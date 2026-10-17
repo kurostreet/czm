@@ -6,7 +6,7 @@ import time
 from collections import defaultdict, deque
 from typing import Any, Callable
 
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from PIL import Image
 from pydantic import BaseModel, Field
@@ -154,11 +154,13 @@ class AuthIn(BaseModel):
 
 
 @router.post("/auth/{action}")
-async def account_action(action: str, body: AuthIn, request: Request, x_czm_key: str | None = Header(default=None)):
+async def account_action(action: str, body: AuthIn, request: Request, background_tasks: BackgroundTasks, x_czm_key: str | None = Header(default=None)):
     key, ip = x_czm_key or "", client_ip(request)
     operations = {
         "register": lambda c: accounts.register(c, key, body.nick, body.password, body.repeat, ip),
         "login": lambda c: accounts.login(c, body.nick, body.password, ip),
+        "email-login": lambda c: accounts.email_login_request(c, body.email, ip),
+        "email-login-confirm": lambda c: accounts.email_login_confirm(c, body.email, body.code, ip),
         "me": lambda c: accounts.me(c, key),
         "logout": lambda c: accounts.logout(c, key),
         "logout-all": lambda c: accounts.logout(c, key, True),
@@ -178,6 +180,10 @@ async def account_action(action: str, body: AuthIn, request: Request, x_czm_key:
             return error.status, {"error": error.code}
 
     status, result = await in_db(run)
+    if action == "email-login" and status == 200:
+        if result:
+            background_tasks.add_task(accounts.deliver_login_code, *result)
+        result = {"ok": True}
     return JSONResponse(result, status_code=status, headers={"Cache-Control": "no-store"})
 
 

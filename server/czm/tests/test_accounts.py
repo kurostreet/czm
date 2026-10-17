@@ -1,6 +1,7 @@
 import os
 import tempfile
 import unittest
+from contextlib import ExitStack, contextmanager
 from unittest.mock import patch
 
 from fastapi import FastAPI
@@ -31,6 +32,22 @@ class AccountTests(unittest.TestCase):
         self.assertEqual(r.status_code, 200, r.text)
         self.assertEqual(r.headers["cache-control"], "no-store")
         return r.json()["token"]
+
+    @contextmanager
+    def mail(self):
+        sent = []
+        with ExitStack() as stack:
+            for name, value in {"smtp_host": "smtp.example.com", "smtp_user": "user",
+                                "smtp_password": "secret", "smtp_from": "sender@example.com"}.items():
+                stack.enter_context(patch.object(get_settings(), name, value))
+            stack.enter_context(patch.object(accounts, "send_code", side_effect=lambda address, code, purpose: sent.append((address, code, purpose))))
+            yield sent
+
+    def verified_email(self, address="test@example.com"):
+        token = self.register()
+        with db.db() as conn:
+            conn.execute("UPDATE accounts SET email=? WHERE player=?", (address, self.player))
+        return token
 
     def test_migration_preserves_profile_photo_history_and_bans(self):
         cfg = get_settings(); cfg.avatar_dir.mkdir(); (cfg.avatar_dir / f"{self.player}.png").write_bytes(b"photo")
@@ -125,8 +142,81 @@ class AccountTests(unittest.TestCase):
         self.assertFalse(self.post("me", token).json()["mail_ready"])
         self.assertEqual(self.post("email", token, email="test@example.com").json()["error"], "mail_unavailable")
         self.assertEqual(self.post("recover", nick="Kuro").status_code, 503)
+        self.assertEqual(self.post("email-login", email="test@example.com").status_code, 503)
+        self.assertEqual(self.post("email-login", email="unknown@example.com").status_code, 503)
         with db.db() as conn:
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM auth_codes").fetchone()[0], 0)
+
+    def test_email_code_signin_keeps_identity_password_and_existing_session(self):
+        token = self.register()
+        with self.mail() as sent:
+            # An unconfirmed address cannot be used for sign-in.
+            self.assertEqual(self.post("email", token, email="Test@example.com").status_code, 200)
+            binding_code = sent[-1][1]
+            self.assertEqual(self.post("email-login", email="test@example.com").json(), {"ok": True})
+            self.assertEqual(len(sent), 1)
+            self.assertEqual(self.post("email-confirm", token, code=binding_code).status_code, 200)
+            known = self.post("email-login", email=" TEST@example.com ")
+            unknown = self.post("email-login", email="unknown@example.com")
+            self.assertEqual((known.status_code, known.json()), (unknown.status_code, unknown.json()))
+            self.assertEqual(known.json(), {"ok": True})
+            self.assertEqual(known.headers["cache-control"], "no-store")
+            address, code, purpose = sent[-1]
+            self.assertEqual((address, purpose), ("test@example.com", "login"))
+            self.assertRegex(code, r"^\d{6}$")
+            self.assertNotIn(code, known.text)
+            with db.db() as conn:
+                self.assertNotEqual(conn.execute("SELECT code_hash FROM auth_codes WHERE purpose='login'").fetchone()[0], code)
+            result = self.post("email-login-confirm", email=address, code=code)
+            self.assertEqual(result.status_code, 200, result.text)
+            self.assertEqual(result.json()["profile"]["id"], self.player)
+            self.assertNotEqual(result.json()["token"], token)
+            self.assertEqual(self.post("me", token).status_code, 200)
+            self.assertEqual(self.post("email-login-confirm", email=address, code=code).status_code, 400)
+            self.assertEqual(self.post("login", nick="Kuro", password="Password123").status_code, 200)
+            with db.db() as conn:
+                self.assertEqual(conn.execute("SELECT COUNT(*) FROM players").fetchone()[0], 1)
+
+    def test_email_signin_wrong_purpose_expiry_and_attempt_limit(self):
+        token = self.verified_email()
+        with self.mail() as sent:
+            self.post("recover", nick="Kuro")
+            self.assertEqual(self.post("email-login-confirm", email="test@example.com", code=sent[-1][1]).status_code, 400)
+            self.post("email-login", email="test@example.com"); code = sent[-1][1]
+            with db.db() as conn:
+                conn.execute("UPDATE auth_codes SET expires=1 WHERE purpose='login'")
+            self.assertEqual(self.post("email-login-confirm", email="test@example.com", code=code).status_code, 400)
+            self.post("email-login", email="test@example.com"); code = sent[-1][1]
+            for _ in range(5):
+                self.assertEqual(self.post("email-login-confirm", email="test@example.com", code="wrong").status_code, 400)
+            self.assertEqual(self.post("email-login-confirm", email="test@example.com", code=code).status_code, 400)
+            self.assertEqual(self.post("me", token).status_code, 200)
+
+    def test_email_change_revokes_pending_signin_and_recovery_codes(self):
+        token = self.verified_email()
+        with self.mail() as sent:
+            self.post("email-login", email="test@example.com"); old = sent[-1][1]
+            self.post("recover", nick="Kuro")
+            self.post("email", token, email="new@example.com")
+            self.assertEqual(self.post("email-confirm", token, code=sent[-1][1]).status_code, 200)
+            self.assertEqual(self.post("email-login-confirm", email="test@example.com", code=old).status_code, 400)
+            with db.db() as conn:
+                self.assertEqual(conn.execute("SELECT COUNT(*) FROM auth_codes").fetchone()[0], 0)
+
+    def test_email_signin_delivery_failure_does_not_disclose_account(self):
+        self.verified_email()
+        with self.mail(), patch.object(accounts, "send_code", side_effect=accounts.AuthError("mail_unavailable", 503)):
+            known = self.post("email-login", email="test@example.com")
+            unknown = self.post("email-login", email="unknown@example.com")
+            self.assertEqual((known.status_code, known.json()), (200, {"ok": True}))
+            self.assertEqual((known.status_code, known.json()), (unknown.status_code, unknown.json()))
+
+    def test_email_signin_request_limit_applies_to_unknown_addresses(self):
+        with self.mail() as sent:
+            for _ in range(3):
+                self.assertEqual(self.post("email-login", email="unknown@example.com").status_code, 200)
+            self.assertEqual(self.post("email-login", email="unknown@example.com").status_code, 429)
+            self.assertEqual(sent, [])
 
     def test_verified_mail_reset_is_one_use_and_revokes_all_sessions(self):
         token = self.register(); sent = []

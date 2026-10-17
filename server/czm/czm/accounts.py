@@ -155,7 +155,7 @@ def send_code(address, code, purpose):
     if not cfg.mail_ready:
         raise AuthError("mail_unavailable", 503)
     message = EmailMessage()
-    message["Subject"] = "Counter Zombie Mobile — " + ("подтверждение почты" if purpose == "email" else "восстановление пароля")
+    message["Subject"] = "Counter Zombie Mobile — " + {"email": "подтверждение почты", "login": "вход в аккаунт"}.get(purpose, "восстановление пароля")
     message["From"], message["To"] = cfg.smtp_from, address
     message.set_content(f"Код: {code}\nДействует 10 минут. Никому его не сообщайте.\nЕсли вы не запрашивали код, пропустите это письмо.")
     try:
@@ -172,13 +172,15 @@ def send_code(address, code, purpose):
         raise AuthError("mail_unavailable", 503) from None
 
 
-def issue_code(conn, player, purpose, target):
+def issue_code(conn, player, purpose, target, deliver=True):
     code = f"{secrets.randbelow(1000000):06d}"
-    send_code(target, code, purpose)
+    if deliver:
+        send_code(target, code, purpose)
     digest = service.hash_secret(f"{player}:{purpose}:{code}")
     conn.execute("INSERT INTO auth_codes VALUES(?,?,?,?,?,0) ON CONFLICT(player,purpose) DO UPDATE SET "
                  "target=excluded.target,code_hash=excluded.code_hash,expires=excluded.expires,attempts=0",
                  (player, purpose, target, digest, now() + 600))
+    return code
 
 
 def consume_code(conn, player, purpose, code):
@@ -192,13 +194,18 @@ def consume_code(conn, player, purpose, code):
     return row["target"]
 
 
+def valid_email(address):
+    address = address.strip().lower()
+    if len(address) > 254 or not re.fullmatch(r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z]{2,63}", address):
+        raise AuthError("email")
+    return address
+
+
 def email_request(conn, token, address, ip):
     player = authenticated(conn, token)
     rate(conn, "email", str(player["id"]), 3, 3600)
     rate(conn, "email-ip", ip, 6, 3600)
-    address = address.strip().lower()
-    if len(address) > 254 or not re.fullmatch(r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z]{2,63}", address):
-        raise AuthError("email")
+    address = valid_email(address)
     if conn.execute("SELECT 1 FROM accounts WHERE email=? AND player!=?", (address, player["id"])).fetchone():
         raise AuthError("email_used", 409)
     issue_code(conn, player["id"], "email", address)
@@ -212,7 +219,43 @@ def email_confirm(conn, token, code, ip):
     if conn.execute("SELECT 1 FROM accounts WHERE email=? AND player!=?", (address, player["id"])).fetchone():
         raise AuthError("email_used", 409)
     conn.execute("UPDATE accounts SET email=? WHERE player=?", (address, player["id"]))
+    conn.execute("DELETE FROM auth_codes WHERE player=? AND purpose IN ('login','reset')", (player["id"],))
     return account_info(conn, player)
+
+
+def email_login_request(conn, address, ip):
+    address = valid_email(address)
+    rate(conn, "email-login-ip", ip, 6, 3600)
+    rate(conn, "email-login-name", service.hash_secret(address), 3, 3600)
+    if not get_settings().mail_ready:
+        raise AuthError("mail_unavailable", 503)
+    row = conn.execute("SELECT player FROM accounts WHERE email=?", (address,)).fetchone()
+    if row:
+        code = issue_code(conn, row["player"], "login", address, deliver=False)
+        return address, code, "login"
+    # Public response is the same; delivery runs after the response, never inside it.
+    return None
+
+
+def deliver_login_code(address, code, purpose):
+    try:
+        send_code(address, code, purpose)
+    except AuthError:
+        pass  # Never disclose account existence, codes or provider credentials in a response/log.
+
+
+def email_login_confirm(conn, address, code, ip):
+    address = valid_email(address)
+    rate(conn, "email-code-ip", ip, 20)
+    rate(conn, "email-code-name", service.hash_secret(address), 10)
+    row = conn.execute("SELECT player FROM accounts WHERE email=?", (address,)).fetchone()
+    if not row:
+        raise AuthError("code")
+    target = consume_code(conn, row["player"], "login", code)
+    if target != address:
+        raise AuthError("code")
+    player = conn.execute("SELECT * FROM players WHERE id=?", (row["player"],)).fetchone()
+    return new_session(conn, player)
 
 
 def recover(conn, nick, ip):
