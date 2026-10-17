@@ -41,6 +41,7 @@ void CZM_DrawImage(const char*,int,int,int,int,unsigned=0xffffffff);void CZM_Dra
 bool CZM_OnlineReady();bool CZM_OnlineAccount();int CZM_OnlineIdentity();const char*CZM_OnlineKey();int CZM_OnlinePlayer();const char*CZM_OnlineUrl(const char*);const char*CZM_AvatarFor(const char*,int);
 int CZM_NetRequest(const char*,const char*,const char*,const char*);bool CZM_NetPoll(int,int*,CUtlString&);void CZM_NetNewKey(char*,size_t);
 void CZM_OpenSettings(int);void CZM_AccountShow(const char*,const char*);bool CZM_CopyText(const char*);void CZM_JoinAddress(const char*);void CZM_PlayClick();
+struct CzmServer{char address[64];char prot[8];char name[64];};int CZM_ServerCount();CzmServer *CZM_Server(int);void CZM_CleanName(const char*,char*,size_t);void CZM_DrawSliced(const char*,int,int,int,int,int,int,unsigned=0xffffffff);
 '''
 HARNESS = r'''
 #include "stub.h"
@@ -65,7 +66,7 @@ void CZM_DrawButton(const char*p,const CzmRect&r,const char*s,unsigned c,bool,in
 bool CZM_OnlineReady(){return true;}bool CZM_OnlineAccount(){return authenticated;}int CZM_OnlineIdentity(){return identity;}const char*CZM_OnlineKey(){return key.c_str();}int CZM_OnlinePlayer(){return me;}const char*CZM_OnlineUrl(const char*p){return p;}const char*CZM_AvatarFor(const char*,int){return "gfx/czm/ui/avatar.png";}
 int CZM_NetRequest(const char*,const char*url,const char*,const char*body){requests.push_back({++ids,url,body});return ids;}
 bool CZM_NetPoll(int id,int*status,CUtlString&body){auto i=replies.find(id);if(i==replies.end())return false;*status=i->second.first;body.Set(i->second.second.c_str());replies.erase(i);return true;}
-void CZM_NetNewKey(char*out,size_t size){Q_strncpy(out,"0123456789abcdef0123456789abcdef",size);}void CZM_OpenSettings(int){}void CZM_AccountShow(const char*,const char*){logins++;}bool CZM_CopyText(const char*){return true;}void CZM_JoinAddress(const char*){}void CZM_PlayClick(){}
+void CZM_NetNewKey(char*out,size_t size){Q_strncpy(out,"0123456789abcdef0123456789abcdef",size);}int CZM_ServerCount(){return 0;}CzmServer *CZM_Server(int){return 0;}void CZM_CleanName(const char*in,char*out,size_t size){Q_strncpy(out,in,size);}void CZM_DrawSliced(const char*,int x,int y,int w,int h,int,int,unsigned c){UI_FillRect(x,y,w,h,c);}void CZM_OpenSettings(int){}void CZM_AccountShow(const char*,const char*){logins++;}bool CZM_CopyText(const char*){return true;}void CZM_JoinAddress(const char*){}void CZM_PlayClick(){}
 '''
 SCENARIOS = r'''
 int main(int argc,char**argv){

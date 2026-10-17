@@ -173,7 +173,11 @@ def _message(row):
             "ts": row["created"], "deleted": bool(row["deleted"])}
 
 
-def send(conn, key, target, text, nonce):
+INVITE = "czm:invite "
+_SERVER = re.compile(r"^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3}):(\d{1,5})$")
+
+
+def send(conn, key, target, text, nonce, invite=False):
     player = actor(conn, key)
     a = player["id"]
     account(conn, target)
@@ -181,7 +185,9 @@ def send(conn, key, target, text, nonce):
         raise accounts.AuthError("not_friends", 403)
     if service.active_ban(conn, player):
         raise accounts.AuthError("banned", 403)
-    text = service.profanity.clean(service.clean_text(text, 400))
+    # typed text never passes for an invite: addresses are masked like links in the chat
+    if not invite:
+        text = service.profanity.clean(service.clean_text(text, 400))
     if not text:
         raise accounts.AuthError("empty")
     old = conn.execute("SELECT m.*,d.low,d.high FROM private_messages m JOIN private_dialogs d ON d.id=m.dialog WHERE m.sender=? AND m.nonce=?", (a, nonce)).fetchone()
@@ -238,3 +244,17 @@ def dialogs(conn, key, offset=0):
         item["last"] = _message(conn.execute("SELECT * FROM private_messages WHERE id=?", (d["last_message"],)).fetchone())
         result.append(item)
     return {"people": result, "next": offset+PAGE_SIZE if len(rows)>PAGE_SIZE else -1, "counts": counts(conn, a)}
+
+
+def online_count(conn) -> int:
+    """Players with the game open right now: every client reports presence about every 30 s."""
+    return conn.execute("SELECT COUNT(DISTINCT player) FROM social_presence WHERE seen>?", (now()-PRESENCE_TTL,)).fetchone()[0]
+
+
+def invite(conn, key, target, server, proto, name, nonce):
+    """A game invite in the private dialog: the friend's game shows it as a card with a join button."""
+    m = _SERVER.match(server or "")
+    if not m or any(int(x) > 255 for x in m.groups()[:4]) or not 0 < int(m.group(5)) < 65536 or proto not in ("gs", "49"):
+        raise accounts.AuthError("server")
+    name = service.profanity.clean(service.clean_text(name, 60)) or server
+    return send(conn, key, target, f"{INVITE}{proto} {server} {name}", nonce, invite=True)

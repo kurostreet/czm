@@ -119,6 +119,10 @@ void CZM_QueryServers( bool force );
 bool CZM_OnServerInfo( netadr_t adr, const char *info ); // true for our own messages, which the stock list must not see
 void CZM_ConnectToServer( int index );
 int CZM_PingUpdate( int old, int fresh ); // keeps a real ping when a late answer reads ~0 ms
+void CZM_QuickPlayStart( void );                  // look for the best open zombie server
+void CZM_QuickPlayCancel( void );
+bool CZM_QuickPlayActive( void );
+int CZM_QuickPlayFrame( char *name, size_t size ); // 0 looking, 1 connecting (name of the server), -1 nothing fits
 
 // pinned servers of the main screen, kept in home_servers.lst
 void CZM_HomeReload( void );                 // read the file into the tiles, call when the main screen opens
@@ -338,6 +342,7 @@ const char *CZM_OnlineUrl( const char *path );
 const char *CZM_OnlineKey( void );
 bool CZM_OnlineReady( void );
 bool CZM_OnlineAccount( void );
+int CZM_OnlineCount( void ); // players in the game right now, -1 unknown
 int CZM_OnlineIdentity( void );
 int CZM_OnlinePlayer( void );
 bool CZM_OnlineBan( int *until, bool *forever, const char **reason );

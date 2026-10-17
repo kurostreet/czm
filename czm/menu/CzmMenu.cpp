@@ -108,6 +108,7 @@ static const struct { const char *key, *ru, *en; } s_strings[] =
 	{ "nav_settings", "Настройки", "Settings" },
 	{ "nav_about", "Об игре", "About" },
 	{ "nav_chat_hint", "Игроки онлайн", "Players online" },
+	{ "nav_chat_online", "%d онлайн", "%d online" },
 	{ "nav_servers_hint", "Найти игру", "Find a game" },
 	{ "nav_settings_hint", "Управление и HUD", "Controls and HUD" },
 	{ "nav_about_hint", "Проект и контакты", "Project and contacts" },
@@ -343,6 +344,11 @@ static const struct { const char *key, *ru, *en; } s_strings[] =
 	{ "setup_text", "Выбери язык и придумай ник", "Choose a language and a nickname" },
 	{ "setup_go", "Играть", "Play" },
 	{ "setup_login", "Уже играл? Войти в аккаунт", "Played before? Sign in" },
+	{ "quick_title", "БЫСТРАЯ ИГРА", "QUICK PLAY" },
+	{ "quick_search", "ИЩЕМ СЕРВЕР", "SEARCHING" },
+	{ "quick_hint", "Лучший открытый зомби-сервер по онлайну и пингу", "The best open zombie server by players and ping" },
+	{ "quick_cancel", "Нажми ещё раз, чтобы отменить", "Tap again to cancel" },
+	{ "quick_none", "Свободных зомби-серверов не нашли — открой «Серверы»", "No open zombie server found, open Servers" },
 };
 
 static bool s_bInitialized;

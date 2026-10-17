@@ -67,6 +67,10 @@ static struct
 	char profilePhotoPath[64];
 	bool preserveAvatar;
 	double photoRetry;
+
+	int onlineId;         // players-online request in flight
+	double nextOnline;
+	int onlineCount;      // -1 until the service answers
 } s_online;
 
 static struct
@@ -88,6 +92,11 @@ const char *CZM_OnlineUrl( const char *path )
 	which ^= 1;
 	snprintf( url[which], sizeof( url[0] ), "https://counter-zombie.ru%s", path );
 	return url[which];
+}
+
+int CZM_OnlineCount( void )
+{
+	return s_online.started && s_online.onlineCount > 0 ? s_online.onlineCount : -1;
 }
 
 const char *CZM_OnlineKey( void )
@@ -376,6 +385,24 @@ void CZM_OnlineFrame( void )
     }}
 	CZM_CloudFrame();
 	CZM_MapPicturesFrame();
+
+	// how many players are in the game right now, for the chat button
+	if( s_online.onlineId )
+	{
+		if( CZM_NetPoll( s_online.onlineId, &status, body ))
+		{
+			CzmJson j;
+
+			s_online.onlineId = 0;
+			if( status == 200 && j.Parse( body.Get( )))
+				s_online.onlineCount = j.Int( j.Get( 0, "online" ));
+		}
+	}
+	else if( now >= s_online.nextOnline )
+	{
+		s_online.nextOnline = now + 60.0;
+		s_online.onlineId = CZM_NetRequest( "GET", CZM_OnlineUrl( "/api/v1/online" ), "", "" );
+	}
 
 	if( s_online.helloId )
 	{

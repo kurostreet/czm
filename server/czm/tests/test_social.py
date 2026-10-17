@@ -136,6 +136,31 @@ class SocialTests(unittest.TestCase):
         self.assertTrue(history["messages"][0]["deleted"])
         self.assertEqual(history["messages"][0]["t"], "")
 
+    def test_game_invite_is_a_structured_message_only_between_friends(self):
+        invite = {"server": "81.181.244.5:27015", "proto": "gs", "name": "Zombie Night", "nonce": "invite-unique-00001"}
+        path = "social/invite/%d" % self.ids[1]
+        self.assertEqual(self.request("POST", path, json=invite).status_code, 403)
+        self.friends()
+        r = self.request("POST", path, json=invite)
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json()["message"]["text"], "czm:invite gs 81.181.244.5:27015 Zombie Night")
+        for bad in ("999.1.1.1:27015", "1.2.3.4", "1.2.3.4:0", "host.example:27015"):
+            r = self.request("POST", path, json=dict(invite, server=bad, nonce="invite-bad-0000001"))
+            self.assertIn(r.status_code, (400, 422), bad)
+        # typed text can not pretend to be an invite: the address is masked
+        r = self.send(text="czm:invite gs 81.181.244.5:27015 Fake", nonce="typed-invite-00001")
+        self.assertEqual(r.status_code, 200)
+        self.assertNotIn("81.181.244.5", r.json()["message"]["text"])
+
+    def test_online_counts_players_with_fresh_presence(self):
+        self.assertEqual(self.client.get("/api/v1/online").json()["online"], 0)
+        with db.db() as c:
+            self.assertEqual(social.online_count(c), 0)
+            for i in range(2):
+                c.execute("INSERT INTO social_presence VALUES(?,?,?,?,?)", ("owner-%d" % i, self.ids[i], db.now(), "", ""))
+            c.execute("INSERT INTO social_presence VALUES(?,?,?,?,?)", ("old", self.ids[2], db.now() - 600, "", ""))
+            self.assertEqual(social.online_count(c), 2)
+
     def test_invalid_addresses_and_repeated_init_are_safe(self):
         self.assertEqual(self.request("POST", "social/presence", json={"server": "https://site/path"}).status_code, 400)
         self.assertEqual(self.request("POST", "social/presence", json={"map": "x\nconnect evil"}).status_code, 400)

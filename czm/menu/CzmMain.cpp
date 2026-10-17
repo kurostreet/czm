@@ -111,6 +111,7 @@ private:
 		HIT_ABOUT_SITE,
 		HIT_UPDATE,
 		HIT_ABOUT_SOURCE,
+		HIT_QUICK,                  // quick play under the logo
 		HIT_NAV,                    // 5 navigation items
 		HIT_TILE = HIT_NAV + 5,     // one per server
 		HIT_LAST = HIT_TILE + CZM_MAX_TILES
@@ -130,6 +131,7 @@ private:
 	void DrawBell( void );
 	void DrawSetup( void );
 	void FinishSetup( void );
+	void DrawQuick( void );
 
 	int m_overlay;
 	int m_iPressed;
@@ -148,6 +150,9 @@ private:
 	CzmRect m_aboutLogo, m_aboutRows[CZM_ABOUT_ROWS];
 	CzmRect m_update, m_updateButton;
 	CzmRect m_setupLang, m_setupNick, m_setupGo, m_setupLogin;
+	CzmRect m_quick;
+	char m_szQuickNote[160];   // why the search found nothing, shown for a few seconds
+	double m_flQuickNote;
 	CzmTextEdit m_nick;
 	bool m_bNickWarning;
 };
@@ -158,6 +163,8 @@ CCzmMainMenu::CCzmMainMenu() : CMenuFramework( "CzmMain" )
 	m_iPressed = HIT_NONE;
 	m_iVersionTaps = 0;
 	m_flVersionTapTime = 0.0;
+	m_szQuickNote[0] = 0;
+	m_flQuickNote = 0.0;
 	W = H = m_iMargin = 0;
 	m_szNick[0] = 0;
 	m_iNickX = m_iNickW = 0;
@@ -255,6 +262,12 @@ void CCzmMainMenu::Layout( void )
 	y = areaTop + ( areaBottom - areaTop - total ) / 2;
 	for( int i = 0; i < m_iTiles; i++ )
 		m_tiles[i] = CZM_Rect( W - m_iMargin - tileW, y + i * ( tileH + gap ), tileW, tileH );
+
+	// quick play under the logo, left of the tiles
+	{
+		int qw = Q_min( (int)( H * 0.66f ), ( m_iTiles > 0 ? m_tiles[0].x : W ) - m_iMargin - (int)( H * 0.06f ));
+		m_quick = CZM_Rect( m_iMargin, H * 0.335f, qw, H * 0.105f );
+	}
 
 	// The visible cards are also their touch targets; the gaps stay empty.
 	y = H * 0.898f;
@@ -369,6 +382,9 @@ int CCzmMainMenu::HitTest( void ) const
 	if( m_lang.Grown( grow ).HasCursor( ))
 		return uiStatic.cursorX < m_lang.x + m_lang.w / 2 ? HIT_LANG_RU : HIT_LANG_EN;
 
+	if( m_quick.Grown( grow ).HasCursor( ))
+		return HIT_QUICK;
+
 	for( int i = 0; i < m_iTiles; i++ )
 	{
 		if( m_tiles[i].HasCursor( ))
@@ -430,6 +446,13 @@ void CCzmMainMenu::Activate( int hit )
 		break;
 	case HIT_SETUP_GO:
 		FinishSetup();
+		break;
+	case HIT_QUICK:
+		m_szQuickNote[0] = 0;
+		if( CZM_QuickPlayActive( ))
+			CZM_QuickPlayCancel();
+		else
+			CZM_QuickPlayStart();
 		break;
 	case HIT_SETUP_LOGIN:
 		// the window closes by itself once the account signs in (CzmOnline finishes the first start)
@@ -588,6 +611,91 @@ bool CCzmMainMenu::KeyUp( int key )
 	}
 
 	return CMenuFramework::KeyUp( key );
+}
+
+/*
+Quick play: one tap and the game picks the best open zombie server (CzmServers.cpp).
+A slow red glow breathes behind the button; while it searches, the play icon becomes a spinner.
+*/
+void CCzmMainMenu::DrawQuick( void )
+{
+	const CzmRect &r = m_quick;
+	double now = EngFuncs::DoubleTime();
+	bool searching = CZM_QuickPlayActive();
+	bool pressed = IsPressed( HIT_QUICK );
+	HFont titleFont = CZM_Font( CZMF_TILE_NAME );
+	HFont small = CZM_Font( CZMF_SMALL );
+	char text[160];
+
+	if( r.w <= r.h * 2 )
+		return;
+
+	// the search goes on here, the server list does the work
+	if( searching )
+	{
+		char name[64];
+		int result = CZM_QuickPlayFrame( name, sizeof( name ));
+
+		if( result < 0 )
+		{
+			Q_strncpy( m_szQuickNote, CZM_T( "quick_none" ), sizeof( m_szQuickNote ));
+			m_flQuickNote = now + 6.0;
+		}
+		searching = CZM_QuickPlayActive();
+	}
+
+	{
+		float pulse = 0.5f + 0.5f * sinf( (float)now * ( searching ? 5.0f : 2.2f ));
+		int gw = r.w + r.h, gh = r.h * 2;
+
+		CZM_DrawImage( UI_DIR "glow.png", r.x - r.h / 2, r.y + r.h / 2 - gh / 2, gw, gh, PackRGBA( 239, 40, 52, (int)( 60 + 70 * pulse )));
+	}
+	CZM_DrawPill( UI_DIR "button_primary.png", r.x, r.y, r.w, r.h, pressed ? PackRGBA( 190, 190, 190, 255 ) : CZM_White());
+
+	// play icon, or a spinner while searching
+	{
+		int c = r.h * 0.70f, cx = r.x + r.h * 0.15f + c / 2, cy = r.y + r.h / 2;
+
+		CZM_DrawImage( UI_DIR "dot.png", cx - c / 2, cy - c / 2, c, c, PackRGBA( 120, 14, 24, 200 ));
+		if( searching )
+		{
+			for( int k = 0; k < 8; k++ )
+			{
+				float a = k * 0.7853982f + (float)now * 6.0f;
+				int d = Q_max( 3, (int)( c * 0.13f ));
+				int px = cx + (int)( cosf( a ) * c * 0.30f ), py = cy + (int)( sinf( a ) * c * 0.30f );
+
+				CZM_DrawImage( UI_DIR "dot.png", px - d / 2, py - d / 2, d, d, CZM_White( 60 + k * 24 ));
+			}
+		}
+		else
+		{
+			int ic = c * 0.46f;
+			CZM_DrawImage( UI_DIR "icon_play.png", cx - ic / 2 + ic / 10, cy - ic / 2, ic, ic );
+		}
+	}
+
+	{
+		int tx = r.x + r.h * 0.15f + r.h * 0.70f + r.h * 0.20f, tw = r.x + r.w - r.h * 0.35f - tx;
+
+		if( searching )
+		{
+			int dots = (int)( now * 3.0 ) % 4;
+			snprintf( text, sizeof( text ), "%s%.*s", CZM_T( "quick_search" ), dots, "..." );
+		}
+		else
+			Q_strncpy( text, CZM_T( "quick_title" ), sizeof( text ));
+		CZM_DrawText( titleFont, tx, r.y + ( r.h - CZM_FontHeight( titleFont )) / 2, tw, text, CZM_White());
+	}
+
+	// under the button: what it does, or why it found nothing
+	{
+		bool note = m_szQuickNote[0] && now < m_flQuickNote;
+		const char *line = note ? m_szQuickNote : searching ? CZM_T( "quick_cancel" ) : CZM_T( "quick_hint" );
+
+		CZM_DrawText( small, r.x + r.h * 0.25f, r.y + r.h + H * 0.014f, r.w + H * 0.2f, line,
+			note ? PackRGBA( 252, 165, 165, 255 ) : PackRGBA( 200, 206, 216, 230 ));
+	}
 }
 
 void CCzmMainMenu::DrawTitle( void )
@@ -912,7 +1020,20 @@ void CCzmMainMenu::DrawNav( void )
 			UI_FillRect( badgeX, badgeY, badge, badge, pressed ? PackRGBA( 144, 34, 49, 180 ) : PackRGBA( 38, 49, 64, 225 ));
 			CZM_DrawImage( icons[i], badgeX + ( badge - iconSize ) / 2, badgeY + ( badge - iconSize ) / 2, iconSize, iconSize, textColor );
 			CZM_DrawText( font, textX, textY, textW, CZM_T( labels[i] ), textColor );
-			CZM_DrawText( small, textX, textY + CZM_FontHeight( font ) + edge * 3, textW, CZM_T( hints[i] ), PackRGBA( 147, 160, 180, 255 ));
+			// the chat button shows how many players have the game open right now
+			int online = i == 0 ? CZM_OnlineCount() : -1;
+			if( online > 0 )
+			{
+				char text[48];
+				int dot = CZM_FontHeight( small ) * 45 / 100, hy = textY + CZM_FontHeight( font ) + edge * 3;
+
+				snprintf( text, sizeof( text ), CZM_T( "nav_chat_online" ), online );
+				CZM_DrawImage( UI_DIR "glow.png", textX - dot / 2, hy + CZM_FontHeight( small ) / 2 - dot, dot * 2, dot * 2, PackRGBA( 74, 222, 128, 140 ));
+				CZM_DrawImage( UI_DIR "dot.png", textX, hy + ( CZM_FontHeight( small ) - dot ) / 2, dot, dot, PackRGBA( 74, 222, 128, 255 ));
+				CZM_DrawText( small, textX + dot * 2, hy, textW - dot * 2, text, PackRGBA( 134, 239, 172, 255 ));
+			}
+			else
+				CZM_DrawText( small, textX, textY + CZM_FontHeight( font ) + edge * 3, textW, CZM_T( hints[i] ), PackRGBA( 147, 160, 180, 255 ));
 			CZM_DrawImage( UI_DIR "icon_chevron.png", r.x + r.w - pad - chevron, r.y + ( r.h - chevron ) / 2,
 				chevron, chevron, pressed ? accent : PackRGBA( 113, 128, 148, 255 ));
 		}
@@ -1222,6 +1343,7 @@ void CCzmMainMenu::Draw()
 	CZM_DrawImage( UI_DIR "fade_top.png", 0, 0, W, H * 0.22f, CZM_White( 200 ));
 
 	DrawTitle();
+	DrawQuick();
 	for( int i = 0; i < m_iTiles; i++ )
 		DrawTile( i, m_tiles[i] );
 	DrawNav();

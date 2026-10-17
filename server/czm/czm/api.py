@@ -318,6 +318,18 @@ async def social_send(target: int, body: PrivateMessageIn, request: Request, x_c
     return await social_result(request, lambda c: social.send(c, x_czm_key or "", target, body.text, body.nonce))
 
 
+class InviteIn(BaseModel):
+    server: str = Field(max_length=21)
+    proto: str = Field(pattern=r"^(gs|49)$")
+    name: str = Field(default="", max_length=128)
+    nonce: str = Field(pattern=r"^[A-Za-z0-9_-]{16,64}$")
+
+
+@router.post("/social/invite/{target}")
+async def social_invite(target: int, body: InviteIn, request: Request, x_czm_key: str | None = Header(default=None)):
+    return await social_result(request, lambda c: social.invite(c, x_czm_key or "", target, body.server, body.proto, body.name, body.nonce))
+
+
 @router.post("/social/dialog/{target}/read")
 async def social_read(target: int, body: PrivateReadIn, request: Request, x_czm_key: str | None = Header(default=None)):
     return await social_result(request, lambda c: social.mark_read(c, x_czm_key or "", target, body.through))
@@ -382,6 +394,19 @@ async def avatar(request: Request, x_czm_key: str | None = Header(default=None))
     tmp.replace(path)
     rev = await in_db(service.set_photo, player["id"])
     return {"avatar": f"photo:{rev}"}
+
+
+_online = {"time": 0.0, "count": 0}
+
+
+@router.get("/online")
+async def online(request: Request):
+    """How many players have the game open, for the chat button. Counted at most every 30 s."""
+    _read_limit.check(client_ip(request))
+    if time.monotonic() - _online["time"] > 30:
+        _online["count"] = await in_db(social.online_count)
+        _online["time"] = time.monotonic()
+    return {"online": _online["count"]}
 
 
 @router.get("/news")

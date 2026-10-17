@@ -367,6 +367,14 @@ public:
 
 	bool m_bReturnHere; // a game started from the list: show it again after the game
 
+	// quick play from the main screen: the best open zombie server for this phone
+	void QuickStart( void );
+	void QuickCancel( void ) { m_bQuick = false; }
+	int QuickFrame( char *name, size_t size ); // 0 still looking, 1 connecting (name filled), -1 nothing fits
+	bool QuickActive( void ) const { return m_bQuick; }
+	bool m_bQuick;
+	double m_flQuickStart;
+
 private:
 	enum EHit
 	{
@@ -518,6 +526,8 @@ CCzmServers::CCzmServers() : CMenuFramework( "CzmServers" )
 {
 	s_browser = this;
 	m_bReturnHere = false;
+	m_bQuick = false;
+	m_flQuickStart = 0.0;
 	memset( m_hash, 0, sizeof( m_hash ));
 	m_bListsLoaded = false;
 	m_bDirty = m_bForceRebuild = true;
@@ -957,6 +967,73 @@ void CCzmServers::Connect( CzmEntry *e, const char *password )
 	EngFuncs::CvarSetString( "czm_connect_adr", e->address );
 	m_bReturnHere = true;
 	EngFuncs::ClientCmdF( false, "connect \"%s\" %s\n", e->address, e->gs ? "gs" : "49" );
+}
+
+void CCzmServers::QuickStart( void )
+{
+	m_bQuick = true;
+	m_flQuickStart = EngFuncs::DoubleTime();
+	Refresh( false ); // asks the master list again only when it is old
+}
+
+/*
+Zombie and escape servers that are open (no password, free slots) and alive.
+Many real players and a low ping win; a nearly full server loses a little,
+the next player may not fit. Empty servers are only taken when nothing else answers.
+*/
+int CCzmServers::QuickFrame( char *name, size_t size )
+{
+	double now = EngFuncs::DoubleTime(), elapsed = now - m_flQuickStart;
+	CzmEntry *best = NULL;
+	float bestScore = 0.0f;
+
+	if( !m_bQuick )
+		return -1;
+
+	for( int pass = 0; pass < 2 && !best; pass++ )
+	{
+		for( int i = 0; i < m_entries.Count(); i++ )
+		{
+			CzmEntry &e = m_entries[i];
+			int humans = e.players - e.bots, ping = e.ping >= 0 ? e.ping : 400;
+			float score;
+
+			if( !e.answered || IsStale( e ) || ( e.mode != MODE_ZOMBIE && e.mode != MODE_ESCAPE ))
+				continue;
+			if( e.password || e.maxPlayers <= 0 || e.players >= e.maxPlayers )
+				continue;
+			if( pass == 0 && humans < 2 )
+				continue;
+
+			score = Q_min( humans, 28 ) * 6.0f - ping * 0.12f;
+			if( e.maxPlayers - e.players < 2 )
+				score -= 12.0f;
+			if( ping > 350 )
+				score -= 40.0f;
+			if( !best || score > bestScore )
+			{
+				best = &e;
+				bestScore = score;
+			}
+		}
+	}
+
+	// a fresh refresh is given a moment for the pings; a long silence ends the search
+	if( !best || ( Refreshing() && elapsed < 3.0 ))
+	{
+		if( elapsed > LIST_TIMEOUT + 1.0 )
+		{
+			m_bQuick = false;
+			return -1;
+		}
+		return 0;
+	}
+
+	m_bQuick = false;
+	CZM_CleanName( best->name[0] ? best->name : best->address, name, size );
+	Connect( best, NULL );
+	m_bReturnHere = false; // after the game the player comes back to the main screen
+	return 1;
 }
 
 static void CZM_PlayersResponse( net_response_t *response )
@@ -2563,6 +2640,28 @@ void CZM_JoinAddress( const char *address )
 	if( !address || strlen( address ) >= 64 || strspn( address, "0123456789abcdefABCDEF.:[]" ) != strlen( address )) return;
 	UI_CzmServers_Menu();
 	menu_czmservers->JoinAddress( address );
+}
+
+void CZM_QuickPlayStart( void )
+{
+	if( s_browser )
+		s_browser->QuickStart();
+}
+
+void CZM_QuickPlayCancel( void )
+{
+	if( s_browser )
+		s_browser->QuickCancel();
+}
+
+bool CZM_QuickPlayActive( void )
+{
+	return s_browser && s_browser->QuickActive();
+}
+
+int CZM_QuickPlayFrame( char *name, size_t size )
+{
+	return s_browser ? s_browser->QuickFrame( name, size ) : -1;
 }
 
 void CZM_ServerListInfo( netadr_t adr, const char *info )
