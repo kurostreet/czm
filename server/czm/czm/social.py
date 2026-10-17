@@ -168,9 +168,21 @@ def _dialog(conn, a, b):
     return conn.execute("SELECT * FROM private_dialogs WHERE low=? AND high=?", (min(a, b), max(a, b))).fetchone()
 
 
+def _text(row):
+    """The text a reader gets: masked like the chat, except the server address of a game invite."""
+    if row["deleted"]:
+        return ""
+    text = row["text"]
+    if text.startswith(INVITE):
+        parts = text[len(INVITE):].split(" ", 2)
+        if len(parts) >= 2 and parts[0] in ("gs", "49") and _valid_server(parts[1]):
+            name = service.profanity.clean(parts[2]) if len(parts) > 2 else ""
+            return f"{INVITE}{parts[0]} {parts[1]} {name}".rstrip()
+    return service.profanity.clean(text)
+
+
 def _message(row):
-    return {"id": row["id"], "p": row["sender"], "t": "" if row["deleted"] else service.profanity.clean(row["text"]),
-            "ts": row["created"], "deleted": bool(row["deleted"])}
+    return {"id": row["id"], "p": row["sender"], "t": _text(row), "ts": row["created"], "deleted": bool(row["deleted"])}
 
 
 INVITE = "czm:invite "
@@ -251,10 +263,14 @@ def online_count(conn) -> int:
     return conn.execute("SELECT COUNT(DISTINCT player) FROM social_presence WHERE seen>?", (now()-PRESENCE_TTL,)).fetchone()[0]
 
 
+def _valid_server(server):
+    m = _SERVER.match(server or "")
+    return bool(m) and all(int(x) <= 255 for x in m.groups()[:4]) and 0 < int(m.group(5)) < 65536
+
+
 def invite(conn, key, target, server, proto, name, nonce):
     """A game invite in the private dialog: the friend's game shows it as a card with a join button."""
-    m = _SERVER.match(server or "")
-    if not m or any(int(x) > 255 for x in m.groups()[:4]) or not 0 < int(m.group(5)) < 65536 or proto not in ("gs", "49"):
+    if not _valid_server(server) or proto not in ("gs", "49"):
         raise accounts.AuthError("server")
     name = service.profanity.clean(service.clean_text(name, 60)) or server
     return send(conn, key, target, f"{INVITE}{proto} {server} {name}", nonce, invite=True)

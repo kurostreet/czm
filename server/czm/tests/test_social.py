@@ -143,14 +143,16 @@ class SocialTests(unittest.TestCase):
         self.friends()
         r = self.request("POST", path, json=invite)
         self.assertEqual(r.status_code, 200, r.text)
-        self.assertEqual(r.json()["message"]["text"], "czm:invite gs 81.181.244.5:27015 Zombie Night")
+        self.assertEqual(r.json()["message"]["t"], "czm:invite gs 81.181.244.5:27015 Zombie Night")
+        history = self.request("GET", "social/dialog/%d" % self.ids[0], 1).json()["messages"]
+        self.assertEqual(history[-1]["t"], "czm:invite gs 81.181.244.5:27015 Zombie Night")
         for bad in ("999.1.1.1:27015", "1.2.3.4", "1.2.3.4:0", "host.example:27015"):
             r = self.request("POST", path, json=dict(invite, server=bad, nonce="invite-bad-0000001"))
             self.assertIn(r.status_code, (400, 422), bad)
         # typed text can not pretend to be an invite: the address is masked
         r = self.send(text="czm:invite gs 81.181.244.5:27015 Fake", nonce="typed-invite-00001")
         self.assertEqual(r.status_code, 200)
-        self.assertNotIn("81.181.244.5", r.json()["message"]["text"])
+        self.assertNotIn("81.181.244.5", r.json()["message"]["t"])
 
     def test_online_counts_players_with_fresh_presence(self):
         self.assertEqual(self.client.get("/api/v1/online").json()["online"], 0)
