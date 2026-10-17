@@ -58,6 +58,7 @@ public class AccountClientTest {
         check(CzmAccount.call(1, "POST", url, "", hello, "application/json").startsWith("409\n"), "wait for game-thread handoff");
         String event = new String(CzmAccount.event(), StandardCharsets.UTF_8);
         check(new JSONObject(event).getJSONObject("profile").getInt("id") == 7 && !event.contains(session), "public event only");
+        check(new JSONObject(event).getJSONObject("profile").getString("login").equals("Kuro"), "native account state without a session token");
         check(CzmAccount.call(1, "POST", url, "", hello, "application/json").startsWith("200\n"), "authorized hello");
         Wire wire = wires.get(wires.size()-1);
         check(new JSONObject(wire.body.toString("UTF-8")).getString("key").equals(session), "effective hello identity");

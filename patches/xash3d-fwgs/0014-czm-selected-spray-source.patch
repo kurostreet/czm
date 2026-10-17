@@ -1,0 +1,19 @@
+diff --git a/engine/client/cl_main.c b/engine/client/cl_main.c
+--- a/engine/client/cl_main.c
++++ b/engine/client/cl_main.c
+@@ -264,6 +264,15 @@
+ 		Cvar_DirectSet( &cl_logoext, "bmp" );
+ 
+ 	Q_snprintf( szFileName, sizeof( szFileName ), "logos/remapped.%s", cl_logoext.string );
++	// A saved CZM choice names the original PNG. Do not upload an old remapped logo
++	// left by an earlier install, a restored config or the legacy player menu.
++	if( !Q_strncmp( cl_logofile.string, "czm_", 4 ))
++	{
++		qboolean safe = true;
++		for( const char *p = cl_logofile.string; *p; p++ )
++			if( !( ( *p >= 'a' && *p <= 'z' ) || ( *p >= '0' && *p <= '9' ) || *p == '_' )) safe = false;
++		if( safe ) Q_snprintf( szFileName, sizeof( szFileName ), "logos/%s.png", cl_logofile.string );
++	}
+ 	if( cls.net_protocol == PROTO_GOLDSRC )
+ 	{
+ 		if( !CL_ConvertImageToWAD3( szFileName ))

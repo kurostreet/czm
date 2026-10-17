@@ -667,14 +667,14 @@ void CCzmSettings::Layout( void )
 
 	W = ScreenWidth;
 	H = ScreenHeight;
-	margin = W * 0.03f;
+	margin = ( W - Q_min( (int)( W * 0.94f ), (int)( H * 1.85f ))) / 2;
 
 	m_back = CZM_Rect( margin, H * 0.035f, H * 0.075f, H * 0.075f );
 
 	// tabs on the left
-	tabW = bound( (int)( H * 0.36f ), (int)( W * 0.21f ), (int)( H * 0.48f ));
-	tabH = H * 0.10f;
-	gap = H * 0.014f;
+	tabW = Q_min( (int)( W * 0.21f ), (int)( H * 0.34f ));
+	tabH = H * 0.085f;
+	gap = H * 0.012f;
 	for( int i = 0; i < CZM_TAB_COUNT; i++ )
 		m_tabs[i] = CZM_Rect( margin, H * 0.17f + i * ( tabH + gap ), tabW, tabH );
 
@@ -683,12 +683,12 @@ void CCzmSettings::Layout( void )
 	m_panel.w = W - margin - m_panel.x;
 	m_panel.h = H - m_panel.y - H * 0.045f;
 
-	pad = H * 0.04f;
+	pad = H * 0.028f;
 	contentY = m_panel.y + H * 0.02f;
 	contentH = m_panel.h - H * 0.04f;
 	m_clip = CZM_Rect( m_panel.x, contentY, m_panel.w, contentH );
 
-	rowH = H * 0.118f;
+	rowH = H * 0.096f;
 	controlW = Q_min( (int)(( m_panel.w - pad * 2 ) * 0.52f ), (int)( H * 0.66f ));
 
 	// rows, scrolled
@@ -705,12 +705,12 @@ void CCzmSettings::Layout( void )
 			h = H * 0.50f;
 		else if( row.type == ROW_SPRAYS || row.type == ROW_AVATARS )
 		{
-			int card = H * 0.13f, cardGap = H * 0.022f;
+			int card = H * 0.105f, cardGap = H * 0.016f;
 			int columns = Q_max( 1, ( m_panel.w - pad * 2 + cardGap ) / ( card + cardGap ));
 			int count = row.type == ROW_SPRAYS ? CZM_SprayCount() : AvatarCards();
 			int lines = ( count + columns - 1 ) / columns;
 
-			h = H * 0.13f + lines * ( card + cardGap );
+			h = H * 0.105f + lines * ( card + cardGap );
 		}
 
 		l.rect = CZM_Rect( m_panel.x + pad, contentY + total - m_iScroll, m_panel.w - pad * 2, h );
@@ -789,13 +789,13 @@ void CCzmSettings::Layout( void )
 		case ROW_SPRAYS:
 		case ROW_AVATARS:
 		{
-			int card = H * 0.13f, cardGap = H * 0.022f;
+			int card = H * 0.105f, cardGap = H * 0.016f;
 			int columns = Q_max( 1, ( l.rect.w + cardGap ) / ( card + cardGap ));
 			int count = Q_min( row.type == ROW_SPRAYS ? CZM_SprayCount() : AvatarCards(), 16 );
 
 			for( int k = 0; k < count; k++ )
 				l.parts[k] = CZM_Rect( l.rect.x + ( k % columns ) * ( card + cardGap ),
-					l.rect.y + H * 0.13f + ( k / columns ) * ( card + cardGap ), card, card );
+					l.rect.y + H * 0.105f + ( k / columns ) * ( card + cardGap ), card, card );
 			l.numParts = count;
 			break;
 		}
@@ -808,7 +808,7 @@ void CCzmSettings::Layout( void )
 
 	// confirm window
 	{
-		int cw = H * 0.74f, ch = H * 0.36f, cpad = H * 0.04f, bh = H * 0.085f;
+		int cw = H * 0.74f, ch = H * 0.28f, cpad = H * 0.03f, bh = H * 0.07f;
 		int bw = ( cw - cpad * 3 ) / 2;
 
 		m_confirmPanel = CZM_Rect(( W - cw ) / 2, ( H - ch ) / 2, cw, ch );
@@ -1513,7 +1513,7 @@ void CCzmSettings::DrawRow( int i )
 void CCzmSettings::DrawConfirm( void )
 {
 	HFont titleFont = CZM_Font( CZMF_PANEL_TITLE );
-	int pad = H * 0.04f;
+	int pad = H * 0.028f;
 	int titleY = m_confirmPanel.y + ( m_confirmNo.y - m_confirmPanel.y - CZM_FontHeight( titleFont )) / 2;
 
 	UI_FillRect( 0, 0, W, H, PackRGBA( 0, 0, 0, 170 ));

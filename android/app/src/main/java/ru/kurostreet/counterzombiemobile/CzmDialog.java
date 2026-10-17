@@ -64,10 +64,19 @@ final class CzmDialog extends Dialog {
         View line = new View(a); line.setBackgroundColor(RED);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(a, 36), dp(a, 2));
         lp.topMargin = dp(a, 9); lp.bottomMargin = dp(a, 6); root.addView(line, lp);
-        ScrollView scroll = new ScrollView(a); scroll.setFillViewport(false);
+        ScrollView scroll = new ScrollView(a) {
+            @Override protected void onMeasure(int widthSpec, int heightSpec) {
+                android.graphics.Rect visible=new android.graphics.Rect();
+                root.getWindowVisibleDisplayFrame(visible);
+                int available=visible.height()>0?visible.height():a.getResources().getDisplayMetrics().heightPixels;
+                int cap=Math.max(dp(a,48),Math.min(dp(a,200),available-dp(a,150)));
+                if(View.MeasureSpec.getMode(heightSpec)!=View.MeasureSpec.UNSPECIFIED)cap=Math.min(cap,View.MeasureSpec.getSize(heightSpec));
+                super.onMeasure(widthSpec,View.MeasureSpec.makeMeasureSpec(cap,View.MeasureSpec.AT_MOST));
+            }
+        }; scroll.setFillViewport(false);
         body = new LinearLayout(a); body.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(body);
-        root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        root.addView(scroll, new LinearLayout.LayoutParams(-1, -2));
         error = text("", 12, Color.rgb(255, 137, 137)); error.setVisibility(View.GONE); body.addView(error);
         LinearLayout buttons = new LinearLayout(a); buttons.setGravity(Gravity.END);
         cancel = button(back, false); submit = button(action, true);
@@ -76,6 +85,7 @@ final class CzmDialog extends Dialog {
         LinearLayout.LayoutParams s = new LinearLayout.LayoutParams(0, dp(a, 44), 1); s.topMargin = dp(a, 8);
         buttons.addView(submit, s); root.addView(buttons);
         cancel.setOnClickListener(v -> dismiss());
+        setCanceledOnTouchOutside(true);
         setContentView(root);
         Window w = getWindow();
         if (w != null) {
@@ -183,8 +193,7 @@ final class CzmDialog extends Dialog {
         if (window == null) return;
         android.util.DisplayMetrics m = activity.getResources().getDisplayMetrics();
         // A bounded compact panel; the body scrolls and the actions remain visible with the IME.
-        window.setLayout(Math.min(dp(activity, 440), m.widthPixels - dp(activity, 40)),
-            Math.min(dp(activity, 340), m.heightPixels - dp(activity, 32)));
+        window.setLayout(Math.min(dp(activity, 420), m.widthPixels - dp(activity, 32)),WindowManager.LayoutParams.WRAP_CONTENT);
         root.requestFocus();
     }
 }

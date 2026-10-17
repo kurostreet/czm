@@ -45,6 +45,8 @@ static struct
 	char sentNick[64];
 	char sentAvatar[80];
 	bool ready;
+	bool account;
+	int identity;
 	int player;
 	char myAvatar[32];
 
@@ -97,6 +99,9 @@ bool CZM_OnlineReady( void )
 {
 	return s_online.ready;
 }
+
+bool CZM_OnlineAccount( void ) { return s_online.account; }
+int CZM_OnlineIdentity( void ) { return s_online.identity; }
 
 int CZM_OnlinePlayer( void )
 {
@@ -280,6 +285,7 @@ void CZM_OnlineAvatarChanged( void )
 
 void CZM_OnlineFrame( void )
 {
+	CZM_SprayFrame();
 	CZM_HudEditorFrame();
 	double now = EngFuncs::DoubleTime();
 	int status;
@@ -302,6 +308,8 @@ void CZM_OnlineFrame( void )
 		CzmJson j;
 		if( j.Parse( body.Get() ))
 		{
+			s_online.identity++;
+			s_online.account=false;
 			CZM_TabReset();
 			s_online.ready = false;
 			s_online.player = 0;
@@ -317,6 +325,7 @@ void CZM_OnlineFrame( void )
 			}
 			else if( j.Type( profile ) == CzmJson::T_OBJECT )
 			{
+				s_online.account=j.String(j.Get(profile,"login"))[0]!=0;
 				const char *avatar = j.String( j.Get( profile, "avatar" ));
 				s_online.player = j.Int( j.Get( profile, "id" ));
 				CZM_SetNick( j.String( j.Get( profile, "nick" )));

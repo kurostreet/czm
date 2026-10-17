@@ -236,8 +236,8 @@ static const struct { const char *key, *ru, *en; } s_strings[] =
 	{ "opt_new", "Новое", "New" },
 	{ "opt_classic", "Классика", "Classic" },
 	{ "s_nick", "Ник", "Nickname" },
-	{ "s_account", "Аккаунт CZM", "CZM account" },
-	{ "s_account_hint", "Сохранить профиль и войти на другом устройстве", "Keep your profile and sign in on another device" },
+	{ "s_account", "Аккаунт и почта", "Account and email" },
+	{ "s_account_hint", "Вход, привязка почты и настройки облака", "Sign in, link email and manage cloud settings" },
 	{ "s_account_open", "Открыть", "Open" },
 	{ "s_nick_hint", "Так тебя видят другие игроки", "How other players see you" },
 	{ "nick_placeholder", "Твой ник", "Your nickname" },
@@ -1715,6 +1715,8 @@ static const char *s_sprays[] =
 	"czm_logo", "czm_zombie", "czm_hunter", "czm_soldier", "czm_biohazard",
 	"czm_skull", "czm_claws", "czm_gg", "czm_zm",
 };
+static char s_preparedSpray[32];
+static double s_sprayRetry;
 
 int CZM_SprayCount( void )
 {
@@ -1755,7 +1757,7 @@ void CZM_SetSpray( int index )
 	if( index < 0 || index >= CZM_SprayCount())
 		return;
 
-	// the engine packs logos/remapped.png into tempdecal.wad for the server
+	// Keep the legacy menu cache in sync; the engine uploads the selected source PNG.
 	data = EngFuncs::COM_LoadFile( CZM_SprayImage( index ), &length );
 	if( !data || length <= 0 )
 		return;
@@ -1768,7 +1770,24 @@ void CZM_SetSpray( int index )
 
 	EngFuncs::CvarSetString( "cl_logoext", "png" );
 	EngFuncs::CvarSetString( "cl_logofile", s_sprays[index] );
+	EngFuncs::CvarSetValue( "cl_allowupload", 1 );
 	EngFuncs::CvarSetValue( "@cl_logoupdate", !EngFuncs::GetCvarFloat( "@cl_logoupdate" ));
+	Q_strncpy( s_preparedSpray, s_sprays[index], sizeof( s_preparedSpray ));
+}
+
+void CZM_SprayFrame( void )
+{
+	int index=CZM_CurrentSpray();
+	const char *name=EngFuncs::GetCvarString("cl_logofile");
+	if(EngFuncs::DoubleTime()<s_sprayRetry)return;
+	if(index<0 && name && !strcmp(name,"lambda")){
+		index=0;
+		for(int i=0;i<CZM_SprayCount();i++)if(!strcmp(s_preparedSpray,s_sprays[i]))index=i;
+	}
+	if(index>=0 && (strcmp(s_preparedSpray,s_sprays[index]) || strcmp(name,s_sprays[index]) || strcmp(EngFuncs::GetCvarString("cl_logoext"),"png"))){
+		s_sprayRetry=EngFuncs::DoubleTime()+2.0;
+		CZM_SetSpray(index);
+	}
 }
 
 /*

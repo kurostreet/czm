@@ -494,12 +494,12 @@ void CCzmChat::Layout( void )
 
 	// complaint window
 	{
-		int pw = Q_min( (int)( H * 0.9f ), W - margin * 2 ), ph = H * 0.56f, bh = H * 0.08f, bw = pw - pad * 2 * 2;
+		int pw = Q_min( (int)( H * 0.9f ), W - margin * 2 ), ph = H * ( PopupHasAvatar() ? 0.43f : 0.34f ), bh = H * 0.07f, bw = pw - pad * 2 * 2;
 
 		m_popup = CZM_Rect(( W - pw ) / 2, ( H - ph ) / 2, pw, ph );
-		m_popupMessage = CZM_Rect( m_popup.x + pad * 2, m_popup.y + ph * 0.34f, bw, bh );
-		m_popupAvatar = CZM_Rect( m_popupMessage.x, m_popupMessage.y + bh + H * 0.02f, bw, bh );
-		m_popupCancel = CZM_Rect( m_popupMessage.x, m_popupAvatar.y + bh + H * 0.02f, bw, bh );
+		m_popupMessage = CZM_Rect( m_popup.x + pad * 2, m_popup.y + H * 0.14f, bw, bh );
+		m_popupAvatar = CZM_Rect( m_popupMessage.x, m_popupMessage.y + bh + H * 0.015f, bw, bh );
+		m_popupCancel = CZM_Rect( m_popupMessage.x, ( PopupHasAvatar() ? m_popupAvatar.y : m_popupMessage.y ) + bh + H * 0.015f, bw, bh );
 	}
 }
 

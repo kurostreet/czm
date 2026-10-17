@@ -38,7 +38,7 @@ void UI_EnableTextInput(bool);void CZM_Init();bool CZM_IsRussian();unsigned CZM_
 HFont CZM_Font(int);int CZM_FontHeight(HFont);int CZM_TextWidth(HFont,const char*);int CZM_WrapText(HFont,const char*,int,int*,int);void CZM_WrapLine(const char*,const int*,int,char*,size_t);
 void CZM_DrawText(HFont,int,int,int,const char*,unsigned,unsigned=0);void UI_FillRect(int,int,int,int,unsigned);
 void CZM_DrawImage(const char*,int,int,int,int,unsigned=0xffffffff);void CZM_DrawPill(const char*,int,int,int,int,unsigned=0xffffffff);void CZM_DrawButton(const char*,const CzmRect&,const char*,unsigned,bool,int);void CZM_DrawPanel(const CzmRect&);
-bool CZM_OnlineReady();const char*CZM_OnlineKey();int CZM_OnlinePlayer();const char*CZM_OnlineUrl(const char*);const char*CZM_AvatarFor(const char*,int);
+bool CZM_OnlineReady();bool CZM_OnlineAccount();int CZM_OnlineIdentity();const char*CZM_OnlineKey();int CZM_OnlinePlayer();const char*CZM_OnlineUrl(const char*);const char*CZM_AvatarFor(const char*,int);
 int CZM_NetRequest(const char*,const char*,const char*,const char*);bool CZM_NetPoll(int,int*,CUtlString&);void CZM_NetNewKey(char*,size_t);
 void CZM_OpenSettings(int);void CZM_AccountShow(const char*,const char*);bool CZM_CopyText(const char*);void CZM_JoinAddress(const char*);void CZM_PlayClick();
 '''
@@ -47,7 +47,7 @@ HARNESS = r'''
 #include <map>
 #include <cassert>
 int ScreenWidth=1536,ScreenHeight=716,cursorX,cursorY;Cursor uiStatic;Stack stack;
-static double now=100;static std::string key="czms1_first-account";static int me=7,ids,logins,lastButtonFont;static bool drawTrace;static bool russian=true;
+static double now=100;static std::string key="legacy-device-key";static int me=7,ids,logins,lastButtonFont,identity=1;static bool authenticated=true,drawTrace;static bool russian=true;
 static std::map<std::string,std::string> vars;static std::map<int,std::pair<int,std::string>> replies;
 struct Request{int id;std::string url,body;};static std::vector<Request> requests;
 const char*EngFuncs::GetCvarString(const char*k){return vars[k].c_str();}float EngFuncs::GetCvarFloat(const char*k){return atof(GetCvarString(k));}void EngFuncs::CvarSetString(const char*k,const char*v){vars[k]=v;}void EngFuncs::CvarSetValue(const char*k,float v){vars[k]=std::to_string(v);}double EngFuncs::DoubleTime(){return now;}
@@ -62,7 +62,7 @@ void CZM_DrawImage(const char*p,int x,int y,int w,int h,unsigned c){if(drawTrace
 void CZM_DrawPill(const char*,int x,int y,int w,int h,unsigned c){UI_FillRect(x,y,w,h,c);}
 void CZM_DrawPanel(const CzmRect&r){UI_FillRect(r.x,r.y,r.w,r.h,PackRGBA(10,17,26,250));}
 void CZM_DrawButton(const char*p,const CzmRect&r,const char*s,unsigned c,bool,int font){lastButtonFont=font;UI_FillRect(r.x,r.y,r.w,r.h,strstr(p,"primary")?PackRGBA(210,34,55,255):PackRGBA(31,43,59,255));CZM_DrawText(font,r.x+r.h/4,r.y+(r.h-CZM_FontHeight(font))/2,r.w-r.h/2,s,c,QM_CENTER);}
-bool CZM_OnlineReady(){return true;}const char*CZM_OnlineKey(){return key.c_str();}int CZM_OnlinePlayer(){return me;}const char*CZM_OnlineUrl(const char*p){return p;}const char*CZM_AvatarFor(const char*,int){return "gfx/czm/ui/avatar.png";}
+bool CZM_OnlineReady(){return true;}bool CZM_OnlineAccount(){return authenticated;}int CZM_OnlineIdentity(){return identity;}const char*CZM_OnlineKey(){return key.c_str();}int CZM_OnlinePlayer(){return me;}const char*CZM_OnlineUrl(const char*p){return p;}const char*CZM_AvatarFor(const char*,int){return "gfx/czm/ui/avatar.png";}
 int CZM_NetRequest(const char*,const char*url,const char*,const char*body){requests.push_back({++ids,url,body});return ids;}
 bool CZM_NetPoll(int id,int*status,CUtlString&body){auto i=replies.find(id);if(i==replies.end())return false;*status=i->second.first;body.Set(i->second.second.c_str());replies.erase(i);return true;}
 void CZM_NetNewKey(char*out,size_t size){Q_strncpy(out,"0123456789abcdef0123456789abcdef",size);}void CZM_OpenSettings(int){}void CZM_AccountShow(const char*,const char*){logins++;}bool CZM_CopyText(const char*){return true;}void CZM_JoinAddress(const char*){}void CZM_PlayClick(){}
@@ -79,12 +79,12 @@ int main(int argc,char**argv){
  w.m_tab=2;w.Navigate(w.LIST);CzmJson followers;assert(followers.Parse("{\"people\":[],\"counts\":{\"requests\":0},\"next\":-1}"));
  w.Read(followers,w.READ_LIST);assert(w.m_write==0);
  // A reply sent before logout cannot populate another account's window.
- int pending=w.m_read;key="czms1_second-account";me=9;CZM_SocialFrame();assert(!w.m_open&&w.m_messages.Count()==0);
+ int pending=w.m_read;identity++;me=9;CZM_SocialFrame();assert(!w.m_open&&w.m_messages.Count()==0);
  if(pending)replies[pending]={200,"{\"messages\":[{\"id\":55,\"t\":\"private old account\"}]}"};CZM_SocialFrame();assert(w.m_messages.Count()==0);
- key="guest-legacy-key";CZM_SocialFrame();CZM_OpenFriends();w.Layout();cursorX=w.m_prev.x+1;cursorY=w.m_prev.y+1;assert(w.Hit()==w.LOGIN);w.Activate(w.LOGIN);assert(logins==1);
+ authenticated=false;identity++;CZM_SocialFrame();CZM_OpenFriends();w.Layout();cursorX=w.m_prev.x+1;cursorY=w.m_prev.y+1;assert(w.Hit()==w.LOGIN);w.Activate(w.LOGIN);assert(logins==1);
  Button(CZM_Rect(0,0,ScreenHeight*.18f,ScreenHeight*.07f),"Отправить");assert(lastButtonFont!=CZMF_LANG);
  // Profiles remain compact with reachable, non-overlapping controls.
- key="czms1_second-account";CZM_SocialFrame();CZM_OpenFriends();
+ authenticated=true;identity++;CZM_SocialFrame();CZM_OpenFriends();
  for(auto resolution:{std::pair<int,int>{1536,716},{960,540},{1024,768},{1280,720}}){
   ScreenWidth=resolution.first;ScreenHeight=resolution.second;
   for(int variant=0;variant<8;variant++){
@@ -109,6 +109,16 @@ int main(int argc,char**argv){
    }
   }
  }
+ // Native account state is public metadata: the legacy key never contains the session.
+ assert(Account()&&key=="legacy-device-key");
+ w.OpenProfile(me,false);w.Read(j,w.READ_PROFILE);w.m_profile.id=me;w.Layout();
+ cursorX=w.m_profileStatus.x+2;cursorY=uiStatic.cursorY=w.m_profileStatus.y+2;
+ assert(w.Hit()==w.EDIT);w.KeyDown(1);w.KeyUp(1);assert(w.m_editStatus);
+ w.Activate(w.CANCEL);w.Layout();
+ // Interior taps stay in the card; an exterior tap closes and is consumed.
+ cursorX=w.m_panel.x+w.m_panel.w/2;cursorY=uiStatic.cursorY=w.m_panel.y+w.m_panel.h/2;assert(w.Hit()!=w.BACKDROP);
+ cursorX=w.m_panel.x-2;cursorY=uiStatic.cursorY=w.m_panel.y+2;
+ assert(w.Hit()==w.BACKDROP);assert(w.KeyDown(1));assert(w.KeyUp(1));assert(!w.m_open);
  russian=true;
  // Adding from a player card uses the account ID, then exposes the dialog for a friend.
  w.OpenProfile(8,true,71);w.Read(j,w.READ_PROFILE);strcpy(w.m_profile.relation,"none");w.Layout();

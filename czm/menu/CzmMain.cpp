@@ -265,8 +265,8 @@ void CCzmMainMenu::Layout( void )
 	// panels
 	if( m_overlay == OV_SETUP )
 	{
-		int pad = H * 0.05f;
-		int pw = H * 0.86f, ph = H * 0.70f;
+		int pad = H * 0.03f;
+		int pw = H * 0.86f, ph = H * 0.60f;
 		int lineH = H * 0.075f;
 
 		m_panel = CZM_Rect(( W - pw ) / 2, ( H - ph ) / 2, pw, ph );
@@ -276,9 +276,9 @@ void CCzmMainMenu::Layout( void )
 	}
 	else if( m_overlay == OV_QUIT )
 	{
-		int pad = H * 0.04f;
-		int bh = H * 0.085f;
-		int pw = H * 0.70f, ph = H * 0.36f;
+		int pad = H * 0.03f;
+		int bh = H * 0.07f;
+		int pw = H * 0.70f, ph = H * 0.27f;
 		int bw;
 
 		m_panel = CZM_Rect(( W - pw ) / 2, ( H - ph ) / 2, pw, ph );
@@ -290,18 +290,18 @@ void CCzmMainMenu::Layout( void )
 	{
 		bool about = m_overlay == OV_ABOUT, bell = m_overlay == OV_BELL;
 		int pw = about || bell ? Q_min( (int)( H * 1.16f ), (int)( W * 0.80f )) : Q_min( (int)( H * 1.0f ), (int)( W * 0.62f ));
-		int ph = about || bell ? H * 0.86f : H * 0.62f;
-		int pad = H * 0.045f;
-		int closeSize = H * 0.09f;
-		int rowH = H * 0.07f, y;
+		int ph = H * ( about ? 0.74f : bell ? ( CZM_NewsCount() ? 0.72f : CZM_Update() ? 0.48f : 0.38f ) : 0.62f );
+		int pad = H * 0.03f;
+		int closeSize = H * 0.075f;
+		int rowH = H * 0.062f, y;
 
 		m_panel = CZM_Rect(( W - pw ) / 2, ( H - ph ) / 2, pw, ph );
 		m_close = CZM_Rect( m_panel.x + pw - closeSize - H * 0.015f, m_panel.y + H * 0.015f, closeSize, closeSize );
 		m_iPanelLineY = m_panel.y + pad * 0.8f + CZM_FontHeight( CZM_Font( CZMF_PANEL_TITLE )) + H * 0.02f;
 
 		// About: logo, then the developer, the group, website, source code, version (five taps open the console), last update
-		m_aboutLogo = CZM_Rect( m_panel.x + pad, m_iPanelLineY + H * 0.025f, pw - pad * 2, H * 0.085f );
-		y = m_aboutLogo.y + m_aboutLogo.h + H * 0.02f;
+		m_aboutLogo = CZM_Rect( m_panel.x + pad, m_iPanelLineY + H * 0.025f, pw - pad * 2, H * 0.075f );
+		y = m_aboutLogo.y + m_aboutLogo.h + H * 0.015f;
 		for( int i = 0; i < CZM_ABOUT_ROWS; i++ )
 			m_aboutRows[i] = CZM_Rect( m_panel.x + pad, y + i * rowH, pw - pad * 2, rowH );
 		m_version = m_aboutRows[4];
@@ -976,7 +976,7 @@ void CCzmMainMenu::DrawBell( void )
 	HFont smallFont = CZM_Font( CZMF_SMALL );
 	const unsigned int dim = PackRGBA( 165, 172, 182, 255 );
 	const CzmUpdateInfo *update = CZM_Update();
-	int pad = H * 0.045f, x = m_panel.x + pad, w = m_panel.w - pad * 2;
+	int pad = H * 0.03f, x = m_panel.x + pad, w = m_panel.w - pad * 2;
 	int y = m_iPanelLineY + H * 0.025f, bottom = m_panel.y + m_panel.h - pad * 0.7f;
 	int seen = (int)EngFuncs::GetCvarFloat( "czm_news_seen" );
 
@@ -1132,7 +1132,7 @@ void CCzmMainMenu::DrawSetup( void )
 void CCzmMainMenu::DrawOverlay( void )
 {
 	HFont titleFont = CZM_Font( CZMF_PANEL_TITLE );
-	int pad = H * 0.045f;
+	int pad = H * 0.03f;
 	int closeIcon;
 
 	if( m_overlay == OV_SETUP )
@@ -1238,7 +1238,7 @@ void CCzmPauseMenu::Show()
 void CCzmPauseMenu::Layout( void )
 {
 	const int W = ScreenWidth, H = ScreenHeight;
-	int pw = H * 0.66f, ph = H * 0.60f;
+	int pw = H * 0.66f, ph = H * 0.48f;
 	int bw, bh, y, gap;
 
 	m_panel = CZM_Rect(( W - pw ) / 2, ( H - ph ) / 2, pw, ph );

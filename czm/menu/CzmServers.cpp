@@ -1418,8 +1418,8 @@ void CCzmServers::Layout( void )
 
 	// dialogs
 	{
-		int pw = Q_min( (int)( H * 1.0f ), W - m_iMargin * 2 ), ph = H * 0.52f, pad = H * 0.045f;
-		int fh = H * 0.08f, bh = H * 0.085f, bw = ( pw - pad * 3 ) / 2;
+		int pw = Q_min( (int)( H * 0.92f ), W - m_iMargin * 2 ), ph = H * 0.36f, pad = H * 0.03f;
+		int fh = H * 0.07f, bh = H * 0.07f, bw = ( pw - pad * 3 ) / 2;
 		int pasteW = m_iDialog == DLG_ADD ? H * 0.24f : 0;
 
 		// the phone keyboard covers the lower half, the window sits high

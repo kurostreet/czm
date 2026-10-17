@@ -163,6 +163,16 @@ final class CzmAccount {
         return d;
     }
 
+    private static void signedIn(CzmDialog d, JSONObject result, boolean ru) throws Exception {
+        synchronized (CzmAccount.class) {
+            String next = result.getString("token");
+            if (!next.matches("czms1_[A-Za-z0-9_-]{43}")) throw new IllegalArgumentException();
+            CzmServerAuth.session(d.activity, next); token = next; ++generation;
+            profile(result.getJSONObject("profile"));
+        }
+        d.dismiss(); Toast.makeText(d.activity, ru ? "Вход выполнен" : "Signed in", Toast.LENGTH_SHORT).show();
+    }
+
     static void show(String legacy, String nick, boolean ru) {
         Context context = SDLActivity.getContext(); if (!(context instanceof Activity)) return;
         Activity a = (Activity)context;
@@ -199,6 +209,7 @@ final class CzmAccount {
             d.link(ru ? "У меня уже есть код" : "I already have a code", v -> form(a, legacy, login.getText().toString(), "reset", ru));
         }
         if (!register && !recovery && !reset) {
+            d.link(ru ? "Войти по коду из почты" : "Sign in with email code", v -> emailLogin(a, legacy, nick, ru, false, ""));
             d.link(ru ? "Создать аккаунт" : "Create an account", v -> form(a, legacy, nick, "register", ru));
             d.link(ru ? "Забыли пароль?" : "Forgot password?", v -> form(a, legacy, login.getText().toString(), "recover", ru));
         }
@@ -222,12 +233,7 @@ final class CzmAccount {
                         form(a, legacy, login.getText().toString(), "login", ru);
                         editor.note(ru ? "Пароль изменён. Войдите с новым паролем." : "Password changed. Sign in with the new password.");
                     } else {
-                        synchronized (CzmAccount.class) {
-                            String next = result.getString("token");
-                            if (!next.matches("czms1_[A-Za-z0-9_-]{43}")) throw new IllegalArgumentException();
-                            CzmServerAuth.session(a, next); token = next; ++generation; profile(result.getJSONObject("profile"));
-                        }
-                        d.dismiss(); Toast.makeText(a, ru ? "Вход выполнен" : "Signed in", Toast.LENGTH_SHORT).show();
+                        signedIn(d, result, ru);
                     }
                 });
             } catch (Exception e) { d.fail(error("network", ru)); }
@@ -239,10 +245,9 @@ final class CzmAccount {
     private static void details(Activity a, String legacy, String nick, String credential, JSONObject info, boolean ru) {
         CzmDialog d = panel(a, ru ? "Аккаунт CZM" : "CZM account", info.optString("login") + " · ID " + info.optInt("id"), ru ? "Выйти" : "Sign out", ru);
         d.link(ru ? "Настройки в облаке" : "Cloud settings", v -> CzmCloud.show(a,ru));
-        d.note((ru ? "Почта для восстановления: " : "Recovery email: ") + (info.optString("email").isEmpty() ? (ru ? "не привязана" : "not linked") : info.optString("email")));
-        if (!info.optBoolean("mail_ready")) d.note(ru ? "Отправка писем ещё не настроена. Восстановление пока недоступно. Сохраните пароль."
-            : "Email delivery is not configured yet. Recovery is unavailable. Keep your password safe.");
-        else d.link(ru ? "Привязать / изменить почту" : "Link / change email", v -> email(a, legacy, nick, credential, ru, false));
+        d.note((ru ? "Почта для входа и восстановления: " : "Sign-in and recovery email: ") + (info.optString("email").isEmpty() ? (ru ? "не привязана" : "not linked") : info.optString("email")));
+        d.link(ru ? (info.optString("email").isEmpty() ? "Привязать почту" : "Изменить почту") : (info.optString("email").isEmpty() ? "Link email" : "Change email"), v -> email(a, legacy, nick, credential, ru, false));
+        if (!info.optBoolean("mail_ready")) d.note(ru ? "Отправка писем пока недоступна. Для входа используйте пароль." : "Email is temporarily unavailable. Use your password to sign in.");
         d.link(ru ? "Выйти на всех устройствах" : "Sign out on all devices", v -> {
             // An explicit second tap keeps this separate from signing out of the current phone.
             CzmDialog confirm = panel(a, ru ? "Завершить все сеансы?" : "End all sessions?", ru ? "Профиль и аватар сохранятся" : "Your profile and avatar will stay", ru ? "Выйти везде" : "Sign out everywhere", ru);
@@ -256,9 +261,36 @@ final class CzmAccount {
         android.widget.Button button=d.link(ru?"Отправить код ещё раз":"Resend code",v->action.run());
         button.post(new Runnable(){public void run(){if(!d.isShowing())return;long seconds=Math.max(0,((mailAt.containsKey(key)?mailAt.get(key):0L)-android.os.SystemClock.elapsedRealtime()+999)/1000);button.setEnabled(seconds==0&&d.submit.isEnabled());button.setText(seconds>0?(ru?"Отправить ещё раз через ":"Resend in ")+seconds+(ru?" сек.":" sec."):(ru?"Отправить код ещё раз":"Resend code"));button.postDelayed(this,1000);}});
     }
+
+    private static void emailLogin(Activity a, String legacy, String nick, boolean ru, boolean confirm, String address) {
+        CzmDialog d=panel(a,ru?"Вход по почте":"Sign in with email",confirm?address:(ru?"Введите почту, подтверждённую в аккаунте":"Use the email verified in your account"),confirm?(ru?"Войти":"Sign in"):(ru?"Получить код":"Get code"),ru);
+        EditText input=confirm?d.codeField(ru?"Код из письма":"Email code"):d.field("Email",false,254);
+        input.setInputType(confirm?InputType.TYPE_CLASS_NUMBER:InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
+        if(!confirm)input.setText(address);
+        String throttle="login:"+address.toLowerCase(java.util.Locale.ROOT);
+        if(confirm) {
+            d.note(ru?"Если почта привязана к аккаунту, код отправлен. Проверьте также «Спам».":"If this email is linked, a code was sent. Also check Spam.");
+            resend(d,throttle,ru,()->{try{send(d,"email-login","",new JSONObject().put("email",address),ru,result->mailAt.put(throttle,android.os.SystemClock.elapsedRealtime()+60000));}catch(Exception e){d.fail(error("email",ru));}});
+            d.link(ru?"Изменить адрес":"Change email address",v->emailLogin(a,legacy,nick,ru,false,address));
+        }
+        d.link(ru?"Войти по паролю":"Use password instead",v->form(a,legacy,nick,"login",ru));
+        d.submit.setOnClickListener(v->{
+            try {
+                String email=confirm?address:input.getText().toString().trim();
+                JSONObject body=new JSONObject().put("email",email);
+                if(confirm)body.put("code",input.getText().toString());
+                send(d,confirm?"email-login-confirm":"email-login","",body,ru,result->{
+                    if(confirm)signedIn(d,result,ru);
+                    else{mailAt.put("login:"+email.toLowerCase(java.util.Locale.ROOT),android.os.SystemClock.elapsedRealtime()+60000);emailLogin(a,legacy,nick,ru,true,email);}
+                });
+            }catch(Exception e){d.fail(error("email",ru));}
+        });
+        d.setOnDismissListener(v->{if(confirm)input.setText("");if(editor==d)editor=null;});
+        d.show();
+    }
     private static void email(Activity a, String legacy, String nick, String credential, boolean ru, boolean confirm) { email(a,legacy,nick,credential,ru,confirm,""); }
     private static void email(Activity a, String legacy, String nick, String credential, boolean ru, boolean confirm,String target) {
-        CzmDialog d = panel(a, ru ? "Почта для восстановления" : "Recovery email", confirm ? (ru ? "Введите код из письма" : "Enter the email code") : "",
+        CzmDialog d = panel(a, ru ? "Привязка почты" : "Link email", confirm ? (ru ? "Введите код из письма" : "Enter the email code") : (ru ? "Для входа по коду и восстановления аккаунта" : "For email sign-in and account recovery"),
             confirm ? (ru ? "Подтвердить" : "Confirm") : (ru ? "Получить код" : "Get code"), ru);
         EditText input = confirm ? d.codeField(ru ? "Код из письма" : "Email code") : d.field("Email", false, 254);
         input.setInputType(confirm ? InputType.TYPE_CLASS_NUMBER : InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);

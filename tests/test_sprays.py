@@ -149,6 +149,7 @@ int main(int argc,char **argv){
 #define ClearBits(x,b) ((x)&=~(b))
 #define SetBits(x,b) ((x)|=(b))
 #define Q_strcmp strcmp
+#define Q_strncmp strncmp
 #define Q_strncpy(d,s,n) snprintf(d,n,"%s",s)
 #define Q_snprintf snprintf
 typedef unsigned char byte;typedef int qboolean;typedef int file_t;
@@ -156,9 +157,10 @@ typedef struct{int ucFlags;byte rgucMD5_hash[16];}resource_t;
 enum{t_decal};struct{int net_protocol;}cls;struct{int num_resources;}cl;
 struct cvar{int flags;char *string;}cl_logoupdate,cl_logofile,cl_logocolor,cl_logoext,hpk_custom_file;
 static int converted,opened,added;static qboolean valid;static resource_t resource;static file_t file;
+static const char *expected="logos/remapped.png";
 static void HPAK_FlushHostQueue(void){}
 static void Cvar_DirectSet(struct cvar *v,char *s){v->string=s;}
-static qboolean CL_ConvertImageToWAD3(const char *name){assert(!strcmp(name,"logos/remapped.png"));converted++;return valid;}
+static qboolean CL_ConvertImageToWAD3(const char *name){assert(!strcmp(name,expected));converted++;return valid;}
 static void Con_Printf(const char *s){}
 static file_t *FS_Open(const char *name,const char *mode,qboolean game){assert(!strcmp(name,"tempdecal.wad"));opened++;return &file;}
 static int FS_FileLength(file_t *f){return 6256;}
@@ -168,9 +170,15 @@ static void HPAK_AddLump(int queued,const char *name,resource_t *r,void *unused,
 static void FS_Close(file_t *f){}
 ''' + function(source, "static void CL_CreateResourceList(") + r'''
 int main(void){
- cls.net_protocol=PROTO_GOLDSRC;cl_logoext.string="png";valid=false;
+ cls.net_protocol=PROTO_GOLDSRC;cl_logoext.string="png";cl_logofile.string="lambda";valid=false;
  CL_CreateResourceList();assert(converted==1&&opened==0&&added==0&&cl.num_resources==0);
  valid=true;CL_CreateResourceList();assert(converted==2&&opened==1&&added==1&&cl.num_resources==1);
+ // Selection wins over a stale remapped file and a restored old extension.
+ cl_logofile.string="czm_biohazard";cl_logoext.string="bmp";expected="logos/czm_biohazard.png";
+ CL_CreateResourceList();assert(converted==3&&opened==2&&added==2);
+ // Untrusted names cannot select a path outside the logos directory.
+ cl_logofile.string="czm_../../secret";cl_logoext.string="png";expected="logos/remapped.png";
+ CL_CreateResourceList();assert(converted==4&&opened==3&&added==3);
 }
 '''
         path = self.folder / "resource.c"
@@ -178,6 +186,50 @@ int main(void){
         exe = self.folder / "resource"
         subprocess.run(["gcc", "-std=gnu99", str(path), "-o", str(exe)], check=True)
         subprocess.run([str(exe)], check=True)
+
+    def test_saved_selection_is_prepared_and_restored_before_upload(self):
+        source = (ROOT / "czm/menu/CzmMenu.cpp").read_text()
+        start = source.index("static const char *s_sprays[]")
+        end = source.index("\n/*", source.index("void CZM_SprayFrame(", start))
+        harness = r'''
+#include <cassert>
+#include <cstdio>
+#include <cstring>
+#include <strings.h>
+#include <string>
+#include <map>
+using byte=unsigned char;
+#define stricmp strcasecmp
+#define Q_strncpy(d,s,n) snprintf(d,n,"%s",s)
+static std::map<std::string,std::string> vars;
+static std::string loaded;
+static double now=10;static int reads,saves;static bool available=true;
+struct EngFuncs {
+ static const char*GetCvarString(const char*n){return vars[n].c_str();}
+ static float GetCvarFloat(const char*n){return atof(GetCvarString(n));}
+ static void CvarSetString(const char*n,const char*v){vars[n]=v;}
+ static void CvarSetValue(const char*n,float v){vars[n]=std::to_string(v);}
+ static double DoubleTime(){return now;}
+ static byte*COM_LoadFile(const char*n,int*size){reads++;loaded=n;*size=available?4:0;static byte data[4];return available?data:nullptr;}
+ static int COM_SaveFile(const char*n,byte*,int size){assert(!strcmp(n,"logos/remapped.png")&&size==4);saves++;return 1;}
+ static void COM_FreeFile(void*){}static void DeleteFile(const char*){}
+};
+''' + source[start:end] + r'''
+int main(){
+ vars["cl_logofile"]="czm_biohazard";vars["cl_logoext"]="bmp";vars["cl_allowupload"]="0";
+ CZM_SprayFrame();assert(loaded=="logos/czm_biohazard.png"&&saves==1&&EngFuncs::GetCvarFloat("cl_allowupload")==1);
+ for(int i=0;i<100;i++){now+=.03;CZM_SprayFrame();}assert(reads==1);
+ vars["cl_logofile"]="lambda";CZM_SprayFrame();assert(vars["cl_logofile"]=="czm_biohazard"&&saves==2);
+ now+=3;vars["cl_logofile"]="custom_player_logo";CZM_SprayFrame();assert(reads==2);
+ vars["cl_logofile"]="czm_skull";available=false;CZM_SprayFrame();assert(reads==3&&saves==2);
+ now+=.2;CZM_SprayFrame();assert(reads==3);
+ now+=3;available=true;CZM_SprayFrame();assert(loaded=="logos/czm_skull.png"&&saves==3);
+ CZM_SetSpray(7);assert(loaded=="logos/czm_gg.png"&&vars["cl_logofile"]=="czm_gg");
+}
+'''
+        path=self.folder/"selection.cpp";path.write_text(harness);exe=self.folder/"selection"
+        subprocess.run(["g++","-std=c++11",str(path),"-o",str(exe)],check=True)
+        subprocess.run([str(exe)],check=True)
 
 
 if __name__ == "__main__":

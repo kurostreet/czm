@@ -213,6 +213,7 @@ const char *CZM_SprayName( int index );  // file name without the extension
 const char *CZM_SprayImage( int index ); // logos/<name>.png
 int CZM_CurrentSpray( void );            // -1 if the player uses a stock spray
 void CZM_SetSpray( int index );
+void CZM_SprayFrame( void );
 
 // avatars: the game logo, our pictures, the player's own photo from the gallery
 #define CZM_AVATAR_LOGO -1
@@ -333,6 +334,8 @@ void CZM_OnlineFrame( void );          // every frame
 const char *CZM_OnlineUrl( const char *path );
 const char *CZM_OnlineKey( void );
 bool CZM_OnlineReady( void );
+bool CZM_OnlineAccount( void );
+int CZM_OnlineIdentity( void );
 int CZM_OnlinePlayer( void );
 bool CZM_OnlineBan( int *until, bool *forever, const char **reason );
 void CZM_OnlineReadBan( const CzmJson &j, int ban );
