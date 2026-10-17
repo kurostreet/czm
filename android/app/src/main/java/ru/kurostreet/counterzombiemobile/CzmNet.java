@@ -56,8 +56,6 @@ public final class CzmNet {
     public static byte[] accountEvent() { return CzmAccount.event(); }
     public static void colorShow(int r, int g, int b, boolean ru) { CzmColorPicker.show(r, g, b, ru); }
     public static byte[] colorEvent() { return CzmColorPicker.event(); }
-    public static void hudShow(byte[] body, boolean ru) { CzmHudEditor.show(body,ru); }
-    public static byte[] hudEvent() { return CzmHudEditor.event(); }
     public static byte[] cloudEvent() { byte[] event=CzmCloud.event();return event!=null?event:CzmLayoutActivity.event(); }
     public static void layoutsShow() { Context ctx=context();if(ctx instanceof android.app.Activity)((android.app.Activity)ctx).runOnUiThread(()->ctx.startActivity(new Intent(ctx,CzmLayoutActivity.class))); }
     public static void cloudApplied(int request, boolean success) { CzmCloud.applied(request,success); }

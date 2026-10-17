@@ -295,7 +295,6 @@ void CZM_OnlineAvatarChanged( void )
 void CZM_OnlineFrame( void )
 {
 	CZM_SprayFrame();
-	CZM_HudEditorFrame();
 	double now = EngFuncs::DoubleTime();
 	int status;
 	CUtlString body;

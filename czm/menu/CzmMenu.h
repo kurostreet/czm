@@ -249,6 +249,7 @@ void CZM_SetTouchScheme( int scheme, bool fromPreset );
 void CZM_TouchStartup( void ); // first start of this version: our layout replaces the stock one
 void CZM_SaveTouchConfig( void ); // writes the current buttons and touch settings to the layout file
 void CZM_OpenTouchEditor( void );
+void CZM_TouchResetHud( void ); // HUD places and sizes back to the defaults
 
 /*
  * shop (buy menu) and server menus as cards
@@ -267,11 +268,7 @@ void CZM_ServerAuthShow( const char *address, const char *name );
 void CZM_AccountShow( const char *key, const char *nick );
 bool CZM_AccountEvent( CUtlString &body );
 void CZM_ColorPickerShow( int r, int g, int b );
-void CZM_HudEditorShow( const char *body );
-bool CZM_HudEditorEvent( CUtlString &body );
-void CZM_OpenHudEditor( void );
 void CZM_LayoutsShow( void );
-void CZM_HudEditorFrame( void );
 bool CZM_CloudEvent( CUtlString &body );
 bool CZM_WidgetEvent( CUtlString &body );
 void CZM_CloudApplied( int request, bool success );

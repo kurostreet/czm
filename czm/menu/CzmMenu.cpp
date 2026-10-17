@@ -152,12 +152,12 @@ static const struct { const char *key, *ru, *en; } s_strings[] =
 	{ "opt_scheme1", "Классика", "Classic" },
 	{ "opt_scheme2", "Шутер", "Shooter" },
 	{ "opt_scheme3", "Минимум", "Minimal" },
-	{ "s_buttons", "Кнопки на экране", "On-screen buttons" },
-	{ "s_buttons_hint", "Место, размер, иконки, новые кнопки", "Place, size, icons, new buttons" },
+	{ "s_buttons", "Кнопки и интерфейс", "Buttons and HUD" },
+	{ "s_buttons_hint", "Кнопки и HUD матча на одном экране, перекрытия видно сразу", "Buttons and the match HUD on one screen, overlaps are shown" },
 	{ "b_edit", "Изменить", "Edit" },
 	{ "b_reset", "Сбросить", "Reset" },
-	{ "reset_confirm", "Сбросить раскладку кнопок?", "Reset the button layout?" },
-	{ "reset_done", "Раскладка кнопок сброшена", "Button layout reset" },
+	{ "reset_confirm", "Сбросить кнопки и интерфейс?", "Reset the buttons and HUD?" },
+	{ "reset_done", "Кнопки и интерфейс сброшены", "Buttons and HUD reset" },
 	{ "s_brightness", "Яркость", "Brightness" },
 	{ "s_parallax", "Живой фон меню", "Animated menu background" },
 	{ "s_parallax_hint", "Движение трёх слоёв и света", "Animated layers and light" },
@@ -339,7 +339,7 @@ static const struct { const char *key, *ru, *en; } s_strings[] =
 	{ "s_layouts", "Обмен раскладками", "Share layouts" },
 	{ "s_layouts_hint", "Поделиться файлом · импорт с просмотром · отмена", "Share file · preview before import · undo" },
 	{ "s_hud_edit", "Интерфейс в матче", "In-match HUD" },
-	{ "s_hud_edit_hint", "Три оформления · положение · размер · прозрачность", "Three styles · positions · size · opacity" },
+	{ "s_hud_edit_hint", "Вместе с кнопками: стиль, место, размер, видимость", "Together with the buttons: style, place, size, opacity" },
 	{ "setup_title", "Добро пожаловать!", "Welcome!" },
 	{ "setup_text", "Выбери язык и придумай ник", "Choose a language and a nickname" },
 	{ "setup_go", "Играть", "Play" },
@@ -1998,32 +1998,6 @@ void CZM_ApplyStartupSettings( void )
 	EngFuncs::CvarSetValue( "cl_allowdownload", 1.0f );
 
 	CZM_TouchStartup();
-}
-
-void CZM_OpenHudEditor( void )
-{
- CUtlString json; char part[256];
- snprintf(part,sizeof(part),"{\"style\":%d,\"blocks\":{",(int)CzmHud::Clamp(EngFuncs::GetCvarFloat("czm_hud_style"),0,2,0));json=part;
- for(int i=0;i<CzmHud::COUNT;i++) {
-  char key[64];float values[4];const char *fields[]={"x","y","scale","opacity"};
-  for(int k=0;k<4;k++){CzmHud::Key(key,sizeof(key),i,fields[k]);float lo=k==2?.65f:k==3?.25f:.01f,hi=k==2?1.6f:k==3?1:.99f;values[k]=CzmHud::Clamp(EngFuncs::GetCvarFloat(key),lo,hi,k<2?CzmHud::defaults[i][k]:1);}
-  snprintf(part,sizeof(part),"%s\"%s\":{\"x\":%.4f,\"y\":%.4f,\"scale\":%.4f,\"opacity\":%.4f}",i?",":"",CzmHud::keys[i],values[0],values[1],values[2],values[3]);json+=part;
- }
- json+="}}";CZM_HudEditorShow(json.Get());
-}
-void CZM_HudEditorFrame( void )
-{
- CUtlString body;if(!CZM_HudEditorEvent(body))return;
- CzmJson j;if(!j.Parse(body.Get()))return;int style=j.Get(0,"style"),blocks=j.Get(0,"blocks");
- if(j.Type(style)!=CzmJson::T_NUMBER || j.Type(blocks)!=CzmJson::T_OBJECT)return;
- float values[CzmHud::COUNT][4];const char *fields[]={"x","y","scale","opacity"};
- for(int i=0;i<CzmHud::COUNT;i++) for(int k=0;k<4;k++) {
-  int n=j.Get(j.Get(blocks,CzmHud::keys[i]),fields[k]);if(j.Type(n)!=CzmJson::T_NUMBER)return;
-  values[i][k]=CzmHud::Clamp(j.Number(n),k==2?.65f:k==3?.25f:.01f,k==2?1.6f:k==3?1:.99f,k<2?CzmHud::defaults[i][k]:1);
- }
- EngFuncs::CvarSetValue("czm_hud_style",CzmHud::Clamp(j.Number(style),0,2,0));
- for(int i=0;i<CzmHud::COUNT;i++)for(int k=0;k<4;k++){char key[64];CzmHud::Key(key,sizeof(key),i,fields[k]);EngFuncs::CvarSetValue(key,values[i][k]);}
- EngFuncs::ClientCmd(false,"host_writeconfig\n");
 }
 
 void CZM_CloudFrame( void )

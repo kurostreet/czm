@@ -128,6 +128,7 @@ public:
 	CCzmSocial();
 	void Show() override;
 	void Hide() override;
+	void Forget();
 	void Draw() override;
 	bool IsRoot() const override { return false; }
 	bool KeyDown( int key ) override;
@@ -179,21 +180,27 @@ CCzmSocial::CCzmSocial() : CMenuFramework( "CzmSocial" )
 	memset( &m_profile,0,sizeof( m_profile ));
 }
 
+// The window keeps being drawn while its closing animation plays, so what was on screen stays
+// until the next opening: clearing it in Hide() flashed an empty guest profile with its buttons.
+void CCzmSocial::Forget()
+{
+	m_people.RemoveAll(); m_messages.RemoveAll(); memset( &m_profile,0,sizeof( m_profile ));
+}
 void CCzmSocial::Show()
 {
 	CZM_Init(); m_epoch=s_epoch; m_mode=LIST; m_tab=0; m_outside=false; m_target=0;
-	if( !m_open ) CMenuFramework::Show(); m_open=true; Navigate( LIST );
+	if( !m_open ) { Forget(); CMenuFramework::Show(); } m_open=true; Navigate( LIST );
 }
 void CCzmSocial::Hide()
 {
 	EndInput(); m_open=false; m_chatMessage=0; m_confirm[0]=0; m_input[0]=m_sent[0]=m_nonce[0]=m_nonceText[0]=0;
-	m_people.RemoveAll(); m_messages.RemoveAll(); memset( &m_profile,0,sizeof( m_profile ));
+	m_pickOpen=false; m_pressed=0;
 	m_view++; CMenuFramework::Hide();
 }
 void CCzmSocial::OpenProfile( int id, bool outside, int chatMessage )
 {
 	if( id<=0 ) return;
-	if( !m_open ) { CMenuFramework::Show(); m_open=true; m_epoch=s_epoch; }
+	if( !m_open ) { Forget(); CMenuFramework::Show(); m_open=true; m_epoch=s_epoch; }
 	m_outside=outside; m_returnMode=m_mode==DIALOG?DIALOG:LIST; m_target=id; Navigate( PROFILE );
 	m_chatMessage=chatMessage;
 }
@@ -279,7 +286,7 @@ void CCzmSocial::Read( const CzmJson &j,int kind )
 
 void CCzmSocial::Frame()
 {
-	if(m_epoch!=s_epoch){Abandon(m_read);Abandon(m_write);Abandon(m_ack);if(m_open)Hide();m_epoch=s_epoch;return;}
+	if(m_epoch!=s_epoch){Abandon(m_read);Abandon(m_write);Abandon(m_ack);if(m_open)Hide();Forget();m_epoch=s_epoch;return;} // another account: nothing of the old one stays
 	int status;CUtlString body;
 	if(m_read && CZM_NetPoll(m_read,&status,body)){
 		m_read=0;CzmJson j;bool parsed=j.Parse(body.Get());

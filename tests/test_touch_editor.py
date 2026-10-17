@@ -24,6 +24,7 @@ static bool CL_IsActive(){return connected;}
 static int CZM_Image(const char *name){assert(!strcmp(name,"gfx/czm/ui/editor_bg.png"));return 7;}
 static void CZM_DrawCover(int image,int x,int y,int w,int h){assert(image==7&&x==0&&y==0&&w==1536&&h==716);backgrounds++;}
 class CCzmTouchEditor{public:int W=1536,H=716;void Layout(){}void Draw();
+ void FindConflicts(){}void DrawHud(){assert(backgrounds==buttons+1);}
  void DrawButtons(){assert(backgrounds==buttons+1);buttons++;}};
 ''' + draw + r'''
 int main(){CCzmTouchEditor editor;for(int i=0;i<8;i++){connected=(i%2)!=0;editor.Draw();}assert(backgrounds==8&&buttons==8);}

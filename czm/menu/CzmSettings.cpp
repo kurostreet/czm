@@ -957,6 +957,7 @@ void CCzmSettings::Activate( int hit )
 		// our default for the current layout, the player's changes to it are dropped
 		m_bConfirm = false;
 		CZM_SetTouchScheme( CZM_TouchScheme(), true );
+		CZM_TouchResetHud();
 		Toast( "reset_done" );
 		return;
 	}
@@ -1019,7 +1020,8 @@ void CCzmSettings::Activate( int hit )
 			CZM_LayoutsShow();
 			break;
 		case ROW_HUDEDIT:
-			CZM_OpenHudEditor();
+			// the HUD is edited together with the buttons
+			CZM_OpenTouchEditor();
 			break;
 		case ROW_ACCOUNT:
 			CZM_AccountShow( CZM_OnlineKey(), EngFuncs::GetCvarString( "name" ));

@@ -333,11 +333,25 @@ def build_presets():
         print(path.relative_to(ROOT), len(buttons) + len(COMMON_HIDDEN), "buttons")
 
 
+# The stock HUD, chat lines and radar of the screenshot, as shares of the picture (x1, y1, x2, y2).
+# The editor draws our own HUD blocks over it, old numbers under them would only confuse.
+STOCK_HUD = [(0, 0, .075, .105), (0, 0, .09, .02), (0, .455, .02, .505), (0, .86, .215, .945), (0, .955, .04, .995),
+             (.19, .955, .235, .995), (.935, .935, 1, 1), (.475, .96, .53, 1), (.97, 0, 1, .04)]
+
+
 def build_background(screenshot):
+    import cv2
+    import numpy
     from PIL import Image
 
     image = Image.open(screenshot).convert("RGB")
     image = image.resize((1600, round(1600 * image.height / image.width)), Image.LANCZOS)
+    pixels = numpy.array(image)
+    mask = numpy.zeros(pixels.shape[:2], numpy.uint8)
+    h, w = mask.shape
+    for x1, y1, x2, y2 in STOCK_HUD:
+        mask[int(y1 * h):int(y2 * h), int(x1 * w):int(x2 * w)] = 255
+    image = Image.fromarray(cv2.inpaint(pixels, mask, 9, cv2.INPAINT_TELEA))
     path = EXTRAS / "gfx/czm/ui/editor_bg.png"
     image.save(path, "PNG", optimize=True)
     print(path.relative_to(ROOT), image.size, path.stat().st_size, "bytes")

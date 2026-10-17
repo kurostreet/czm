@@ -25,6 +25,7 @@ GNU General Public License for more details.
 #include "Scissor.h"
 #include "keydefs.h"
 #include "CzmMenu.h"
+#include "../../common/czm_hud_paint.h"
 
 #define UI_DIR "gfx/czm/ui/"
 #define TOUCH_DIR "gfx/czm/touch/"
@@ -305,6 +306,170 @@ static const char *ButtonLabel( const CzmTouchButton &b )
 
 /*
 =================
+match HUD
+
+The HUD blocks are edited on the same screen as the buttons, so the player sees what
+covers what. The HUD is one for all button schemes and lives in the czm_hud_* cvars.
+=================
+*/
+#define HUD_ATLAS "gfx/czm/hud_glyphs.tga"
+#define HUD_STYLES 3
+
+struct CzmHudBlock
+{
+	float x, y;          // centre, share of the screen
+	float scale, opacity;
+};
+
+static const struct
+{
+	const char *ru, *en;
+} s_hudNames[CzmHud::COUNT] =
+{
+	{ "Жизни", "Health" },
+	{ "Броня", "Armor" },
+	{ "Время", "Round time" },
+	{ "Деньги", "Money" },
+	{ "Патроны", "Ammo" },
+}, s_hudStyles[HUD_STYLES] =
+{
+	{ "Классический", "Classic" },
+	{ "Компактный", "Compact" },
+	{ "CZM", "CZM" },
+};
+
+static const char *s_hudFields[4] = { "x", "y", "scale", "opacity" };
+
+static const char *HudName( int kind )
+{
+	return CZM_IsRussian() ? s_hudNames[kind].ru : s_hudNames[kind].en;
+}
+
+static float HudField( const CzmHudBlock &block, int field )
+{
+	return field == 0 ? block.x : field == 1 ? block.y : field == 2 ? block.scale : block.opacity;
+}
+
+// the same limits as the game HUD uses when it draws
+static CzmHudBlock HudClamp( int kind, CzmHudBlock b )
+{
+	b.x = CzmHud::Clamp( b.x, 0.01f, 0.99f, CzmHud::defaults[kind][0] );
+	b.y = CzmHud::Clamp( b.y, 0.01f, 0.99f, CzmHud::defaults[kind][1] );
+	b.scale = CzmHud::Clamp( b.scale, 0.65f, 1.6f, 1.0f );
+	b.opacity = CzmHud::Clamp( b.opacity, 0.25f, 1.0f, 1.0f );
+	return b;
+}
+
+static CzmHudBlock HudDefault( int kind )
+{
+	CzmHudBlock b = { CzmHud::defaults[kind][0], CzmHud::defaults[kind][1], 1.0f, 1.0f };
+	return b;
+}
+
+static void ReadHud( CzmHudBlock *blocks, int *style )
+{
+	*style = (int)CzmHud::Clamp( EngFuncs::GetCvarFloat( "czm_hud_style" ), 0, HUD_STYLES - 1, 0 );
+	for( int i = 0; i < CzmHud::COUNT; i++ )
+	{
+		char key[64];
+		float values[4];
+
+		for( int k = 0; k < 4; k++ )
+		{
+			CzmHud::Key( key, sizeof( key ), i, s_hudFields[k] );
+			values[k] = EngFuncs::GetCvarFloat( key );
+		}
+		CzmHudBlock b = { values[0], values[1], values[2], values[3] };
+		blocks[i] = HudClamp( i, b );
+	}
+}
+
+static void WriteHud( const CzmHudBlock *blocks, int style )
+{
+	EngFuncs::CvarSetValue( "czm_hud_style", style );
+	for( int i = 0; i < CzmHud::COUNT; i++ )
+	{
+		for( int k = 0; k < 4; k++ )
+		{
+			char key[64];
+
+			CzmHud::Key( key, sizeof( key ), i, s_hudFields[k] );
+			EngFuncs::CvarSetValue( key, HudField( blocks[i], k ));
+		}
+	}
+	EngFuncs::ClientCmd( false, "host_writeconfig\n" );
+}
+
+// places, sizes and opacity back to the defaults, the chosen style stays
+void CZM_TouchResetHud( void )
+{
+	CzmHudBlock blocks[CzmHud::COUNT];
+
+	for( int i = 0; i < CzmHud::COUNT; i++ )
+		blocks[i] = HudDefault( i );
+	WriteHud( blocks, (int)CzmHud::Clamp( EngFuncs::GetCvarFloat( "czm_hud_style" ), 0, HUD_STYLES - 1, 0 ));
+}
+
+// the shared HUD painter drawing with menu calls: the preview is the HUD of the match
+struct CzmMenuHudPainter : CzmHud::Painter
+{
+	void Fill( int x, int y, int w, int h, int r, int g, int b, int a ) override
+	{
+		if( w > 0 && h > 0 )
+			UI_FillRect( x, y, w, h, PackRGBA( r, g, b, bound( 0, a, 255 )));
+	}
+	void Blend( int x, int y, int w, int h, int r, int g, int b, int a ) override
+	{
+		Fill( x, y, w, h, r, g, b, a );
+	}
+	void Text( float x, float y, float height, const char *s, int r, int g, int b, float alpha ) override
+	{
+		HIMAGE atlas = CZM_Image( HUD_ATLAS );
+		int iw = atlas ? EngFuncs::PIC_Width( atlas ) : 0, ih = atlas ? EngFuncs::PIC_Height( atlas ) : 0;
+		float width = height * 0.65f;
+		int top = (int)( y + 0.5f ), bottom = (int)( y + height + 0.5f );
+
+		if( iw <= 0 || ih <= 0 || bottom <= top )
+			return;
+
+		for( ; *s; s++, x += width )
+		{
+			unsigned c = (unsigned char)*s;
+			int left = (int)( x + 0.5f ), right = (int)( x + width + 0.5f );
+			wrect_t rc;
+
+			if( c < 32 || c > 95 )
+				c = '?';
+			c -= 32;
+			rc.left = ( c % 16 ) * iw / 16;
+			rc.right = rc.left + iw / 16;
+			rc.top = ( c / 16 ) * ih / 4;
+			rc.bottom = rc.top + ih / 4;
+			// the engine resets the colour after every picture
+			EngFuncs::PIC_Set( atlas, r, g, b, bound( 0, (int)( alpha * 255.0f ), 255 ));
+			EngFuncs::PIC_DrawTrans( left, top, right - left, bottom - top, &rc );
+		}
+	}
+};
+
+// thin frame inside the rectangle
+static void DrawFrame( const CzmRect &r, int t, unsigned int color )
+{
+	UI_FillRect( r.x, r.y, r.w, t, color );
+	UI_FillRect( r.x, r.y + r.h - t, r.w, t, color );
+	UI_FillRect( r.x, r.y + t, t, r.h - t * 2, color );
+	UI_FillRect( r.x + r.w - t, r.y + t, t, r.h - t * 2, color );
+}
+
+// overlapping controls pulse in amber, the selection stays red
+static unsigned int ConflictColor( int alpha )
+{
+	float pulse = 0.65f + 0.35f * sinf( uiStatic.realTime * 0.006f );
+	return PackRGBA( 255, 176, 32, (int)( alpha * pulse ));
+}
+
+/*
+=================
 CCzmTouchEditor
 
 The layout over the game: drag buttons, change size, opacity, icon and action,
@@ -364,8 +529,11 @@ private:
 		HIT_OV_SAY_ADD,
 		HIT_OV_CMD_FIELD,
 		HIT_OV_CMD_ADD,
+		HIT_HUD_STYLE,    // + style, panel of a HUD block
+		HIT_HUD_RESET = HIT_HUD_STYLE + HUD_STYLES,
 		HIT_GROUP = 100,  // + group
 		HIT_ITEM = 200,   // + action or icon index
+		HIT_HUD = 900,    // + HUD block
 		HIT_BUTTON = 1000 // + layout button index
 	};
 
@@ -386,18 +554,37 @@ private:
 
 	CzmRect ButtonRect( int i ) const;
 	int ButtonAt( int x, int y ) const;
+	CzmHud::Rect HudLayout( int kind ) const;
+	CzmRect HudRect( int kind ) const;
+	int HudAt( int x, int y ) const;
+	void FindConflicts( void );
+	const char *ItemName( int item ) const;
 	float ButtonSize( int i ) const; // diameter, share of the screen width
 	void SetButtonSize( int i, float size );
 
+	void DrawHud( void );
 	void DrawButtons( void );
+	void DrawGuides( void );
 	void DrawBar( void );
 	void DrawPanel( void );
+	void DrawHudPanel( void );
+	void DrawConflictChip( void );
 	void DrawPicker( void );
 	void DrawConfirm( void );
 	void DrawSlider( const CzmRect &r, float t, const char *label, const char *value );
 
 	CzmTouchButton m_buttons[CZM_MAX_BUTTONS];
 	int m_iButtons;
+	CzmHudBlock m_hud[CzmHud::COUNT];
+	int m_iHudStyle;
+	int m_iHudSelected; // HUD block with the open panel, -1 when a button or nothing is selected
+	int m_iDragHud;
+	bool m_bSnapX;      // the dragged HUD block sits on the centre line
+	float m_flSnapY;    // ...or on the row of another block, -1 if not
+
+	// overlapping controls: items are the HUD blocks, then the buttons (CzmHud::COUNT + button)
+	int m_conflict[CzmHud::COUNT + CZM_MAX_BUTTONS]; // one item it overlaps, -1 for none
+	int m_iConflicts, m_iConflictA, m_iConflictB;
 	int m_iScheme;
 	int m_iSelected;
 	bool m_bDirty;
@@ -433,6 +620,16 @@ private:
 CCzmTouchEditor::CCzmTouchEditor() : CMenuFramework( "CzmTouchEditor" )
 {
 	m_iButtons = 0;
+	for( int i = 0; i < CzmHud::COUNT; i++ )
+		m_hud[i] = HudDefault( i );
+	m_iHudStyle = 0;
+	m_iHudSelected = m_iDragHud = -1;
+	m_bSnapX = false;
+	m_flSnapY = -1.0f;
+	for( int i = 0; i < CzmHud::COUNT + CZM_MAX_BUTTONS; i++ )
+		m_conflict[i] = -1;
+	m_iConflicts = 0;
+	m_iConflictA = m_iConflictB = -1;
 	m_iScheme = 1;
 	m_iSelected = -1;
 	m_bDirty = m_bShowHidden = m_bCollapsed = false;
@@ -519,7 +716,13 @@ void CCzmTouchEditor::Load( int scheme, bool fromPreset )
 	m_iScheme = CZM_TouchScheme();
 	SchemePath( m_iScheme, path, sizeof( path ));
 	Parse( path );
-	m_iSelected = -1;
+
+	// the default layout brings the default HUD places; otherwise unsaved HUD changes go too
+	if( fromPreset )
+		CZM_TouchResetHud();
+	ReadHud( m_hud, &m_iHudStyle );
+
+	m_iSelected = m_iHudSelected = -1;
 	m_bDirty = false;
 }
 
@@ -542,6 +745,7 @@ void CCzmTouchEditor::Apply( void )
 
 	EngFuncs::ClientCmd( true, "alias czm_more czm_more_show\n" );
 	CZM_SaveTouchConfig();
+	WriteHud( m_hud, m_iHudStyle );
 	m_bDirty = false;
 	Toast( "Сохранено", "Saved" );
 }
@@ -556,7 +760,9 @@ void CCzmTouchEditor::Show()
 {
 	m_overlay = OV_NONE;
 	m_iPressed = HIT_NONE;
-	m_iDragButton = -1;
+	m_iDragButton = m_iDragHud = -1;
+	m_bSnapX = false;
+	m_flSnapY = -1.0f;
 	m_iSlider = 0;
 	m_szToast = NULL;
 	m_iShowTime = uiStatic.realTime;
@@ -610,6 +816,115 @@ int CCzmTouchEditor::ButtonAt( int x, int y ) const
 			return i;
 	}
 	return -1;
+}
+
+CzmHud::Rect CCzmTouchEditor::HudLayout( int kind ) const
+{
+	const CzmHudBlock &b = m_hud[kind];
+	return CzmHud::Layout( kind, m_iHudStyle, W, H, b.x, b.y, b.scale, b.opacity, (int)strlen( CzmHud::samples[kind] ));
+}
+
+CzmRect CCzmTouchEditor::HudRect( int kind ) const
+{
+	CzmHud::Rect p = HudLayout( kind );
+	return CZM_Rect( p.x, p.y, p.w, p.h );
+}
+
+int CCzmTouchEditor::HudAt( int x, int y ) const
+{
+	// the selected block first, it is drawn with a frame on top
+	if( m_iHudSelected >= 0 && HudRect( m_iHudSelected ).Grown( H / 100 ).Contains( x, y ))
+		return m_iHudSelected;
+	for( int i = CzmHud::COUNT - 1; i >= 0; i-- )
+	{
+		if( HudRect( i ).Grown( H / 100 ).Contains( x, y ))
+			return i;
+	}
+	return -1;
+}
+
+const char *CCzmTouchEditor::ItemName( int item ) const
+{
+	if( item < 0 )
+		return "";
+	return item < CzmHud::COUNT ? HudName( item ) : ButtonLabel( m_buttons[item - CzmHud::COUNT] );
+}
+
+// What covers what in the match: HUD blocks are rectangles, buttons are round.
+// Only what the player sees counts: hidden buttons and the move/look zones do not.
+void CCzmTouchEditor::FindConflicts( void )
+{
+	struct Shape
+	{
+		bool round;
+		float x, y, w, h; // rectangle, or centre and radius in x, y, w
+		int item;
+	} shapes[CzmHud::COUNT + CZM_MAX_BUTTONS];
+	int count = 0;
+
+	for( int i = 0; i < CzmHud::COUNT; i++ )
+	{
+		CzmHud::Rect p = HudLayout( i );
+		Shape shape = { false, p.x, p.y, p.w, p.h, i };
+		shapes[count++] = shape;
+	}
+
+	for( int i = 0; i < m_iButtons; i++ )
+	{
+		const CzmTouchButton &b = m_buttons[i];
+		CzmRect r;
+
+		if( !ButtonEditable( b ) || ( b.flags & TOUCH_FLAG_HIDE ))
+			continue;
+		r = ButtonRect( i );
+		// the round icon, a little inside its square so that touching edges do not count
+		Shape shape = { true, r.x + r.w * 0.5f, r.y + r.h * 0.5f, Q_min( r.w, r.h ) * 0.45f, 0.0f, CzmHud::COUNT + i };
+		shapes[count++] = shape;
+	}
+
+	for( int i = 0; i < CzmHud::COUNT + CZM_MAX_BUTTONS; i++ )
+		m_conflict[i] = -1;
+	m_iConflicts = 0;
+	m_iConflictA = m_iConflictB = -1;
+
+	for( int a = 0; a < count; a++ )
+	{
+		for( int b = a + 1; b < count; b++ )
+		{
+			const Shape &p = shapes[a], &q = shapes[b];
+			bool overlap;
+
+			if( p.round && q.round )
+			{
+				float dx = p.x - q.x, dy = p.y - q.y, r = p.w + q.w;
+				overlap = dx * dx + dy * dy < r * r;
+			}
+			else if( p.round || q.round )
+			{
+				const Shape &c = p.round ? p : q, &box = p.round ? q : p;
+				float nx = bound( box.x, c.x, box.x + box.w ), ny = bound( box.y, c.y, box.y + box.h );
+				float dx = c.x - nx, dy = c.y - ny;
+				overlap = dx * dx + dy * dy < c.w * c.w;
+			}
+			else
+			{
+				overlap = p.x < q.x + q.w - 1 && q.x < p.x + p.w - 1 && p.y < q.y + q.h - 1 && q.y < p.y + p.h - 1;
+			}
+
+			if( !overlap )
+				continue;
+			if( m_conflict[p.item] < 0 )
+				m_conflict[p.item] = q.item;
+			if( m_conflict[q.item] < 0 )
+				m_conflict[q.item] = p.item;
+			if( !m_iConflicts )
+			{
+				m_iConflictA = p.item;
+				m_iConflictB = q.item;
+			}
+			m_iConflicts++;
+		}
+	}
 }
 
 float CCzmTouchEditor::ButtonSize( int i ) const
@@ -734,7 +1049,10 @@ void CCzmTouchEditor::Layout( void )
 		int pad = H * 0.035f, rowH = H * 0.065f;
 		int bw;
 
-		if( m_iSelected >= 0 && ( m_buttons[m_iSelected].y1 + m_buttons[m_iSelected].y2 ) * 0.5f > 0.55f )
+		float selected = m_iSelected >= 0 ? ( m_buttons[m_iSelected].y1 + m_buttons[m_iSelected].y2 ) * 0.5f
+			: m_iHudSelected >= 0 ? m_hud[m_iHudSelected].y : 0.0f;
+
+		if( selected > 0.55f )
 			py = m_bCollapsed ? H * 0.07f : m_bar.y + m_bar.h + H * 0.02f;
 
 		m_panel = CZM_Rect(( W - pw ) / 2, py, pw, ph );
@@ -904,18 +1222,34 @@ int CCzmTouchEditor::HitTest( void ) const
 			return HIT_COLLAPSE;
 		if( m_bar.Contains( x, y ))
 		{
-			// a button peeking out between the bar's pills can still be taken
+			// a button or a HUD block peeking out between the bar's pills can still be taken
 			button = ButtonAt( x, y );
-			return button >= 0 ? HIT_BUTTON + button : HIT_BAR;
+			if( button >= 0 )
+				return HIT_BUTTON + button;
+			button = HudAt( x, y );
+			return button >= 0 ? HIT_HUD + button : HIT_BAR;
 		}
 	}
 
-	if( m_iSelected >= 0 && m_panel.Contains( x, y ))
+	if(( m_iSelected >= 0 || m_iHudSelected >= 0 ) && m_panel.Contains( x, y ))
 	{
 		if( m_size.Contains( x, y ))
 			return HIT_SIZE;
 		if( m_opacity.Contains( x, y ))
 			return HIT_OPACITY;
+		if( m_iHudSelected >= 0 )
+		{
+			// style | style | style | default place
+			const CzmRect *row[] = { &m_hide, &m_icon, &m_command };
+			for( int i = 0; i < HUD_STYLES; i++ )
+			{
+				if( row[i]->Contains( x, y ))
+					return HIT_HUD_STYLE + i;
+			}
+			if( m_delete.Contains( x, y ))
+				return HIT_HUD_RESET;
+			return HIT_PANEL;
+		}
 		if( m_hide.Contains( x, y ))
 			return HIT_HIDE;
 		if( m_icon.Contains( x, y ))
@@ -928,19 +1262,33 @@ int CCzmTouchEditor::HitTest( void ) const
 	}
 
 	button = ButtonAt( x, y );
-	return button >= 0 ? HIT_BUTTON + button : HIT_NONE;
+	if( button >= 0 )
+		return HIT_BUTTON + button;
+	button = HudAt( x, y );
+	return button >= 0 ? HIT_HUD + button : HIT_NONE;
 }
 
 void CCzmTouchEditor::SetSlider( int which )
 {
 	const CzmRect &r = which == HIT_SIZE ? m_size : m_opacity;
-	int x0 = r.x, x1 = r.x + r.w - H * 0.10f;
+	int x0 = r.x, x1 = r.x + r.w - H * 0.125f; // as drawn: the value sits right of the knob
 	float t;
 
-	if( m_iSelected < 0 || x1 <= x0 )
+	if(( m_iSelected < 0 && m_iHudSelected < 0 ) || x1 <= x0 )
 		return;
 
 	t = bound( 0.0f, (float)( uiStatic.cursorX - x0 ) / ( x1 - x0 ), 1.0f );
+	if( m_iHudSelected >= 0 )
+	{
+		CzmHudBlock &b = m_hud[m_iHudSelected];
+
+		if( which == HIT_SIZE )
+			b.scale = 0.65f + t * 0.95f;
+		else
+			b.opacity = 0.25f + t * 0.75f;
+		m_bDirty = true;
+		return;
+	}
 	if( which == HIT_SIZE )
 		SetButtonSize( m_iSelected, 0.03f + t * 0.12f );
 	else
@@ -953,12 +1301,12 @@ void CCzmTouchEditor::Activate( int hit )
 	if( hit == HIT_NONE || hit == HIT_BAR || hit == HIT_PANEL || hit == HIT_OV_PANEL )
 	{
 		if( hit == HIT_NONE && m_overlay == OV_NONE )
-			m_iSelected = -1; // tap on the empty screen
+			m_iSelected = m_iHudSelected = -1; // tap on the empty screen
 		return;
 	}
 
-	if( hit >= HIT_BUTTON )
-		return; // buttons are selected on press
+	if( hit >= HIT_BUTTON || ( hit >= HIT_HUD && hit < HIT_HUD + CzmHud::COUNT ))
+		return; // buttons and HUD blocks are selected on press
 
 	CZM_PlayClick();
 
@@ -973,6 +1321,22 @@ void CCzmTouchEditor::Activate( int hit )
 			m_overlay = OV_CONFIRM_SCHEME;
 		else
 			Load( scheme, false );
+		return;
+	}
+
+	if( hit >= HIT_HUD_STYLE && hit < HIT_HUD_STYLE + HUD_STYLES )
+	{
+		// one style for the whole HUD, like in the match
+		m_iHudStyle = hit - HIT_HUD_STYLE;
+		m_bDirty = true;
+		return;
+	}
+
+	if( hit == HIT_HUD_RESET && m_iHudSelected >= 0 )
+	{
+		m_hud[m_iHudSelected] = HudDefault( m_iHudSelected );
+		m_bDirty = true;
+		Toast( "Блок на обычном месте", "Block moved back" );
 		return;
 	}
 
@@ -1141,8 +1505,18 @@ bool CCzmTouchEditor::KeyDown( int key )
 			const CzmTouchButton &b = m_buttons[hit - HIT_BUTTON];
 
 			m_iSelected = m_iDragButton = hit - HIT_BUTTON;
+			m_iHudSelected = -1;
 			m_flGrabX = (float)uiStatic.cursorX / W - b.x1;
 			m_flGrabY = (float)uiStatic.cursorY / H - b.y1;
+		}
+		else if( hit >= HIT_HUD && hit < HIT_HUD + CzmHud::COUNT )
+		{
+			int kind = hit - HIT_HUD;
+
+			m_iHudSelected = m_iDragHud = kind;
+			m_iSelected = -1;
+			m_flGrabX = (float)uiStatic.cursorX / W - m_hud[kind].x;
+			m_flGrabY = (float)uiStatic.cursorY / H - m_hud[kind].y;
 		}
 		else if( hit == HIT_SIZE || hit == HIT_OPACITY )
 		{
@@ -1161,8 +1535,8 @@ bool CCzmTouchEditor::KeyDown( int key )
 		}
 		else if( m_overlay != OV_NONE )
 			m_overlay = OV_NONE;
-		else if( m_iSelected >= 0 )
-			m_iSelected = -1;
+		else if( m_iSelected >= 0 || m_iHudSelected >= 0 )
+			m_iSelected = m_iHudSelected = -1;
 		else
 			Exit();
 		return true;
@@ -1182,7 +1556,9 @@ bool CCzmTouchEditor::KeyUp( int key )
 		Layout();
 		hit = HitTest();
 		m_iPressed = HIT_NONE;
-		m_iDragButton = -1;
+		m_iDragButton = m_iDragHud = -1;
+		m_bSnapX = false;
+		m_flSnapY = -1.0f;
 		m_iSlider = 0;
 		m_bPickerScrolling = m_bPickerMaybeScroll = false;
 
@@ -1227,6 +1603,48 @@ bool CCzmTouchEditor::MouseMove( int x, int y )
 		return true;
 	}
 
+	if( m_iDragHud >= 0 )
+	{
+		CzmHudBlock &b = m_hud[m_iDragHud];
+		CzmHud::Rect p;
+		float nx, ny;
+
+		if( !m_bMoved && abs( dx ) + abs( dy ) < H * 0.012f )
+			return true;
+
+		m_bMoved = true;
+		nx = (float)uiStatic.cursorX / W - m_flGrabX;
+		ny = (float)uiStatic.cursorY / H - m_flGrabY;
+
+		// stick to the centre line and to the row of another block
+		m_bSnapX = fabsf( nx - 0.5f ) < 0.012f;
+		if( m_bSnapX )
+			nx = 0.5f;
+		m_flSnapY = -1.0f;
+		for( int i = 0; i < CzmHud::COUNT; i++ )
+		{
+			if( i != m_iDragHud && fabsf( ny - m_hud[i].y ) < 0.015f )
+			{
+				ny = m_hud[i].y;
+				m_flSnapY = ny;
+				break;
+			}
+		}
+
+		b.x = nx;
+		b.y = ny;
+		b = HudClamp( m_iDragHud, b );
+
+		// keep the saved centre where the block is really drawn: it stops at the screen edges
+		p = HudLayout( m_iDragHud );
+		b.x = ( p.x + p.w * 0.5f ) / W;
+		b.y = ( p.y + p.h * 0.5f ) / H;
+		if( m_flSnapY >= 0.0f )
+			m_flSnapY = b.y;
+		m_bDirty = true;
+		return true;
+	}
+
 	if( m_bPickerMaybeScroll )
 	{
 		if( !m_bPickerScrolling && abs( dy ) > H * 0.02f && m_iPickerMaxScroll > 0 )
@@ -1252,6 +1670,33 @@ void CCzmTouchEditor::Char( int key )
 drawing
 =================
 */
+void CCzmTouchEditor::DrawHud( void )
+{
+	CzmMenuHudPainter painter;
+	int frame = Q_max( 2, (int)( H * 0.004f ));
+
+	for( int i = 0; i < CzmHud::COUNT; i++ )
+	{
+		CzmHud::Rect p = HudLayout( i );
+		CzmRect r = CZM_Rect( p.x, p.y, p.w, p.h );
+		bool selected = i == m_iHudSelected, conflict = m_conflict[i] >= 0;
+
+		// the block exactly as in the match, at the player's opacity
+		CzmHud::Paint( painter, i, m_iHudStyle, p, CzmHud::samples[i], false );
+
+		if( conflict )
+		{
+			UI_FillRect( r.x, r.y, r.w, r.h, ConflictColor( 60 ));
+			DrawFrame( r.Grown( frame ), frame, ConflictColor( 255 ));
+		}
+		if( selected )
+			DrawFrame( r.Grown( frame * ( conflict ? 2 : 1 )), frame, PackRGBA( 239, 68, 68, 255 ));
+		else if( !conflict )
+			DrawFrame( r, 1, CZM_White( 70 )); // the compact style has no plate, show where the block ends
+		// no name under the block: the numbers say what it is, the panel and the warning name it
+	}
+}
+
 void CCzmTouchEditor::DrawButtons( void )
 {
 	HFont font = CZM_Font( CZMF_SMALL );
@@ -1265,6 +1710,14 @@ void CCzmTouchEditor::DrawButtons( void )
 
 		if( !ButtonEditable( b ) || ( hidden && !m_bShowHidden ))
 			continue;
+
+		if( m_conflict[CzmHud::COUNT + i] >= 0 )
+		{
+			int halo = r.w * 0.45f, ring = r.w * 0.08f;
+			CZM_DrawImage( UI_DIR "glow.png", r.x - halo, r.y - halo, r.w + halo * 2, r.h + halo * 2, ConflictColor( 200 ));
+			if( i != m_iSelected )
+				CZM_DrawImage( UI_DIR "dot.png", r.x - ring, r.y - ring, r.w + ring * 2, r.h + ring * 2, ConflictColor( 220 ));
+		}
 
 		if( i == m_iSelected )
 		{
@@ -1285,8 +1738,21 @@ void CCzmTouchEditor::DrawButtons( void )
 
 		// names only in the editor, like in PUBG
 		CZM_DrawText( font, r.x + r.w / 2 - H * 0.14f, r.y + r.h + 2, H * 0.28f, ButtonLabel( b ),
-			i == m_iSelected ? PackRGBA( 255, 120, 120, 255 ) : CZM_White( 230 ), QM_CENTER );
+			i == m_iSelected ? PackRGBA( 255, 120, 120, 255 ) : m_conflict[CzmHud::COUNT + i] >= 0 ? PackRGBA( 255, 196, 90, 255 ) : CZM_White( 230 ), QM_CENTER );
 	}
+}
+
+// lines the dragged HUD block snapped to
+void CCzmTouchEditor::DrawGuides( void )
+{
+	int t = Q_max( 1, (int)( H * 0.003f ));
+
+	if( m_iDragHud < 0 )
+		return;
+	if( m_bSnapX )
+		UI_FillRect( W / 2 - t / 2, 0, t, H, PackRGBA( 239, 68, 68, 170 ));
+	if( m_flSnapY >= 0.0f )
+		UI_FillRect( 0, (int)( m_flSnapY * H ) - t / 2, W, t, PackRGBA( 239, 68, 68, 170 ));
 }
 
 void CCzmTouchEditor::DrawBar( void )
@@ -1342,7 +1808,7 @@ void CCzmTouchEditor::DrawSlider( const CzmRect &r, float t, const char *label, 
 	HFont font = CZM_Font( CZMF_SMALL );
 	HFont valueFont = CZM_Font( CZMF_TILE_STATUS );
 	int valueW = H * 0.10f;
-	int x0 = r.x, x1 = r.x + r.w - valueW;
+	int x0 = r.x, x1 = r.x + r.w - H * 0.125f; // the knob at 100% does not cover the value
 	int cy = r.y + r.h * 0.62f;
 	int track = Q_max( 3, (int)( H * 0.009f )), knob = H * 0.045f;
 	int kx = x0 + (int)( bound( 0.0f, t, 1.0f ) * ( x1 - x0 ));
@@ -1351,7 +1817,7 @@ void CCzmTouchEditor::DrawSlider( const CzmRect &r, float t, const char *label, 
 	UI_FillRect( x0, cy - track / 2, x1 - x0, track, CZM_White( 45 ));
 	UI_FillRect( x0, cy - track / 2, kx - x0, track, PackRGBA( 230, 38, 38, 255 ));
 	CZM_DrawImage( UI_DIR "dot.png", kx - knob / 2, cy - knob / 2, knob, knob );
-	CZM_DrawText( valueFont, x1, cy - CZM_FontHeight( valueFont ) / 2, valueW, value, CZM_White(), QM_RIGHT );
+	CZM_DrawText( valueFont, r.x + r.w - valueW, cy - CZM_FontHeight( valueFont ) / 2, valueW, value, CZM_White(), QM_RIGHT );
 }
 
 void CCzmTouchEditor::DrawPanel( void )
@@ -1370,8 +1836,17 @@ void CCzmTouchEditor::DrawPanel( void )
 	snprintf( texture, sizeof( texture ), "%s.png", b.texture );
 	CZM_DrawImage( texture, m_panel.x + pad, m_panel.y + H * 0.02f, icon, icon );
 	CZM_DrawText( titleFont, m_panel.x + pad + icon + H * 0.02f, m_panel.y + H * 0.02f, m_panel.w - pad * 2 - icon, ButtonLabel( b ), CZM_White());
-	CZM_DrawText( smallFont, m_panel.x + pad + icon + H * 0.02f, m_panel.y + H * 0.02f + CZM_FontHeight( titleFont ) + 2,
-		m_panel.w - pad * 2 - icon, b.command, PackRGBA( 140, 146, 156, 255 ));
+	if( m_conflict[CzmHud::COUNT + m_iSelected] >= 0 )
+	{
+		char text[160];
+
+		snprintf( text, sizeof( text ), "%s %s", CZM_IsRussian() ? "Перекрывает:" : "Overlaps:", ItemName( m_conflict[CzmHud::COUNT + m_iSelected] ));
+		CZM_DrawText( smallFont, m_panel.x + pad + icon + H * 0.02f, m_panel.y + H * 0.02f + CZM_FontHeight( titleFont ) + 2,
+			m_panel.w - pad * 2 - icon, text, PackRGBA( 255, 196, 90, 255 ));
+	}
+	else
+		CZM_DrawText( smallFont, m_panel.x + pad + icon + H * 0.02f, m_panel.y + H * 0.02f + CZM_FontHeight( titleFont ) + 2,
+			m_panel.w - pad * 2 - icon, b.command, PackRGBA( 140, 146, 156, 255 ));
 
 	snprintf( value, sizeof( value ), "%d%%", (int)( size / 0.06f * 100.0f + 0.5f ));
 	DrawSlider( m_size, ( size - 0.03f ) / 0.12f, CZM_IsRussian() ? "Размер" : "Size", value );
@@ -1383,6 +1858,79 @@ void CCzmTouchEditor::DrawPanel( void )
 	CZM_DrawButton( UI_DIR "button_secondary.png", m_icon, CZM_IsRussian() ? "Иконка" : "Icon", CZM_White(), IsPressed( HIT_ICON ), CZMF_TILE_STATUS );
 	CZM_DrawButton( UI_DIR "button_secondary.png", m_command, CZM_IsRussian() ? "Действие" : "Action", CZM_White(), IsPressed( HIT_COMMAND ), CZMF_TILE_STATUS );
 	CZM_DrawButton( UI_DIR "button_danger.png", m_delete, CZM_IsRussian() ? "Удалить" : "Delete", PackRGBA( 255, 150, 150, 255 ), IsPressed( HIT_DELETE ), CZMF_TILE_STATUS );
+}
+
+void CCzmTouchEditor::DrawHudPanel( void )
+{
+	const int kind = m_iHudSelected;
+	const CzmHudBlock &b = m_hud[kind];
+	CzmMenuHudPainter painter;
+	HFont titleFont = CZM_Font( CZMF_NICK );
+	HFont smallFont = CZM_Font( CZMF_SMALL );
+	int pad = H * 0.035f, icon = H * 0.07f;
+	int miniW = icon * 2.6f, textX = m_panel.x + pad + miniW + H * 0.025f, textW = m_panel.x + m_panel.w - pad - textX;
+	const CzmRect *row[] = { &m_hide, &m_icon, &m_command };
+	char text[160];
+
+	CZM_DrawPanel( m_panel );
+
+	// a small copy of the block in the chosen style, at full opacity
+	{
+		CzmHud::Rect mini = { (float)( m_panel.x + pad ), (float)( m_panel.y + H * 0.02f ), (float)miniW, (float)icon, 1.0f, 1.0f };
+		CzmHud::Paint( painter, kind, m_iHudStyle, mini, CzmHud::samples[kind], false );
+	}
+
+	CZM_DrawText( titleFont, textX, m_panel.y + H * 0.02f, textW, HudName( kind ), CZM_White());
+	if( m_conflict[kind] >= 0 )
+	{
+		snprintf( text, sizeof( text ), "%s %s", CZM_IsRussian() ? "Перекрывает:" : "Overlaps:", ItemName( m_conflict[kind] ));
+		CZM_DrawText( smallFont, textX, m_panel.y + H * 0.02f + CZM_FontHeight( titleFont ) + 2, textW, text, PackRGBA( 255, 196, 90, 255 ));
+	}
+	else
+	{
+		CZM_DrawText( smallFont, textX, m_panel.y + H * 0.02f + CZM_FontHeight( titleFont ) + 2, textW,
+			CZM_IsRussian() ? "Интерфейс матча · один для всех схем кнопок" : "Match HUD · the same for all button layouts", PackRGBA( 140, 146, 156, 255 ));
+	}
+
+	snprintf( text, sizeof( text ), "%d%%", (int)( b.scale * 100.0f + 0.5f ));
+	DrawSlider( m_size, ( b.scale - 0.65f ) / 0.95f, CZM_IsRussian() ? "Размер" : "Size", text );
+	snprintf( text, sizeof( text ), "%d%%", (int)( b.opacity * 100.0f + 0.5f ));
+	DrawSlider( m_opacity, ( b.opacity - 0.25f ) / 0.75f, CZM_IsRussian() ? "Видимость" : "Opacity", text );
+
+	// style of the whole HUD and the default place of this block
+	for( int i = 0; i < HUD_STYLES; i++ )
+	{
+		bool active = i == m_iHudStyle;
+		CZM_DrawButton( active ? UI_DIR "button_primary.png" : UI_DIR "button_secondary.png", *row[i],
+			CZM_IsRussian() ? s_hudStyles[i].ru : s_hudStyles[i].en, active ? CZM_White() : PackRGBA( 200, 205, 215, 255 ),
+			IsPressed( HIT_HUD_STYLE + i ), CZMF_TILE_STATUS );
+	}
+	CZM_DrawButton( UI_DIR "button_secondary.png", m_delete, CZM_IsRussian() ? "На место" : "Default", CZM_White(), IsPressed( HIT_HUD_RESET ), CZMF_TILE_STATUS );
+}
+
+// what overlaps, under the bar; the editor shows it until the controls are moved apart
+void CCzmTouchEditor::DrawConflictChip( void )
+{
+	HFont font = CZM_Font( CZMF_TILE_STATUS );
+	char text[200];
+	int dot, tw;
+	CzmRect r;
+
+	if( m_iConflicts > 1 )
+		snprintf( text, sizeof( text ), CZM_IsRussian() ? "Перекрываются: %s и %s · ещё %d" : "Overlapping: %s and %s · %d more",
+			ItemName( m_iConflictA ), ItemName( m_iConflictB ), m_iConflicts - 1 );
+	else
+		snprintf( text, sizeof( text ), CZM_IsRussian() ? "Перекрываются: %s и %s" : "Overlapping: %s and %s",
+			ItemName( m_iConflictA ), ItemName( m_iConflictB ));
+
+	dot = H * 0.022f;
+	tw = Q_min( (int)( W * 0.8f ), CZM_TextWidth( font, text ) + dot * 2 + (int)( H * 0.10f ));
+	r = CZM_Rect(( W - tw ) / 2, m_bCollapsed ? H * 0.075f : m_bar.y + m_bar.h + H * 0.02f, tw, H * 0.065f );
+
+	CZM_DrawPill( UI_DIR "button_secondary.png", r.x, r.y, r.w, r.h, CZM_White( 235 ));
+	CZM_DrawImage( UI_DIR "dot.png", r.x + H * 0.035f, r.y + ( r.h - dot ) / 2, dot, dot, ConflictColor( 255 ));
+	CZM_DrawText( font, r.x + H * 0.035f + dot * 2, r.y + ( r.h - CZM_FontHeight( font )) / 2, r.w - H * 0.07f - dot * 2,
+		text, PackRGBA( 255, 210, 130, 255 ), QM_CENTER );
 }
 
 void CCzmTouchEditor::DrawPicker( void )
@@ -1477,7 +2025,7 @@ void CCzmTouchEditor::DrawConfirm( void )
 
 	if( m_overlay == OV_CONFIRM_RESET )
 	{
-		title = ru ? "Вернуть стандартную раскладку?" : "Restore the default layout?";
+		title = ru ? "Вернуть стандартные кнопки и интерфейс?" : "Restore the default buttons and HUD?";
 		yes = ru ? "Вернуть" : "Restore";
 		no = ru ? "Отмена" : "Cancel";
 	}
@@ -1505,16 +2053,19 @@ void CCzmTouchEditor::Draw()
 	// paused world is not guaranteed and leaves old HUD/buttons in the framebuffer.
 	CZM_DrawCover( CZM_Image( UI_DIR "editor_bg.png" ), 0, 0, W, H );
 
+	// the match HUD under the buttons, as the game draws them
+	FindConflicts();
+	DrawHud();
 	DrawButtons();
 
-	// while a button is dragged nothing covers the screen
-	dragging = m_iDragButton >= 0 && m_bMoved;
+	// while a button or a HUD block is dragged nothing covers the screen
+	dragging = ( m_iDragButton >= 0 || m_iDragHud >= 0 ) && m_bMoved;
 
-	if( m_iSelected < 0 && m_overlay == OV_NONE && !dragging && uiStatic.realTime - m_iShowTime < 6000 )
+	if( m_iSelected < 0 && m_iHudSelected < 0 && m_overlay == OV_NONE && !dragging && uiStatic.realTime - m_iShowTime < 6000 )
 	{
 		HFont font = CZM_Font( CZMF_TILE_STATUS );
-		const char *hint = CZM_IsRussian() ? "Нажми на кнопку, чтобы настроить. Тащи пальцем, чтобы переместить."
-			: "Tap a button to set it up. Drag it to move.";
+		const char *hint = CZM_IsRussian() ? "Нажми на кнопку или блок интерфейса, чтобы настроить. Тащи, чтобы переместить."
+			: "Tap a button or a HUD block to set it up. Drag it to move.";
 		int tw = CZM_TextWidth( font, hint ) + H * 0.08f;
 		CzmRect r = CZM_Rect(( W - tw ) / 2, H - H * 0.10f, tw, H * 0.065f );
 
@@ -1523,12 +2074,22 @@ void CCzmTouchEditor::Draw()
 	}
 
 	if( dragging )
+	{
+		DrawGuides();
 		return;
+	}
 
 	DrawBar();
 
-	if( m_iSelected >= 0 && m_overlay == OV_NONE )
-		DrawPanel();
+	if( m_overlay == OV_NONE )
+	{
+		if( m_iSelected >= 0 )
+			DrawPanel();
+		else if( m_iHudSelected >= 0 )
+			DrawHudPanel();
+		else if( m_iConflicts > 0 )
+			DrawConflictChip();
+	}
 
 	if( m_szToast && uiStatic.realTime - m_iToastTime < 2200 )
 	{
