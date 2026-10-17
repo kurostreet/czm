@@ -105,6 +105,7 @@ private:
 		HIT_SETUP_EN,
 		HIT_SETUP_NICK,
 		HIT_SETUP_GO,
+		HIT_SETUP_LOGIN, // played before: sign in, the account brings the settings back
 		HIT_ABOUT_TELEGRAM,
 		HIT_ABOUT_GROUP,
 		HIT_ABOUT_SITE,
@@ -146,7 +147,7 @@ private:
 	CzmRect m_panel, m_close, m_quitYes, m_quitNo, m_version;
 	CzmRect m_aboutLogo, m_aboutRows[CZM_ABOUT_ROWS];
 	CzmRect m_update, m_updateButton;
-	CzmRect m_setupLang, m_setupNick, m_setupGo;
+	CzmRect m_setupLang, m_setupNick, m_setupGo, m_setupLogin;
 	CzmTextEdit m_nick;
 	bool m_bNickWarning;
 };
@@ -266,13 +267,14 @@ void CCzmMainMenu::Layout( void )
 	if( m_overlay == OV_SETUP )
 	{
 		int pad = H * 0.03f;
-		int pw = H * 0.86f, ph = H * 0.60f;
-		int lineH = H * 0.075f;
+		int pw = H * 0.86f, ph = H * 0.72f;
+		int lineH = H * 0.075f, loginH = H * 0.062f;
 
 		m_panel = CZM_Rect(( W - pw ) / 2, ( H - ph ) / 2, pw, ph );
-		m_setupLang = CZM_Rect( m_panel.x + ( pw - H * 0.30f ) / 2, m_panel.y + ph * 0.30f, H * 0.30f, lineH );
-		m_setupNick = CZM_Rect( m_panel.x + pad, m_panel.y + ph * 0.50f, pw - pad * 2, lineH );
-		m_setupGo = CZM_Rect( m_panel.x + ( pw - H * 0.40f ) / 2, m_panel.y + ph - pad - H * 0.085f, H * 0.40f, H * 0.085f );
+		m_setupLang = CZM_Rect( m_panel.x + ( pw - H * 0.30f ) / 2, m_panel.y + ph * 0.27f, H * 0.30f, lineH );
+		m_setupNick = CZM_Rect( m_panel.x + pad, m_panel.y + ph * 0.43f, pw - pad * 2, lineH );
+		m_setupLogin = CZM_Rect( m_panel.x + ( pw - H * 0.56f ) / 2, m_panel.y + ph - pad - loginH, H * 0.56f, loginH );
+		m_setupGo = CZM_Rect( m_panel.x + ( pw - H * 0.40f ) / 2, m_setupLogin.y - H * 0.022f - H * 0.085f, H * 0.40f, H * 0.085f );
 	}
 	else if( m_overlay == OV_QUIT )
 	{
@@ -325,6 +327,8 @@ int CCzmMainMenu::HitTest( void ) const
 			return HIT_SETUP_NICK;
 		if( m_setupGo.HasCursor( ))
 			return HIT_SETUP_GO;
+		if( m_setupLogin.HasCursor( ))
+			return HIT_SETUP_LOGIN;
 		return HIT_PANEL; // the window stays until the player finishes it
 	}
 
@@ -426,6 +430,11 @@ void CCzmMainMenu::Activate( int hit )
 		break;
 	case HIT_SETUP_GO:
 		FinishSetup();
+		break;
+	case HIT_SETUP_LOGIN:
+		// the window closes by itself once the account signs in (CzmOnline finishes the first start)
+		m_nick.End();
+		CZM_AccountShow( CZM_OnlineKey(), "" );
 		break;
 	case HIT_NAV + 4:
 		m_overlay = OV_ABOUT;
@@ -674,7 +683,9 @@ static void CZM_RoundRectPoint( const CzmRect &r, float rad, float s, float peri
 	a = PI + ( s / arc ) * HALF_PI; *ox = r.x + rad + cosf( a ) * rad; *oy = r.y + rad + sinf( a ) * rad;
 }
 
-// a golden spark running around the tile border, so the tile asks to be tapped
+// a golden comet running along the tile border, so the tile asks to be tapped:
+// a continuous fading trail (samples closer than their size never look like beads)
+// and a soft glow around a white-hot head
 static void CZM_TileLightning( const CzmRect &r, int index )
 {
 	const float TWO_PI = 6.2831853f;
@@ -682,24 +693,44 @@ static void CZM_TileLightning( const CzmRect &r, int index )
 	float perim = 2.0f * ( r.w + r.h ) - 8.0f * rad + TWO_PI * rad;
 	float t = (float)EngFuncs::DoubleTime();
 	float offset = index * perim * 0.41f;              // the three tiles are out of step
-	float head = t * ( perim / 2.6f ) + offset;        // one loop every ~2.6 s
-	int tail = 26;
-	float step = perim / 150.0f;
+	float head = t * ( perim / 3.2f ) + offset;        // one loop every ~3.2 s
+	float length = perim * 0.17f;                      // the tail
+	float core = Q_max( 2.0f, r.h * 0.022f );          // line thickness at the head
+	int samples = (int)( length / Q_max( 1.0f, core * 0.45f ));
+	float x = 0, y = 0;
 
-	for( int k = tail; k >= 0; k-- )
+	samples = bound( 24, samples, 160 );
+
+	// glow first, so the line stays crisp on top
+	for( int k = samples; k >= 0; k -= 4 )
 	{
-		float f = 1.0f - (float)k / tail;              // 0 at the tail, 1 at the head
-		float x = 0, y = 0;
-		int sz = (int)( r.h * ( 0.025f + 0.050f * f ));
-		int a = (int)( 235 * f * f );
-		unsigned int col = ( k <= 1 ) ? PackRGBA( 255, 248, 214, a ) : PackRGBA( 255, 206, 84, a );
+		float f = 1.0f - (float)k / samples;           // 0 at the end of the tail, 1 at the head
+		int g = (int)( core * ( 2.5f + 4.0f * f ));
+
+		CZM_RoundRectPoint( r, rad, head - length * k / samples, perim, &x, &y );
+		CZM_DrawImage( UI_DIR "glow.png", (int)x - g, (int)y - g, g * 2, g * 2, PackRGBA( 255, 170, 40, (int)( 70 * f * f )));
+	}
+
+	for( int k = samples; k >= 0; k-- )
+	{
+		float f = 1.0f - (float)k / samples;
+		int sz = (int)( core * ( 0.35f + 0.85f * f ));
+		int a = (int)( 250 * f * sqrtf( f ));
 
 		if( sz < 2 )
 			sz = 2;
-		CZM_RoundRectPoint( r, rad, head - k * step, perim, &x, &y );
-		CZM_DrawImage( UI_DIR "dot.png", (int)x - sz, (int)y - sz, sz * 2, sz * 2,
-			PackRGBA( 255, 191, 70, (int)( a * 0.16f )));
-		CZM_DrawImage( UI_DIR "dot.png", (int)x - sz / 2, (int)y - sz / 2, sz, sz, col );
+		CZM_RoundRectPoint( r, rad, head - length * k / samples, perim, &x, &y );
+		CZM_DrawImage( UI_DIR "dot.png", (int)x - sz / 2, (int)y - sz / 2, sz, sz,
+			f > 0.92f ? PackRGBA( 255, 250, 228, a ) : PackRGBA( 255, 200, 70, a ));
+	}
+
+	// the head: a bright core in a wide warm halo
+	CZM_RoundRectPoint( r, rad, head, perim, &x, &y );
+	{
+		int halo = (int)( core * 9.0f ), spark = (int)( core * 3.2f );
+
+		CZM_DrawImage( UI_DIR "glow.png", (int)x - halo, (int)y - halo, halo * 2, halo * 2, PackRGBA( 255, 176, 50, 120 ));
+		CZM_DrawImage( UI_DIR "glow.png", (int)x - spark, (int)y - spark, spark * 2, spark * 2, PackRGBA( 255, 252, 235, 255 ));
 	}
 }
 
@@ -746,7 +777,7 @@ void CCzmMainMenu::DrawTile( int index, CzmRect r )
 	{
 		int coverW = r.w * 0.40f, coverH = r.h - rad * 2;
 		int coverX = r.x + r.w - coverW - rad, coverY = r.y + rad;
-		CZM_DrawMapPreview( server->map, coverX, coverY, coverW, coverH );
+		CZM_DrawMapPreview( server->map, coverX, coverY, coverW, coverH, server->name );
 
 		// accent spine on the left edge
 		UI_FillRect( r.x + rad * 0.6f, r.y + rad * 0.7f, Q_max( 3, (int)( r.w * 0.010f )), r.h - rad * 1.4f, accent );
@@ -758,8 +789,9 @@ void CCzmMainMenu::DrawTile( int index, CzmRect r )
 		char name[128];
 
 		CZM_CleanName( server->name, name, sizeof( name ));
-		HFont titleFont = CZM_Font( CZMF_TILE_TITLE );
-		if( CZM_FontHeight( titleFont ) * 2 > r.h * 0.44f ) titleFont = CZM_Font( CZMF_TILE_TEXT );
+		// bold italic like the logo; two lines must leave room for the map and the status
+		HFont titleFont = CZM_Font( CZMF_TILE_NAME );
+		if( CZM_FontHeight( titleFont ) * 2 > r.h * 0.48f ) titleFont = CZM_Font( CZMF_SHOP_NAME );
 		const char *title = name[0] ? name : server->address;
 		char first[128];
 		size_t best = 0, space = 0;
@@ -776,10 +808,11 @@ void CCzmMainMenu::DrawTile( int index, CzmRect r )
 		}
 		if( title[best] && space ) best = space;
 		memcpy( first, title, best ); first[best] = 0;
-		CZM_DrawText( titleFont, textX, r.y + r.h * 0.08f, textW, first, CZM_White());
+		int titleY = r.y + r.h * 0.07f, lineH = CZM_FontHeight( titleFont ) * 96 / 100;
+		CZM_DrawText( titleFont, textX, titleY, textW, first, CZM_White());
 		const char *second = title + best;
 		while( *second == ' ' ) second++;
-		if( *second ) CZM_DrawText( titleFont, textX, r.y + r.h * 0.08f + CZM_FontHeight( titleFont ), textW, second, CZM_White());
+		if( *second ) CZM_DrawText( titleFont, textX, titleY + lineH, textW, second, PackRGBA( 232, 236, 242, 255 ));
 
 		if( server->map[0] )
 		{
@@ -1127,6 +1160,8 @@ void CCzmMainMenu::DrawSetup( void )
 			CZM_T( "nick_bad" ), PackRGBA( 248, 113, 113, 255 ), QM_CENTER );
 
 	CZM_DrawButton( UI_DIR "button_primary.png", m_setupGo, CZM_T( "setup_go" ), CZM_White(), IsPressed( HIT_SETUP_GO ));
+	CZM_DrawButton( UI_DIR "button_secondary.png", m_setupLogin, CZM_T( "setup_login" ), PackRGBA( 220, 224, 232, 255 ),
+		IsPressed( HIT_SETUP_LOGIN ), CZMF_TILE_STATUS );
 }
 
 void CCzmMainMenu::DrawOverlay( void )
@@ -1134,6 +1169,14 @@ void CCzmMainMenu::DrawOverlay( void )
 	HFont titleFont = CZM_Font( CZMF_PANEL_TITLE );
 	int pad = H * 0.03f;
 	int closeIcon;
+
+	// signed in from the first window: the account already brought the nickname and settings
+	if( m_overlay == OV_SETUP && !CZM_FirstStart( ))
+	{
+		m_nick.End();
+		m_overlay = OV_NONE;
+		return;
+	}
 
 	if( m_overlay == OV_SETUP )
 	{

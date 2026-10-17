@@ -46,6 +46,7 @@ enum CzmFontId
 	CZMF_SHOP_CARD,
 	CZMF_SHOP_CARD_PRICE,
 	CZMF_MENU_TITLE,
+	CZMF_TILE_NAME,   // server name on a main-screen tile, two lines
 	CZMF_COUNT
 };
 
@@ -117,6 +118,7 @@ CzmServer *CZM_Server( int index );
 void CZM_QueryServers( bool force );
 bool CZM_OnServerInfo( netadr_t adr, const char *info ); // true for our own messages, which the stock list must not see
 void CZM_ConnectToServer( int index );
+int CZM_PingUpdate( int old, int fresh ); // keeps a real ping when a late answer reads ~0 ms
 
 // pinned servers of the main screen, kept in home_servers.lst
 void CZM_HomeReload( void );                 // read the file into the tiles, call when the main screen opens
@@ -128,7 +130,8 @@ bool CZM_HomeSetPinned( const char *address, const char *prot, bool on ); // fal
 HIMAGE CZM_MapPicture( const char *map );                  // 0 when there is none
 HIMAGE CZM_MapPreview( const char *map );
 bool CZM_MapInstalled( const char *map );
-void CZM_DrawMapPreview( const char *map, int x, int y, int w, int h );
+void CZM_DrawMapPreview( const char *map, int x, int y, int w, int h, const char *server = NULL );
+const char *CZM_MapModeArt( const char *map, const char *server ); // zombie / escape / classic picture for maps without one
 void CZM_MapPicturesFrame( void );
 unsigned int CZM_MapAccent( const char *map, const char *name );
 

@@ -990,7 +990,9 @@ void CCzmChat::Draw()
 			m_flVelocity = 0.0f;
 	}
 
-	UI_FillRect( 0, 0, W, H, PackRGBA( 0, 0, 0, (int)( 90 * m_flOpen )));
+	// the menu behind goes dark and the sheet is solid: tiles and the logo must not show through
+	UI_FillRect( 0, 0, W, H, PackRGBA( 0, 0, 0, (int)( 185 * m_flOpen )));
+	CZM_DrawPanel( m_sheet );
 	CZM_DrawPanel( m_sheet );
 	CZM_DrawPill( UI_DIR "button_secondary.png", W / 2 - H * 0.055f, m_sheet.y + H * 0.018f, H * 0.11f, H * 0.008f, PackRGBA( 210, 216, 228, 210 ));
 

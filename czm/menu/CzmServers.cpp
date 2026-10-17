@@ -251,7 +251,7 @@ Our zombie map previews, then the overview of a standard map from the game data
 */
 static void DrawMapPicture( const CzmEntry *e, int x, int y, int w, int h )
 {
- CZM_DrawMapPreview( e ? e->map : "", x, y, w, h );
+	CZM_DrawMapPreview( e ? e->map : "", x, y, w, h, e ? e->name : NULL );
 }
 
 static void ClassifyMap( CzmEntry *e )
@@ -317,6 +317,23 @@ unsigned int CZM_MapAccent( const char *map, const char *name )
 	Q_strncpy( e.name, name ? name : "", sizeof( e.name ));
 	ClassifyMap( &e );
 	return ModeColor( e.mode );
+}
+
+const char *CZM_MapModeArt( const char *map, const char *server )
+{
+	CzmEntry e;
+
+	memset( &e, 0, sizeof( e ));
+	Q_strncpy( e.map, map ? map : "", sizeof( e.map ));
+	Q_strncpy( e.name, server ? server : "", sizeof( e.name ));
+	ClassifyMap( &e );
+	switch( e.mode )
+	{
+	case MODE_ZOMBIE: return MAP_DIR "_zombie.png";
+	case MODE_ESCAPE: return MAP_DIR "_escape.png";
+	case MODE_CLASSIC: return MAP_DIR "_classic.png";
+	default: return MAP_DIR "_other.png";
+	}
 }
 
 HIMAGE CZM_MapPicture( const char *map )
@@ -658,7 +675,7 @@ void CCzmServers::UpdateEntry( CzmEntry *e, const char *info )
 		double base = Q_max( e->queryTime, m_flPingBase );
 
 		if( base > 0.0 && now - base < 5.0 )
-			e->ping = (int)(( now - base ) * 1000.0 );
+			e->ping = CZM_PingUpdate( e->ping, (int)(( now - base ) * 1000.0 ));
 	}
 
 	e->answered = true;
@@ -680,7 +697,7 @@ void CCzmServers::OnServerInfo( netadr_t adr, const char *info )
 		e = Find( adr );
 		if( e )
 		{
-			e->ping = atoi( value );
+			e->ping = CZM_PingUpdate( e->ping, atoi( value ));
 			m_bDirty = true;
 		}
 		return;

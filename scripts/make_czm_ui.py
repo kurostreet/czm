@@ -107,6 +107,20 @@ def make_dot(name, size=64):
     save(big.resize((size, size), Image.LANCZOS), name)
 
 
+def make_glow(name, size=96):
+    # soft light for sparks: white, alpha falls off like a gaussian, no hard edge
+    import math
+    glow = Image.new("RGBA", (size, size), (255, 255, 255, 0))
+    px = glow.load()
+    c = (size - 1) / 2.0
+    for y in range(size):
+        for x in range(size):
+            d = math.hypot(x - c, y - c) / c
+            a = 0 if d >= 1 else int(255 * math.exp(-d * d * 4.2) * (1 - d) ** 0.5)
+            px[x, y] = (255, 255, 255, a)
+    save(glow, name)
+
+
 def icon(kind, size=128, color=(255, 255, 255, 255)):
     S = size * SS
     im = Image.new("RGBA", (S, S), (0, 0, 0, 0))
@@ -294,11 +308,13 @@ def main():
         for kind in NEW_ICONS:
             save(icon(kind), f"icon_{kind}.png")
         save(Image.new("RGBA", (8, 8), (255, 255, 255, 255)), "white.png")
+        make_glow("glow.png")
         return
     for name, (art, focus, accent) in TILES.items():
         make_tile(name, art, focus, accent)
     make_tile_shadow("tile_shadow.png")
     make_dot("dot.png")
+    make_glow("glow.png")
     for kind in ("bell", "user", "stick", "gear", "info", "pencil", "close", "back", "display", "sound", "target", "check"):
         save(icon(kind), f"icon_{kind}.png")
     for kind in NEW_ICONS:

@@ -163,7 +163,7 @@ static const struct { const char *key, *ru, *en; } s_strings[] =
 	{ "s_fps", "Лимит FPS", "FPS limit" },
 	{ "s_fps_hint", "Больше — плавнее, но телефон греется", "Higher is smoother but warms the phone" },
 	{ "s_render", "Режим отрисовки", "Rendering mode" },
-	{ "s_render_hint", "Если изображение отображается неправильно — попробуй другой режим", "If the picture looks wrong, try another mode" },
+	{ "s_render_hint", "Картинка с ошибками — попробуй другой режим", "Picture looks wrong? Try another mode" },
 	{ "render_classic", "Классический", "Classic" },
 	{ "render_compatible", "Совместимый", "Compatible" },
 	{ "render_modern", "Современный", "Modern" },
@@ -342,6 +342,7 @@ static const struct { const char *key, *ru, *en; } s_strings[] =
 	{ "setup_title", "Добро пожаловать!", "Welcome!" },
 	{ "setup_text", "Выбери язык и придумай ник", "Choose a language and a nickname" },
 	{ "setup_go", "Играть", "Play" },
+	{ "setup_login", "Уже играл? Войти в аккаунт", "Played before? Sign in" },
 };
 
 static bool s_bInitialized;
@@ -503,6 +504,7 @@ void CZM_CreateFonts( float scale )
 		{ "CZM Black", 28, 900 },       // CZMF_SHOP_CARD
 		{ "CZM Black", 25, 900 },       // CZMF_SHOP_CARD_PRICE
 		{ "CZM BlackItalic", 36, 900 }, // CZMF_MENU_TITLE
+		{ "CZM BlackItalic", 30, 900 }, // CZMF_TILE_NAME
 	};
 
 	for( int i = 0; i < CZMF_COUNT; i++ )
@@ -1013,7 +1015,7 @@ bool CZM_OnServerInfo( netadr_t adr, const char *info )
 		value = Info_ValueForKey( info, "czmping" );
 		if( value && value[0] )
 		{
-			server->ping = atoi( value );
+			server->ping = CZM_PingUpdate( server->ping, atoi( value ));
 			return true; // our own message, not a server entry
 		}
 
@@ -1038,12 +1040,25 @@ bool CZM_OnServerInfo( netadr_t adr, const char *info )
 
 		// rough ping until the real one arrives
 		if( server->ping < 0 )
-			server->ping = (int)(( server->answerTime - server->queryTime ) * 1000.0 );
+			server->ping = CZM_PingUpdate( server->ping, (int)(( server->answerTime - server->queryTime ) * 1000.0 ));
 		return false;
 	}
 
 	value = Info_ValueForKey( info, "czmping" );
 	return value && value[0];
+}
+
+/*
+A late answer to an earlier query can arrive right after a new query of the same
+server (the card asks the selected server again and again): it would read as 0 ms.
+Internet servers are never that close to a phone, so such a value is ignored and
+the next real measurement fills the ping.
+*/
+int CZM_PingUpdate( int old, int fresh )
+{
+	if( fresh < 3 )
+		return old;
+	return fresh;
 }
 
 void CZM_ConnectToServer( int index )

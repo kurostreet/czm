@@ -70,6 +70,30 @@ def brand_base_menu(source):
 \t}
 }
 ''' + source[end:]
+    # A cut line ends with "...": cut before the whole UTF-8 character, not after its first byte
+    # (a Russian letter cut in half was drawn as a wrong letter, e.g. «режЮ..»).
+    source = replace_once(
+        source,
+        "\t\tutfstate_t state;\n\n\t\twhile( string[j] )\n",
+        "\t\tutfstate_t state;\n\t\tint charStart = j; // first byte of the character being read\n\n\t\twhile( string[j] )\n",
+        filename,
+    )
+    source = replace_once(
+        source,
+        "\t\t\tline[len] = string[j];\n\n\t\t\tuint32_t uch = state.Decode((uint8_t)string[j] );\n",
+        "\t\t\tline[len] = string[j];\n\n"
+        "\t\t\tif((( uint8_t )string[j] & 0xC0 ) != 0x80 )\n\t\t\t\tcharStart = j;\n\n"
+        "\t\t\tuint32_t uch = state.Decode((uint8_t)string[j] );\n",
+        filename,
+    )
+    source = replace_once(
+        source,
+        "\t\t\t\t\tif( pixelWide + ellipsisWide < w && j > 0 )\n\t\t\t\t\t{\n"
+        "\t\t\t\t\t\tsave_pixelWide = pixelWide;\n\t\t\t\t\t\tsave_j = j;\n",
+        "\t\t\t\t\tif( pixelWide + ellipsisWide < w && charStart > 0 )\n\t\t\t\t\t{\n"
+        "\t\t\t\t\t\tsave_pixelWide = pixelWide;\n\t\t\t\t\t\tsave_j = charStart;\n",
+        filename,
+    )
     return replace_once(
         source,
         "uiStatic.renderPicbuttonText = gMenu.m_gameinfo.flags & GFL_RENDER_PICBUTTON_TEXT;",

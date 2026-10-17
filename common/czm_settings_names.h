@@ -9,6 +9,7 @@ static const char *const czm_settings_names[]={
     "cl_crosshair_size",
     "cl_crosshair_translucent",
     "cl_dynamiccrosshair",
+    "cl_logofile",
     "cl_radartype",
     "cl_righthand",
     "cl_shadows",

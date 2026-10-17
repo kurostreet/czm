@@ -326,6 +326,9 @@ void CZM_OnlineFrame( void )
 			else if( j.Type( profile ) == CzmJson::T_OBJECT )
 			{
 				s_online.account=j.String(j.Get(profile,"login"))[0]!=0;
+				// signed in from the first window: the nickname comes from the account
+				if( s_online.account && CZM_FirstStart( ))
+					CZM_FinishFirstStart();
 				const char *avatar = j.String( j.Get( profile, "avatar" ));
 				s_online.player = j.Int( j.Get( profile, "id" ));
 				CZM_SetNick( j.String( j.Get( profile, "nick" )));

@@ -79,24 +79,58 @@ bool CZM_MapInstalled( const char *name )
 	return EngFuncs::FileExists( path, false );
 }
 
-void CZM_DrawMapPreview( const char *map, int x, int y, int w, int h )
+// plain fills go through a picture: the engine clips pictures to a scrolling list, not rectangles
+static void Fill( int x, int y, int w, int h, unsigned int color )
+{
+	CZM_DrawImage( "gfx/czm/ui/white.png", x, y, w, h, color );
+}
+
+void CZM_DrawMapPreview( const char *map, int x, int y, int w, int h, const char *server )
 {
 	HIMAGE image = CZM_MapPreview( map );
 	HFont small = CZM_Font( CZMF_SMALL );
-	if( image ) CZM_DrawCover( image, x, y, w, h );
+	int sh = CZM_FontHeight( small );
+
+	if( w <= 0 || h <= 0 )
+		return;
+
+	if( image )
+		CZM_DrawCover( image, x, y, w, h );
 	else
 	{
-		UI_FillRect( x, y, w, h, PackRGBA( 20, 24, 33, 235 ));
-		HFont large = CZM_Font( CZMF_PANEL_TITLE );
-		int lh = CZM_FontHeight( large );
-		CZM_DrawText( large, x, y + ( h - lh ) / 3, w, "?", PackRGBA( 176, 188, 207, 230 ), QM_CENTER );
-		if( h > lh + CZM_FontHeight( small ) * 2 )
-			CZM_DrawText( small, x + 4, y + h * 0.64f, w - 8, CZM_T( "map_not_loaded" ), CZM_Grey(), QM_CENTER );
+		// nobody has a picture of this map yet: the art of its mode, dimmed, with a question mark
+		HIMAGE art = CZM_Image( CZM_MapModeArt( map, server ));
+		int side = Q_min( w, h );
+		int chip = bound( sh + 6, (int)( side * 0.36f ), (int)( side * 0.6f ));
+		bool plate = h >= chip + sh * 3;
+		int cx = x + w / 2, cy = y + ( plate ? ( h - sh - 8 ) / 2 : h / 2 );
+		HFont mark = CZM_Font( CZMF_PANEL_TITLE );
+
+		if( art )
+			CZM_DrawCover( art, x, y, w, h );
+		else
+			Fill( x, y, w, h, PackRGBA( 20, 24, 33, 255 ));
+		Fill( x, y, w, h, PackRGBA( 8, 10, 16, 150 ));
+
+		if( CZM_FontHeight( mark ) > chip * 0.9f )
+			mark = CZM_Font( CZMF_TILE_STATUS );
+		CZM_DrawImage( "gfx/czm/ui/glow.png", cx - chip, cy - chip, chip * 2, chip * 2, PackRGBA( 0, 0, 0, 120 ));
+		CZM_DrawImage( "gfx/czm/ui/chip_round.png", cx - chip / 2, cy - chip / 2, chip, chip );
+		CZM_DrawText( mark, cx - chip / 2, cy - CZM_FontHeight( mark ) / 2, chip, "?", PackRGBA( 240, 242, 246, 255 ), QM_CENTER );
+
+		if( plate )
+		{
+			int bh = sh + 8;
+			Fill( x, y + h - bh, w, bh, PackRGBA( 6, 10, 17, 200 ));
+			CZM_DrawText( small, x + 4, y + h - bh + 4, w - 8, CZM_T( "map_not_loaded" ), PackRGBA( 200, 206, 216, 255 ), QM_CENTER );
+		}
+		return;
 	}
-	if( image && map && *map && !CZM_MapInstalled( map ))
+
+	if( map && *map && !CZM_MapInstalled( map ))
 	{
-		int bh = CZM_FontHeight( small ) + 6;
-		UI_FillRect( x, y + h - bh, w, bh, PackRGBA( 6, 10, 17, 205 ));
+		int bh = sh + 6;
+		Fill( x, y + h - bh, w, bh, PackRGBA( 6, 10, 17, 205 ));
 		CZM_DrawText( small, x + 3, y + h - bh + 3, w - 6, CZM_T( "map_not_downloaded" ), CZM_White(), QM_CENTER );
 	}
 }

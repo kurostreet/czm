@@ -661,6 +661,35 @@ void CCzmSettings::FinishNickEdit( void )
 		Toast( "nick_bad" );
 }
 
+/*
+Avatar and spray cards: one row when the cards fit with a little shrinking,
+otherwise even rows (12 cards in two rows of 6, never 11 and a lonely one).
+*/
+static void CardGrid( int width, int count, int *card, int *gap, int *columns )
+{
+	const int H = ScreenHeight;
+	int c = H * 0.105f, g = H * 0.016f;
+
+	count = Q_max( 1, count );
+	if( count * c + ( count - 1 ) * g > width )
+	{
+		int fit = ( width - ( count - 1 ) * g ) / count; // one row with smaller cards
+		if( fit >= H * 0.085f )
+			c = fit;
+	}
+
+	int cols = Q_max( 1, ( width + g ) / ( c + g ));
+	if( cols < count )
+	{
+		int lines = ( count + cols - 1 ) / cols;
+		cols = ( count + lines - 1 ) / lines;
+	}
+
+	*card = c;
+	*gap = g;
+	*columns = Q_min( cols, count );
+}
+
 void CCzmSettings::Layout( void )
 {
 	int margin, tabW, tabH, gap, pad, contentY, contentH, rowH, controlW, total;
@@ -705,10 +734,10 @@ void CCzmSettings::Layout( void )
 			h = H * 0.50f;
 		else if( row.type == ROW_SPRAYS || row.type == ROW_AVATARS )
 		{
-			int card = H * 0.105f, cardGap = H * 0.016f;
-			int columns = Q_max( 1, ( m_panel.w - pad * 2 + cardGap ) / ( card + cardGap ));
+			int card, cardGap, columns;
 			int count = row.type == ROW_SPRAYS ? CZM_SprayCount() : AvatarCards();
-			int lines = ( count + columns - 1 ) / columns;
+			CardGrid( m_panel.w - pad * 2, Q_min( count, 16 ), &card, &cardGap, &columns );
+			int lines = ( Q_min( count, 16 ) + columns - 1 ) / columns;
 
 			h = H * 0.105f + lines * ( card + cardGap );
 		}
@@ -789,9 +818,9 @@ void CCzmSettings::Layout( void )
 		case ROW_SPRAYS:
 		case ROW_AVATARS:
 		{
-			int card = H * 0.105f, cardGap = H * 0.016f;
-			int columns = Q_max( 1, ( l.rect.w + cardGap ) / ( card + cardGap ));
+			int card, cardGap, columns;
 			int count = Q_min( row.type == ROW_SPRAYS ? CZM_SprayCount() : AvatarCards(), 16 );
+			CardGrid( l.rect.w, count, &card, &cardGap, &columns );
 
 			for( int k = 0; k < count; k++ )
 				l.parts[k] = CZM_Rect( l.rect.x + ( k % columns ) * ( card + cardGap ),
@@ -1287,19 +1316,32 @@ void CCzmSettings::DrawTabPreview( const CzmRect &box )
 	int h = style == 1 ? box.h * 0.88f : box.h - pad * 2;
 	int x = box.x + ( box.w - w ) / 2, y = box.y + ( box.h - h ) / 2;
 	const int cols = style == 1 ? 1 : 2, rows = style == 1 ? 6 : 3;
-	const int head = fh * 2 + pad * 2, gap = style == 2 ? pad * 3 : pad;
+	const bool ru = CZM_IsRussian();
+	// the same blocks as the real scoreboard: title, server, column names, players
+	const int titleY = y + pad, serverY = titleY + fh + pad / 2, headY = serverY + fh + pad;
+	const int head = headY + fh + pad / 2 - y, gap = style == 2 ? pad * 3 : pad;
 	const int cw = ( w - pad * 2 - gap * ( cols - 1 )) / cols;
 	const int rh = Q_max( 1, ( h - head - pad ) / rows );
 	if( style != 2 )
 		FillClipped( x, y, w, h, PackRGBA( 10, 13, 19, 235 ), clip );
+	else
+		FillClipped( x, y, w, headY - pad / 2 - y, PackRGBA( 10, 13, 19, 235 ), clip );
 	FillClipped( x, y, w, 2, PackRGBA( 224, 35, 47, 255 ), clip );
-	CZM_DrawText( font, x + pad, y + pad, w - pad * 2, "COUNTER ZOMBIE MOBILE  /  6", CZM_White() );
+	CZM_DrawText( font, x + pad, titleY, w - pad * 2, ru ? "ИГРОКИ  /  6" : "PLAYERS  /  6", CZM_White() );
+	CZM_DrawText( font, x + pad, serverY, w - pad * 2, "COUNTER ZOMBIE MOBILE", PackRGBA( 158, 168, 185, 255 ));
 	for( int c = 0; c < cols; c++ )
 	{
 		int left = x + pad + c * ( cw + gap );
+		int nameW = cw * 0.57f, statW = cw * 0.13f;
+		const unsigned int headColor = PackRGBA( 162, 171, 187, 255 );
+		static const char *stats[3] = { "12", "4", "48" };
+
 		if( style == 2 )
-			FillClipped( left - pad / 2, y + head - fh - pad, cw + pad, h - head + fh + pad, PackRGBA( 10, 13, 19, 230 ), clip );
-		CZM_DrawText( font, left + pad, y + head - fh - pad, cw, CZM_T( "s_tab_style" ), PackRGBA( 160, 170, 187, 255 ));
+			FillClipped( left - pad / 2, headY - pad / 2, cw + pad, h - ( headY - pad / 2 - y ) - pad / 2, PackRGBA( 10, 13, 19, 230 ), clip );
+		CZM_DrawText( font, left, headY, nameW, ru ? "ИГРОК" : "PLAYER", headColor );
+		CZM_DrawText( font, left + nameW, headY, statW, ru ? "УБ." : "KILLS", headColor, QM_CENTER );
+		CZM_DrawText( font, left + nameW + statW, headY, statW, ru ? "СМ." : "DEATHS", headColor, QM_CENTER );
+		CZM_DrawText( font, left + nameW + statW * 2, headY, cw - nameW - statW * 2, ru ? "ПИНГ" : "PING", headColor, QM_CENTER );
 		for( int row = 0; row < rows; row++ )
 		{
 			int n = c * rows + row, ry = y + head + row * rh;
@@ -1307,9 +1349,10 @@ void CCzmSettings::DrawTabPreview( const CzmRect &box )
 			FillClipped( left, ry, cw, rh - inset, n == 1 ? PackRGBA( 90, 24, 34, 230 ) : PackRGBA( 24, 28, 38, 210 ), clip );
 			FillClipped( left, ry, 2, rh - inset, n < 3 ? PackRGBA( 233, 84, 101, 255 ) : PackRGBA( 75, 167, 245, 255 ), clip );
 			char name[48]; snprintf( name, sizeof( name ), "PLAYER %02d", n + 1 );
-			int ty = ry + Q_max( 0, ( rh - fh ) / 2 );
-			CZM_DrawText( font, left + pad, ty, cw * 0.55f, name, CZM_White() );
-			CZM_DrawText( font, left + cw * 0.65f, ty, cw * 0.32f, "12   4   48", PackRGBA( 150, 210, 180, 255 ));
+			int ty = ry + Q_max( 0, ( rh - inset - fh ) / 2 );
+			CZM_DrawText( font, left + pad, ty, nameW - pad, name, CZM_White() );
+			for( int k = 0; k < 3; k++ )
+				CZM_DrawText( font, left + nameW + statW * k, ty, k < 2 ? statW : cw - nameW - statW * 2, stats[k], PackRGBA( 150, 210, 180, 255 ), QM_CENTER );
 		}
 	}
 	UI::Scissor::PopScissor();

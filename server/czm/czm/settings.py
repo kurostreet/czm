@@ -17,6 +17,7 @@ def valid_value(key,value):
         return bool(re.fullmatch(r'\d{1,3} \d{1,3} \d{1,3}',value)) and all(int(x)<=255 for x in value.split())
     if key=='cl_crosshair_size': return value in ('auto','small','medium','large','0','1','2','3')
     if key=='czm_lang': return value in ('','ru','en')
+    if key=='cl_logofile': return bool(re.fullmatch(r'[A-Za-z0-9_-]{1,32}',value))  # the chosen spray
     try: return math.isfinite(float(value)) and abs(float(value))<=1000000
     except ValueError: return False
 
