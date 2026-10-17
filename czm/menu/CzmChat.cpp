@@ -33,8 +33,8 @@ GNU General Public License for more details.
 /*
 Messages come from our service (server/czm): the open room is asked for new messages
 every 2.5 seconds while the window is open. The server cleans swear words, limits the
-pace and keeps the last 100 messages of a room for 7 days. A tap on someone's message
-offers a complaint about the message or the avatar; the owner bans in his Telegram bot.
+pace and keeps the last 100 messages of a room for 7 days. A tap opens the player
+card with friendship, messages and a contextual complaint; the owner moderates in his Telegram bot.
 */
 #define UI_DIR "gfx/czm/ui/"
 #define ROOMS 3
@@ -604,26 +604,19 @@ void CCzmChat::Activate( int hit )
 		return;
 	}
 
-	if( hit >= HIT_PROFILE )
-	{
-		int index = hit - HIT_PROFILE;
-		CzmChatRoom &room = m_rooms[m_iRoom];
-		if( index < room.messages.Count() ) { EndInput(); CZM_OpenProfile( room.messages[index].player ); }
-		return;
-	}
-
+	// The avatar, name and message all lead to the same player card.
+	// Keep the message ID so a complaint from the card includes its actual text.
 	if( hit >= HIT_MESSAGE )
 	{
-		int index = hit - HIT_MESSAGE;
+		int index = hit >= HIT_PROFILE ? hit - HIT_PROFILE : hit - HIT_MESSAGE;
 		CzmChatRoom &room = m_rooms[m_iRoom];
-
-		// a complaint about someone else's message
-		if( index < room.messages.Count() && room.messages[index].player != CZM_OnlinePlayer( ))
+		if( index >= 0 && index < room.messages.Count() )
 		{
 			EndInput();
-			m_iPopup = index;
+			CZM_OpenProfile( room.messages[index].player, room.messages[index].id );
 		}
 	}
+
 }
 
 bool CCzmChat::KeyDown( int key )

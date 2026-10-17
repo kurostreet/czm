@@ -17,7 +17,7 @@ STUB = r'''
 #include "utlvector.h"
 #include "utlstring.h"
 using HFont=int;
-enum{CZMF_PANEL_TEXT,CZMF_LANG,CZMF_SMALL,CZMF_PANEL_TITLE,QM_CENTER=1,QM_RIGHT=2,CZM_TAB_PROFILE=5,K_MWHEELUP=30,K_MWHEELDOWN=31};
+enum{CZMF_PANEL_TEXT,CZMF_LANG,CZMF_SMALL,CZMF_PANEL_TITLE,CZMF_NICK,QM_CENTER=1,QM_RIGHT=2,CZM_TAB_PROFILE=5,K_MWHEELUP=30,K_MWHEELDOWN=31};
 template<class T> T Q_min(T a,T b){return std::min(a,b);}template<class T>T Q_max(T a,T b){return std::max(a,b);}
 template<class T>T bound(T a,T b,T c){return std::max(a,std::min(b,c));}
 inline void Q_strncpy(char*a,const char*b,size_t n){if(a!=b){strncpy(a,b,n);a[n-1]=0;}}
@@ -47,12 +47,12 @@ HARNESS = r'''
 #include <map>
 #include <cassert>
 int ScreenWidth=1536,ScreenHeight=716,cursorX,cursorY;Cursor uiStatic;Stack stack;
-static double now=100;static std::string key="czms1_first-account";static int me=7,ids,logins,lastButtonFont;static bool drawTrace;
+static double now=100;static std::string key="czms1_first-account";static int me=7,ids,logins,lastButtonFont;static bool drawTrace;static bool russian=true;
 static std::map<std::string,std::string> vars;static std::map<int,std::pair<int,std::string>> replies;
 struct Request{int id;std::string url,body;};static std::vector<Request> requests;
 const char*EngFuncs::GetCvarString(const char*k){return vars[k].c_str();}float EngFuncs::GetCvarFloat(const char*k){return atof(GetCvarString(k));}void EngFuncs::CvarSetString(const char*k,const char*v){vars[k]=v;}void EngFuncs::CvarSetValue(const char*k,float v){vars[k]=std::to_string(v);}double EngFuncs::DoubleTime(){return now;}
-void UI_EnableTextInput(bool){}void CZM_Init(){}bool CZM_IsRussian(){return true;}unsigned CZM_White(){return 0xffffffff;}unsigned CZM_Grey(){return PackRGBA(150,164,184,255);}
-HFont CZM_Font(int i){return i;}int CZM_FontHeight(HFont f){return (f==CZMF_PANEL_TITLE?42:f==CZMF_LANG?24:f==CZMF_SMALL?17:21)*ScreenHeight/768;}
+void UI_EnableTextInput(bool){}void CZM_Init(){}bool CZM_IsRussian(){return russian;}unsigned CZM_White(){return 0xffffffff;}unsigned CZM_Grey(){return PackRGBA(150,164,184,255);}
+HFont CZM_Font(int i){return i;}int CZM_FontHeight(HFont f){return (f==CZMF_PANEL_TITLE?42:f==CZMF_NICK?29:f==CZMF_LANG?24:f==CZMF_SMALL?17:21)*ScreenHeight/768;}
 int CZM_TextWidth(HFont f,const char*s){int n=0;for(;*s;s++)if((*s&0xc0)!=0x80)n++;return n*CZM_FontHeight(f)*62/100;}
 int CZM_WrapText(HFont f,const char*s,int w,int*starts,int max){int lines=0,i=0,last=0;starts[0]=0;for(;s[i]&&lines<max;){int from=i,n=0;while(s[i]&&(n*CZM_FontHeight(f)/2<w||!n)){i++;while((s[i]&0xc0)==0x80)i++;n++;}if(i==from)break;lines++;starts[lines]=i;last=i;}return lines;}
 void CZM_WrapLine(const char*s,const int*starts,int n,char*out,size_t size){int len=std::min((int)size-1,starts[n+1]-starts[n]);memcpy(out,s+starts[n],len);out[len]=0;}
@@ -61,7 +61,7 @@ void UI_FillRect(int x,int y,int w,int h,unsigned c){if(drawTrace)printf("R\t%d\
 void CZM_DrawImage(const char*p,int x,int y,int w,int h,unsigned c){if(drawTrace)printf("I\t%d\t%d\t%d\t%d\t%s\n",x,y,w,h,p);}
 void CZM_DrawPill(const char*,int x,int y,int w,int h,unsigned c){UI_FillRect(x,y,w,h,c);}
 void CZM_DrawPanel(const CzmRect&r){UI_FillRect(r.x,r.y,r.w,r.h,PackRGBA(10,17,26,250));}
-void CZM_DrawButton(const char*p,const CzmRect&r,const char*s,unsigned c,bool,int font){lastButtonFont=font;UI_FillRect(r.x,r.y,r.w,r.h,strstr(p,"primary")?PackRGBA(210,34,55,255):PackRGBA(31,43,59,255));CZM_DrawText(font,r.x+r.h/4,r.y+(r.h-CZM_FontHeight(font))/2,r.w-r.h/2,s,c);}
+void CZM_DrawButton(const char*p,const CzmRect&r,const char*s,unsigned c,bool,int font){lastButtonFont=font;UI_FillRect(r.x,r.y,r.w,r.h,strstr(p,"primary")?PackRGBA(210,34,55,255):PackRGBA(31,43,59,255));CZM_DrawText(font,r.x+r.h/4,r.y+(r.h-CZM_FontHeight(font))/2,r.w-r.h/2,s,c,QM_CENTER);}
 bool CZM_OnlineReady(){return true;}const char*CZM_OnlineKey(){return key.c_str();}int CZM_OnlinePlayer(){return me;}const char*CZM_OnlineUrl(const char*p){return p;}const char*CZM_AvatarFor(const char*,int){return "gfx/czm/ui/avatar.png";}
 int CZM_NetRequest(const char*,const char*url,const char*,const char*body){requests.push_back({++ids,url,body});return ids;}
 bool CZM_NetPoll(int id,int*status,CUtlString&body){auto i=replies.find(id);if(i==replies.end())return false;*status=i->second.first;body.Set(i->second.second.c_str());replies.erase(i);return true;}
@@ -83,11 +83,55 @@ int main(int argc,char**argv){
  if(pending)replies[pending]={200,"{\"messages\":[{\"id\":55,\"t\":\"private old account\"}]}"};CZM_SocialFrame();assert(w.m_messages.Count()==0);
  key="guest-legacy-key";CZM_SocialFrame();CZM_OpenFriends();w.Layout();cursorX=w.m_prev.x+1;cursorY=w.m_prev.y+1;assert(w.Hit()==w.LOGIN);w.Activate(w.LOGIN);assert(logins==1);
  Button(CZM_Rect(0,0,ScreenHeight*.18f,ScreenHeight*.07f),"Отправить");assert(lastButtonFont!=CZMF_LANG);
- // The exact Draw methods also run at phone and narrow landscape sizes.
+ // Profiles remain compact with reachable, non-overlapping controls.
  key="czms1_second-account";CZM_SocialFrame();CZM_OpenFriends();
- for(auto resolution:{std::pair<int,int>{1536,716},{960,540},{1024,768}}){ScreenWidth=resolution.first;ScreenHeight=resolution.second;w.OpenProfile(8,false);w.Read(j,w.READ_PROFILE);w.Draw();assert(w.m_primary.y+w.m_primary.h<ScreenHeight);assert(w.m_copy.x+w.m_copy.w<w.m_panel.x+w.m_panel.w);}
+ for(auto resolution:{std::pair<int,int>{1536,716},{960,540},{1024,768},{1280,720}}){
+  ScreenWidth=resolution.first;ScreenHeight=resolution.second;
+  for(int variant=0;variant<8;variant++){
+   russian=variant%2==0;
+   w.OpenProfile(8,false);w.Read(j,w.READ_PROFILE);
+   if(variant==1){strcpy(w.m_profile.server,"203.0.113.10:27015");strcpy(w.m_profile.map,"zm_survival");}
+   if(variant==2){w.m_profile.id=me;strcpy(w.m_profile.relation,"self");}
+   if(variant==3){w.m_profile.account=false;strcpy(w.m_profile.relation,"none");}
+   if(variant==4){w.m_profile.id=me;strcpy(w.m_profile.relation,"self");w.m_editStatus=true;}
+   if(variant==5)strcpy(w.m_profile.relation,"blocked");
+   if(variant==6)strcpy(w.m_profile.relation,"unavailable");
+   if(variant==7){memset(w.m_profile.status,'W',100);w.m_profile.status[100]=0;}
+   w.Draw();assert(w.m_panel.y>0&&w.m_panel.x>0);
+   assert(w.m_panel.w*w.m_panel.h<ScreenWidth*ScreenHeight*.5f);
+   assert(w.m_panel.y+w.m_panel.h<ScreenHeight);
+   CzmRect*buttons[]={&w.m_primary,&w.m_secondary,&w.m_edit,&w.m_settings,&w.m_report,&w.m_block,&w.m_join,&w.m_copy};
+   for(auto r:buttons)if(r->w){
+    assert(r->x>=w.m_panel.x&&r->y>=w.m_panel.y);
+    assert(r->x+r->w<=w.m_panel.x+w.m_panel.w&&r->y+r->h<=w.m_panel.y+w.m_panel.h);
+    cursorX=r->x+r->w/2;cursorY=uiStatic.cursorY=r->y+r->h/2;assert(w.Hit());
+    for(auto other:buttons)if(r!=other&&other->w)assert(r->x+r->w<=other->x||other->x+other->w<=r->x||r->y+r->h<=other->y||other->y+other->h<=r->y);
+   }
+  }
+ }
+ russian=true;
+ // Adding from a player card uses the account ID, then exposes the dialog for a friend.
+ w.OpenProfile(8,true,71);w.Read(j,w.READ_PROFILE);strcpy(w.m_profile.relation,"none");w.Layout();
+ cursorX=w.m_primary.x+2;cursorY=uiStatic.cursorY=w.m_primary.y+2;assert(w.Hit()==w.PRIMARY);
+ w.KeyDown(1);w.KeyUp(1);assert(requests.back().url=="/api/v1/social/action"&&requests.back().body=="{\"target\":8,\"action\":\"follow\"}");
+ replies[w.m_write]={200,"{}"};w.Frame();w.Read(j,w.READ_PROFILE);
+ w.Activate(w.PRIMARY);assert(w.m_mode==w.DIALOG&&w.m_chatMessage==0);
+ // Reporting from chat preserves the message, with a separate profile complaint.
+ w.OpenProfile(8,true,71);w.Read(j,w.READ_PROFILE);w.Activate(w.REPORT);w.Layout();assert(!strcmp(w.m_confirm,"report_choice"));
+ cursorX=w.m_reportChat.x+2;cursorY=uiStatic.cursorY=w.m_reportChat.y+2;assert(w.Hit()==w.REPORT_CHAT);
+ w.Activate(w.REPORT_CHAT);assert(requests.back().url=="/api/v1/report"&&requests.back().body=="{\"message\":71}");replies[w.m_write]={200,"{}"};w.Frame();
+ w.OpenProfile(8,true,72);w.Read(j,w.READ_PROFILE);w.Activate(w.REPORT);w.Layout();w.Activate(w.CONFIRM);assert(requests.back().body=="{\"player\":8}");replies[w.m_write]={200,"{}"};w.Frame();
+ w.OpenProfile(10,true);w.Read(j,w.READ_PROFILE);w.Activate(w.REPORT);assert(!strcmp(w.m_confirm,"profile_report")&&w.m_chatMessage==0);w.Activate(w.CANCEL);
+ // Guest cards explain the unavailable friendship instead of hiding the action.
+ w.m_profile.account=false;w.Layout();auto count=requests.size();assert(w.m_primary.w&&w.m_report.w&&!w.m_block.w);w.Activate(w.PRIMARY);assert(requests.size()==count&&*w.m_notice);
  ScreenWidth=1536;ScreenHeight=716;
- if(argc>1){drawTrace=true;if(!strcmp(argv[1],"profile")){w.OpenProfile(8,false);w.Read(j,w.READ_PROFILE);}else{w.m_target=8;w.Navigate(w.DIALOG);w.Read(j,w.READ_DIALOG);}w.Draw();}
+ if(argc>1){drawTrace=true;if(strcmp(argv[1],"dialog")){
+  w.OpenProfile(8,false);w.Read(j,w.READ_PROFILE);
+  if(!strcmp(argv[1],"own")){w.m_profile.id=me;strcpy(w.m_profile.nick,"Kuro");strcpy(w.m_profile.status,"");}
+  if(!strcmp(argv[1],"guest")){w.m_profile.account=false;strcpy(w.m_profile.relation,"none");strcpy(w.m_profile.status,"");}
+  if(!strcmp(argv[1],"join")){strcpy(w.m_profile.server,"203.0.113.10:27015");strcpy(w.m_profile.map,"zm_survival");}
+  if(!strcmp(argv[1],"report")){w.m_chatMessage=71;w.Activate(w.REPORT);}
+ }else{w.m_target=8;w.Navigate(w.DIALOG);w.Read(j,w.READ_DIALOG);}w.Draw();}
 }
 '''
 
@@ -111,9 +155,55 @@ class SocialMenuTests(unittest.TestCase):
             preview = os.environ.get("CZM_SOCIAL_PREVIEW_DIR")
             if preview:
                 output = Path(preview); output.mkdir(parents=True, exist_ok=True)
-                for view in ["profile", "dialog"]:
+                for view in ["profile", "own", "guest", "join", "report", "dialog"]:
                     result = subprocess.run([str(exe), view], check=True, capture_output=True, text=True)
                     (output/(view+".tsv")).write_text(result.stdout)
+
+    def test_chat_opens_the_same_card_with_message_context_in_every_room(self):
+        import re
+        source = (ROOT / "czm/menu/CzmChat.cpp").read_text()
+        hits = re.search(r"enum EHit\n\t\{.*?\n\t\};", source, re.S).group()
+        activate = re.search(r"void CCzmChat::Activate\( int hit \)\n\{.*?\n\}", source, re.S).group()
+        harness = r'''
+#include <cassert>
+#include <vector>
+#include <utility>
+#include <cstddef>
+struct Message{int player,id;};
+struct Messages:std::vector<Message>{int Count()const{return size();}};
+struct Room{Messages messages;double nextPoll;};
+using CzmChatRoom=Room;
+struct EngFuncs{static void CvarSetValue(const char*,float){}};
+static std::vector<std::pair<int,int>> opened;
+void CZM_OpenProfile(int player,int message){opened.push_back({player,message});}
+bool CZM_OnlineBan(void*,void*,void*){return false;}void CZM_PlayClick(){}
+#define ROOMS 3
+class CCzmChat{public:
+''' + hits + r'''
+ bool m_bClosing=false;int m_iPopup=-1,m_iRoom=0;float m_flScroll=0,m_flVelocity=0;
+ Room m_rooms[ROOMS];bool inputEnded=false;
+ void Hide(){}void BeginInput(){}void Send(){}void Report(bool){}
+ void EndInput(){inputEnded=true;}void Activate(int);
+};
+''' + activate + r'''
+int main(){
+ CCzmChat chat;
+ for(int room=0;room<ROOMS;room++){
+  chat.m_rooms[room].messages.push_back({8+room,70+room});chat.m_iRoom=room;
+  for(int hit:{chat.HIT_PROFILE,chat.HIT_MESSAGE}){
+   chat.inputEnded=false;chat.Activate(hit);
+   assert(opened.back()==std::make_pair(8+room,70+room));
+   assert(chat.inputEnded&&chat.m_iPopup==-1);
+  }
+ }
+ auto count=opened.size();chat.m_bClosing=true;chat.Activate(chat.HIT_MESSAGE);assert(opened.size()==count);
+}
+'''
+        with tempfile.TemporaryDirectory() as folder:
+            cpp=Path(folder)/"chat.cpp";exe=Path(folder)/"chat"
+            cpp.write_text(harness)
+            subprocess.run(["g++","-std=c++11",str(cpp),"-o",str(exe)],check=True)
+            subprocess.run([str(exe)],check=True)
 
 
 if __name__ == "__main__": unittest.main()

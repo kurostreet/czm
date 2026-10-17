@@ -351,7 +351,7 @@ void CZM_OpenChat( void );
 
 // Account profiles, friends and private dialogs (independent of game-server mods).
 void CZM_OpenFriends( void );
-void CZM_OpenProfile( int player );
+void CZM_OpenProfile( int player, int chatMessage = 0 );
 void CZM_SocialFrame( void );
 int CZM_SocialUnread( void );
 int CZM_SocialRequests( void );
