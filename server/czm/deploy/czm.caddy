@@ -15,9 +15,17 @@ counter-zombie.ru, kontrafps.ru {
 		reverse_proxy 127.0.0.1:8200
 	}
 
-	# new builds from GitHub Actions (players' APK and the Google Play bundle), the service checks the workflow token
-	@builds path /api/v1/builds /api/v1/play-builds
-	handle @builds {
+	# new builds from GitHub Actions, the service checks the workflow token. Exact paths: Caddy
+	# puts single-path handles before /api/* (a named matcher would come after it and get 1 MB)
+	handle /api/v1/builds {
+		request_body {
+			max_size 700MB
+		}
+		reverse_proxy 127.0.0.1:8200
+	}
+
+	# the Google Play bundle from play.yml
+	handle /api/v1/play-builds {
 		request_body {
 			max_size 700MB
 		}

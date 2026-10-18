@@ -125,8 +125,9 @@ class InstallListTests(unittest.TestCase):
 
     def test_build_uploads_get_the_large_body_limit(self):
         caddy = (self.base / "deploy" / "czm.caddy").read_text()
-        self.assertIn("@builds path /api/v1/builds /api/v1/play-builds", caddy)
-        self.assertLess(caddy.index("handle @builds"), caddy.index("handle /api/*"))
+        for path in ("/api/v1/builds", "/api/v1/play-builds"):
+            block = caddy.split(f"handle {path} {{", 1)[1].split("}\n\t}", 1)[0]   # exact path: before /api/*
+            self.assertIn("max_size 700MB", block, path)
 
     def test_pages_have_no_inline_code_beyond_the_allowed_line(self):
         caddy = (self.base / "deploy" / "czm.caddy").read_text()
