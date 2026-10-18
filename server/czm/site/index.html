@@ -182,6 +182,12 @@ footer .h-game{font-size:14px;color:var(--text);margin-right:auto}
 .btn-ghost svg{flex:none}
 .beta{padding:16px 16px 10px}
 .beta h2{margin:0}
+.beta-progress{margin:14px 0;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px}
+.beta-progress strong{font:900 28px/1 "CZM Display";color:var(--red-ink);font-variant-numeric:tabular-nums}
+.beta-progress span{font-size:14px;color:var(--muted)}
+.beta-progress small{flex-basis:100%;font-size:12px;color:var(--muted)}
+.beta-track{width:100%;height:7px;margin:0 0 16px;background:var(--surface2);border-radius:999px;overflow:hidden}
+.beta-track div{width:0;height:100%;background:var(--red);border-radius:inherit;transition:width .5s}
 .beta .lead{margin:6px 0 12px;color:var(--muted);font-size:15px;max-width:640px}
 .steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
 .step{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--line);transition:opacity .3s ease}
@@ -294,6 +300,8 @@ footer .h-game{font-size:14px;color:var(--text);margin-right:auto}
   data-store="https://play.google.com/store/apps/details?id=dev.gaming.czm">
 <div class="card beta">
 <h2 class="h-game" data-i18n="betaTitle">Бета-тест в Google Play</h2>
+<div class="beta-progress"><strong><span id="sBetaTesters">—</span> / 12</strong><span data-i18n="betaCount">подтвердили участие</span><small data-i18n="betaCountNote">Данные Google Play Console, проверяются вручную</small></div>
+<div class="beta-track" id="sBetaTrack" role="progressbar" aria-label="Подтверждённые тестировщики" aria-valuemin="0" aria-valuemax="12"><div id="sBetaBar"></div></div>
 <p class="lead" data-i18n="betaLead">Помоги выпустить игру в Google Play: нужно 12 тестировщиков на 14 дней. Тестеры первыми получают версию из Google Play.</p>
 <ol class="steps">
 <li class="step" data-step="1"><span class="n">1</span><span class="b"><b data-i18n="beta1">Вступи в группу тестировщиков</b><small data-i18n="beta1Note">Нужен аккаунт Google — тот же, что в Google Play на телефоне.</small></span><a class="btn-red" data-beta="group" target="_blank" rel="noopener" data-i18n="beta1Btn">Вступить</a></li>
