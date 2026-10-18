@@ -33,8 +33,10 @@
       dlTitle: 'Заходи в игру', dlText: 'Бесплатно. Ссылка всегда ведёт на свежую версию, дальше игра обновляется сама.', dlButton: 'Скачать APK',
       newsTitle: 'Что нового', version: 'Версия', mail: 'Почта', privacy: 'Конфиденциальность',
       betaTitle: 'Бета-тест в Google Play', betaShort: 'Бета-тест',
-      betaCount: 'подтвердили участие', betaCountNote: 'Данные Google Play Console, проверяются вручную',
-      betaLead: 'Набираем 50 тестировщиков с запасом! Google требует минимум 12 участников на 14 дней. Присоединяйся и играй.',
+      betaCount: 'подтвердили участие в Google Play', betaCountNote: 'По данным Google Play Console, обновляется вручную',
+      betaProgress: 'Подтверждённые тестировщики', betaPending: 'Google Play проверяет игру. Пока можно вступить в группу; шаги 2 и 3 откроются после одобрения.',
+      betaReady: 'Закрытая бета в Google Play доступна! Вступи в группу, подтверди участие и установи игру.',
+      betaLead: 'Цель — 50 тестировщиков с запасом! Для допуска к рабочей версии Google требует минимум 12 участников на 14 дней.',
       beta1: 'Вступи в группу тестировщиков', beta1Note: 'Нужен аккаунт Google — тот же, что в Google Play на телефоне.', beta1Btn: 'Вступить',
       beta2: 'Прими приглашение', beta2Note: 'Откроется Google Play. Если приглашения нет, проверь шаг 1.', beta2Btn: 'Стать тестером',
       beta3: 'Установи и играй', beta3Note: 'Заходи в игру хотя бы пару раз в неделю: Google проверяет, что тест живой.', beta3Btn: 'Открыть в Google Play'
@@ -61,8 +63,10 @@
       dlTitle: 'Join the game', dlText: 'Free. The link always leads to the latest version, then the game updates itself.', dlButton: 'Download APK',
       newsTitle: 'What’s new', version: 'Version', mail: 'Email', privacy: 'Privacy',
       betaTitle: 'Google Play beta test', betaShort: 'Beta test',
-      betaCount: 'confirmed testers', betaCountNote: 'Google Play Console data, checked manually',
-      betaLead: 'Our goal is 50 testers as a safety margin! Google requires at least 12 opted-in testers for 14 days. Join and play.',
+      betaCount: 'confirmed Google Play testers', betaCountNote: 'From Google Play Console, manually updated',
+      betaProgress: 'Confirmed testers', betaPending: 'Google Play is reviewing the game. You can join the group now; steps 2 and 3 will unlock after approval.',
+      betaReady: 'The Google Play closed beta is available! Join the group, opt in and install the game.',
+      betaLead: 'Our goal is 50 testers as a safety margin! Google requires at least 12 opted-in testers for 14 days.',
       beta1: 'Join the testers group', beta1Note: 'You need a Google account, the same one as in Google Play on your phone.', beta1Btn: 'Join',
       beta2: 'Accept the invitation', beta2Note: 'Google Play opens. If there is no invitation, check step 1.', beta2Btn: 'Become a tester',
       beta3: 'Install and play', beta3Note: 'Play at least a couple of times a week: Google checks that the test is alive.', beta3Btn: 'Open in Google Play'
@@ -386,31 +390,31 @@
   var beta = $('beta');
   var betaLinks = beta ? { group: beta.getAttribute('data-group') || '', optin: beta.getAttribute('data-optin') || '',
     store: beta.getAttribute('data-store') || '' } : {};
-  function betaStep() {
-    var n = parseInt(store.get('czm-beta') || '0', 10);
-    return n >= 0 && n <= 3 ? n : 0;
-  }
   function paintBeta() {
-    var done = betaStep();
+    if (!beta || beta.hidden) return;
+    var open = Boolean(stats && stats.play_beta_open === true);
+    $('betaStatus').textContent = open ? T.betaReady : T.betaPending;
     all('#beta .step').forEach(function (li) {
       var n = parseInt(li.getAttribute('data-step'), 10);
       var link = li.querySelector('[data-beta]');
-      li.classList.toggle('done', n <= done);
-      li.classList.toggle('locked', n > done + 1);
-      if (n > done + 1) link.setAttribute('aria-disabled', 'true'); else link.removeAttribute('aria-disabled');
+      var kind = link.getAttribute('data-beta');
+      var allowed = kind === 'group' || open;
+      li.classList.toggle('locked', !allowed);
+      li.classList.remove('done'); // clicks cannot verify Google Group membership or opt-in
+      if (allowed) {
+        link.href = betaLinks[kind];
+        link.removeAttribute('aria-disabled');
+        link.removeAttribute('tabindex');
+      } else {
+        link.removeAttribute('href');
+        link.setAttribute('aria-disabled', 'true');
+        link.setAttribute('tabindex', '-1');
+      }
     });
   }
   if (beta && /^https:\/\/groups\.google\.com\//.test(betaLinks.group)) {
     beta.hidden = false;
     all('[data-beta-link]').forEach(function (el) { el.hidden = false; });
-    all('#beta [data-beta]').forEach(function (a) {
-      a.href = betaLinks[a.getAttribute('data-beta')];
-      a.addEventListener('click', function () {
-        var n = parseInt(a.closest('.step').getAttribute('data-step'), 10);
-        if (n > betaStep()) store.set('czm-beta', String(n));
-        setTimeout(paintBeta, 400);
-      });
-    });
     paintBeta();
   }
 
@@ -454,11 +458,15 @@
     countTo('online', $('sOnline'), stats.online, instant);
     countTo('offline', $('sOffline'), stats.offline, instant);
     countTo('downloads', $('sDownloads'), stats.downloads, instant);
-    if ($('sBetaTesters') && typeof stats.play_beta_testers === 'number') {
-      $('sBetaTesters').textContent = fmt(stats.play_beta_testers);
-      $('sBetaBar').style.width = Math.min(100, stats.play_beta_testers / 50 * 100) + '%';
-      $('sBetaTrack').setAttribute('aria-valuenow', String(Math.min(50, stats.play_beta_testers)));
+    if ($('sBetaTesters')) {
+      var testers = stats.play_beta_testers;
+      $('sBetaTesters').textContent = typeof testers === 'number' ? fmt(testers) : '—';
+      $('sBetaBar').style.width = typeof testers === 'number' ? Math.min(100, testers / 50 * 100) + '%' : '0%';
+      $('sBetaTrack').setAttribute('aria-valuenow', String(typeof testers === 'number' ? Math.min(50, testers) : 0));
+      var checked = stats.play_beta_checked_at;
+      $('betaCountUpdated').textContent = T.betaCountNote + (checked ? ' · ' + new Date(checked * 1000).toLocaleString(lang === 'ru' ? 'ru-RU' : 'en-GB') : '');
     }
+    paintBeta();
     if (stats.size_mb) { $('sSize').textContent = fmt(stats.size_mb); $('dSize').textContent = fmt(stats.size_mb); }
     $('dVersion').textContent = stats.version ? T.version + ' ' + stats.version : '—';
   }
