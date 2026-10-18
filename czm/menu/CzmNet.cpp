@@ -479,6 +479,16 @@ static void CZM_CallVoid( const char *name )
 }
 
 void CZM_UpdateInstall( void ) { CZM_CallVoid( "updateInstall" ); }
+bool CZM_NetStoreUpdate( int *code, double *bytes )
+{
+	char text[64];
+
+	*code = 0;
+	*bytes = 0;
+	CZM_CallString( "storeUpdateState", text, sizeof( text ));
+	return sscanf( text, "%d %lf", code, bytes ) >= 1 && *code > 0;
+}
+void CZM_NetStoreUpdateStart( void ) { CZM_CallVoid( "storeUpdateStart" ); }
 void CZM_UpdateCancel( void ) { CZM_CallVoid( "updateCancel" ); }
 void CZM_UpdateCleanup( void ) { CZM_CallVoid( "updateCleanup" ); }
 
@@ -518,6 +528,8 @@ const char *CZM_NetDeviceId( void ) { return ""; }
 void CZM_NetNewKey( char *out, size_t size ) { if( size ) out[0] = 0; }
 int CZM_NetVersionCode( void ) { return 0; }
 bool CZM_NetCanSelfUpdate( void ) { return false; }
+bool CZM_NetStoreUpdate( int *code, double *bytes ) { *code = 0; *bytes = 0; return false; }
+void CZM_NetStoreUpdateStart( void ) {}
 void CZM_UpdateStart( const CzmUpdateInfo & ) {}
 void CZM_UpdateInstall( void ) {}
 void CZM_UpdateCancel( void ) {}

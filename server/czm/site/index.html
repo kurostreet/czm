@@ -29,6 +29,7 @@
 :root{--bg:#09090c;--surface:#131318;--surface2:#1c1c23;--line:rgba(255,255,255,.09);--text:#f2efe9;--muted:#a7a5ad;--red:#ef2834;--red-ink:#ff5d66;--gold:#f5b440;--glass:rgba(9,9,12,.6);--shadow:0 18px 44px rgba(0,0,0,.55);color-scheme:dark}
 :root.light{--bg:#efece6;--surface:#ffffff;--surface2:#e5e1da;--line:rgba(20,20,22,.11);--text:#16161a;--muted:#55545c;--red:#d21f2b;--red-ink:#b3141f;--gold:#8f5a00;--glass:rgba(255,255,255,.72);--shadow:0 14px 34px rgba(50,35,20,.16);color-scheme:light}
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--text);font:500 16px/1.5 "CZM Text",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow-x:hidden;transition:background .5s ease,color .5s ease}
 a{color:var(--red-ink)}a:hover{color:var(--red)}
@@ -177,6 +178,22 @@ footer .h-game{font-size:14px;color:var(--text);margin-right:auto}
 .flash{position:fixed;inset:0;z-index:60;background:#000;opacity:0;pointer-events:none}
 .flash.on{animation:flicker .62s steps(1) both}
 @keyframes flicker{0%{opacity:0}15%{opacity:.75}25%{opacity:0}40%{opacity:.85}55%{opacity:.1}70%{opacity:.6}100%{opacity:0}}
+.dl .btn-ghost{min-height:56px;background:var(--surface2);border-color:var(--line);color:var(--text)}
+.btn-ghost svg{flex:none}
+.beta{padding:16px 16px 10px}
+.beta h2{margin:0}
+.beta .lead{margin:6px 0 12px;color:var(--muted);font-size:15px;max-width:640px}
+.steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.step{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--line);transition:opacity .3s ease}
+.step .n{width:34px;height:34px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font:900 16px "CZM Display";background:var(--red);color:#fff}
+.step .b{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.step .b b{font-weight:600;font-size:15px}
+.step .b small{color:var(--muted);font-size:13px;line-height:1.4}
+.step .btn-red,.step .btn-red:hover,.step .btn-red:visited{display:inline-flex;align-items:center;text-decoration:none;white-space:nowrap;color:#fff}
+.step.locked{opacity:.45}
+.step.locked .btn-red{pointer-events:none}
+.step.done .n{background:#22c55e}
+@media (max-width:560px){.step{flex-wrap:wrap}.step .b{flex:1 1 calc(100% - 46px)}.step .btn-red{margin-left:46px}}
 .toast{position:fixed;left:50%;width:max-content;bottom:calc(80px + env(safe-area-inset-bottom));z-index:55;transform:translate(-50%,20px);max-width:calc(100% - 32px);padding:11px 18px;border-radius:999px;background:var(--text);color:var(--bg);font:600 14px "CZM Text";box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:opacity .25s ease,transform .25s ease;overflow-wrap:anywhere}
 .toast.on{opacity:1;transform:translate(-50%,0)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
@@ -216,6 +233,7 @@ footer .h-game{font-size:14px;color:var(--text);margin-right:auto}
 <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M6 20h12"/></svg></span>
 <span class="h-game" data-i18n="downloadCta">Скачать игру</span>
 </a>
+<a class="btn-ghost" href="https://play.google.com/store/apps/details?id=dev.gaming.czm" rel="noopener" data-play-public hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M5 3.5v17a.8.8 0 0 0 1.2.7l14.6-8.5a.8.8 0 0 0 0-1.4L6.2 2.8A.8.8 0 0 0 5 3.5z"/></svg>&nbsp;Google Play</a>
 <a class="btn-ghost" href="https://t.me/counter_zombie_mobile" rel="noopener">Telegram</a>
 </div>
 </div>
@@ -264,7 +282,24 @@ footer .h-game{font-size:14px;color:var(--text);margin-right:auto}
 <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M6 20h12"/></svg></span>
 <span class="h-game" data-i18n="dlButton">Скачать APK</span>
 </a>
+<a class="btn-ghost dl-play" href="https://play.google.com/store/apps/details?id=dev.gaming.czm" rel="noopener" data-play-public hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M5 3.5v17a.8.8 0 0 0 1.2.7l14.6-8.5a.8.8 0 0 0 0-1.4L6.2 2.8A.8.8 0 0 0 5 3.5z"/></svg>&nbsp;Google Play</a>
 </div>
+</div>
+</section>
+
+<!-- Google Play beta test. Shown when data-group has the Google Group link; data-play-public="1" on <html> shows the store buttons. -->
+<section class="sec wrap" id="beta" hidden
+  data-group=""
+  data-optin="https://play.google.com/apps/testing/dev.gaming.czm"
+  data-store="https://play.google.com/store/apps/details?id=dev.gaming.czm">
+<div class="card beta">
+<h2 class="h-game" data-i18n="betaTitle">Бета-тест в Google Play</h2>
+<p class="lead" data-i18n="betaLead">Помоги выпустить игру в Google Play: нужно 12 тестировщиков на 14 дней. Тестеры первыми получают версию из Google Play.</p>
+<ol class="steps">
+<li class="step" data-step="1"><span class="n">1</span><span class="b"><b data-i18n="beta1">Вступи в группу тестировщиков</b><small data-i18n="beta1Note">Нужен аккаунт Google — тот же, что в Google Play на телефоне.</small></span><a class="btn-red" data-beta="group" target="_blank" rel="noopener" data-i18n="beta1Btn">Вступить</a></li>
+<li class="step" data-step="2"><span class="n">2</span><span class="b"><b data-i18n="beta2">Прими приглашение</b><small data-i18n="beta2Note">Откроется Google Play. Если приглашения нет, проверь шаг 1.</small></span><a class="btn-red" data-beta="optin" target="_blank" rel="noopener" data-i18n="beta2Btn">Стать тестером</a></li>
+<li class="step" data-step="3"><span class="n">3</span><span class="b"><b data-i18n="beta3">Установи и играй</b><small data-i18n="beta3Note">Заходи в игру хотя бы пару раз в неделю: Google проверяет, что тест живой.</small></span><a class="btn-red" data-beta="store" target="_blank" rel="noopener" data-i18n="beta3Btn">Открыть в Google Play</a></li>
+</ol>
 </div>
 </section>
 
@@ -280,6 +315,7 @@ footer .h-game{font-size:14px;color:var(--text);margin-right:auto}
 <a href="https://t.me/counter_zombie_mobile" rel="noopener">Telegram</a>
 <a href="mailto:kuro.street.inc@gmail.com" data-i18n="mail">Почта</a>
 <a href="https://github.com/kurostreet/czm" rel="noopener">GitHub</a>
+<a href="#beta" data-beta-link hidden data-i18n="betaShort">Бета-тест</a>
 <a href="/privacy" data-i18n="privacy">Конфиденциальность</a>
 </div>
 </footer>

@@ -476,6 +476,11 @@ void CCzmMainMenu::Activate( int hit )
 
 		if( !update )
 			break;
+		if( update->store )
+		{
+			CZM_NetStoreUpdateStart();
+			break;
+		}
 		CZM_UpdateState( &state, &done, &total, error, sizeof( error ));
 		if( state == CZM_UPDATE_DOWNLOADING )
 			CZM_UpdateCancel();
@@ -1151,18 +1156,24 @@ void CCzmMainMenu::DrawBell( void )
 		if( state != CZM_UPDATE_IDLE && total > 0 )
 			downloadSize = total;
 		snprintf( size, sizeof( size ), "%.1f %s", downloadSize / 1048576.0, CZM_T( "mb" ));
-		snprintf( text, sizeof( text ), "%s %s", CZM_T( "upd_title" ), update->version );
+		if( update->store && downloadSize <= 0 )
+			size[0] = 0;	// Play did not say the size
+		if( update->store )
+			Q_strncpy( text, CZM_T( "upd_store_title" ), sizeof( text ));
+		else
+			snprintf( text, sizeof( text ), "%s %s", CZM_T( "upd_title" ), update->version );
 		CZM_DrawText( nameFont, c.x + H * 0.03f, c.y + H * 0.022f, c.w - H * 0.06f - CZM_TextWidth( smallFont, size ) - H * 0.02f, text, CZM_White());
 		CZM_DrawText( smallFont, c.x + c.w - H * 0.03f - CZM_TextWidth( smallFont, size ), c.y + H * 0.03f, CZM_TextWidth( smallFont, size ) + 2, size, dim );
 
 		// what is new, up to three lines
 		ty = c.y + H * 0.022f + CZM_FontHeight( nameFont ) + H * 0.01f;
-		lines = CZM_WrapText( textFont, update->notes, c.w - H * 0.06f, starts, 3 );
+		const char *notes = update->store ? CZM_T( "upd_store_notes" ) : update->notes;	// follows the language switch
+		lines = CZM_WrapText( textFont, notes, c.w - H * 0.06f, starts, 3 );
 		for( int l = 0; l < lines && ty + CZM_FontHeight( textFont ) < m_updateButton.y; l++ )
 		{
 			char line[512];
 
-			CZM_WrapLine( update->notes, starts, l, line, sizeof( line ));
+			CZM_WrapLine( notes, starts, l, line, sizeof( line ));
 			CZM_DrawText( textFont, c.x + H * 0.03f, ty, c.w - H * 0.06f, line, PackRGBA( 220, 224, 232, 255 ));
 			ty += CZM_FontHeight( textFont ) * 115 / 100;
 		}
@@ -1207,6 +1218,8 @@ void CCzmMainMenu::DrawBell( void )
 			label = CZM_T( "upd_download" );
 			break;
 		}
+		if( update->store )
+			label = CZM_T( "upd_store_button" );
 
 		CZM_DrawButton( state == CZM_UPDATE_DOWNLOADING ? UI_DIR "button_secondary.png" : UI_DIR "button_primary.png", m_updateButton, label,
 			CZM_White(), IsPressed( HIT_UPDATE ));

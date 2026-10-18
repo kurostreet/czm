@@ -131,6 +131,11 @@ android {
 	assetPacks = [":gamedata"]
 }
 
+dependencies {
+	// the bell asks Google Play about updates (Google Play build only, see src/googlePlay)
+	googlePlayImplementation "com.google.android.play:app-update:2.1.0"
+}
+
 def embeddedEngine = tasks.register("buildBundledEngine", Exec) {
 	workingDir rootProject.projectDir.parentFile
 	commandLine "python3", "scripts/build_android_engine.py",

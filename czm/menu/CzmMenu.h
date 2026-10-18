@@ -310,6 +310,9 @@ void CZM_UpdateState( int *state, double *done, double *total, char *error, size
 void CZM_UpdateInstall( void );
 void CZM_UpdateCancel( void );
 void CZM_UpdateCleanup( void );
+// Google Play build: Play offers the update and shows its own screen (StoreUpdates.java)
+bool CZM_NetStoreUpdate( int *code, double *bytes );
+void CZM_NetStoreUpdateStart( void );
 
 /*
  * the player on our service (czm/menu/CzmOnline.cpp)
@@ -325,6 +328,7 @@ struct CzmUpdateInfo
 {
 	bool available;
 	bool cleaned;
+	bool store;			// Google Play has it: the button opens Play's update screen
 	char version[32];
 	int code;
 	double size;

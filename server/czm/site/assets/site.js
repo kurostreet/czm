@@ -31,7 +31,12 @@
       roomsLabel: 'Комнаты чата', chatEmpty: 'В этой комнате пока тихо', chatLoading: 'Загружаем чат…',
       chatError: 'Чат сейчас не отвечает, попробуем ещё раз через несколько секунд', all: 'Все',
       dlTitle: 'Заходи в игру', dlText: 'Бесплатно. Ссылка всегда ведёт на свежую версию, дальше игра обновляется сама.', dlButton: 'Скачать APK',
-      newsTitle: 'Что нового', version: 'Версия', mail: 'Почта', privacy: 'Конфиденциальность'
+      newsTitle: 'Что нового', version: 'Версия', mail: 'Почта', privacy: 'Конфиденциальность',
+      betaTitle: 'Бета-тест в Google Play', betaShort: 'Бета-тест',
+      betaLead: 'Помоги выпустить игру в Google Play: нужно 12 тестировщиков на 14 дней. Тестеры первыми получают версию из Google Play.',
+      beta1: 'Вступи в группу тестировщиков', beta1Note: 'Нужен аккаунт Google — тот же, что в Google Play на телефоне.', beta1Btn: 'Вступить',
+      beta2: 'Прими приглашение', beta2Note: 'Откроется Google Play. Если приглашения нет, проверь шаг 1.', beta2Btn: 'Стать тестером',
+      beta3: 'Установи и играй', beta3Note: 'Заходи в игру хотя бы пару раз в неделю: Google проверяет, что тест живой.', beta3Btn: 'Открыть в Google Play'
     },
     en: {
       title: 'Counter Zombie Mobile — a zombie shooter for Android',
@@ -53,7 +58,12 @@
       roomsLabel: 'Chat rooms', chatEmpty: 'Quiet in this room so far', chatLoading: 'Loading the chat…',
       chatError: 'The chat is not answering, trying again in a few seconds', all: 'All',
       dlTitle: 'Join the game', dlText: 'Free. The link always leads to the latest version, then the game updates itself.', dlButton: 'Download APK',
-      newsTitle: 'What’s new', version: 'Version', mail: 'Email', privacy: 'Privacy'
+      newsTitle: 'What’s new', version: 'Version', mail: 'Email', privacy: 'Privacy',
+      betaTitle: 'Google Play beta test', betaShort: 'Beta test',
+      betaLead: 'Help release the game on Google Play: it needs 12 testers for 14 days. Testers get the Google Play version first.',
+      beta1: 'Join the testers group', beta1Note: 'You need a Google account, the same one as in Google Play on your phone.', beta1Btn: 'Join',
+      beta2: 'Accept the invitation', beta2Note: 'Google Play opens. If there is no invitation, check step 1.', beta2Btn: 'Become a tester',
+      beta3: 'Install and play', beta3Note: 'Play at least a couple of times a week: Google checks that the test is alive.', beta3Btn: 'Open in Google Play'
     }
   };
   var FEAT_SHOTS = [6, 8, 7, 9, 5];
@@ -366,6 +376,41 @@
     else if (boxAt >= 0 && e.key === 'ArrowRight') stepBox(1);
     else if (boxAt >= 0 && e.key === 'ArrowLeft') stepBox(-1);
   });
+
+  /* ---------- Google Play: store buttons and the beta test ---------- */
+  if (root.getAttribute('data-play-public') === '1') {
+    all('[data-play-public]').forEach(function (el) { el.hidden = false; });
+  }
+  var beta = $('beta');
+  var betaLinks = beta ? { group: beta.getAttribute('data-group') || '', optin: beta.getAttribute('data-optin') || '',
+    store: beta.getAttribute('data-store') || '' } : {};
+  function betaStep() {
+    var n = parseInt(store.get('czm-beta') || '0', 10);
+    return n >= 0 && n <= 3 ? n : 0;
+  }
+  function paintBeta() {
+    var done = betaStep();
+    all('#beta .step').forEach(function (li) {
+      var n = parseInt(li.getAttribute('data-step'), 10);
+      var link = li.querySelector('[data-beta]');
+      li.classList.toggle('done', n <= done);
+      li.classList.toggle('locked', n > done + 1);
+      if (n > done + 1) link.setAttribute('aria-disabled', 'true'); else link.removeAttribute('aria-disabled');
+    });
+  }
+  if (beta && /^https:\/\/groups\.google\.com\//.test(betaLinks.group)) {
+    beta.hidden = false;
+    all('[data-beta-link]').forEach(function (el) { el.hidden = false; });
+    all('#beta [data-beta]').forEach(function (a) {
+      a.href = betaLinks[a.getAttribute('data-beta')];
+      a.addEventListener('click', function () {
+        var n = parseInt(a.closest('.step').getAttribute('data-step'), 10);
+        if (n > betaStep()) store.set('czm-beta', String(n));
+        setTimeout(paintBeta, 400);
+      });
+    });
+    paintBeta();
+  }
 
   /* ---------- share ---------- */
   var toast = $('toast'), toastTimer = 0;

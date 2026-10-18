@@ -129,6 +129,16 @@ public final class CzmNet {
         return !BuildConfig.IS_GOOGLE_PLAY_BUILD;
     }
 
+    /** Google Play build: "code bytes" of the update Play offers, or "" (StoreUpdates per build flavor). */
+    public static String storeUpdateState() {
+        return StoreUpdates.state(context());
+    }
+
+    /** Google Play build: Play's own update screen over the game. */
+    public static void storeUpdateStart() {
+        StoreUpdates.start(context());
+    }
+
     // requests ----------------------------------------------------------------
 
     /** GET or POST with a JSON body (UTF-8 bytes, empty for none); returns the number to poll. */

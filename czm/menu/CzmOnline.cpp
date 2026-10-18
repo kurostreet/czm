@@ -249,6 +249,10 @@ static void OnHello( int status, const char *body )
 		Q_strncpy( u.patchSha256, j.String( j.Get( update, "patch_sha256" )), sizeof( u.patchSha256 ));
 		Q_strncpy( u.baseSha256, j.String( j.Get( update, "base_sha256" )), sizeof( u.baseSha256 ));
 	}
+	else if( s_online.update.store )
+	{
+		// Google Play build: the store answers about updates (CZM_OnlineFrame), not our service
+	}
 	else
 	{
 		// up to date: a downloaded update is no longer needed
@@ -292,6 +296,36 @@ void CZM_OnlineAvatarChanged( void )
 	s_online.preserveAvatar = false;
 }
 
+// Google Play build: the game does not update itself, Google Play does. Java asks Play every
+// 30 minutes; the bell shows the update when Play offers one and opens Play's update screen.
+static void StoreUpdateFrame( double now )
+{
+	static int selfUpdate = -1;
+	static double next;
+	int code;
+	double bytes;
+
+	if( selfUpdate < 0 )
+		selfUpdate = CZM_NetCanSelfUpdate() ? 1 : 0;
+	if( selfUpdate || now < next )
+		return;
+	next = now + 5.0;
+	if( CZM_NetStoreUpdate( &code, &bytes ))
+	{
+		CzmUpdateInfo &u = s_online.update;
+
+		if( !u.store || u.code != code )
+		{
+			memset( &u, 0, sizeof( u ));
+			u.available = u.store = u.cleaned = true;
+			u.code = code;
+			u.size = bytes;
+		}
+	}
+	else if( s_online.update.store )
+		memset( &s_online.update, 0, sizeof( s_online.update ));
+}
+
 void CZM_OnlineFrame( void )
 {
 	CZM_SprayFrame();
@@ -310,6 +344,7 @@ void CZM_OnlineFrame( void )
 
 	if( !s_online.key[0] )
 		return;
+	StoreUpdateFrame( now );
 	// Account changes arrive from Java without a password or session token in the engine.
 	if( CZM_AccountEvent( body ))
 	{
