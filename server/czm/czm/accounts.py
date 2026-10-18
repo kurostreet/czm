@@ -1,6 +1,8 @@
 """CZM accounts. Existing profile IDs, photos, messages and bans stay in place."""
 import hashlib
 import hmac
+import html
+import logging
 import re
 import secrets
 import smtplib
@@ -8,9 +10,13 @@ import ssl
 import unicodedata
 from email.message import EmailMessage
 
+import httpx
+
 from . import service
 from .config import get_settings
 from .db import now
+
+log = logging.getLogger("czm.mail")
 
 SESSION_PREFIX = "czms1_"
 SESSION_IDLE = 30 * 86400
@@ -150,26 +156,78 @@ def logout(conn, token, everywhere=False):
     return {"ok": True}
 
 
+MAIL_SUBJECTS = {"email": "подтверждение почты", "login": "вход в аккаунт"}
+MAIL_HEADINGS = {"email": "Подтверждение почты", "login": "Код для входа"}
+
+
+def mail_texts(code, purpose):
+    """Subject, plain text and HTML of a letter with a one-time code."""
+    subject = "Counter Zombie Mobile — " + MAIL_SUBJECTS.get(purpose, "восстановление пароля")
+    heading = MAIL_HEADINGS.get(purpose, "Восстановление пароля")
+    text = (f"{heading}: {code}\n\nКод действует 10 минут. Никому его не сообщайте.\n"
+            "Если вы не запрашивали код, просто пропустите это письмо.")
+    safe = html.escape(code)
+    body = f"""<div style="margin:0;background:#0b0b0e;padding:32px 16px;font-family:Arial,sans-serif;color:#f4f4f6">
+  <div style="max-width:520px;margin:0 auto;border:1px solid #3a1d22;border-radius:20px;background:#131317;padding:28px">
+    <div style="font-size:13px;letter-spacing:3px;color:#e02532;font-weight:700">COUNTER ZOMBIE MOBILE</div>
+    <h1 style="font-size:24px;margin:14px 0 8px;color:#ffffff">{html.escape(heading)}</h1>
+    <p style="color:#a7a7ae;margin:0">Введите этот код в игре.</p>
+    <div style="margin:26px 0;padding:18px;border-radius:14px;background:#1d1013;border:1px solid #8d1f2a;text-align:center;font-size:34px;letter-spacing:9px;font-weight:800;color:#ffffff">{safe}</div>
+    <p style="color:#e02532;font-weight:700">Код действует 10 минут.</p>
+    <p style="color:#85858c;font-size:13px;line-height:1.5">Никому не сообщайте этот код. Если вы не запрашивали его, просто пропустите это письмо.</p>
+  </div>
+</div>"""
+    return subject, text, body
+
+
+class MailRefused(Exception):
+    """A refusal explained by the mail service, safe to log."""
+
+
+def send_resend(cfg, address, subject, text, body):
+    response = httpx.post(cfg.resend_url, timeout=15.0,
+                          headers={"Authorization": f"Bearer {cfg.resend_key}", "Content-Type": "application/json"},
+                          json={"from": cfg.mail_from, "to": [address], "subject": subject, "text": text, "html": body})
+    if response.status_code // 100 != 2:
+        # the service explains a refusal (domain not verified, limit); no key or address is logged
+        try:
+            reason = re.sub(r"\S+@\S+", "<address>", str(response.json().get("message", "")))[:200]
+        except ValueError:
+            reason = ""
+        raise MailRefused(f"{response.status_code} {reason}")
+
+
+def send_smtp(cfg, address, subject, text, body):
+    message = EmailMessage()
+    message["Subject"], message["From"], message["To"] = subject, cfg.smtp_from, address
+    message.set_content(text)
+    message.add_alternative(body, subtype="html")
+    context = ssl.create_default_context()
+    smtp = smtplib.SMTP(cfg.smtp_host, cfg.smtp_port, timeout=10) if cfg.smtp_starttls else \
+        smtplib.SMTP_SSL(cfg.smtp_host, cfg.smtp_port, timeout=10, context=context)
+    with smtp:
+        if cfg.smtp_starttls:
+            smtp.starttls(context=context)
+        smtp.login(cfg.smtp_user, cfg.smtp_password)
+        smtp.send_message(message)
+
+
 def send_code(address, code, purpose):
     cfg = get_settings()
     if not cfg.mail_ready:
         raise AuthError("mail_unavailable", 503)
-    message = EmailMessage()
-    message["Subject"] = "Counter Zombie Mobile — " + {"email": "подтверждение почты", "login": "вход в аккаунт"}.get(purpose, "восстановление пароля")
-    message["From"], message["To"] = cfg.smtp_from, address
-    message.set_content(f"Код: {code}\nДействует 10 минут. Никому его не сообщайте.\nЕсли вы не запрашивали код, пропустите это письмо.")
-    try:
-        context = ssl.create_default_context()
-        smtp = smtplib.SMTP(cfg.smtp_host, cfg.smtp_port, timeout=10) if cfg.smtp_starttls else \
-            smtplib.SMTP_SSL(cfg.smtp_host, cfg.smtp_port, timeout=10, context=context)
-        with smtp:
-            if cfg.smtp_starttls:
-                smtp.starttls(context=context)
-            smtp.login(cfg.smtp_user, cfg.smtp_password)
-            smtp.send_message(message)
-    except Exception:
-        # Never expose the sender's credentials or SMTP response to the client/log.
-        raise AuthError("mail_unavailable", 503) from None
+    subject, text, body = mail_texts(code, purpose)
+    senders = ([("resend", send_resend)] if cfg.resend_ready else []) + ([("smtp", send_smtp)] if cfg.smtp_ready else [])
+    for name, sender in senders:
+        try:
+            sender(cfg, address, subject, text, body)
+            return
+        except MailRefused as error:
+            log.warning("mail via %s refused: %s", name, error)
+        except Exception as error:
+            # never the sender's credentials or the SMTP dialogue: the kind of failure and the SMTP code
+            log.warning("mail via %s failed: %s %s", name, type(error).__name__, getattr(error, "smtp_code", ""))
+    raise AuthError("mail_unavailable", 503)
 
 
 def issue_code(conn, player, purpose, target, deliver=True):

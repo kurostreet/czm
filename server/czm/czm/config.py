@@ -42,7 +42,11 @@ class Settings(BaseSettings):
     room_history: int = 100
     keep_days: int = 7
 
-    # Recovery is offered only when an authenticated TLS SMTP sender is configured.
+    # Codes by mail. Resend (HTTP API) goes first when its key is set, an authenticated TLS
+    # SMTP sender is the fallback. Without either, mail forms are not offered.
+    resend_key: str = ""
+    resend_url: str = "https://api.resend.com/emails"
+    mail_from: str = "Counter Zombie Mobile <noreply@counter-zombie.ru>"
     smtp_host: str = ""
     smtp_port: int = 465
     smtp_user: str = ""
@@ -51,8 +55,16 @@ class Settings(BaseSettings):
     smtp_starttls: bool = False
 
     @property
-    def mail_ready(self) -> bool:
+    def resend_ready(self) -> bool:
+        return bool(self.resend_key and self.mail_from)
+
+    @property
+    def smtp_ready(self) -> bool:
         return bool(self.smtp_host and self.smtp_user and self.smtp_password and self.smtp_from)
+
+    @property
+    def mail_ready(self) -> bool:
+        return self.resend_ready or self.smtp_ready
 
     @property
     def owner_ids(self) -> set[int]:

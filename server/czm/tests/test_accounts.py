@@ -13,7 +13,7 @@ from czm.config import get_settings
 class AccountTests(unittest.TestCase):
     def setUp(self):
         folder = tempfile.TemporaryDirectory(); self.addCleanup(folder.cleanup)
-        env = patch.dict(os.environ, {"CZM_DATA_DIR": folder.name, "CZM_SMTP_HOST": "", "CZM_SMTP_PASSWORD": ""})
+        env = patch.dict(os.environ, {"CZM_DATA_DIR": folder.name, "CZM_SMTP_HOST": "", "CZM_SMTP_PASSWORD": "", "CZM_RESEND_KEY": ""})
         env.start(); self.addCleanup(env.stop)
         get_settings.cache_clear(); self.addCleanup(get_settings.cache_clear)
         db.init()
@@ -253,6 +253,79 @@ class AccountTests(unittest.TestCase):
             self.assertEqual(self.post("login", nick="Kuro", password="Password123").status_code, 200)
         with db.db() as conn:
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM account_sessions").fetchone()[0], 5)
+
+
+class FakeResponse:
+    def __init__(self, status, body):
+        self.status_code, self.body = status, body
+
+    def json(self):
+        return self.body
+
+
+class MailDeliveryTests(unittest.TestCase):
+    def setUp(self):
+        env = patch.dict(os.environ, {"CZM_RESEND_KEY": "", "CZM_SMTP_HOST": "", "CZM_SMTP_USER": "",
+                                      "CZM_SMTP_PASSWORD": "", "CZM_SMTP_FROM": ""})
+        env.start(); self.addCleanup(env.stop)
+        get_settings.cache_clear(); self.addCleanup(get_settings.cache_clear)
+
+    def configure(self, resend=False, smtp=False):
+        cfg = get_settings()
+        if resend:
+            cfg.resend_key = "re_test_key"
+        if smtp:
+            cfg.smtp_host, cfg.smtp_user, cfg.smtp_password, cfg.smtp_from = "smtp.example.com", "user", "secret", "sender@example.com"
+        return cfg
+
+    def test_nothing_configured_offers_no_mail(self):
+        self.assertFalse(get_settings().mail_ready)
+        with self.assertRaises(accounts.AuthError) as error:
+            accounts.send_code("player@example.com", "123456", "email")
+        self.assertEqual(error.exception.status, 503)
+
+    def test_resend_alone_is_enough_and_sends_the_code(self):
+        cfg = self.configure(resend=True)
+        self.assertTrue(cfg.mail_ready)
+        calls = []
+        with patch.object(accounts.httpx, "post", side_effect=lambda url, **kw: calls.append((url, kw)) or FakeResponse(200, {"id": "x"})):
+            accounts.send_code("player@example.com", "042917", "login")
+        url, kw = calls[0]
+        self.assertEqual(url, "https://api.resend.com/emails")
+        self.assertEqual(kw["headers"]["Authorization"], "Bearer re_test_key")
+        mail = kw["json"]
+        self.assertEqual((mail["to"], mail["from"]), (["player@example.com"], "Counter Zombie Mobile <noreply@counter-zombie.ru>"))
+        self.assertIn("вход", mail["subject"])
+        self.assertIn("042917", mail["text"]); self.assertIn("042917", mail["html"])
+
+    def test_resend_refusal_falls_back_to_smtp_and_logs_no_secrets(self):
+        self.configure(resend=True, smtp=True)
+        smtp = []
+        refusal = FakeResponse(403, {"message": "The counter-zombie.ru domain is not verified, mail player@example.com"})
+        with patch.object(accounts.httpx, "post", return_value=refusal), \
+             patch.object(accounts, "send_smtp", side_effect=lambda cfg, address, *rest: smtp.append(address)), \
+             self.assertLogs("czm.mail", "WARNING") as logs:
+            accounts.send_code("player@example.com", "111222", "email")
+        self.assertEqual(smtp, ["player@example.com"])
+        text = "\n".join(logs.output)
+        self.assertIn("403", text); self.assertIn("not verified", text)
+        self.assertNotIn("re_test_key", text); self.assertNotIn("player@example.com", text)
+
+    def test_both_failing_reports_mail_unavailable(self):
+        self.configure(resend=True, smtp=True)
+        with patch.object(accounts.httpx, "post", side_effect=OSError("network")), \
+             patch.object(accounts, "send_smtp", side_effect=OSError("secret dialogue")), \
+             self.assertLogs("czm.mail", "WARNING") as logs:
+            with self.assertRaises(accounts.AuthError) as error:
+                accounts.send_code("player@example.com", "111222", "reset")
+        self.assertEqual(error.exception.status, 503)
+        self.assertNotIn("secret dialogue", "\n".join(logs.output))
+
+    def test_letter_escapes_and_names_each_purpose(self):
+        for purpose, word in (("email", "почты"), ("login", "вход"), ("reset", "пароля")):
+            subject, text, body = accounts.mail_texts("<b>", purpose)
+            self.assertIn(word, subject)
+            self.assertIn("&lt;b&gt;", body); self.assertNotIn("<b>", body)
 
 
 if __name__ == "__main__":

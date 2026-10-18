@@ -8,7 +8,7 @@ COMMIT=${1:?usage: install.sh <commit>}
 REPO=https://raw.githubusercontent.com/kurostreet/czm/$COMMIT/server/czm
 FILES="requirements.txt czm/__init__.py czm/config.py czm/db.py czm/profanity.py czm/links.py czm/service.py czm/api.py
        czm/bot.py czm/steam.py czm/main.py czm/cli.py czm/builds.py czm/assemble.py czm/apkpatch.py czm/mappics.py czm/accounts.py czm/settings.py czm/tab.py czm/social.py czm/settings_schema.json czm/tlds.txt
-       deploy/czm.service deploy/czm.caddy deploy/install.sh
+       deploy/czm.service deploy/czm.caddy deploy/install.sh deploy/czm-set
        deploy/czm-assemble.service deploy/czm-assemble.path deploy/czm-assemble.timer"
 # the public debug key of the engine (the same one signs every build, or updates would not install)
 XASH=51353ff8d65e58300eeb2bd014867673f1f367c6
@@ -47,6 +47,9 @@ chmod 640 /etc/czm/env
 chown -R czm:czm /var/lib/czm
 chmod 755 /var/lib/czm /var/lib/czm/avatars /var/lib/czm/apk /var/lib/czm/server-list /var/lib/czm/mappics
 chmod 750 /var/lib/czm/incoming /var/lib/czm/signing
+
+# czm-set: the owner types keys (mail, Steam) without showing them
+install -m 755 "$DEST/deploy/czm-set" /usr/local/sbin/czm-set
 
 ln -sfn "$DEST" /opt/czm/current
 for unit in czm.service czm-assemble.service czm-assemble.path czm-assemble.timer; do

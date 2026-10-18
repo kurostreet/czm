@@ -53,6 +53,11 @@
 - Код ставится в `/opt/czm/releases/<коммит>`, ссылка `/opt/czm/current`, окружение `/opt/czm/venv`.
 - Настройки и секреты — `/etc/czm/env`: `CZM_BOT_TOKEN`, `CZM_BOT_API_URL`, `CZM_BOT_OWNER_IDS`, `CZM_PEPPER`, `CZM_STEAM_KEY`.
   - Первый раз бот берётся из `/etc/fva/env`, «перец» создаётся случайный.
+- Письма с кодами (почта, вход, восстановление): сначала Resend (`CZM_RESEND_KEY`, отправитель `CZM_MAIL_FROM`,
+  по умолчанию `Counter Zombie Mobile <noreply@counter-zombie.ru>`), запасной путь — SMTP (`CZM_SMTP_*`).
+  Домен подтверждается в Resend записями DNS (DKIM `resend._domainkey`, MX и SPF поддомена `send`).
+- Ключи вводит владелец сам, без показа на экране: `ssh -t market czm-set CZM_RESEND_KEY`;
+  `czm-set check` показывает только PRESENT/MISSING.
   - Ключ Steam владелец вписывает сам.
 - Служба `czm.service`, сайт Caddy — `deploy/czm.caddy` в `/etc/caddy/sites/`.
 

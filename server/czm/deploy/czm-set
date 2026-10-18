@@ -1,0 +1,42 @@
+#!/bin/bash
+# Set one setting of the Counter Zombie Mobile service without showing it. As root:
+#   czm-set CZM_RESEND_KEY      asks for the value (hidden), saves it, restarts the service
+#   czm-set check               prints which settings are filled (PRESENT/MISSING), never the values
+set -euo pipefail
+ENV=/etc/czm/env
+ALLOWED="CZM_RESEND_KEY CZM_MAIL_FROM CZM_SMTP_HOST CZM_SMTP_PORT CZM_SMTP_USER CZM_SMTP_PASSWORD CZM_SMTP_FROM CZM_SMTP_STARTTLS CZM_STEAM_KEY CZM_BOT_TOKEN"
+KEY=${1:-}
+
+if [ "$KEY" = "check" ]; then
+  for k in $ALLOWED; do
+    if grep -q "^$k=." "$ENV" 2>/dev/null; then echo "$k PRESENT"; else echo "$k MISSING"; fi
+  done
+  exit 0
+fi
+
+case " $ALLOWED " in
+  *" $KEY "*) ;;
+  *) echo "usage: czm-set <name>|check"; echo "names: $ALLOWED"; exit 2 ;;
+esac
+
+if [ -t 0 ]; then
+  read -rs -p "$KEY (ввод не отображается): " VALUE
+  echo
+else
+  read -r VALUE
+fi
+VALUE=${VALUE%$'\r'}
+case "$VALUE" in
+  *$'\n'*|*'"'*|*"'"*|*'\'*|*'`'*|*'$'*) echo "Недопустимые символы, ничего не сохранено"; exit 1 ;;
+esac
+
+TMP=$(mktemp /etc/czm/.env.XXXXXX)
+trap 'rm -f "$TMP"' EXIT
+grep -v "^$KEY=" "$ENV" > "$TMP" || true
+if [ -n "$VALUE" ]; then printf '%s=%s\n' "$KEY" "$VALUE" >> "$TMP"; fi
+chown root:czm "$TMP"
+chmod 640 "$TMP"
+mv "$TMP" "$ENV"
+trap - EXIT
+systemctl restart czm
+if [ -n "$VALUE" ]; then echo "$KEY сохранён, сервис перезапущен"; else echo "$KEY удалён, сервис перезапущен"; fi
