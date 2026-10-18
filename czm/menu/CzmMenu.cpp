@@ -194,6 +194,12 @@ static const struct { const char *key, *ru, *en; } s_strings[] =
 	{ "opt_high", "Много", "High" },
 	{ "s_volume", "Громкость", "Volume" },
 	{ "s_music", "Музыка в меню", "Menu music" },
+	{ "s_music_track", "Трек меню", "Menu track" },
+	{ "s_music_track_hint", "Включается сразу, можно послушать", "Starts at once, so you can listen" },
+	{ "opt_music_silent", "Затишье", "Silent" },
+	{ "opt_music_city", "Город", "City" },
+	{ "opt_music_thoughts", "Раздумье", "Thoughts" },
+	{ "opt_music_rain", "Дождь", "Rain" },
 	{ "s_ui_volume", "Звуки кнопок", "Button sounds" },
 	{ "s_voice", "Голосовой чат", "Voice chat" },
 	{ "s_voice_hint", "Слышать игроков и говорить", "Hear and talk to players" },
@@ -411,6 +417,7 @@ void CZM_Init( void )
 	EngFuncs::CvarRegister( "czm_news_seen", "0", FCVAR_ARCHIVE );   // the newest news the player opened
 	EngFuncs::CvarRegister( "czm_chat_room", "0", FCVAR_ARCHIVE );   // 0 global, 1 ru, 2 en
 	EngFuncs::CvarRegister( "czm_ui_volume", "0.65", FCVAR_ARCHIVE );
+	EngFuncs::CvarRegister( "czm_menu_music", "0", FCVAR_ARCHIVE );  // main menu track, see CZM_MENU_TRACKS
 	EngFuncs::CvarRegister( "czm_srv_filters", "0", FCVAR_ARCHIVE ); // server list filters, bits
 	EngFuncs::CvarRegister( "czm_srv_sort", "0", FCVAR_ARCHIVE );    // 0 players, 1 ping, 2 name
 }
@@ -1553,22 +1560,34 @@ void CZM_PlayClick( void )
 	EngFuncs::PlayLocalSound( uiStatic.sounds[SND_LAUNCH] );
 }
 
+// main menu tracks in the order of the choice in Settings → Sound (credits in README.md)
+static const char *const CZM_MENU_TRACKS[] =
+{
+	"media/czm_music_silent.mp3",   // The World Fell Silent, the default
+	"media/czm_music_city.mp3",     // EmptyCity
+	"media/czm_music_thoughts.mp3", // Contemplation
+	"media/czm_sound.mp3",          // menu_loop_rain_3
+};
+
 void CZM_MenuAudioFrame( void )
 {
-	static bool playing;
+	static const char *playing;
 	CZM_Init();
 	const bool inMenu = !CL_IsActive() && !gpGlobals->demoplayback && uiStatic.menu.IsActive()
 		&& EngFuncs::GetCvarFloat( "czm_loading_stage" ) == CZM_STAGE_NONE;
 	if( !inMenu )
 	{
 		if( playing ) EngFuncs::StopBackgroundTrack();
-		playing = false;
+		playing = NULL;
 		return;
 	}
-	if( !playing )
+	const int count = (int)( sizeof( CZM_MENU_TRACKS ) / sizeof( CZM_MENU_TRACKS[0] ));
+	const int choice = (int)EngFuncs::GetCvarFloat( "czm_menu_music" );
+	const char *track = CZM_MENU_TRACKS[choice >= 0 && choice < count ? choice : 0];
+	if( playing != track ) // a new choice in the settings starts at once
 	{
-		EngFuncs::PlayBackgroundTrack( "media/czm_sound.mp3", "media/czm_sound.mp3" );
-		playing = true;
+		EngFuncs::PlayBackgroundTrack( track, track );
+		playing = track;
 	}
 }
 

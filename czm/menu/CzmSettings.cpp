@@ -218,6 +218,8 @@ float GetVolume( void ) { return GetCvar( "volume" ); }
 void SetVolume( float v ) { SetCvar( "volume", v ); }
 float GetMusic( void ) { return GetCvar( "MP3Volume" ); }
 void SetMusic( float v ) { SetCvar( "MP3Volume", v ); }
+float GetMenuMusic( void ) { return bound( 0, (int)GetCvar( "czm_menu_music" ), 3 ); }
+void SetMenuMusic( float v ) { SetCvar( "czm_menu_music", bound( 0, (int)v, 3 )); }
 float GetUiVolume( void ) { return GetCvar( "czm_ui_volume" ); }
 void SetUiVolume( float v ) { SetCvar( "czm_ui_volume", v ); }
 float GetVoice( void ) { return GetCvar( "voice_enable" ) != 0.0f; }
@@ -400,6 +402,7 @@ const CzmRow s_sound[] =
 {
 	{ ROW_SLIDER, "s_volume", NULL, GetVolume, SetVolume, NULL, 0.0f, 1.0f, 0.05f, FMT_PERCENT, {}, 0 },
 	{ ROW_SLIDER, "s_music", NULL, GetMusic, SetMusic, NULL, 0.0f, 1.0f, 0.05f, FMT_PERCENT, {}, 0 },
+	{ ROW_CHOICE, "s_music_track", "s_music_track_hint", GetMenuMusic, SetMenuMusic, NULL, 0, 3, 1, 0, { "opt_music_silent", "opt_music_city", "opt_music_thoughts", "opt_music_rain" }, 4 },
 	{ ROW_SLIDER, "s_ui_volume", NULL, GetUiVolume, SetUiVolume, NULL, 0.0f, 1.0f, 0.05f, FMT_PERCENT, {}, 0 },
 	{ ROW_SWITCH, "s_voice", "s_voice_hint", GetVoice, SetVoice, NULL, 0, 1, 1, 0, {}, 0 },
 	{ ROW_SLIDER, "s_voice_in", NULL, GetVoiceIn, SetVoiceIn, VoiceOn, 0.0f, 2.0f, 0.05f, FMT_PERCENT, {}, 0 },
@@ -771,7 +774,7 @@ void CCzmSettings::Layout( void )
 		case ROW_CHOICE:
 		{
 			int ch = H * 0.064f;
-			int cw = row.get == GetRenderer || row.get == GetTabStyle ? controlW : Q_min( controlW, (int)( row.numOptions * H * 0.16f ));
+			int cw = row.get == GetRenderer || row.get == GetTabStyle || row.get == GetMenuMusic ? controlW : Q_min( controlW, (int)( row.numOptions * H * 0.16f ));
 			l.control = CZM_Rect( l.rect.x + l.rect.w - cw, l.rect.y + ( h - ch ) / 2, cw, ch );
 			for( int k = 0; k < row.numOptions; k++ )
 				l.parts[k] = CZM_Rect( l.control.x + l.control.w * k / row.numOptions, l.control.y,

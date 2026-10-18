@@ -55,10 +55,19 @@ SDL — `98d1f3a45aae568ccd6ed5fec179330f47d4d356` (2.32.8).
 
 ### Музыка главного меню
 
-`3rdparty/cs16client-extras/media/czm_sound.mp3` — трек «menu_loop_rain_3» из набора
-[Unreleased Zombie soundtrack](https://opengameart.org/content/unreleased-zombie-soundtrack),
-автор — Emma M. Andersson (Emma_MA), лицензия [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/).
-Изменения: перекодирован из WAV в MP3 160 кбит/с, громкость понижена на 0,4 дБ.
+Игрок выбирает трек в «Настройки → Звук → Трек меню». Файлы в `3rdparty/cs16client-extras/media/`:
+
+- `czm_music_silent.mp3` (по умолчанию) — «The World Fell Silent», автор Tsorthan Grove,
+  [OpenGameArt](https://opengameart.org/node/177977), лицензия [CC0](https://creativecommons.org/publicdomain/zero/1.0/).
+  Изменения: версия-петля, 44,1 кГц, MP3 160 кбит/с, громкость +0,4 дБ.
+- `czm_music_city.mp3` — «EmptyCity: Background Music», автор yd,
+  [OpenGameArt](https://opengameart.org/node/6681), лицензия CC0.
+- `czm_music_thoughts.mp3` — «Contemplation», автор Joth,
+  [OpenGameArt](https://opengameart.org/node/85636), лицензия CC0.
+- `czm_sound.mp3` — трек «menu_loop_rain_3» из набора
+  [Unreleased Zombie soundtrack](https://opengameart.org/content/unreleased-zombie-soundtrack),
+  автор — Emma M. Andersson (Emma_MA), лицензия [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/).
+  Изменения: перекодирован из WAV в MP3 160 кбит/с, громкость понижена на 0,4 дБ.
 
 Текущий план: [ROADMAP_RU.md](docs/ROADMAP_RU.md).
 Исходный план: [MOBILE_LAUNCHER_PLAN_RU.md](docs/MOBILE_LAUNCHER_PLAN_RU.md).

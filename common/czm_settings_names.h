@@ -61,6 +61,7 @@ static const char *const czm_settings_names[]={
     "czm_hud_time_y",
     "czm_lang",
     "czm_menu_cards",
+    "czm_menu_music",
     "czm_parallax",
     "czm_shop",
     "czm_shop_auto",
