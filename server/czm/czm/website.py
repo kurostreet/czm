@@ -57,6 +57,16 @@ def set_play_beta_testers(conn: sqlite3.Connection, count: int) -> None:
         )
 
 
+def set_play_beta_open(conn: sqlite3.Connection, enabled: bool) -> None:
+    """Open Google Play steps only after the closed track and opt-in links are live."""
+    ensure_counters(conn)
+    conn.execute(
+        "INSERT INTO site_counters(name, value) VALUES ('play_beta_open', ?) "
+        "ON CONFLICT(name) DO UPDATE SET value = excluded.value",
+        (int(enabled),),
+    )
+
+
 def stats(conn: sqlite3.Connection) -> dict:
     ensure_counters(conn)
     players = conn.execute("SELECT COUNT(*) FROM players").fetchone()[0]
@@ -70,6 +80,7 @@ def stats(conn: sqlite3.Connection) -> dict:
         # A public number is shown only after an owner entered the count from Play Console.
         "play_beta_testers": _counter(conn, "play_beta_testers") if beta_checked else None,
         "play_beta_checked_at": beta_checked,
+        "play_beta_open": bool(_counter(conn, "play_beta_open")),
         "version": release["version"] if release else "",
         "size_mb": round(release["size"] / 1048576) if release and release.get("size") else 0,
     }
