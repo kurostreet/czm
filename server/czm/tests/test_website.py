@@ -123,6 +123,11 @@ class InstallListTests(unittest.TestCase):
         site = {p.relative_to(self.base).as_posix() for p in (self.base / "site").rglob("*") if p.is_file()}
         self.assertEqual(site, self.listed("SITE"))
 
+    def test_build_uploads_get_the_large_body_limit(self):
+        caddy = (self.base / "deploy" / "czm.caddy").read_text()
+        self.assertIn("@builds path /api/v1/builds /api/v1/play-builds", caddy)
+        self.assertLess(caddy.index("handle @builds"), caddy.index("handle /api/*"))
+
     def test_pages_have_no_inline_code_beyond_the_allowed_line(self):
         caddy = (self.base / "deploy" / "czm.caddy").read_text()
         for page in ("index.html", "privacy.html"):
