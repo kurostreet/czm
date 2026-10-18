@@ -64,21 +64,18 @@ class WebsiteTests(unittest.TestCase):
         with db.db() as conn:
             self.assertEqual(website.stats(conn)["downloads"], 3)
 
-    def test_download_counts_once_per_address_and_day_and_head_does_not_count(self):
+    def test_website_apk_downloads_are_disabled(self):
         self.player(1, "Kuro")
         self.release()
-        name = "r7.apk"
         with db.db() as conn:
             conn.execute("UPDATE releases SET size = 10")
-        for ip, method in (("1.1.1.1", "get"), ("1.1.1.1", "get"), ("2.2.2.2", "get"), ("3.3.3.3", "head")):
-            r = getattr(self.client, method)("/download", headers={"X-Forwarded-For": ip}, follow_redirects=False)
-            self.assertEqual(r.status_code, 307, r.text)
-            self.assertTrue(r.headers["location"].endswith(name))
+        for path in ("/download", "/download/CounterZombieMobile.apk"):
+            for method in ("get", "head"):
+                response = getattr(self.client, method)(path, follow_redirects=False)
+                self.assertEqual(response.status_code, 410)
+                self.assertNotIn("location", response.headers)
         with db.db() as conn:
-            self.assertEqual(website.stats(conn)["downloads"], 1 + 2)
-            stored = [row[0] for row in conn.execute("SELECT ip_hash FROM site_downloads")]
-        self.assertEqual(len(stored), 2)
-        self.assertFalse(any("1.1.1.1" in h or "2.2.2.2" in h for h in stored))
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM site_downloads").fetchone()[0], 0)
 
     def test_play_beta_count_uses_console_confirmed_value_only(self):
         initial = self.client.get("/api/v1/site/stats").json()
@@ -161,6 +158,21 @@ class InstallListTests(unittest.TestCase):
         self.assertIn('play_beta_open === true', js)
         self.assertIn("link.removeAttribute('href')", js)
         self.assertIn("link.setAttribute('aria-disabled', 'true')", js)
+
+    def test_beta_is_first_and_apk_ctas_are_gone(self):
+        html = (self.base / "site" / "index.html").read_text()
+        js = (self.base / "site" / "assets" / "site.js").read_text()
+        caddy = (self.base / "deploy" / "czm.caddy").read_text()
+        self.assertIn('href="#beta"', html)
+        self.assertIn('data-i18n="downloadCta">Принять участие в бета-тесте', html)
+        self.assertLess(html.index('id="beta"'), html.index('id="shots"'))
+        self.assertNotIn('href="/download"', html)
+        self.assertNotIn('id="download"', html)
+        self.assertNotIn('Скачать APK', html)
+        self.assertNotIn('id="sDownloads"', html)
+        self.assertIn("Use the Google Play beta for installation", caddy)
+        self.assertIn("respond @packages", caddy)
+        self.assertIn("downloadCta: 'Join the beta test'", js)
 
     def test_build_uploads_get_the_large_body_limit(self):
         caddy = (self.base / "deploy" / "czm.caddy").read_text()
