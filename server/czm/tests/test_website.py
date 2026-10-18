@@ -151,6 +151,17 @@ class InstallListTests(unittest.TestCase):
         site = {p.relative_to(self.base).as_posix() for p in (self.base / "site").rglob("*") if p.is_file()}
         self.assertEqual(site, self.listed("SITE"))
 
+    def test_beta_group_is_publicly_listed_but_play_links_start_locked(self):
+        html = (self.base / "site" / "index.html").read_text()
+        js = (self.base / "site" / "assets" / "site.js").read_text()
+        self.assertIn('data-group="https://groups.google.com/g/counter-zombie-mobile-beta"', html)
+        self.assertIn('id="sBetaTesters">0</span> / 50', html)
+        self.assertIn('data-step="2"', html)
+        self.assertIn('data-step="3"', html)
+        self.assertIn('play_beta_open === true', js)
+        self.assertIn("link.removeAttribute('href')", js)
+        self.assertIn("link.setAttribute('aria-disabled', 'true')", js)
+
     def test_build_uploads_get_the_large_body_limit(self):
         caddy = (self.base / "deploy" / "czm.caddy").read_text()
         for path in ("/api/v1/builds", "/api/v1/play-builds"):
