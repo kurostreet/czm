@@ -64,6 +64,8 @@ jobs:
               assert "gamedata/assets/bundled/czm-gamedata-pending.txt" in names, "no placeholder"
               assert b"assets/bundled" in z.read("gamedata/assets.pb"), "the pack index must list assets/bundled"
               assert not any("game-data" in n for n in names), "game data must not come from CI"
+              abis = {n.split("/")[2] for n in names if n.startswith("base/lib/")}
+              assert abis == {"armeabi-v7a", "arm64-v8a"}, f"Google Play takes 32-bit code only next to 64-bit: {abis}"
               base = sum(i.compress_size for i in z.infolist() if i.filename.startswith("base/"))
               print(f"base module {base // 1048576} MB compressed")
               assert base < 190 * 1048576, "the base module must stay under the 200 MB Play limit"

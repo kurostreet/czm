@@ -15,10 +15,7 @@ android {
 		versionCode = getBuildNum()
 		minSdk = 21
 		targetSdk = 36
-
-		ndk {
-        	abiFilters "armeabi-v7a", "arm64-v8a", "x86"
-		}
+		// ABIs are set per flavor: Google Play takes no 32-bit-only x86 (64-bit rule)
 	}
 
 	compileOptions {
@@ -99,11 +96,14 @@ android {
 			dimension = "version"
 			applicationId = "dev.gaming.czm"   // the Google Play listing; the site APK stays ru.kurostreet.counterzombiemobile.test
 			buildConfigField("Boolean", "IS_GOOGLE_PLAY_BUILD", "true")
+			// Google Play refuses x86 without x86_64; x86_64 devices run the ARM code
+			ndk { abiFilters "armeabi-v7a", "arm64-v8a" }
 		}
 
 		create("git") {
 			dimension = "version"
 			buildConfigField("Boolean", "IS_GOOGLE_PLAY_BUILD", "false")
+			ndk { abiFilters "armeabi-v7a", "arm64-v8a", "x86" }
 		}
 	}
 
