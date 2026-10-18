@@ -180,7 +180,6 @@ static const struct { const char *key, *ru, *en; } s_strings[] =
 	{ "s_shadows", "Тени игроков", "Player shadows" },
 	{ "s_weather", "Погода", "Weather" },
 	{ "s_weather_hint", "Дождь и снег на картах, где они есть", "Rain and snow on maps that have them" },
-	{ "s_radar", "Прозрачный радар", "See-through radar" },
 	{ "s_mic", "Проверка микрофона", "Microphone test" },
 	{ "s_mic_hint", "Скажи что-нибудь — полоска покажет громкость", "Say something, the bar shows the level" },
 	{ "s_mic_ok", "Микрофон работает", "The microphone works" },
@@ -340,6 +339,8 @@ static const struct { const char *key, *ru, *en; } s_strings[] =
 	{ "s_layouts_hint", "Поделиться файлом · импорт с просмотром · отмена", "Share file · preview before import · undo" },
 	{ "s_hud_edit", "Интерфейс в матче", "In-match HUD" },
 	{ "s_hud_edit_hint", "Вместе с кнопками: стиль, место, размер, видимость", "Together with the buttons: style, place, size, opacity" },
+	{ "s_radar_style", "Радар", "Radar" },
+	{ "s_radar_style_hint", "Вид мини-карты. Место и размер — в «Интерфейс в матче»", "How the minimap looks. Place and size are in the in-match HUD editor" },
 	{ "setup_title", "Добро пожаловать!", "Welcome!" },
 	{ "setup_text", "Выбери язык и придумай ник", "Choose a language and a nickname" },
 	{ "setup_go", "Играть", "Play" },
@@ -377,10 +378,11 @@ void CZM_Init( void )
 	EngFuncs::CvarRegister( "czm_menu_cards", "1", FCVAR_ARCHIVE ); // server menus as cards
 	EngFuncs::CvarRegister( "czm_hud_style", "0", FCVAR_ARCHIVE );
 	EngFuncs::CvarRegister( "czm_parallax", "1", FCVAR_ARCHIVE );
-	for( int i=0;i<CzmHud::COUNT;i++ ) for( int k=0;k<4;k++ ) {
-		const char *fields[]={"x","y","scale","opacity"};char name[64],value[32];
-		CzmHud::Key(name,sizeof(name),i,fields[k]);
-		snprintf(value,sizeof(value),"%.4f",k<2?CzmHud::defaults[i][k]:1.f);
+	EngFuncs::CvarRegister( "czm_hud_radar_style", "0", FCVAR_ARCHIVE ); // classic, tactical, minimal
+	for( int i=0;i<CzmHud::BLOCKS;i++ ) for( int k=0;k<5;k++ ) {
+		char name[64],value[32];
+		CzmHud::Key(name,sizeof(name),i,CzmHud::fields[k]);
+		snprintf(value,sizeof(value),"%.4f",k<2?CzmHud::defaults[i][k]:k<4?1.f:0.f);
 		EngFuncs::CvarRegister(name,value,FCVAR_ARCHIVE);
 	}
 	EngFuncs::CvarRegister( "czm_open_profile", "0", 0 );

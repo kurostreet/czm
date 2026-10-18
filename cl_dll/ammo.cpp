@@ -1092,6 +1092,7 @@ int CHudAmmo::Draw(float flTime)
 
 	char czmAmmo[48];
 	int reserve = pw->iAmmoType >= 0 ? gWR.CountAmmo(pw->iAmmoType) : 0;
+	CZM_AmmoReport( pw->iId, pw->iClip, reserve ); // the clip on the reload button
 	if( pw->iClip >= 0 ) snprintf(czmAmmo,sizeof(czmAmmo),"%d / %d",pw->iClip,reserve);
 	else snprintf(czmAmmo,sizeof(czmAmmo),"%d",reserve);
 	if( pw->iAmmo2Type > 0 && gWR.CountAmmo(pw->iAmmo2Type)>0 ) { size_t used=strlen(czmAmmo);snprintf(czmAmmo+used,sizeof(czmAmmo)-used," + %d",gWR.CountAmmo(pw->iAmmo2Type)); }

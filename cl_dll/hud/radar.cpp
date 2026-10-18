@@ -28,6 +28,7 @@ version.
 */
 
 #include "hud.h"
+#include "czm_hud.h"
 #include "cl_util.h"
 #include "parsemsg.h"
 #include "draw_util.h"
@@ -289,6 +290,9 @@ int CHudRadar::Draw(float flTime)
 	int iTeamNumber = g_PlayerExtraInfo[ gHUD.m_Scoreboard.m_iPlayerNum ].teamnumber;
 	int r, g, b;
 
+	if( DrawCzm( flTime, iTeamNumber ))
+		return 0;
+
 	if( cl_radartype->value )
 	{
 		SPR_Set(m_hRadarOpaque.spr, 200, 200, 200);
@@ -385,7 +389,80 @@ int CHudRadar::Draw(float flTime)
 	return 0;
 }
 
-void CHudRadar::DrawPlayerLocation( int y )
+// The CZM radar: the same marks as below, drawn over the chosen plate where the player put it.
+static void CzmMark( CzmRadarMark *marks, int &count, const Vector &player, const Vector &object, const Vector &angles,
+	int r, int g, int b, bool cross = false )
+{
+	Vector2D diff = object.Make2D() - player.Make2D();
+	float length = diff.Length(), offset, radius, dz;
+
+	if( count >= 48 )
+		return;
+	CzmRadarMark &m = marks[count];
+	if( diff.x == 0 ) diff.x = 0.00001f;
+	if( diff.y == 0 ) diff.y = 0.00001f;
+	offset = DEG2RAD( angles.y - RAD2DEG( atan2( diff.y, diff.x )));
+	radius = length / CzmHud::radarRange;
+	if( radius > 1.0f )
+		radius = 1.0f;
+	m.x = radius * sin( offset );
+	m.y = radius * -cos( offset );
+	dz = player.z - object.z;
+	m.kind = cross ? CZM_MARK_X : dz <= -128 ? CZM_MARK_UP : dz >= 128 ? CZM_MARK_DOWN : CZM_MARK_DOT;
+	m.r = r; m.g = g; m.b = b;
+	count++;
+}
+
+bool CHudRadar::DrawCzm( float flTime, int iTeamNumber )
+{
+	CzmRadarMark marks[48];
+	int count = 0, labelX, labelY;
+
+	if( !bUseRenderAPI || !CZM_HudReady())
+		return false;
+
+	for( int i = 0; i < 33; i++ )
+	{
+		if( i == gHUD.m_Scoreboard.m_iPlayerNum || g_PlayerExtraInfo[i].dead )
+			continue;
+		if( g_PlayerExtraInfo[i].teamnumber != iTeamNumber )
+			continue;
+		if( !FlashTime( flTime, &g_PlayerExtraInfo[i] ))
+			continue;
+		// the bomb carrier and the VIP are red, the team white
+		if( g_PlayerExtraInfo[i].has_c4 || g_PlayerExtraInfo[i].vip )
+			CzmMark( marks, count, gHUD.m_vecOrigin, g_PlayerExtraInfo[i].origin, gHUD.m_vecAngles, 255, 72, 72 );
+		else
+			CzmMark( marks, count, gHUD.m_vecOrigin, g_PlayerExtraInfo[i].origin, gHUD.m_vecAngles, 236, 241, 248 );
+	}
+
+	if( iTeamNumber == TEAM_TERRORIST )
+	{
+		if( !g_PlayerExtraInfo[33].dead && g_PlayerExtraInfo[33].radarflashes && FlashTime( flTime, &g_PlayerExtraInfo[33] ))
+			CzmMark( marks, count, gHUD.m_vecOrigin, g_PlayerExtraInfo[33].origin, gHUD.m_vecAngles, 255, 60, 60,
+				g_PlayerExtraInfo[33].playerclass != 0 ); // planted: a cross
+	}
+	else if( iTeamNumber == TEAM_CT )
+	{
+		for( int i = 1; i <= MAX_HOSTAGES; i++ )
+		{
+			if( !HostageFlashTime( flTime, g_HostageInfo + i ))
+				continue;
+			if( g_HostageInfo[i].dead )
+				CzmMark( marks, count, gHUD.m_vecOrigin, g_HostageInfo[i].origin, gHUD.m_vecAngles, 255, 60, 60 );
+			else
+				CzmMark( marks, count, gHUD.m_vecOrigin, g_HostageInfo[i].origin, gHUD.m_vecAngles, 110, 190, 255 );
+		}
+	}
+
+	if( !CZM_RadarDraw( gHUD.m_vecAngles.y, marks, count, &labelX, &labelY ))
+		return false;
+	if( labelY >= 0 )
+		DrawPlayerLocation( labelY, labelX );
+	return true;
+}
+
+void CHudRadar::DrawPlayerLocation( int y, int centerX )
 {
 	const char *szLocation = g_PlayerExtraInfo[gHUD.m_Scoreboard.m_iPlayerNum].location;
 	if( szLocation[0] )
@@ -397,7 +474,7 @@ void CHudRadar::DrawPlayerLocation( int y )
 		if( szLocalizedLocation[0] == '#' )
 			return;
 
-		int x = (m_hRadarOpaque.rect.Width()) / 2;
+		int x = centerX >= 0 ? centerX : (m_hRadarOpaque.rect.Width()) / 2;
 		int len = DrawUtils::ConsoleStringLen( szLocalizedLocation );
 
 		x = x - len / 2;

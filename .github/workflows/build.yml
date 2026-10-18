@@ -107,7 +107,8 @@ jobs:
                            "touch_presets/czm_scheme2.cfg", "touch_presets/czm_scheme3.cfg",
                            "userconfig.d/czm_touch.cfg", "gfx/czm/ui/icon_globe.png", "gfx/czm/ui/icon_star_on.png",
                            "gfx/czm/ui/white.png", "gfx/czm/maps/_zombie.png", "gfx/czm/maps/_classic.png",
-                           "gfx/czm/maps/zm_3rooms.png", "gfx/czm/avatars/avatar_01.png", "gfx/czm/avatars/avatar_10.png"]:
+                           "gfx/czm/maps/zm_3rooms.png", "gfx/czm/avatars/avatar_01.png", "gfx/czm/avatars/avatar_10.png",
+                           "gfx/czm/radar/radar_classic.png", "gfx/czm/radar/radar_tactical.png", "gfx/czm/radar/mark_dot.png"]:
                   assert apk.read("assets/" + name) == Path("3rdparty/cs16client-extras", name).read_bytes(), name
               with wave.open(io.BytesIO(apk.read("assets/sound/czm/tapscroll.wav"))) as tap:
                   assert (tap.getnchannels(), tap.getsampwidth(), tap.getframerate(), tap.getcomptype()) == (1, 2, 44100, "NONE")

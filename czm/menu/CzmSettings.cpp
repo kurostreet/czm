@@ -212,8 +212,6 @@ void SetShadows( float v ) { SetCvar( "cl_shadows", v ); }
 float GetWeather( void ) { return GetCvar( "cl_weather" ) != 0.0f; }
 void SetWeather( float v ) { SetCvar( "cl_weather", v ); }
 // cl_radartype 0 is the see-through radar
-float GetRadarTrans( void ) { return GetCvar( "cl_radartype" ) == 0.0f; }
-void SetRadarTrans( float v ) { SetCvar( "cl_radartype", v != 0.0f ? 0.0f : 1.0f ); }
 
 // sound
 float GetVolume( void ) { return GetCvar( "volume" ); }
@@ -315,6 +313,9 @@ void SetShopAuto( float v ) { SetCvar( "czm_shop_auto", v ); }
 float GetMenuCards( void ) { return GetCvar( "czm_menu_cards" ) != 0.0f; }
 void SetMenuCards( float v ) { SetCvar( "czm_menu_cards", v ); }
 float GetTabStyle( void ) { return bound( 0, (int)GetCvar( "czm_tab_style" ), 2 ); }
+// the radar look; its place and size are set in the editor of buttons and HUD
+float GetRadarStyle( void ) { return bound( 0, (int)GetCvar( "czm_hud_radar_style" ), 2 ); }
+void SetRadarStyle( float v ) { SetCvar( "czm_hud_radar_style", bound( 0, (int)v, 2 )); EngFuncs::ClientCmd( false, "host_writeconfig\n" ); }
 void SetTabStyle( float v ) { SetCvar( "czm_tab_style", bound( 0, (int)v, 2 )); }
 
 /*
@@ -337,6 +338,7 @@ enum ERowType
 	ROW_SPRAYS,
 	ROW_LAYOUTS,
 	ROW_HUDEDIT,
+	ROW_RADAR,    // three radar looks as cards
 	ROW_MIC,      // microphone test: level meter and a start/stop button
 };
 
@@ -386,7 +388,6 @@ const CzmRow s_graphics[] =
 	{ ROW_CHOICE, "s_effects", "s_effects_hint", GetEffects, SetEffects, NULL, 0, 2, 1, 0, { "opt_low", "opt_mid", "opt_high" }, 3 },
 	{ ROW_SWITCH, "s_shadows", NULL, GetShadows, SetShadows, NULL, 0, 1, 1, 0, {}, 0 },
 	{ ROW_SWITCH, "s_weather", "s_weather_hint", GetWeather, SetWeather, NULL, 0, 1, 1, 0, {}, 0 },
-	{ ROW_SWITCH, "s_radar", NULL, GetRadarTrans, SetRadarTrans, NULL, 0, 1, 1, 0, {}, 0 },
 	{ ROW_SWITCH, "s_parallax", "s_parallax_hint", GetParallax, SetParallax, NULL, 0, 1, 1, 0, {}, 0 },
 };
 
@@ -419,6 +420,7 @@ const CzmRow s_game[] =
 const CzmRow s_hud[] =
 {
 	{ ROW_HUDEDIT, "s_hud_edit", "s_hud_edit_hint", NULL, NULL, NULL, 0, 0, 0, 0, {}, 0 },
+	{ ROW_RADAR, "s_radar_style", "s_radar_style_hint", GetRadarStyle, SetRadarStyle, NULL, 0, 2, 1, 0, {}, 3 },
 	{ ROW_CHOICE, "s_tab_style", "s_tab_style_hint", GetTabStyle, SetTabStyle, NULL, 0, 2, 1, 0, { "opt_tab_default", "opt_tab_compact", "opt_tab_tactical" }, 3 },
 	{ ROW_TABPREVIEW, "s_tab_preview", "s_tab_preview_hint", NULL, NULL, NULL, 0, 0, 0, 0, {}, 0 },
 };
@@ -732,6 +734,8 @@ void CCzmSettings::Layout( void )
 			h = rowH * 1.6f;
 		else if( row.type == ROW_TABPREVIEW )
 			h = H * 0.50f;
+		else if( row.type == ROW_RADAR )
+			h = H * 0.47f;
 		else if( row.type == ROW_SPRAYS || row.type == ROW_AVATARS )
 		{
 			int card, cardGap, columns;
@@ -806,6 +810,15 @@ void CCzmSettings::Layout( void )
 		case ROW_TABPREVIEW:
 			l.control = CZM_Rect( l.rect.x, l.rect.y + H * 0.14f, l.rect.w, h - H * 0.16f );
 			break;
+		case ROW_RADAR:
+		{
+			// three cards under the title: the radar picture and its name
+			int cardGap = H * 0.025f, cardW = ( l.rect.w - cardGap * 2 ) / 3, cardH = h - H * 0.135f;
+			for( int k = 0; k < 3; k++ )
+				l.parts[k] = CZM_Rect( l.rect.x + k * ( cardW + cardGap ), l.rect.y + H * 0.12f, cardW, cardH );
+			l.numParts = 3;
+			break;
+		}
 		case ROW_LAYOUTS:
 		case ROW_HUDEDIT:
 		case ROW_ACCOUNT:
@@ -980,6 +993,7 @@ void CCzmSettings::Activate( int hit )
 			row.set( row.get() != 0.0f ? 0.0f : 1.0f );
 			break;
 		case ROW_CHOICE:
+		case ROW_RADAR:
 		case ROW_COLORS:
 			if( part >= 0 )
 			{
@@ -1368,7 +1382,7 @@ void CCzmSettings::DrawRow( int i )
 	HFont hintFont = CZM_Font( CZMF_SMALL );
 	bool dim = !RowActive( i );
 	const char *hint = row.hint ? CZM_T( row.hint ) : NULL;
-	bool cards = row.type == ROW_SPRAYS || row.type == ROW_AVATARS || row.type == ROW_TABPREVIEW;
+	bool cards = row.type == ROW_SPRAYS || row.type == ROW_AVATARS || row.type == ROW_TABPREVIEW || row.type == ROW_RADAR;
 	int labelW = ( cards ? l.rect.w : l.control.x - l.rect.x - H * 0.03f );
 	int labelH = CZM_FontHeight( labelFont ), hintH = CZM_FontHeight( hintFont );
 	int blockH = labelH + ( hint ? hintH + H * 0.008f : 0 );
@@ -1457,6 +1471,26 @@ void CCzmSettings::DrawRow( int i )
 	case ROW_TABPREVIEW:
 		DrawTabPreview( l.control );
 		break;
+	case ROW_RADAR:
+	{
+		int current = (int)GetRadarStyle(), corner = H * 0.02f;
+		HFont nameFont = CZM_Font( CZMF_TILE_STATUS );
+
+		for( int k = 0; k < l.numParts; k++ )
+		{
+			const CzmRect &p = l.parts[k];
+			bool pressed = IsPressed( HIT_ROW + i * 20 + 1 + k );
+			int nameH = CZM_FontHeight( nameFont );
+			int size = Q_min( p.w - H * 0.06f, p.h - nameH - H * 0.07f );
+
+			CZM_DrawSliced( k == current ? UI_DIR "card_on.png" : UI_DIR "card.png", p.x, p.y, p.w, p.h, 30, corner,
+				pressed ? PackRGBA( 200, 200, 200, 255 ) : CZM_White());
+			CZM_DrawRadarPreview( k, p.x + ( p.w - size ) / 2, p.y + H * 0.025f, size, 1.0f );
+			CZM_DrawText( nameFont, p.x, p.y + p.h - nameH - H * 0.022f, p.w, CZM_RadarStyleName( k ),
+				k == current ? CZM_White() : PackRGBA( 200, 205, 215, 255 ), QM_CENTER );
+		}
+		break;
+	}
 	case ROW_LAYOUTS:
 	case ROW_HUDEDIT:
 	case ROW_ACCOUNT:

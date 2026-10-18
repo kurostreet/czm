@@ -18,6 +18,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include "hud.h"
+#include "hud/czm_hud.h"
 #include "cl_util.h"
 #include "triangleapi.h"
 
@@ -147,6 +148,7 @@ int CHud :: Redraw( float flTime, int intermission )
 	UpdateDefaultHUDColor();
 	CZM_UpdateShopState();
 
+	CZM_AmmoFrameBegin();
 	if ( m_pCvarDraw->value && (intermission || !(m_iHideHUDDisplay & HIDEHUD_ALL) ) )
 	{
 		for( HUDLIST *pList = m_pHudList; pList; pList = pList->pNext )
@@ -163,6 +165,7 @@ int CHud :: Redraw( float flTime, int intermission )
 		if( !intermission && IN_AutoRunActive( ))
 			CZM_DrawAutoRunLabel( flTime );
 	}
+	CZM_AmmoFrameEnd(); // the reload button shows the clip only while the ammo HUD has one
 
 	// are we in demo mode? do we need to draw the logo in the top corner?
 	if (m_iLogo)

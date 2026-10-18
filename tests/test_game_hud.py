@@ -23,7 +23,8 @@ HARNESS=r'''
 #include <cstring>
 #include <cmath>
 Hud gHUD={1};int ScreenWidth,ScreenHeight,g_iXash=1,style;float requested=1;
-float Float(const char *s){if(!strcmp(s,"czm_hud_style"))return style; if(strstr(s,"_scale"))return requested;if(strstr(s,"_opacity"))return 1;int k=0;for(;k<CzmHud::COUNT;k++)if(strstr(s,CzmHud::keys[k]))break;if(k==CzmHud::COUNT)return 0;return CzmHud::defaults[k][strstr(s,"_y")?1:0];}
+void CZM_RadarVidInit(){}void CZM_AmmoReset(){}
+float Float(const char *s){if(!strcmp(s,"czm_hud_style"))return style; if(strstr(s,"_hidden"))return 0; if(strstr(s,"_scale"))return requested;if(strstr(s,"_opacity"))return 1;int k=0;for(;k<CzmHud::COUNT;k++)if(strstr(s,CzmHud::keys[k]))break;if(k==CzmHud::COUNT)return 0;return CzmHud::defaults[k][strstr(s,"_y")?1:0];}
 const char *String(const char *){return "1";}
 void Mode(int){}void Color(float r,float g,float b,float a){printf("C %f %f %f %f\n",r,g,b,a);}void Begin(int){}void UV(float u,float v){printf("U %f %f\n",u,v);}void Vertex(float x,float y,float){printf("V %f %f\n",x,y);}void End(){puts("E");}
 Tri tri={Mode,Color,Begin,UV,Vertex,End};Engine gEngfuncs={Float,String,&tri};

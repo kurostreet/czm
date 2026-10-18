@@ -35,7 +35,8 @@ private:
 	cvar_t *cl_radartype;
 
 	int InitBuiltinTextures();
-	void DrawPlayerLocation(int y);
+	void DrawPlayerLocation(int y, int centerX = -1);
+	bool DrawCzm(float flTime, int iTeamNumber); // our radar, false to draw the stock one
 	void DrawRadarDot(int x, int y, int r, int g, int b, int a);
 	void DrawCross(int x, int y, int r, int g, int b, int a );
 

@@ -4,9 +4,17 @@
 #include <cstdio>
 
 namespace CzmHud {
-enum { HEALTH, ARMOR, TIMER, MONEY, AMMO, COUNT };
-static const char *const keys[COUNT] = { "hp", "armor", "time", "money", "ammo" };
-static const float defaults[COUNT][2] = {{.085f,.94f},{.25f,.94f},{.5f,.94f},{.88f,.82f},{.86f,.94f}};
+// COUNT text blocks, then the radar; BLOCKS is everything the editor moves
+enum { HEALTH, ARMOR, TIMER, MONEY, AMMO, COUNT, RADAR = COUNT, BLOCKS };
+enum { RADAR_CLASSIC, RADAR_TACTICAL, RADAR_MINIMAL, RADAR_STYLES };
+static const char *const keys[BLOCKS] = { "hp", "armor", "time", "money", "ammo", "radar" };
+// the radar sits in the top left corner, like in the original game
+static const float defaults[BLOCKS][2] = {{.085f,.94f},{.25f,.94f},{.5f,.94f},{.88f,.82f},{.86f,.94f},{.01f,.01f}};
+// cvar czm_hud_<key>_<field>; "hidden" is 1 when the player took the block off the screen
+static const char *const fields[5] = { "x", "y", "scale", "opacity", "hidden" };
+static const float radarMinScale = .6f, radarMaxScale = 2.f;
+// world units from the centre to the edge of the radar, as in the original (64 px * 32)
+static const float radarRange = 2048.f;
 inline float Clamp(float v, float low, float high, float fallback) {
     return std::isfinite(v) ? (v < low ? low : v > high ? high : v) : fallback;
 }
@@ -28,4 +36,19 @@ inline Rect Layout(int kind, int style, float sw, float sh, float x, float y, fl
     y=Clamp(y,sh*.018f,sh-sh*.018f-h,sh*.018f);
     return {x,y,w,h,unit,opacity};
 }
+// the radar is a square, its side a quarter of the screen height at 100 %
+inline Rect RadarLayout(float sw, float sh, float x, float y, float scale, float opacity) {
+    scale = Clamp(scale,radarMinScale,radarMaxScale,1);
+    opacity = Clamp(opacity,.25f,1,1);
+    float d=sh*.24f*scale;
+    if(d>sh*.62f) d=sh*.62f;
+    if(d>sw*.45f) d=sw*.45f;
+    x=Clamp(x,.01f,.99f,defaults[RADAR][0])*sw-d/2;
+    y=Clamp(y,.01f,.99f,defaults[RADAR][1])*sh-d/2;
+    x=Clamp(x,sw*.012f,sw-sw*.012f-d,sw*.012f);
+    y=Clamp(y,sh*.018f,sh-sh*.018f-d,sh*.018f);
+    return {x,y,d,d,d/(sh*.24f),opacity};
+}
+// what the radar shows inside its frame, a share of the half side
+inline float RadarInner(int style) { return style==RADAR_TACTICAL ? .86f : .84f; }
 }

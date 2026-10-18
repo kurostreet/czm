@@ -10,12 +10,15 @@
 static int s_atlas;
 void CZM_HudVidInit() {
     s_atlas=gRenderAPI.GL_LoadTexture("gfx/czm/hud_glyphs.tga",NULL,0,TF_NOMIPMAP|TF_CLAMP);
+    CZM_RadarVidInit();
+    CZM_AmmoReset();
 }
-static float Value(int kind,const char *field,float fallback) {
+float CZM_HudValue(int kind,const char *field,float fallback) {
     char key[64]; CzmHud::Key(key,sizeof(key),kind,field);
     const char *s=gEngfuncs.pfnGetCvarString(key);
     return s && *s ? gEngfuncs.pfnGetCvarFloat(key) : fallback;
 }
+static float Value(int kind,const char *field,float fallback) { return CZM_HudValue(kind,field,fallback); }
 static void Glyphs(float x,float y,float height,const char *s,int r,int g,int b,float alpha) {
     gRenderAPI.GL_SelectTexture(0); gRenderAPI.GL_Bind(0,s_atlas);
     gEngfuncs.pTriAPI->RenderMode(kRenderTransAlpha);
@@ -33,6 +36,10 @@ static void Glyphs(float x,float y,float height,const char *s,int r,int g,int b,
     }
     gEngfuncs.pTriAPI->Color4f(1,1,1,1);
 }
+bool CZM_HudReady() { return s_atlas && g_iXash; }
+void CZM_HudText(float x,float y,float height,const char *s,int r,int g,int b,float alpha) {
+    if(s_atlas) Glyphs(x,y,height,s,r,g,b,alpha);
+}
 namespace {
 // the match: additive bars and icons, alpha-blended plates, glyphs from the atlas
 struct GamePainter : CzmHud::Painter {
@@ -43,6 +50,7 @@ struct GamePainter : CzmHud::Painter {
 }
 bool CZM_HudDraw(int kind,const char *value,bool warning) {
     if(!s_atlas || !g_iXash || kind<0 || kind>=CzmHud::COUNT) return false;
+    if(Value(kind,"hidden",0)>.5f) return true; // the player took it off the screen in the editor
     int style=(int)CzmHud::Clamp(gEngfuncs.pfnGetCvarFloat("czm_hud_style"),0,2,0);
     CzmHud::Rect p=CzmHud::Layout(kind,style,ScreenWidth,ScreenHeight,Value(kind,"x",CzmHud::defaults[kind][0]),
         Value(kind,"y",CzmHud::defaults[kind][1]),Value(kind,"scale",1),Value(kind,"opacity",1),(int)strlen(value));

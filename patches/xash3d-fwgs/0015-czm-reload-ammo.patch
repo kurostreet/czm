@@ -1,0 +1,204 @@
+diff --git a/engine/client/input/in_touch.c b/engine/client/input/in_touch.c
+--- a/engine/client/input/in_touch.c
++++ b/engine/client/input/in_touch.c
+@@ -148,6 +148,8 @@
+ static size_t g_DefaultButtonsLength;
+ 
+ static CVAR_DEFINE_AUTO( touch_in_menu, "0", FCVAR_PRIVILEGED, "draw touch in menu (for internal use only)" );
++// Counter Zombie Mobile: the client keeps "clip reserve full" here while the weapon has a clip
++static CVAR_DEFINE_AUTO( czm_ammo_state, "", FCVAR_PRIVILEGED, "clip, reserve and full clip shown on the reload button" );
+ static CVAR_DEFINE_AUTO( touch_forwardzone, "0.06", FCVAR_FILTERABLE, "forward touch zone" );
+ static CVAR_DEFINE_AUTO( touch_sidezone, "0.06", FCVAR_FILTERABLE, "side touch zone" );
+ static CVAR_DEFINE_AUTO( touch_pitch, "90", FCVAR_FILTERABLE, "touch pitch sensitivity" );
+@@ -1240,6 +1242,7 @@
+ 
+ 	// not saved, just runtime state for scripting
+ 	Cvar_RegisterVariable( &touch_in_menu );
++	Cvar_RegisterVariable( &czm_ammo_state );
+ 
+ 	// sensitivity configuration
+ 	Cvar_RegisterVariable( &touch_forwardzone );
+@@ -1619,6 +1622,173 @@
+ 
+ }
+ 
++/*
++============
++Counter Zombie Mobile: the clip on the reload button
++
++A ring of ticks around every "+reload" button empties while the clip goes down, a plate under
++the icon shows "clip/reserve". Green when the clip is full, yellow at half, orange when low,
++red when almost empty; an empty clip blinks. Digits come from the HUD glyph atlas.
++============
++*/
++static int czm_ammo_glyphs, czm_ammo_dot; // 0 not loaded yet, -1 missing
++
++static void Touch_CzmAmmoColor( float frac, byte *out )
++{
++	static const struct { float at; byte c[3]; } stops[] =
++	{
++		{ 0.0f, { 255, 59, 59 }},
++		{ 0.2f, { 255, 120, 40 }},
++		{ 0.4f, { 255, 176, 32 }},
++		{ 0.65f, { 130, 220, 90 }},
++		{ 1.0f, { 70, 215, 120 }},
++	};
++	int i = 1;
++	float t;
++
++	frac = bound( 0.0f, frac, 1.0f );
++	while( i < (int)ARRAYSIZE( stops ) - 1 && frac > stops[i].at )
++		i++;
++	t = ( frac - stops[i - 1].at ) / ( stops[i].at - stops[i - 1].at );
++	for( int k = 0; k < 3; k++ )
++		out[k] = stops[i - 1].c[k] + ( stops[i].c[k] - stops[i - 1].c[k] ) * bound( 0.0f, t, 1.0f );
++}
++
++static int Touch_CzmTexture( int *texture, const char *path )
++{
++	if( !*texture )
++	{
++		*texture = ref.dllFuncs.GL_LoadTexture( path, NULL, 0, TF_IMAGE );
++		if( !*texture )
++			*texture = -1;
++	}
++	return *texture > 0 ? *texture : 0;
++}
++
++static void Touch_CzmPill( float x, float y, float w, float h, byte r, byte g, byte b, byte a )
++{
++	const float cap = h * 0.5f;
++
++	if( w < h )
++		w = h;
++	ref.dllFuncs.Color4ub( r, g, b, a );
++	ref.dllFuncs.R_DrawStretchPic( x, y, cap, h, 0.0f, 0.0f, 0.5f, 1.0f, czm_ammo_dot );
++	ref.dllFuncs.Color4ub( r, g, b, a );
++	ref.dllFuncs.R_DrawStretchPic( x + cap, y, w - h, h, 0.5f, 0.0f, 0.5f, 1.0f, czm_ammo_dot );
++	ref.dllFuncs.Color4ub( r, g, b, a );
++	ref.dllFuncs.R_DrawStretchPic( x + w - cap, y, cap, h, 0.5f, 0.0f, 1.0f, 1.0f, czm_ammo_dot );
++}
++
++static float Touch_CzmGlyphs( float x, float y, float h, const char *s, byte r, byte g, byte b, byte a )
++{
++	const float w = h * 0.65f;
++
++	for( ; *s; s++, x += w )
++	{
++		uint c = (byte)*s;
++
++		if( c < 32 || c > 95 )
++			c = '?';
++		c -= 32;
++		ref.dllFuncs.Color4ub( r, g, b, a );
++		ref.dllFuncs.R_DrawStretchPic( x, y, w, h, ( c % 16 ) / 16.0f, ( c / 16 ) / 4.0f,
++			( c % 16 + 1 ) / 16.0f, ( c / 16 + 1 ) / 4.0f, czm_ammo_glyphs );
++	}
++	return x;
++}
++
++static void Touch_CzmTicks( float cx, float cy, float r0, float r1, int total, int lit, const byte *on, byte alpha )
++{
++	const float step = M_PI2_F / total;
++
++	ref.dllFuncs.GL_SetRenderMode( kRenderTransColor );
++	ref.dllFuncs.GL_Bind( XASH_TEXTURE0, R_GetBuiltinTexture( REF_WHITE_TEXTURE ));
++	ref.dllFuncs.Begin( TRI_QUADS );
++	for( int i = 0; i < total; i++ )
++	{
++		// clockwise from the top, a small gap between the ticks
++		const float a0 = -M_PI_F * 0.5f + i * step + step * 0.17f, a1 = a0 + step * 0.66f;
++
++		if( i < lit )
++			ref.dllFuncs.Color4ub( on[0], on[1], on[2], alpha );
++		else
++			ref.dllFuncs.Color4ub( 255, 255, 255, alpha * 45 / 255 );
++		ref.dllFuncs.Vertex3f( cx + cosf( a0 ) * r0, cy + sinf( a0 ) * r0, 0.0f );
++		ref.dllFuncs.Vertex3f( cx + cosf( a0 ) * r1, cy + sinf( a0 ) * r1, 0.0f );
++		ref.dllFuncs.Vertex3f( cx + cosf( a1 ) * r1, cy + sinf( a1 ) * r1, 0.0f );
++		ref.dllFuncs.Vertex3f( cx + cosf( a1 ) * r0, cy + sinf( a1 ) * r0, 0.0f );
++	}
++	ref.dllFuncs.End();
++	ref.dllFuncs.Color4ub( 255, 255, 255, 255 );
++	ref.dllFuncs.GL_SetRenderMode( kRenderTransTexture );
++}
++
++static void Touch_CzmDrawAmmo( touchbuttonlist_t *list )
++{
++	int clip, reserve, full;
++	char big[16], small[16];
++
++	if( !czm_ammo_state.string[0] || sscanf( czm_ammo_state.string, "%d %d %d", &clip, &reserve, &full ) != 3 )
++		return;
++	if( clip < 0 || full <= 0 )
++		return;
++	if( !Touch_CzmTexture( &czm_ammo_glyphs, "gfx/czm/hud_glyphs.tga" ) || !Touch_CzmTexture( &czm_ammo_dot, "gfx/czm/ui/dot.png" ))
++		return;
++
++	Q_snprintf( big, sizeof( big ), "%d", clip );
++	Q_snprintf( small, sizeof( small ), "/%d", reserve < 0 ? 0 : reserve );
++
++	for( touch_button_t *b = list->first; b; b = b->next )
++	{
++		const float x1 = TO_SCRN_X( b->x1 ), y1 = TO_SCRN_Y( b->y1 ), x2 = TO_SCRN_X( b->x2 ), y2 = TO_SCRN_Y( b->y2 );
++		float size, radius, cx, cy, ph, bigH, smallH, pw, px, py, border, frac, blink = 1.0f;
++		int total, lit;
++		byte color[3], alpha;
++
++		if( !Touch_IsVisible( b ) || Q_strcmp( b->command, "+reload" ) || !b->texture[0] || b->texture[0] == '#' )
++			continue;
++
++		size = Q_min( x2 - x1, y2 - y1 );
++		if( size < 8.0f )
++			continue;
++		radius = size * 0.5f;
++		cx = ( x1 + x2 ) * 0.5f;
++		cy = ( y1 + y2 ) * 0.5f;
++		frac = (float)clip / full;
++		Touch_CzmAmmoColor( frac, color );
++		if( clip == 0 )
++			blink = 0.55f + 0.45f * sinf( host.realtime * 7.0f );
++		alpha = bound( 0, (int)( 245.0f * b->fade ), 255 );
++
++		// the ring: one tick per round for small clips, at most 30
++		total = bound( 8, full, 30 );
++		lit = clip > 0 ? Q_max( 1, (int)( frac * total + 0.5f )) : 0;
++		Touch_CzmTicks( cx, cy, radius * 1.06f, radius * 1.17f, total, Q_min( lit, total ), color, alpha );
++
++		// the plate at the bottom of the button: the clip big and coloured, the reserve small
++		ph = radius * 0.62f;
++		bigH = ph * 0.70f;
++		smallH = ph * 0.46f;
++		pw = Q_strlen( big ) * bigH * 0.65f + Q_strlen( small ) * smallH * 0.65f + ph * 0.6f;
++		px = cx - pw * 0.5f;
++		py = y2 - ph * 0.62f;
++		if( py + ph > refState.height - 2 )
++			py = refState.height - 2 - ph;
++		border = Q_max( 1.0f, ph * 0.07f );
++
++		Touch_CzmPill( px - border, py - border, pw + border * 2, ph + border * 2, color[0], color[1], color[2], alpha * blink );
++		Touch_CzmPill( px, py, pw, ph, 12, 16, 24, alpha * 0.94f );
++		{
++			float x = px + ph * 0.3f, y = py + ( ph - bigH ) * 0.5f;
++
++			x = Touch_CzmGlyphs( x, y, bigH, big, color[0], color[1], color[2], alpha * blink );
++			Touch_CzmGlyphs( x, y + ( bigH - smallH ) * 0.82f, smallH, small, 190, 198, 210, alpha );
++		}
++	}
++
++	ref.dllFuncs.Color4ub( 255, 255, 255, 255 );
++}
++
+ void Touch_Draw( void )
+ {
+ 	if( !touch.initialized || ( !touch_enable.value && !touch.clientonly ))
+@@ -1655,6 +1825,9 @@
+ 
+ 	Touch_DrawButtons( &touch.list_user );
+ 
++	if( touch.state == state_none )
++		Touch_CzmDrawAmmo( &touch.list_user );
++
+ 	if( touch.state >= state_edit )
+ 	{
+ 		if( touch.edit )

@@ -314,100 +314,126 @@ covers what. The HUD is one for all button schemes and lives in the czm_hud_* cv
 */
 #define HUD_ATLAS "gfx/czm/hud_glyphs.tga"
 #define HUD_STYLES 3
+#define HUD_BLOCKS CzmHud::BLOCKS // the text blocks and the radar
+static_assert( HUD_STYLES == CzmHud::RADAR_STYLES, "one row of style buttons serves the text blocks and the radar" );
 
 struct CzmHudBlock
 {
 	float x, y;          // centre, share of the screen
 	float scale, opacity;
+	bool hidden;         // taken off the screen; "Hidden" in the bar shows it again
 };
 
 static const struct
 {
 	const char *ru, *en;
-} s_hudNames[CzmHud::COUNT] =
+} s_hudNames[HUD_BLOCKS] =
 {
 	{ "Жизни", "Health" },
 	{ "Броня", "Armor" },
 	{ "Время", "Round time" },
 	{ "Деньги", "Money" },
 	{ "Патроны", "Ammo" },
+	{ "Радар", "Radar" },
 }, s_hudStyles[HUD_STYLES] =
 {
 	{ "Классический", "Classic" },
 	{ "Компактный", "Compact" },
 	{ "CZM", "CZM" },
+}, s_radarStyles[CzmHud::RADAR_STYLES] =
+{
+	{ "Классический", "Classic" },
+	{ "Тактический", "Tactical" },
+	{ "Минимал", "Minimal" },
 };
-
-static const char *s_hudFields[4] = { "x", "y", "scale", "opacity" };
 
 static const char *HudName( int kind )
 {
 	return CZM_IsRussian() ? s_hudNames[kind].ru : s_hudNames[kind].en;
 }
 
+const char *CZM_RadarStyleName( int style )
+{
+	style = bound( 0, style, CzmHud::RADAR_STYLES - 1 );
+	return CZM_IsRussian() ? s_radarStyles[style].ru : s_radarStyles[style].en;
+}
+
 static float HudField( const CzmHudBlock &block, int field )
 {
-	return field == 0 ? block.x : field == 1 ? block.y : field == 2 ? block.scale : block.opacity;
+	switch( field )
+	{
+	case 0: return block.x;
+	case 1: return block.y;
+	case 2: return block.scale;
+	case 3: return block.opacity;
+	default: return block.hidden ? 1.0f : 0.0f;
+	}
 }
+
+static float HudMinScale( int kind ) { return kind == CzmHud::RADAR ? CzmHud::radarMinScale : 0.65f; }
+static float HudMaxScale( int kind ) { return kind == CzmHud::RADAR ? CzmHud::radarMaxScale : 1.6f; }
 
 // the same limits as the game HUD uses when it draws
 static CzmHudBlock HudClamp( int kind, CzmHudBlock b )
 {
 	b.x = CzmHud::Clamp( b.x, 0.01f, 0.99f, CzmHud::defaults[kind][0] );
 	b.y = CzmHud::Clamp( b.y, 0.01f, 0.99f, CzmHud::defaults[kind][1] );
-	b.scale = CzmHud::Clamp( b.scale, 0.65f, 1.6f, 1.0f );
+	b.scale = CzmHud::Clamp( b.scale, HudMinScale( kind ), HudMaxScale( kind ), 1.0f );
 	b.opacity = CzmHud::Clamp( b.opacity, 0.25f, 1.0f, 1.0f );
 	return b;
 }
 
 static CzmHudBlock HudDefault( int kind )
 {
-	CzmHudBlock b = { CzmHud::defaults[kind][0], CzmHud::defaults[kind][1], 1.0f, 1.0f };
+	CzmHudBlock b = { CzmHud::defaults[kind][0], CzmHud::defaults[kind][1], 1.0f, 1.0f, false };
 	return b;
 }
 
-static void ReadHud( CzmHudBlock *blocks, int *style )
+static void ReadHud( CzmHudBlock *blocks, int *style, int *radarStyle )
 {
 	*style = (int)CzmHud::Clamp( EngFuncs::GetCvarFloat( "czm_hud_style" ), 0, HUD_STYLES - 1, 0 );
-	for( int i = 0; i < CzmHud::COUNT; i++ )
+	*radarStyle = (int)CzmHud::Clamp( EngFuncs::GetCvarFloat( "czm_hud_radar_style" ), 0, CzmHud::RADAR_STYLES - 1, 0 );
+	for( int i = 0; i < HUD_BLOCKS; i++ )
 	{
 		char key[64];
-		float values[4];
+		float values[5];
 
-		for( int k = 0; k < 4; k++ )
+		for( int k = 0; k < 5; k++ )
 		{
-			CzmHud::Key( key, sizeof( key ), i, s_hudFields[k] );
+			CzmHud::Key( key, sizeof( key ), i, CzmHud::fields[k] );
 			values[k] = EngFuncs::GetCvarFloat( key );
 		}
-		CzmHudBlock b = { values[0], values[1], values[2], values[3] };
+		CzmHudBlock b = { values[0], values[1], values[2], values[3], values[4] > 0.5f };
 		blocks[i] = HudClamp( i, b );
 	}
 }
 
-static void WriteHud( const CzmHudBlock *blocks, int style )
+static void WriteHud( const CzmHudBlock *blocks, int style, int radarStyle )
 {
 	EngFuncs::CvarSetValue( "czm_hud_style", style );
-	for( int i = 0; i < CzmHud::COUNT; i++ )
+	EngFuncs::CvarSetValue( "czm_hud_radar_style", radarStyle );
+	for( int i = 0; i < HUD_BLOCKS; i++ )
 	{
-		for( int k = 0; k < 4; k++ )
+		for( int k = 0; k < 5; k++ )
 		{
 			char key[64];
 
-			CzmHud::Key( key, sizeof( key ), i, s_hudFields[k] );
+			CzmHud::Key( key, sizeof( key ), i, CzmHud::fields[k] );
 			EngFuncs::CvarSetValue( key, HudField( blocks[i], k ));
 		}
 	}
 	EngFuncs::ClientCmd( false, "host_writeconfig\n" );
 }
 
-// places, sizes and opacity back to the defaults, the chosen style stays
+// places, sizes and opacity back to the defaults, hidden blocks come back; the chosen styles stay
 void CZM_TouchResetHud( void )
 {
-	CzmHudBlock blocks[CzmHud::COUNT];
+	CzmHudBlock blocks[HUD_BLOCKS];
 
-	for( int i = 0; i < CzmHud::COUNT; i++ )
+	for( int i = 0; i < HUD_BLOCKS; i++ )
 		blocks[i] = HudDefault( i );
-	WriteHud( blocks, (int)CzmHud::Clamp( EngFuncs::GetCvarFloat( "czm_hud_style" ), 0, HUD_STYLES - 1, 0 ));
+	WriteHud( blocks, (int)CzmHud::Clamp( EngFuncs::GetCvarFloat( "czm_hud_style" ), 0, HUD_STYLES - 1, 0 ),
+		(int)CzmHud::Clamp( EngFuncs::GetCvarFloat( "czm_hud_radar_style" ), 0, CzmHud::RADAR_STYLES - 1, 0 ));
 }
 
 // the shared HUD painter drawing with menu calls: the preview is the HUD of the match
@@ -466,6 +492,113 @@ static unsigned int ConflictColor( int alpha )
 {
 	float pulse = 0.65f + 0.35f * sinf( uiStatic.realTime * 0.006f );
 	return PackRGBA( 255, 176, 32, (int)( alpha * pulse ));
+}
+
+// The radar as the match draws it (cl_dll/hud/czm_radar.cpp): the plate of the style,
+// a few team marks and, on the tactical one, the compass. Used by the editor and the settings.
+void CZM_DrawRadarPreview( int style, int x, int y, int size, float opacity )
+{
+	static const char *const plates[CzmHud::RADAR_STYLES] = { "classic", "tactical", "minimal" };
+	static const char *const marks[3] = { "dot", "up", "down" };
+	static const struct { float x, y; int kind; int r, g, b; } team[] =
+	{
+		{ 0.35f, -0.50f, 0, 236, 241, 248 },
+		{ -0.45f, 0.20f, 0, 236, 241, 248 },
+		{ 0.10f, 0.55f, 2, 236, 241, 248 },
+		{ -0.20f, -0.75f, 0, 255, 72, 72 },
+		{ 0.62f, 0.15f, 1, 236, 241, 248 },
+	};
+	char path[64];
+	float cx = x + size * 0.5f, cy = y + size * 0.5f;
+	float inner;
+	int m;
+
+	style = bound( 0, style, CzmHud::RADAR_STYLES - 1 );
+	inner = size * 0.5f * CzmHud::RadarInner( style );
+	snprintf( path, sizeof( path ), "gfx/czm/radar/radar_%s.png", plates[style] );
+	CZM_DrawImage( path, x, y, size, size, CZM_White( bound( 0, (int)( 255 * opacity ), 255 )));
+
+	if( style == CzmHud::RADAR_TACTICAL )
+	{
+		static const char *const letters[4] = { "N", "E", "S", "W" };
+		CzmMenuHudPainter painter;
+		float h = size * 0.07f, radius = inner * 0.93f;
+
+		for( int i = 0; i < 4; i++ )
+		{
+			float a = ( 20.0f - i * 90.0f ) * 0.0174532925f; // as if the player looked a little to the left of north
+			bool north = i == 0;
+			painter.Text( cx + radius * sinf( a ) - h * 0.325f, cy - radius * cosf( a ) - h * 0.5f, h, letters[i],
+				north ? 224 : 147, north ? 37 : 159, north ? 50 : 180, 1.0f );
+		}
+	}
+
+	m = Q_max( 6, (int)( size * 0.085f ));
+	for( size_t i = 0; i < sizeof( team ) / sizeof( team[0] ); i++ )
+	{
+		snprintf( path, sizeof( path ), "gfx/czm/radar/mark_%s.png", marks[team[i].kind] );
+		CZM_DrawImage( path, (int)( cx + team[i].x * inner ) - m / 2, (int)( cy + team[i].y * inner ) - m / 2, m, m,
+			PackRGBA( team[i].r, team[i].g, team[i].b, 255 ));
+	}
+}
+
+// a rounded plate: two halves of the dot picture and a fill between them
+static void DrawPill( float x, float y, float w, float h, unsigned int color )
+{
+	HIMAGE dot = CZM_Image( UI_DIR "dot.png" );
+	int iw = dot ? EngFuncs::PIC_Width( dot ) : 0, ih = dot ? EngFuncs::PIC_Height( dot ) : 0;
+	int r, g, b, a, cap = (int)( h * 0.5f + 0.5f );
+	wrect_t rc;
+
+	if( iw <= 0 || ih <= 0 || h < 2 )
+		return;
+	if( w < h )
+		w = h;
+	UnpackRGBA( r, g, b, a, color );
+	rc.top = 0;
+	rc.bottom = ih;
+	rc.left = 0;
+	rc.right = iw / 2;
+	EngFuncs::PIC_Set( dot, r, g, b, a );
+	EngFuncs::PIC_DrawTrans( (int)x, (int)y, cap, (int)h, &rc );
+	UI_FillRect( (int)x + cap, (int)y, (int)w - cap * 2, (int)h, color );
+	rc.left = iw / 2;
+	rc.right = iw;
+	EngFuncs::PIC_Set( dot, r, g, b, a );
+	EngFuncs::PIC_DrawTrans( (int)( x + w ) - cap, (int)y, cap, (int)h, &rc );
+}
+
+// The clip on the reload button as the match shows it (engine patch czm-reload-ammo): a full clip here.
+static void DrawReloadPreview( const CzmRect &r )
+{
+	const unsigned int green = PackRGBA( 70, 215, 120, 245 );
+	const int total = 30;
+	float radius = Q_min( r.w, r.h ) * 0.5f, cx = r.x + r.w * 0.5f, cy = r.y + r.h * 0.5f;
+	float ring = radius * 1.115f, thick = radius * 0.11f;
+	float ph = radius * 0.62f, bigH = ph * 0.70f, smallH = ph * 0.46f, pw, px, py, border;
+	CzmMenuHudPainter painter;
+
+	// the ticks: the game draws short arcs, three small dots make each one here
+	for( int i = 0; i < total; i++ )
+	{
+		float step = 6.2831853f / total, a0 = -1.5707963f + i * step + step * 0.17f;
+		int d = Q_max( 2, (int)( thick + 0.5f ));
+
+		for( int k = 0; k < 3; k++ )
+		{
+			float a = a0 + step * 0.66f * k / 2.0f;
+			CZM_DrawImage( UI_DIR "dot.png", (int)( cx + cosf( a ) * ring ) - d / 2, (int)( cy + sinf( a ) * ring ) - d / 2, d, d, green );
+		}
+	}
+
+	pw = 2 * bigH * 0.65f + 3 * smallH * 0.65f + ph * 0.6f;
+	px = cx - pw * 0.5f;
+	py = r.y + r.h - ph * 0.62f;
+	border = Q_max( 1.0f, ph * 0.07f );
+	DrawPill( px - border, py - border, pw + border * 2, ph + border * 2, green );
+	DrawPill( px, py, pw, ph, PackRGBA( 12, 16, 24, 240 ));
+	painter.Text( px + ph * 0.3f, py + ( ph - bigH ) * 0.5f, bigH, "30", 70, 215, 120, 1.0f );
+	painter.Text( px + ph * 0.3f + 2 * bigH * 0.65f, py + ( ph - bigH ) * 0.5f + ( bigH - smallH ) * 0.82f, smallH, "/90", 190, 198, 210, 1.0f );
 }
 
 /*
@@ -531,6 +664,7 @@ private:
 		HIT_OV_CMD_ADD,
 		HIT_HUD_STYLE,    // + style, panel of a HUD block
 		HIT_HUD_RESET = HIT_HUD_STYLE + HUD_STYLES,
+		HIT_HUD_HIDE,
 		HIT_GROUP = 100,  // + group
 		HIT_ITEM = 200,   // + action or icon index
 		HIT_HUD = 900,    // + HUD block
@@ -575,15 +709,16 @@ private:
 
 	CzmTouchButton m_buttons[CZM_MAX_BUTTONS];
 	int m_iButtons;
-	CzmHudBlock m_hud[CzmHud::COUNT];
-	int m_iHudStyle;
+	CzmHudBlock m_hud[HUD_BLOCKS];
+	int m_iHudStyle;    // the text blocks
+	int m_iRadarStyle;
 	int m_iHudSelected; // HUD block with the open panel, -1 when a button or nothing is selected
 	int m_iDragHud;
 	bool m_bSnapX;      // the dragged HUD block sits on the centre line
 	float m_flSnapY;    // ...or on the row of another block, -1 if not
 
-	// overlapping controls: items are the HUD blocks, then the buttons (CzmHud::COUNT + button)
-	int m_conflict[CzmHud::COUNT + CZM_MAX_BUTTONS]; // one item it overlaps, -1 for none
+	// overlapping controls: items are the HUD blocks, then the buttons (HUD_BLOCKS + button)
+	int m_conflict[HUD_BLOCKS + CZM_MAX_BUTTONS]; // one item it overlaps, -1 for none
 	int m_iConflicts, m_iConflictA, m_iConflictB;
 	int m_iScheme;
 	int m_iSelected;
@@ -610,6 +745,7 @@ private:
 	int W, H;
 	CzmRect m_bar, m_schemes[CZM_SCHEMES], m_add, m_hidden, m_reset, m_save, m_exit, m_collapse, m_expand;
 	CzmRect m_panel, m_size, m_opacity, m_hide, m_icon, m_command, m_delete;
+	CzmRect m_hudStyles[HUD_STYLES], m_hudHide, m_hudReset; // panel of a HUD block
 	CzmRect m_ovPanel, m_ovClose, m_ovYes, m_ovNo, m_ovClip, m_groups[GROUP_COUNT];
 	CzmRect m_sayField, m_sayAdd, m_cmdField, m_cmdAdd;
 	CzmRect m_items[CZM_ICONS > CZM_ACTIONS ? CZM_ICONS : CZM_ACTIONS];
@@ -620,13 +756,13 @@ private:
 CCzmTouchEditor::CCzmTouchEditor() : CMenuFramework( "CzmTouchEditor" )
 {
 	m_iButtons = 0;
-	for( int i = 0; i < CzmHud::COUNT; i++ )
+	for( int i = 0; i < HUD_BLOCKS; i++ )
 		m_hud[i] = HudDefault( i );
-	m_iHudStyle = 0;
+	m_iHudStyle = m_iRadarStyle = 0;
 	m_iHudSelected = m_iDragHud = -1;
 	m_bSnapX = false;
 	m_flSnapY = -1.0f;
-	for( int i = 0; i < CzmHud::COUNT + CZM_MAX_BUTTONS; i++ )
+	for( int i = 0; i < HUD_BLOCKS + CZM_MAX_BUTTONS; i++ )
 		m_conflict[i] = -1;
 	m_iConflicts = 0;
 	m_iConflictA = m_iConflictB = -1;
@@ -720,7 +856,7 @@ void CCzmTouchEditor::Load( int scheme, bool fromPreset )
 	// the default layout brings the default HUD places; otherwise unsaved HUD changes go too
 	if( fromPreset )
 		CZM_TouchResetHud();
-	ReadHud( m_hud, &m_iHudStyle );
+	ReadHud( m_hud, &m_iHudStyle, &m_iRadarStyle );
 
 	m_iSelected = m_iHudSelected = -1;
 	m_bDirty = false;
@@ -745,7 +881,7 @@ void CCzmTouchEditor::Apply( void )
 
 	EngFuncs::ClientCmd( true, "alias czm_more czm_more_show\n" );
 	CZM_SaveTouchConfig();
-	WriteHud( m_hud, m_iHudStyle );
+	WriteHud( m_hud, m_iHudStyle, m_iRadarStyle );
 	m_bDirty = false;
 	Toast( "Сохранено", "Saved" );
 }
@@ -821,6 +957,9 @@ int CCzmTouchEditor::ButtonAt( int x, int y ) const
 CzmHud::Rect CCzmTouchEditor::HudLayout( int kind ) const
 {
 	const CzmHudBlock &b = m_hud[kind];
+
+	if( kind == CzmHud::RADAR )
+		return CzmHud::RadarLayout( W, H, b.x, b.y, b.scale, b.opacity );
 	return CzmHud::Layout( kind, m_iHudStyle, W, H, b.x, b.y, b.scale, b.opacity, (int)strlen( CzmHud::samples[kind] ));
 }
 
@@ -833,10 +972,12 @@ CzmRect CCzmTouchEditor::HudRect( int kind ) const
 int CCzmTouchEditor::HudAt( int x, int y ) const
 {
 	// the selected block first, it is drawn with a frame on top
-	if( m_iHudSelected >= 0 && HudRect( m_iHudSelected ).Grown( H / 100 ).Contains( x, y ))
+	if( m_iHudSelected >= 0 && ( !m_hud[m_iHudSelected].hidden || m_bShowHidden ) && HudRect( m_iHudSelected ).Grown( H / 100 ).Contains( x, y ))
 		return m_iHudSelected;
-	for( int i = CzmHud::COUNT - 1; i >= 0; i-- )
+	for( int i = HUD_BLOCKS - 1; i >= 0; i-- )
 	{
+		if( m_hud[i].hidden && !m_bShowHidden )
+			continue;
 		if( HudRect( i ).Grown( H / 100 ).Contains( x, y ))
 			return i;
 	}
@@ -847,7 +988,7 @@ const char *CCzmTouchEditor::ItemName( int item ) const
 {
 	if( item < 0 )
 		return "";
-	return item < CzmHud::COUNT ? HudName( item ) : ButtonLabel( m_buttons[item - CzmHud::COUNT] );
+	return item < HUD_BLOCKS ? HudName( item ) : ButtonLabel( m_buttons[item - HUD_BLOCKS] );
 }
 
 // What covers what in the match: HUD blocks are rectangles, buttons are round.
@@ -859,14 +1000,26 @@ void CCzmTouchEditor::FindConflicts( void )
 		bool round;
 		float x, y, w, h; // rectangle, or centre and radius in x, y, w
 		int item;
-	} shapes[CzmHud::COUNT + CZM_MAX_BUTTONS];
+	} shapes[HUD_BLOCKS + CZM_MAX_BUTTONS];
 	int count = 0;
 
-	for( int i = 0; i < CzmHud::COUNT; i++ )
+	for( int i = 0; i < HUD_BLOCKS; i++ )
 	{
 		CzmHud::Rect p = HudLayout( i );
-		Shape shape = { false, p.x, p.y, p.w, p.h, i };
-		shapes[count++] = shape;
+
+		if( m_hud[i].hidden )
+			continue;
+		// the round radars are circles, the tactical one is a square
+		if( i == CzmHud::RADAR && m_iRadarStyle != CzmHud::RADAR_TACTICAL )
+		{
+			Shape shape = { true, p.x + p.w * 0.5f, p.y + p.h * 0.5f, p.w * 0.485f, 0.0f, i };
+			shapes[count++] = shape;
+		}
+		else
+		{
+			Shape shape = { false, p.x, p.y, p.w, p.h, i };
+			shapes[count++] = shape;
+		}
 	}
 
 	for( int i = 0; i < m_iButtons; i++ )
@@ -878,11 +1031,11 @@ void CCzmTouchEditor::FindConflicts( void )
 			continue;
 		r = ButtonRect( i );
 		// the round icon, a little inside its square so that touching edges do not count
-		Shape shape = { true, r.x + r.w * 0.5f, r.y + r.h * 0.5f, Q_min( r.w, r.h ) * 0.45f, 0.0f, CzmHud::COUNT + i };
+		Shape shape = { true, r.x + r.w * 0.5f, r.y + r.h * 0.5f, Q_min( r.w, r.h ) * 0.45f, 0.0f, HUD_BLOCKS + i };
 		shapes[count++] = shape;
 	}
 
-	for( int i = 0; i < CzmHud::COUNT + CZM_MAX_BUTTONS; i++ )
+	for( int i = 0; i < HUD_BLOCKS + CZM_MAX_BUTTONS; i++ )
 		m_conflict[i] = -1;
 	m_iConflicts = 0;
 	m_iConflictA = m_iConflictB = -1;
@@ -1063,6 +1216,17 @@ void CCzmTouchEditor::Layout( void )
 		m_icon = CZM_Rect( m_hide.x + bw + gap, m_hide.y, bw, pillH );
 		m_command = CZM_Rect( m_icon.x + bw + gap, m_hide.y, bw, pillH );
 		m_delete = CZM_Rect( m_command.x + bw + gap, m_hide.y, bw, pillH );
+
+		// panel of a HUD block: three styles in the bottom row, "Hide" and "Default" in the top right corner
+		bw = ( pw - pad * 2 - gap * ( HUD_STYLES - 1 )) / HUD_STYLES;
+		for( int i = 0; i < HUD_STYLES; i++ )
+			m_hudStyles[i] = CZM_Rect( m_panel.x + pad + i * ( bw + gap ), m_hide.y, bw, pillH );
+		{
+			int chipH = pillH * 0.82f, chipW = H * 0.25f;
+
+			m_hudReset = CZM_Rect( m_panel.x + pw - pad - chipW, m_panel.y + H * 0.022f, chipW, chipH );
+			m_hudHide = CZM_Rect( m_hudReset.x - gap - chipW, m_hudReset.y, chipW, chipH );
+		}
 	}
 
 	// pickers and confirm windows
@@ -1239,14 +1403,14 @@ int CCzmTouchEditor::HitTest( void ) const
 			return HIT_OPACITY;
 		if( m_iHudSelected >= 0 )
 		{
-			// style | style | style | default place
-			const CzmRect *row[] = { &m_hide, &m_icon, &m_command };
 			for( int i = 0; i < HUD_STYLES; i++ )
 			{
-				if( row[i]->Contains( x, y ))
+				if( m_hudStyles[i].Contains( x, y ))
 					return HIT_HUD_STYLE + i;
 			}
-			if( m_delete.Contains( x, y ))
+			if( m_hudHide.Contains( x, y ))
+				return HIT_HUD_HIDE;
+			if( m_hudReset.Contains( x, y ))
 				return HIT_HUD_RESET;
 			return HIT_PANEL;
 		}
@@ -1283,7 +1447,7 @@ void CCzmTouchEditor::SetSlider( int which )
 		CzmHudBlock &b = m_hud[m_iHudSelected];
 
 		if( which == HIT_SIZE )
-			b.scale = 0.65f + t * 0.95f;
+			b.scale = HudMinScale( m_iHudSelected ) + t * ( HudMaxScale( m_iHudSelected ) - HudMinScale( m_iHudSelected ));
 		else
 			b.opacity = 0.25f + t * 0.75f;
 		m_bDirty = true;
@@ -1305,7 +1469,7 @@ void CCzmTouchEditor::Activate( int hit )
 		return;
 	}
 
-	if( hit >= HIT_BUTTON || ( hit >= HIT_HUD && hit < HIT_HUD + CzmHud::COUNT ))
+	if( hit >= HIT_BUTTON || ( hit >= HIT_HUD && hit < HIT_HUD + HUD_BLOCKS ))
 		return; // buttons and HUD blocks are selected on press
 
 	CZM_PlayClick();
@@ -1324,10 +1488,13 @@ void CCzmTouchEditor::Activate( int hit )
 		return;
 	}
 
-	if( hit >= HIT_HUD_STYLE && hit < HIT_HUD_STYLE + HUD_STYLES )
+	if( hit >= HIT_HUD_STYLE && hit < HIT_HUD_STYLE + HUD_STYLES && m_iHudSelected >= 0 )
 	{
-		// one style for the whole HUD, like in the match
-		m_iHudStyle = hit - HIT_HUD_STYLE;
+		// the radar has its own looks, the text blocks share one style, like in the match
+		if( m_iHudSelected == CzmHud::RADAR )
+			m_iRadarStyle = hit - HIT_HUD_STYLE;
+		else
+			m_iHudStyle = hit - HIT_HUD_STYLE;
 		m_bDirty = true;
 		return;
 	}
@@ -1337,6 +1504,20 @@ void CCzmTouchEditor::Activate( int hit )
 		m_hud[m_iHudSelected] = HudDefault( m_iHudSelected );
 		m_bDirty = true;
 		Toast( "Блок на обычном месте", "Block moved back" );
+		return;
+	}
+
+	if( hit == HIT_HUD_HIDE && m_iHudSelected >= 0 )
+	{
+		CzmHudBlock &b = m_hud[m_iHudSelected];
+
+		b.hidden = !b.hidden;
+		m_bDirty = true;
+		if( b.hidden && !m_bShowHidden )
+		{
+			m_iHudSelected = -1;
+			Toast( "Блок скрыт. Показать: «Скрытые»", "Block hidden. See it with \"Hidden\"" );
+		}
 		return;
 	}
 
@@ -1509,7 +1690,7 @@ bool CCzmTouchEditor::KeyDown( int key )
 			m_flGrabX = (float)uiStatic.cursorX / W - b.x1;
 			m_flGrabY = (float)uiStatic.cursorY / H - b.y1;
 		}
-		else if( hit >= HIT_HUD && hit < HIT_HUD + CzmHud::COUNT )
+		else if( hit >= HIT_HUD && hit < HIT_HUD + HUD_BLOCKS )
 		{
 			int kind = hit - HIT_HUD;
 
@@ -1621,9 +1802,12 @@ bool CCzmTouchEditor::MouseMove( int x, int y )
 		if( m_bSnapX )
 			nx = 0.5f;
 		m_flSnapY = -1.0f;
-		for( int i = 0; i < CzmHud::COUNT; i++ )
+		for( int i = 0; i < HUD_BLOCKS; i++ )
 		{
-			if( i != m_iDragHud && fabsf( ny - m_hud[i].y ) < 0.015f )
+			// rows are for the text blocks, the radar only sticks to the centre
+			if( i == m_iDragHud || i == CzmHud::RADAR || m_iDragHud == CzmHud::RADAR || m_hud[i].hidden )
+				continue;
+			if( fabsf( ny - m_hud[i].y ) < 0.015f )
 			{
 				ny = m_hud[i].y;
 				m_flSnapY = ny;
@@ -1675,24 +1859,54 @@ void CCzmTouchEditor::DrawHud( void )
 	CzmMenuHudPainter painter;
 	int frame = Q_max( 2, (int)( H * 0.004f ));
 
-	for( int i = 0; i < CzmHud::COUNT; i++ )
+	for( int i = 0; i < HUD_BLOCKS; i++ )
 	{
 		CzmHud::Rect p = HudLayout( i );
 		CzmRect r = CZM_Rect( p.x, p.y, p.w, p.h );
-		bool selected = i == m_iHudSelected, conflict = m_conflict[i] >= 0;
+		bool selected = i == m_iHudSelected, conflict = m_conflict[i] >= 0, hidden = m_hud[i].hidden;
+		bool round = i == CzmHud::RADAR && m_iRadarStyle != CzmHud::RADAR_TACTICAL;
+
+		if( hidden && !m_bShowHidden )
+			continue;
+		if( hidden )
+			p.opacity *= 0.3f; // shown pale, like hidden buttons
+
+		if( round )
+		{
+			// a soft halo around the round radar instead of a frame
+			int halo = r.w * 0.12f;
+			if( conflict )
+				CZM_DrawImage( UI_DIR "glow.png", r.x - halo, r.y - halo, r.w + halo * 2, r.h + halo * 2, ConflictColor( 230 ));
+			if( selected )
+				CZM_DrawImage( UI_DIR "glow.png", r.x - halo, r.y - halo, r.w + halo * 2, r.h + halo * 2, PackRGBA( 239, 68, 68, 230 ));
+		}
 
 		// the block exactly as in the match, at the player's opacity
-		CzmHud::Paint( painter, i, m_iHudStyle, p, CzmHud::samples[i], false );
+		if( i == CzmHud::RADAR )
+			CZM_DrawRadarPreview( m_iRadarStyle, r.x, r.y, r.w, p.opacity );
+		else
+			CzmHud::Paint( painter, i, m_iHudStyle, p, CzmHud::samples[i], false );
 
-		if( conflict )
+		if( !round )
 		{
-			UI_FillRect( r.x, r.y, r.w, r.h, ConflictColor( 60 ));
-			DrawFrame( r.Grown( frame ), frame, ConflictColor( 255 ));
+			if( conflict )
+			{
+				UI_FillRect( r.x, r.y, r.w, r.h, ConflictColor( 60 ));
+				DrawFrame( r.Grown( frame ), frame, ConflictColor( 255 ));
+			}
+			if( selected )
+				DrawFrame( r.Grown( frame * ( conflict ? 2 : 1 )), frame, PackRGBA( 239, 68, 68, 255 ));
+			else if( !conflict )
+				DrawFrame( r, 1, CZM_White( 70 )); // the compact style has no plate, show where the block ends
 		}
-		if( selected )
-			DrawFrame( r.Grown( frame * ( conflict ? 2 : 1 )), frame, PackRGBA( 239, 68, 68, 255 ));
-		else if( !conflict )
-			DrawFrame( r, 1, CZM_White( 70 )); // the compact style has no plate, show where the block ends
+
+		if( hidden )
+		{
+			// crossed-out mark, as on hidden buttons
+			int d = Q_min( r.w, r.h ) * 0.34f;
+			CZM_DrawImage( UI_DIR "dot.png", r.x + r.w - d, r.y, d, d, PackRGBA( 60, 64, 72, 230 ));
+			CZM_DrawImage( UI_DIR "icon_close.png", r.x + r.w - d + d / 5, r.y + d / 5, d * 3 / 5, d * 3 / 5 );
+		}
 		// no name under the block: the numbers say what it is, the panel and the warning name it
 	}
 }
@@ -1711,7 +1925,7 @@ void CCzmTouchEditor::DrawButtons( void )
 		if( !ButtonEditable( b ) || ( hidden && !m_bShowHidden ))
 			continue;
 
-		if( m_conflict[CzmHud::COUNT + i] >= 0 )
+		if( m_conflict[HUD_BLOCKS + i] >= 0 )
 		{
 			int halo = r.w * 0.45f, ring = r.w * 0.08f;
 			CZM_DrawImage( UI_DIR "glow.png", r.x - halo, r.y - halo, r.w + halo * 2, r.h + halo * 2, ConflictColor( 200 ));
@@ -1735,10 +1949,12 @@ void CCzmTouchEditor::DrawButtons( void )
 			CZM_DrawImage( UI_DIR "dot.png", r.x + r.w - d, r.y, d, d, PackRGBA( 60, 64, 72, 230 ));
 			CZM_DrawImage( UI_DIR "icon_close.png", r.x + r.w - d + d / 5, r.y + d / 5, d * 3 / 5, d * 3 / 5 );
 		}
+		else if( !strcmp( b.command, "+reload" ))
+			DrawReloadPreview( r ); // the match shows the clip on it
 
 		// names only in the editor, like in PUBG
 		CZM_DrawText( font, r.x + r.w / 2 - H * 0.14f, r.y + r.h + 2, H * 0.28f, ButtonLabel( b ),
-			i == m_iSelected ? PackRGBA( 255, 120, 120, 255 ) : m_conflict[CzmHud::COUNT + i] >= 0 ? PackRGBA( 255, 196, 90, 255 ) : CZM_White( 230 ), QM_CENTER );
+			i == m_iSelected ? PackRGBA( 255, 120, 120, 255 ) : m_conflict[HUD_BLOCKS + i] >= 0 ? PackRGBA( 255, 196, 90, 255 ) : CZM_White( 230 ), QM_CENTER );
 	}
 }
 
@@ -1836,11 +2052,11 @@ void CCzmTouchEditor::DrawPanel( void )
 	snprintf( texture, sizeof( texture ), "%s.png", b.texture );
 	CZM_DrawImage( texture, m_panel.x + pad, m_panel.y + H * 0.02f, icon, icon );
 	CZM_DrawText( titleFont, m_panel.x + pad + icon + H * 0.02f, m_panel.y + H * 0.02f, m_panel.w - pad * 2 - icon, ButtonLabel( b ), CZM_White());
-	if( m_conflict[CzmHud::COUNT + m_iSelected] >= 0 )
+	if( m_conflict[HUD_BLOCKS + m_iSelected] >= 0 )
 	{
 		char text[160];
 
-		snprintf( text, sizeof( text ), "%s %s", CZM_IsRussian() ? "Перекрывает:" : "Overlaps:", ItemName( m_conflict[CzmHud::COUNT + m_iSelected] ));
+		snprintf( text, sizeof( text ), "%s %s", CZM_IsRussian() ? "Перекрывает:" : "Overlaps:", ItemName( m_conflict[HUD_BLOCKS + m_iSelected] ));
 		CZM_DrawText( smallFont, m_panel.x + pad + icon + H * 0.02f, m_panel.y + H * 0.02f + CZM_FontHeight( titleFont ) + 2,
 			m_panel.w - pad * 2 - icon, text, PackRGBA( 255, 196, 90, 255 ));
 	}
@@ -1863,18 +2079,24 @@ void CCzmTouchEditor::DrawPanel( void )
 void CCzmTouchEditor::DrawHudPanel( void )
 {
 	const int kind = m_iHudSelected;
+	const bool radar = kind == CzmHud::RADAR;
 	const CzmHudBlock &b = m_hud[kind];
+	const int current = radar ? m_iRadarStyle : m_iHudStyle;
 	CzmMenuHudPainter painter;
 	HFont titleFont = CZM_Font( CZMF_NICK );
 	HFont smallFont = CZM_Font( CZMF_SMALL );
 	int pad = H * 0.035f, icon = H * 0.07f;
-	int miniW = icon * 2.6f, textX = m_panel.x + pad + miniW + H * 0.025f, textW = m_panel.x + m_panel.w - pad - textX;
-	const CzmRect *row[] = { &m_hide, &m_icon, &m_command };
+	int miniW = radar ? icon : icon * 2.6f;
+	int textX = m_panel.x + pad + miniW + H * 0.025f, textW = m_hudHide.x - H * 0.02f - textX;
+	float minScale = HudMinScale( kind ), maxScale = HudMaxScale( kind );
 	char text[160];
 
 	CZM_DrawPanel( m_panel );
 
 	// a small copy of the block in the chosen style, at full opacity
+	if( radar )
+		CZM_DrawRadarPreview( m_iRadarStyle, m_panel.x + pad, m_panel.y + H * 0.02f, icon, 1.0f );
+	else
 	{
 		CzmHud::Rect mini = { (float)( m_panel.x + pad ), (float)( m_panel.y + H * 0.02f ), (float)miniW, (float)icon, 1.0f, 1.0f };
 		CzmHud::Paint( painter, kind, m_iHudStyle, mini, CzmHud::samples[kind], false );
@@ -1889,23 +2111,29 @@ void CCzmTouchEditor::DrawHudPanel( void )
 	else
 	{
 		CZM_DrawText( smallFont, textX, m_panel.y + H * 0.02f + CZM_FontHeight( titleFont ) + 2, textW,
-			CZM_IsRussian() ? "Интерфейс матча · один для всех схем кнопок" : "Match HUD · the same for all button layouts", PackRGBA( 140, 146, 156, 255 ));
+			radar ? ( CZM_IsRussian() ? "Свои игроки, бомба, заложники" : "Your team, the bomb, hostages" )
+			: ( CZM_IsRussian() ? "Интерфейс матча, один на все схемы" : "Match HUD, the same in every layout" ), PackRGBA( 140, 146, 156, 255 ));
 	}
 
+	// hide or show the block, back to its usual place
+	CZM_DrawButton( UI_DIR "button_secondary.png", m_hudHide, b.hidden ? ( CZM_IsRussian() ? "Показать" : "Show" ) : ( CZM_IsRussian() ? "Скрыть" : "Hide" ),
+		CZM_White(), IsPressed( HIT_HUD_HIDE ), CZMF_TILE_STATUS );
+	CZM_DrawButton( UI_DIR "button_secondary.png", m_hudReset, CZM_IsRussian() ? "На место" : "Default", CZM_White(), IsPressed( HIT_HUD_RESET ), CZMF_TILE_STATUS );
+
 	snprintf( text, sizeof( text ), "%d%%", (int)( b.scale * 100.0f + 0.5f ));
-	DrawSlider( m_size, ( b.scale - 0.65f ) / 0.95f, CZM_IsRussian() ? "Размер" : "Size", text );
+	DrawSlider( m_size, ( b.scale - minScale ) / ( maxScale - minScale ), CZM_IsRussian() ? "Размер" : "Size", text );
 	snprintf( text, sizeof( text ), "%d%%", (int)( b.opacity * 100.0f + 0.5f ));
 	DrawSlider( m_opacity, ( b.opacity - 0.25f ) / 0.75f, CZM_IsRussian() ? "Видимость" : "Opacity", text );
 
-	// style of the whole HUD and the default place of this block
+	// the radar looks, or the style of all text blocks
 	for( int i = 0; i < HUD_STYLES; i++ )
 	{
-		bool active = i == m_iHudStyle;
-		CZM_DrawButton( active ? UI_DIR "button_primary.png" : UI_DIR "button_secondary.png", *row[i],
-			CZM_IsRussian() ? s_hudStyles[i].ru : s_hudStyles[i].en, active ? CZM_White() : PackRGBA( 200, 205, 215, 255 ),
-			IsPressed( HIT_HUD_STYLE + i ), CZMF_TILE_STATUS );
+		bool active = i == current;
+		const char *name = radar ? CZM_RadarStyleName( i ) : CZM_IsRussian() ? s_hudStyles[i].ru : s_hudStyles[i].en;
+
+		CZM_DrawButton( active ? UI_DIR "button_primary.png" : UI_DIR "button_secondary.png", m_hudStyles[i],
+			name, active ? CZM_White() : PackRGBA( 200, 205, 215, 255 ), IsPressed( HIT_HUD_STYLE + i ), CZMF_TILE_STATUS );
 	}
-	CZM_DrawButton( UI_DIR "button_secondary.png", m_delete, CZM_IsRussian() ? "На место" : "Default", CZM_White(), IsPressed( HIT_HUD_RESET ), CZMF_TILE_STATUS );
 }
 
 // what overlaps, under the bar; the editor shows it until the controls are moved apart

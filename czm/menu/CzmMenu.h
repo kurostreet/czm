@@ -250,6 +250,8 @@ void CZM_TouchStartup( void ); // first start of this version: our layout replac
 void CZM_SaveTouchConfig( void ); // writes the current buttons and touch settings to the layout file
 void CZM_OpenTouchEditor( void );
 void CZM_TouchResetHud( void ); // HUD places and sizes back to the defaults
+void CZM_DrawRadarPreview( int style, int x, int y, int size, float opacity ); // as the match draws it
+const char *CZM_RadarStyleName( int style );
 
 /*
  * shop (buy menu) and server menus as cards
