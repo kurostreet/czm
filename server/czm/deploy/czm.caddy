@@ -9,7 +9,7 @@ counter-zombie.ru, kontrafps.ru {
 		Referrer-Policy no-referrer
 	}
 
-	# Stable public link resolves the latest published full APK on each visit.
+	# Legacy links return HTTP 410 (Google Play-only distribution now).
 	@latest_apk path /download /download/CounterZombieMobile.apk
 	handle @latest_apk {
 		reverse_proxy 127.0.0.1:8200
@@ -53,8 +53,11 @@ counter-zombie.ru, kontrafps.ru {
 		file_server
 	}
 
-	# APK downloads continue after a break (Range)
+	# Do not allow direct APK downloads, even when old URLs are shared.
+	# Leave other /dl resources accessible for compatibility with installed clients.
 	handle_path /dl/* {
+		@packages path_regexp (?i)\.apk$
+		respond @packages "Use the Google Play beta for installation" 403
 		root * /var/lib/czm/apk
 		file_server
 	}
