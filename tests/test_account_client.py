@@ -29,6 +29,8 @@ class AccountClientTests(unittest.TestCase):
                 (tmp / (name + ".java")).write_text(text)
             files = [str(JAVA / (name + ".java")) for name in ("CzmNet", "CzmAccount", "CzmDialog", "CzmServerAuth", "ServerAuthData", "ApkUpdate", "CzmColorPicker", "ColorWheelData", "CzmCodeInput", "CzmCloud", "SettingsData", "SettingsSchema", "CzmLayoutActivity", "CzmLayoutProvider", "ServerQuery")]
             files.append(str(JAVA / "CzmDownloads.java"))
+            # the site build's StoreUpdates (the Google Play one needs the Play library)
+            files.append(str(ROOT / "android/app/src/git/java/ru/kurostreet/counterzombiemobile/StoreUpdates.java"))
             cp = os.pathsep.join([json, sdk])
             subprocess.run(["javac", "--release", "11", "-encoding", "UTF-8", "-cp", cp, "-d", temp] +
                            [str(x) for x in tmp.glob("*.java")] + files + [str(ROOT / "tests/AccountClientTest.java"),str(ROOT / "tests/DownloadsStateTest.java")], check=True)
