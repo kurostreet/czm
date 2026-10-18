@@ -19,6 +19,7 @@
 //
 
 #include "hud.h"
+#include "hud/czm_hud.h"
 #include "cl_util.h"
 #include <string.h>
 #include <stdio.h>
@@ -99,20 +100,36 @@ float CHudMessage::FadeBlend( float fadein, float fadeout, float hold, float loc
 }
 
 
+// The frame of server messages from the editor (czm_hud_msgs_*): a server places its texts on the
+// screen, the player may squeeze them into a smaller frame away from the buttons. Whole screen by default.
+static CzmHud::Rect s_frame;
+static bool s_framesHidden;
+static int s_messageStyle;
+
+static void CzmMessageFrame( void )
+{
+	s_frame = CzmHud::MessageFrame( ScreenWidth, ScreenHeight,
+		CZM_HudValue( CzmHud::MESSAGES, "x", CzmHud::defaults[CzmHud::MESSAGES][0] ), CZM_HudValue( CzmHud::MESSAGES, "y", CzmHud::defaults[CzmHud::MESSAGES][1] ),
+		CZM_HudValue( CzmHud::MESSAGES, "scale", 1 ), CZM_HudValue( CzmHud::MESSAGES, "opacity", 1 ));
+	s_framesHidden = CZM_HudValue( CzmHud::MESSAGES, "hidden", 0 ) > 0.5f;
+	s_messageStyle = (int)CzmHud::Clamp( gEngfuncs.pfnGetCvarFloat( "czm_hud_msg_style" ), 0, CzmHud::MSG_STYLES - 1, 0 );
+}
+
 int	CHudMessage::XPosition( float x, int width, int totalWidth )
 {
 	int xPos;
+	const float left = s_frame.w > 0 ? s_frame.x : 0, wide = s_frame.w > 0 ? s_frame.w : ScreenWidth;
 
 	if ( x == -1 )
 	{
-		xPos = (ScreenWidth - width) / 2;
+		xPos = left + (wide - width) / 2;
 	}
 	else
 	{
 		if ( x < 0 )
-			xPos = (1.0 + x) * ScreenWidth - totalWidth;	// Alight right
+			xPos = left + (1.0 + x) * wide - totalWidth;	// Alight right
 		else
-			xPos = x * ScreenWidth;
+			xPos = left + x * wide;
 	}
 
 	if ( xPos + width > ScreenWidth )
@@ -127,16 +144,17 @@ int	CHudMessage::XPosition( float x, int width, int totalWidth )
 int CHudMessage::YPosition( float y, int height )
 {
 	int yPos;
+	const float top = s_frame.h > 0 ? s_frame.y : 0, tall = s_frame.h > 0 ? s_frame.h : ScreenHeight;
 
 	if ( y == -1 )	// Centered?
-		yPos = (ScreenHeight - height) * 0.5;
+		yPos = top + (tall - height) * 0.5;
 	else
 	{
 		// Alight bottom?
 		if ( y < 0 )
-			yPos = (1.0 + y) * ScreenHeight - height;	// Alight bottom
+			yPos = top + (1.0 + y) * tall - height;	// Alight bottom
 		else // align top
-			yPos = y * ScreenHeight;
+			yPos = top + y * tall;
 	}
 
 	if ( yPos + height > ScreenHeight )
@@ -324,6 +342,25 @@ void CHudMessage::MessageDrawScan( client_textmessage_t *pMessage, float time )
 
 		m_parms.x = XPosition( pMessage->x, m_parms.width, m_parms.totalWidth );
 
+		// CZM: a dark plate with an edge of the message colour; outline: a soft dark band under the text
+		if ( s_messageStyle != CzmHud::MSG_CLASSIC && m_parms.width > 0 )
+		{
+			float shown = 1.0f - m_parms.fadeBlend / 255.0f;
+			int pad = gHUD.GetCharHeight() / 3, h = gHUD.GetCharHeight();
+
+			if ( pMessage->effect == 2 && m_parms.time < m_parms.fadeTime )
+				shown = 1.0f; // the scan-out keeps its plate while it writes
+			shown = shown < 0 ? 0 : shown > 1 ? 1 : shown;
+			shown *= s_frame.opacity;
+			if ( s_messageStyle == CzmHud::MSG_CZM )
+			{
+				FillRGBABlend( m_parms.x - pad, m_parms.y, m_parms.width + pad * 2, h, 10, 14, 22, (int)( 170 * shown ));
+				FillRGBABlend( m_parms.x - pad, m_parms.y, 3, h, pMessage->r1, pMessage->g1, pMessage->b1, (int)( 255 * shown ));
+			}
+			else
+				FillRGBABlend( m_parms.x - pad, m_parms.y, m_parms.width + pad * 2, h, 0, 0, 0, (int)( 95 * shown ));
+		}
+
 		Con_UtfProcessChar( 0 );
 		for ( j = 0; j < m_parms.lineLength; j++ )
 		{
@@ -338,7 +375,8 @@ void CHudMessage::MessageDrawScan( client_textmessage_t *pMessage, float time )
 				m_parms.charTime = savedCharTime;
 			
 			if ( m_parms.x >= 0 && m_parms.y >= 0 && next <= ScreenWidth )
-				m_parms.x += DrawUtils::TextMessageDrawChar( m_parms.x, m_parms.y, m_parms.text, m_parms.r, m_parms.g, m_parms.b );
+				m_parms.x += DrawUtils::TextMessageDrawChar( m_parms.x, m_parms.y, m_parms.text,
+					m_parms.r * s_frame.opacity, m_parms.g * s_frame.opacity, m_parms.b * s_frame.opacity ); // additive: darker is fainter
 		}
 
 		m_parms.y += gHUD.GetCharHeight();
@@ -353,6 +391,7 @@ int CHudMessage::Draw( float fTime )
 	float endTime;
 
 	drawn = 0;
+	CzmMessageFrame();
 
 	if ( m_gameTitleTime > 0 )
 	{
@@ -428,7 +467,8 @@ int CHudMessage::Draw( float fTime )
 				// effect 0 is fade in/fade out
 				// effect 1 is flickery credits
 				// effect 2 is write out (training room)
-				MessageDrawScan( pMessage, messageTime );
+				if ( !s_framesHidden ) // taken off the screen in the editor: they still time out
+					MessageDrawScan( pMessage, messageTime );
 
 				drawn++;
 			}

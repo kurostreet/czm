@@ -340,7 +340,9 @@ static const struct { const char *key, *ru, *en; } s_strings[] =
 	{ "s_hud_edit", "Интерфейс в матче", "In-match HUD" },
 	{ "s_hud_edit_hint", "Вместе с кнопками: стиль, место, размер, видимость", "Together with the buttons: style, place, size, opacity" },
 	{ "s_radar_style", "Радар", "Radar" },
-	{ "s_radar_style_hint", "Вид мини-карты. Место и размер — в «Интерфейс в матче»", "How the minimap looks. Place and size are in the in-match HUD editor" },
+	{ "s_radar_style_hint", "Вид мини-карты. Место и размер — Управление → Кнопки и интерфейс", "How the minimap looks. Place and size: Controls → Buttons and HUD" },
+	{ "s_msg_style", "Чат и сообщения сервера", "Chat and server messages" },
+	{ "s_msg_style_hint", "Как они выглядят в матче. Место — Управление → Кнопки и интерфейс", "How they look in a match. Place: Controls → Buttons and HUD" },
 	{ "setup_title", "Добро пожаловать!", "Welcome!" },
 	{ "setup_text", "Выбери язык и придумай ник", "Choose a language and a nickname" },
 	{ "setup_go", "Играть", "Play" },
@@ -359,6 +361,10 @@ void CZM_Init( void )
 	// This also runs after config.cfg: existing players may have saved the old value.
 	if( EngFuncs::GetCvarFloat( "cl_advertise_engine_in_name" ) != 0.0f )
 		EngFuncs::CvarSetValue( "cl_advertise_engine_in_name", 0.0f );
+	// Console lines over the game ("Warning: ...", plugin notes printed to the console) are for
+	// developers: the original game shows them only with developer mode, the console keeps them.
+	if( EngFuncs::GetCvarFloat( "con_notifytime" ) != 0.0f )
+		EngFuncs::CvarSetValue( "con_notifytime", 0.0f );
 
 	if( s_bInitialized )
 		return;
@@ -379,6 +385,7 @@ void CZM_Init( void )
 	EngFuncs::CvarRegister( "czm_hud_style", "0", FCVAR_ARCHIVE );
 	EngFuncs::CvarRegister( "czm_parallax", "1", FCVAR_ARCHIVE );
 	EngFuncs::CvarRegister( "czm_hud_radar_style", "0", FCVAR_ARCHIVE ); // classic, tactical, minimal
+	EngFuncs::CvarRegister( "czm_hud_msg_style", "1", FCVAR_ARCHIVE );   // chat and server messages: classic, CZM, outline
 	for( int i=0;i<CzmHud::BLOCKS;i++ ) for( int k=0;k<5;k++ ) {
 		char name[64],value[32];
 		CzmHud::Key(name,sizeof(name),i,CzmHud::fields[k]);

@@ -4,12 +4,17 @@
 #include <cstdio>
 
 namespace CzmHud {
-// COUNT text blocks, then the radar; BLOCKS is everything the editor moves
-enum { HEALTH, ARMOR, TIMER, MONEY, AMMO, COUNT, RADAR = COUNT, BLOCKS };
+// COUNT text blocks, then the radar, the match chat and the frame of server messages;
+// BLOCKS is everything the editor moves
+enum { HEALTH, ARMOR, TIMER, MONEY, AMMO, COUNT, RADAR = COUNT, CHAT, MESSAGES, BLOCKS };
 enum { RADAR_CLASSIC, RADAR_TACTICAL, RADAR_MINIMAL, RADAR_STYLES };
-static const char *const keys[BLOCKS] = { "hp", "armor", "time", "money", "ammo", "radar" };
-// the radar sits in the top left corner, like in the original game
-static const float defaults[BLOCKS][2] = {{.085f,.94f},{.25f,.94f},{.5f,.94f},{.88f,.82f},{.86f,.94f},{.01f,.01f}};
+// the chat and the server messages: as in CS, on dark plates, with a dark outline
+enum { MSG_CLASSIC, MSG_CZM, MSG_OUTLINE, MSG_STYLES };
+static const char *const keys[BLOCKS] = { "hp", "armor", "time", "money", "ammo", "radar", "chat", "msgs" };
+// the radar sits in the top left corner, like in the original game; the chat bottom left;
+// the frame of server messages is the whole screen, so they stay where the server put them
+static const float defaults[BLOCKS][2] = {{.085f,.94f},{.25f,.94f},{.5f,.94f},{.88f,.82f},{.86f,.94f},{.01f,.01f},{.265f,.74f},{.5f,.5f}};
+static const int chatLines = 5;
 // cvar czm_hud_<key>_<field>; "hidden" is 1 when the player took the block off the screen
 static const char *const fields[5] = { "x", "y", "scale", "opacity", "hidden" };
 static const float radarMinScale = .6f, radarMaxScale = 2.f;
@@ -48,6 +53,30 @@ inline Rect RadarLayout(float sw, float sh, float x, float y, float scale, float
     x=Clamp(x,sw*.012f,sw-sw*.012f-d,sw*.012f);
     y=Clamp(y,sh*.018f,sh-sh*.018f-d,sh*.018f);
     return {x,y,d,d,d/(sh*.24f),opacity};
+}
+// the chat: lines grow up from the bottom of the block, half the screen wide at 100 %
+inline Rect ChatLayout(float sw, float sh, float x, float y, float scale, float opacity, float lineHeight) {
+    scale = Clamp(scale,.6f,1.6f,1);
+    opacity = Clamp(opacity,.25f,1,1);
+    float w=sw*.5f*scale, h=lineHeight*chatLines;
+    if(w>sw*.96f) w=sw*.96f;
+    if(h>sh*.6f) h=sh*.6f;
+    x=Clamp(x,.01f,.99f,defaults[CHAT][0])*sw-w/2;
+    y=Clamp(y,.01f,.99f,defaults[CHAT][1])*sh-h/2;
+    x=Clamp(x,sw*.006f,sw-sw*.006f-w,sw*.006f);
+    y=Clamp(y,sh*.01f,sh-sh*.01f-h,sh*.01f);
+    return {x,y,w,h,scale,opacity};
+}
+// server messages keep their places inside this frame: the whole screen at 100 %, 60 % at least
+inline Rect MessageFrame(float sw, float sh, float x, float y, float scale, float opacity) {
+    scale = Clamp(scale,.6f,1,1);
+    opacity = Clamp(opacity,.25f,1,1);
+    float w=sw*scale, h=sh*scale;
+    x=Clamp(x,0,1,defaults[MESSAGES][0])*sw-w/2;
+    y=Clamp(y,0,1,defaults[MESSAGES][1])*sh-h/2;
+    x=Clamp(x,0,sw-w,0);
+    y=Clamp(y,0,sh-h,0);
+    return {x,y,w,h,scale,opacity};
 }
 // what the radar shows inside its frame, a share of the half side
 inline float RadarInner(int style) { return style==RADAR_TACTICAL ? .86f : .84f; }

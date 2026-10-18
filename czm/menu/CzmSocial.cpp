@@ -414,7 +414,7 @@ int CCzmSocial::Hit()
 {
 	if(m_pickOpen){for(int i=0;i<m_pickCount;i++)if(m_pick[i].HasCursor())return PICK+i;return m_pickCancel.HasCursor()||!m_pickPanel.HasCursor()?CANCEL:0;}
 	if(m_confirm[0]){if(m_confirmYes.HasCursor())return CONFIRM;if(m_confirmNo.HasCursor())return CANCEL;if(!strcmp(m_confirm,"report_choice")&&m_reportChat.HasCursor())return REPORT_CHAT;return 0;}
-	if(m_mode==PROFILE&&!m_panel.HasCursor())return BACKDROP;
+	if(!m_panel.HasCursor())return BACKDROP; // a tap next to the window closes it, as in the chat and the profile
 	if(m_back.HasCursor())return BACK;if(m_refresh.HasCursor())return REFRESH;
 	if(m_mode==LIST){
 		if(!Account()&&m_prev.HasCursor())return LOGIN;

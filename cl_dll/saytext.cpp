@@ -19,6 +19,7 @@
 //
 
 #include "hud.h"
+#include "hud/czm_hud.h"
 #include "cl_util.h"
 #include "parsemsg.h"
 
@@ -37,9 +38,16 @@ extern float *GetClientColor( int clientIndex );
 #define MAX_LINES	5
 #define MAX_CHARS_PER_LINE	1024  /* it can be less than this, depending on char size */
 
-// allow 20 pixels on either side of the text
-#define MAX_LINE_WIDTH  ( ScreenWidth - 40 )
+// the chat block of the editor (czm_hud_chat_*): where the lines are and how wide they may be
+static CzmHud::Rect ChatRect( int lineHeight )
+{
+	return CzmHud::ChatLayout( ScreenWidth, ScreenHeight,
+		CZM_HudValue( CzmHud::CHAT, "x", CzmHud::defaults[CzmHud::CHAT][0] ), CZM_HudValue( CzmHud::CHAT, "y", CzmHud::defaults[CzmHud::CHAT][1] ),
+		CZM_HudValue( CzmHud::CHAT, "scale", 1 ), CZM_HudValue( CzmHud::CHAT, "opacity", 1 ), lineHeight > 0 ? lineHeight : 16 );
+}
+
 #define LINE_START  10
+#define MAX_LINE_WIDTH  ( (int)ChatRect( line_height ).w - LINE_START * 2 )
 
 static void StripSayTextControlCodes( const char *src, char *dst, int dstSize )
 {
@@ -116,7 +124,9 @@ int ScrollTextUp( void )
 
 int CHudSayText :: Draw( float flTime )
 {
-	int y = Y_START;
+	int y = Y_START, lines = 0, style;
+	CzmHud::Rect area;
+	bool hidden;
 
 	//if ( ( gViewPort && gViewPort->AllowedToPrintText() == FALSE) || !m_HUD_saytext->value )
 	if ( !m_HUD_saytext->value )
@@ -142,12 +152,52 @@ int CHudSayText :: Draw( float flTime )
 		}
 	}
 	
+	// the newest line sits at the bottom of the chat block, older ones above it
+	area = ChatRect( line_height );
+	hidden = CZM_HudValue( CzmHud::CHAT, "hidden", 0 ) > 0.5f;
+	style = (int)CzmHud::Clamp( gEngfuncs.pfnGetCvarFloat( "czm_hud_msg_style" ), 0, CzmHud::MSG_STYLES - 1, 0 );
+	for( int i = 0; i < MAX_LINES; i++ )
+	{
+		if( g_szLineBuffer[i][0] )
+			lines++;
+	}
+	y = (int)( area.y + area.h ) - lines * line_height;
+	if( hidden )
+		return 1;
+
 	for (int i = 0; i < MAX_LINES; i++)
 	{
 		if (!g_szLineBuffer[i][0]) // skip empty string
 			continue;
 
-		int current_x = LINE_START;
+		int current_x = (int)area.x + LINE_START;
+
+		// CZM: a dark plate with a red edge under each line; outline: a dark copy of the text under it
+		if( style != CzmHud::MSG_CLASSIC )
+		{
+			char plain[ MAX_CHARS_PER_LINE ];
+			int width = 0, height = 0;
+
+			StripSayTextControlCodes( g_szLineBuffer[i], plain, sizeof( plain ));
+			DrawUtils::ConsoleStringSize( plain, &width, &height );
+			if( style == CzmHud::MSG_CZM )
+			{
+				FillRGBABlend( (int)area.x, y, width + LINE_START * 2, line_height, 10, 14, 22, (int)( 175 * area.opacity ));
+				FillRGBABlend( (int)area.x, y, 3, line_height, 224, 37, 50, (int)( 255 * area.opacity ));
+			}
+			else
+			{
+				// a dark outline: the text four times around its place, thicker on big screens
+				const int o = line_height > 32 ? 2 : 1;
+				const int dx[4] = { o, -o, o, -o }, dy[4] = { o, o, -o, -o };
+
+				for( int k = 0; k < 4; k++ )
+				{
+					DrawUtils::SetConsoleTextColor( (unsigned char)0, (unsigned char)0, (unsigned char)0 );
+					DrawUtils::DrawConsoleString( current_x + dx[k], y + dy[k], plain );
+				}
+			}
+		}
 		const char* text = g_szLineBuffer[i];
 		size_t length = strlen(text);
 

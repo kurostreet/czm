@@ -252,6 +252,8 @@ void CZM_OpenTouchEditor( void );
 void CZM_TouchResetHud( void ); // HUD places and sizes back to the defaults
 void CZM_DrawRadarPreview( int style, int x, int y, int size, float opacity ); // as the match draws it
 const char *CZM_RadarStyleName( int style );
+void CZM_DrawMessagePreview( int style, int x, int y, int w, int h ); // chat and server texts in a look
+const char *CZM_MessageStyleName( int style );
 
 /*
  * shop (buy menu) and server menus as cards

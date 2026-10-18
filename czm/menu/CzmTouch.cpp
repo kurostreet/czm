@@ -315,7 +315,7 @@ covers what. The HUD is one for all button schemes and lives in the czm_hud_* cv
 #define HUD_ATLAS "gfx/czm/hud_glyphs.tga"
 #define HUD_STYLES 3
 #define HUD_BLOCKS CzmHud::BLOCKS // the text blocks and the radar
-static_assert( HUD_STYLES == CzmHud::RADAR_STYLES, "one row of style buttons serves the text blocks and the radar" );
+static_assert( HUD_STYLES == CzmHud::RADAR_STYLES && HUD_STYLES == CzmHud::MSG_STYLES, "one row of style buttons serves every block" );
 
 struct CzmHudBlock
 {
@@ -335,6 +335,8 @@ static const struct
 	{ "Деньги", "Money" },
 	{ "Патроны", "Ammo" },
 	{ "Радар", "Radar" },
+	{ "Чат", "Chat" },
+	{ "Сообщения сервера", "Server messages" },
 }, s_hudStyles[HUD_STYLES] =
 {
 	{ "Классический", "Classic" },
@@ -345,7 +347,18 @@ static const struct
 	{ "Классический", "Classic" },
 	{ "Тактический", "Tactical" },
 	{ "Минимал", "Minimal" },
+}, s_msgStyles[CzmHud::MSG_STYLES] =
+{
+	{ "Классический", "Classic" },
+	{ "CZM", "CZM" },
+	{ "Контур", "Outline" },
 };
+
+const char *CZM_MessageStyleName( int style )
+{
+	style = bound( 0, style, CzmHud::MSG_STYLES - 1 );
+	return CZM_IsRussian() ? s_msgStyles[style].ru : s_msgStyles[style].en;
+}
 
 static const char *HudName( int kind )
 {
@@ -370,8 +383,21 @@ static float HudField( const CzmHudBlock &block, int field )
 	}
 }
 
-static float HudMinScale( int kind ) { return kind == CzmHud::RADAR ? CzmHud::radarMinScale : 0.65f; }
-static float HudMaxScale( int kind ) { return kind == CzmHud::RADAR ? CzmHud::radarMaxScale : 1.6f; }
+static float HudMinScale( int kind )
+{
+	return kind == CzmHud::RADAR ? CzmHud::radarMinScale : kind == CzmHud::CHAT || kind == CzmHud::MESSAGES ? 0.6f : 0.65f;
+}
+static float HudMaxScale( int kind )
+{
+	return kind == CzmHud::RADAR ? CzmHud::radarMaxScale : kind == CzmHud::MESSAGES ? 1.0f : 1.6f;
+}
+
+// the chat line as the match draws it with the console font: its height follows "Text size"
+static float ChatLineHeight( int screenHeight )
+{
+	float scale = EngFuncs::GetCvarFloat( "con_fontscale" );
+	return screenHeight * 0.0168f * bound( 1.0f, scale, 3.0f );
+}
 
 // the same limits as the game HUD uses when it draws
 static CzmHudBlock HudClamp( int kind, CzmHudBlock b )
@@ -389,10 +415,11 @@ static CzmHudBlock HudDefault( int kind )
 	return b;
 }
 
-static void ReadHud( CzmHudBlock *blocks, int *style, int *radarStyle )
+static void ReadHud( CzmHudBlock *blocks, int *style, int *radarStyle, int *msgStyle )
 {
 	*style = (int)CzmHud::Clamp( EngFuncs::GetCvarFloat( "czm_hud_style" ), 0, HUD_STYLES - 1, 0 );
 	*radarStyle = (int)CzmHud::Clamp( EngFuncs::GetCvarFloat( "czm_hud_radar_style" ), 0, CzmHud::RADAR_STYLES - 1, 0 );
+	*msgStyle = (int)CzmHud::Clamp( EngFuncs::GetCvarFloat( "czm_hud_msg_style" ), 0, CzmHud::MSG_STYLES - 1, 1 );
 	for( int i = 0; i < HUD_BLOCKS; i++ )
 	{
 		char key[64];
@@ -408,10 +435,11 @@ static void ReadHud( CzmHudBlock *blocks, int *style, int *radarStyle )
 	}
 }
 
-static void WriteHud( const CzmHudBlock *blocks, int style, int radarStyle )
+static void WriteHud( const CzmHudBlock *blocks, int style, int radarStyle, int msgStyle )
 {
 	EngFuncs::CvarSetValue( "czm_hud_style", style );
 	EngFuncs::CvarSetValue( "czm_hud_radar_style", radarStyle );
+	EngFuncs::CvarSetValue( "czm_hud_msg_style", msgStyle );
 	for( int i = 0; i < HUD_BLOCKS; i++ )
 	{
 		for( int k = 0; k < 5; k++ )
@@ -433,7 +461,8 @@ void CZM_TouchResetHud( void )
 	for( int i = 0; i < HUD_BLOCKS; i++ )
 		blocks[i] = HudDefault( i );
 	WriteHud( blocks, (int)CzmHud::Clamp( EngFuncs::GetCvarFloat( "czm_hud_style" ), 0, HUD_STYLES - 1, 0 ),
-		(int)CzmHud::Clamp( EngFuncs::GetCvarFloat( "czm_hud_radar_style" ), 0, CzmHud::RADAR_STYLES - 1, 0 ));
+		(int)CzmHud::Clamp( EngFuncs::GetCvarFloat( "czm_hud_radar_style" ), 0, CzmHud::RADAR_STYLES - 1, 0 ),
+		(int)CzmHud::Clamp( EngFuncs::GetCvarFloat( "czm_hud_msg_style" ), 0, CzmHud::MSG_STYLES - 1, 1 ));
 }
 
 // the shared HUD painter drawing with menu calls: the preview is the HUD of the match
@@ -568,6 +597,103 @@ static void DrawPill( float x, float y, float w, float h, unsigned int color )
 	EngFuncs::PIC_DrawTrans( (int)( x + w ) - cap, (int)y, cap, (int)h, &rc );
 }
 
+/*
+=================
+chat and server messages as the match draws them (cl_dll/saytext.cpp, cl_dll/message.cpp):
+classic CS text, CZM dark plates with a coloured edge, or a dark outline
+=================
+*/
+struct CzmTextPart { const char *text; int r, g, b; };
+
+static int MessageLineWidth( HFont font, const CzmTextPart *parts, int count )
+{
+	int w = 0;
+	for( int i = 0; i < count; i++ )
+		w += CZM_TextWidth( font, parts[i].text );
+	return w;
+}
+
+// one line at x, y of height h: the plate or the outline by the style, then the coloured parts
+static void DrawMessageLine( int style, HFont font, int x, int y, int h, const CzmTextPart *parts, int count,
+	int edgeR, int edgeG, int edgeB, float opacity, int pad )
+{
+	int textY = y + ( h - CZM_FontHeight( font )) / 2, w = MessageLineWidth( font, parts, count );
+
+	if( style == CzmHud::MSG_CZM )
+	{
+		UI_FillRect( x - pad, y, w + pad * 2, h, PackRGBA( 10, 14, 22, (int)( 175 * opacity )));
+		UI_FillRect( x - pad, y, Q_max( 2, h / 10 ), h, PackRGBA( edgeR, edgeG, edgeB, (int)( 255 * opacity )));
+	}
+	else if( style == CzmHud::MSG_OUTLINE )
+	{
+		// a dark outline: the text four times around its place, as the match draws it
+		const int o = h > 32 ? 2 : 1;
+		const int dx[4] = { o, -o, o, -o }, dy[4] = { o, o, -o, -o };
+		int tx = x;
+
+		for( int i = 0; i < count; i++ )
+		{
+			for( int k = 0; k < 4; k++ )
+				CZM_DrawText( font, tx + dx[k], textY + dy[k], 9999, parts[i].text, PackRGBA( 0, 0, 0, 255 ));
+			tx += CZM_TextWidth( font, parts[i].text );
+		}
+	}
+	for( int i = 0; i < count; i++ )
+	{
+		CZM_DrawText( font, x, textY, 9999, parts[i].text, PackRGBA( parts[i].r, parts[i].g, parts[i].b, 255 ));
+		x += CZM_TextWidth( font, parts[i].text );
+	}
+}
+
+// three chat lines growing up from the bottom of the area, the newest at the bottom
+static void DrawChatSample( int style, int x, int bottom, int lineH, float opacity, HFont font )
+{
+	const bool ru = CZM_IsRussian();
+	const CzmTextPart one[] = { { "Kuro", 153, 204, 255 }, { ru ? " :  всем привет!" : " :  hi all!", 255, 178, 0 } };
+	const CzmTextPart two[] = { { "Zombie", 255, 63, 63 }, { ru ? " :  бегите на крышу" : " :  run to the roof", 255, 178, 0 } };
+	const CzmTextPart three[] = { { ru ? "* Новый раунд, удачи!" : "* New round, good luck!", 153, 255, 153 } };
+	int pad = lineH / 3;
+
+	DrawMessageLine( style, font, x + pad, bottom - lineH * 3, lineH, one, 2, 224, 37, 50, opacity, pad );
+	DrawMessageLine( style, font, x + pad, bottom - lineH * 2, lineH, two, 2, 224, 37, 50, opacity, pad );
+	DrawMessageLine( style, font, x + pad, bottom - lineH, lineH, three, 1, 224, 37, 50, opacity, pad );
+}
+
+// two typical server texts where servers put them: the title at the top, the zombie status at the bottom left
+static void DrawServerSample( int style, const CzmRect &frame, int lineH, float opacity, HFont font )
+{
+	const CzmTextPart title[] = { { "ZS.SERVER  •  zm_dust  •  12/32", 80, 230, 120 } };
+	const CzmTextPart status[] = { { "HP: 1750  ·  Light Zombie  ·  Ammo packs: 35", 200, 230, 60 } };
+	int pad = lineH / 3;
+	int w = MessageLineWidth( font, title, 1 );
+
+	DrawMessageLine( style, font, frame.x + ( frame.w - w ) / 2, frame.y + frame.h * 0.02f, lineH, title, 1, 80, 230, 120, opacity, pad );
+	DrawMessageLine( style, font, frame.x + frame.w * 0.02f + pad, frame.y + frame.h * 0.88f, lineH, status, 1, 200, 230, 60, opacity, pad );
+}
+
+// a small picture of the three looks for the settings: a game shot with the chat and a server text
+void CZM_DrawMessagePreview( int style, int x, int y, int w, int h )
+{
+	HFont font = CZM_Font( CZMF_SMALL );
+	int lineH = CZM_FontHeight( font ) + 6;
+	CzmRect frame = CZM_Rect( x, y, w, h );
+	HIMAGE shot = CZM_Image( UI_DIR "editor_bg.png" );
+
+	style = bound( 0, style, CzmHud::MSG_STYLES - 1 );
+	if( shot )
+	{
+		// a bright part of the match screenshot, so the difference in readability shows
+		int iw = EngFuncs::PIC_Width( shot ), ih = EngFuncs::PIC_Height( shot );
+		wrect_t rc;
+		rc.left = iw * 0.38f; rc.right = iw * 0.98f; rc.top = ih * 0.05f; rc.bottom = ih * 0.05f + ( rc.right - rc.left ) * h / Q_max( 1, w );
+		if( rc.bottom > ih ) rc.bottom = ih;
+		EngFuncs::PIC_Set( shot, 255, 255, 255, 255 );
+		EngFuncs::PIC_DrawTrans( x, y, w, h, &rc );
+	}
+	DrawServerSample( style, CZM_Rect( frame.x, frame.y + lineH / 2, frame.w, frame.h - lineH ), lineH, 1.0f, font );
+	DrawChatSample( style, x + w / 30, y + h * 0.80f, lineH, 1.0f, font );
+}
+
 // The clip on the reload button as the match shows it (engine patch czm-reload-ammo): a full clip here.
 static void DrawReloadPreview( const CzmRect &r )
 {
@@ -690,6 +816,7 @@ private:
 	int ButtonAt( int x, int y ) const;
 	CzmHud::Rect HudLayout( int kind ) const;
 	CzmRect HudRect( int kind ) const;
+	CzmRect HudGrab( int kind ) const; // where a finger takes the block: the frame of server messages by its label
 	int HudAt( int x, int y ) const;
 	void FindConflicts( void );
 	const char *ItemName( int item ) const;
@@ -697,6 +824,7 @@ private:
 	void SetButtonSize( int i, float size );
 
 	void DrawHud( void );
+	void DrawMessageFrame( const CzmRect &r, float opacity, bool selected );
 	void DrawButtons( void );
 	void DrawGuides( void );
 	void DrawBar( void );
@@ -712,6 +840,7 @@ private:
 	CzmHudBlock m_hud[HUD_BLOCKS];
 	int m_iHudStyle;    // the text blocks
 	int m_iRadarStyle;
+	int m_iMsgStyle;    // the chat and server messages
 	int m_iHudSelected; // HUD block with the open panel, -1 when a button or nothing is selected
 	int m_iDragHud;
 	bool m_bSnapX;      // the dragged HUD block sits on the centre line
@@ -759,6 +888,7 @@ CCzmTouchEditor::CCzmTouchEditor() : CMenuFramework( "CzmTouchEditor" )
 	for( int i = 0; i < HUD_BLOCKS; i++ )
 		m_hud[i] = HudDefault( i );
 	m_iHudStyle = m_iRadarStyle = 0;
+	m_iMsgStyle = CzmHud::MSG_CZM;
 	m_iHudSelected = m_iDragHud = -1;
 	m_bSnapX = false;
 	m_flSnapY = -1.0f;
@@ -856,7 +986,7 @@ void CCzmTouchEditor::Load( int scheme, bool fromPreset )
 	// the default layout brings the default HUD places; otherwise unsaved HUD changes go too
 	if( fromPreset )
 		CZM_TouchResetHud();
-	ReadHud( m_hud, &m_iHudStyle, &m_iRadarStyle );
+	ReadHud( m_hud, &m_iHudStyle, &m_iRadarStyle, &m_iMsgStyle );
 
 	m_iSelected = m_iHudSelected = -1;
 	m_bDirty = false;
@@ -881,7 +1011,7 @@ void CCzmTouchEditor::Apply( void )
 
 	EngFuncs::ClientCmd( true, "alias czm_more czm_more_show\n" );
 	CZM_SaveTouchConfig();
-	WriteHud( m_hud, m_iHudStyle, m_iRadarStyle );
+	WriteHud( m_hud, m_iHudStyle, m_iRadarStyle, m_iMsgStyle );
 	m_bDirty = false;
 	Toast( "Сохранено", "Saved" );
 }
@@ -960,6 +1090,10 @@ CzmHud::Rect CCzmTouchEditor::HudLayout( int kind ) const
 
 	if( kind == CzmHud::RADAR )
 		return CzmHud::RadarLayout( W, H, b.x, b.y, b.scale, b.opacity );
+	if( kind == CzmHud::CHAT )
+		return CzmHud::ChatLayout( W, H, b.x, b.y, b.scale, b.opacity, ChatLineHeight( H ));
+	if( kind == CzmHud::MESSAGES )
+		return CzmHud::MessageFrame( W, H, b.x, b.y, b.scale, b.opacity );
 	return CzmHud::Layout( kind, m_iHudStyle, W, H, b.x, b.y, b.scale, b.opacity, (int)strlen( CzmHud::samples[kind] ));
 }
 
@@ -969,16 +1103,28 @@ CzmRect CCzmTouchEditor::HudRect( int kind ) const
 	return CZM_Rect( p.x, p.y, p.w, p.h );
 }
 
+CzmRect CCzmTouchEditor::HudGrab( int kind ) const
+{
+	CzmRect r = HudRect( kind );
+
+	if( kind == CzmHud::MESSAGES )
+	{
+		int w = H * 0.56f, h = H * 0.08f;
+		return CZM_Rect( r.x + ( r.w - w ) / 2, r.y + ( r.h - h ) / 2, w, h );
+	}
+	return r;
+}
+
 int CCzmTouchEditor::HudAt( int x, int y ) const
 {
 	// the selected block first, it is drawn with a frame on top
-	if( m_iHudSelected >= 0 && ( !m_hud[m_iHudSelected].hidden || m_bShowHidden ) && HudRect( m_iHudSelected ).Grown( H / 100 ).Contains( x, y ))
+	if( m_iHudSelected >= 0 && ( !m_hud[m_iHudSelected].hidden || m_bShowHidden ) && HudGrab( m_iHudSelected ).Grown( H / 100 ).Contains( x, y ))
 		return m_iHudSelected;
 	for( int i = HUD_BLOCKS - 1; i >= 0; i-- )
 	{
 		if( m_hud[i].hidden && !m_bShowHidden )
 			continue;
-		if( HudRect( i ).Grown( H / 100 ).Contains( x, y ))
+		if( HudGrab( i ).Grown( H / 100 ).Contains( x, y ))
 			return i;
 	}
 	return -1;
@@ -1007,7 +1153,8 @@ void CCzmTouchEditor::FindConflicts( void )
 	{
 		CzmHud::Rect p = HudLayout( i );
 
-		if( m_hud[i].hidden )
+		// the frame of server messages is an area, not a control: it may cover buttons
+		if( m_hud[i].hidden || i == CzmHud::MESSAGES )
 			continue;
 		// the round radars are circles, the tactical one is a square
 		if( i == CzmHud::RADAR && m_iRadarStyle != CzmHud::RADAR_TACTICAL )
@@ -1490,9 +1637,11 @@ void CCzmTouchEditor::Activate( int hit )
 
 	if( hit >= HIT_HUD_STYLE && hit < HIT_HUD_STYLE + HUD_STYLES && m_iHudSelected >= 0 )
 	{
-		// the radar has its own looks, the text blocks share one style, like in the match
+		// the radar has its own looks, the chat and server messages share theirs, the text blocks one style
 		if( m_iHudSelected == CzmHud::RADAR )
 			m_iRadarStyle = hit - HIT_HUD_STYLE;
+		else if( m_iHudSelected == CzmHud::CHAT || m_iHudSelected == CzmHud::MESSAGES )
+			m_iMsgStyle = hit - HIT_HUD_STYLE;
 		else
 			m_iHudStyle = hit - HIT_HUD_STYLE;
 		m_bDirty = true;
@@ -1804,8 +1953,8 @@ bool CCzmTouchEditor::MouseMove( int x, int y )
 		m_flSnapY = -1.0f;
 		for( int i = 0; i < HUD_BLOCKS; i++ )
 		{
-			// rows are for the text blocks, the radar only sticks to the centre
-			if( i == m_iDragHud || i == CzmHud::RADAR || m_iDragHud == CzmHud::RADAR || m_hud[i].hidden )
+			// rows are for the text blocks, the others only stick to the centre
+			if( i == m_iDragHud || i >= CzmHud::COUNT || m_iDragHud >= CzmHud::COUNT || m_hud[i].hidden )
 				continue;
 			if( fabsf( ny - m_hud[i].y ) < 0.015f )
 			{
@@ -1854,13 +2003,42 @@ void CCzmTouchEditor::Char( int key )
 drawing
 =================
 */
+// the frame of server messages: a dashed border, two sample texts and its label in the middle
+void CCzmTouchEditor::DrawMessageFrame( const CzmRect &r, float opacity, bool selected )
+{
+	HFont font = CZM_Font( CZMF_SMALL );
+	HFont label = CZM_Font( CZMF_TILE_STATUS );
+	const unsigned int color = selected ? PackRGBA( 239, 68, 68, 255 ) : CZM_White( 120 );
+	int t = Q_max( 2, (int)( H * 0.004f )), dash = H * 0.03f;
+	CzmRect chip = HudGrab( CzmHud::MESSAGES );
+
+	for( int x = r.x; x < r.x + r.w; x += dash * 2 )
+	{
+		UI_FillRect( x, r.y, Q_min( dash, r.x + r.w - x ), t, color );
+		UI_FillRect( x, r.y + r.h - t, Q_min( dash, r.x + r.w - x ), t, color );
+	}
+	for( int y = r.y; y < r.y + r.h; y += dash * 2 )
+	{
+		UI_FillRect( r.x, y, t, Q_min( dash, r.y + r.h - y ), color );
+		UI_FillRect( r.x + r.w - t, y, t, Q_min( dash, r.y + r.h - y ), color );
+	}
+
+	DrawServerSample( m_iMsgStyle, CZM_Rect( r.x, r.y + H * 0.13f, r.w, r.h - H * 0.13f ), CZM_FontHeight( font ) + 6, opacity, font );
+
+	CZM_DrawPill( UI_DIR "button_secondary.png", chip.x, chip.y, chip.w, chip.h, selected ? PackRGBA( 255, 170, 170, 255 ) : CZM_White( 225 ));
+	CZM_DrawText( label, chip.x, chip.y + ( chip.h - CZM_FontHeight( label )) / 2, chip.w, HudName( CzmHud::MESSAGES ),
+		selected ? PackRGBA( 255, 140, 140, 255 ) : CZM_White(), QM_CENTER );
+}
+
 void CCzmTouchEditor::DrawHud( void )
 {
 	CzmMenuHudPainter painter;
 	int frame = Q_max( 2, (int)( H * 0.004f ));
 
-	for( int i = 0; i < HUD_BLOCKS; i++ )
+	// the frame of server messages lies under everything, the blocks over it
+	for( int n = 0; n < HUD_BLOCKS; n++ )
 	{
+		const int i = n == 0 ? CzmHud::MESSAGES : n - 1;
 		CzmHud::Rect p = HudLayout( i );
 		CzmRect r = CZM_Rect( p.x, p.y, p.w, p.h );
 		bool selected = i == m_iHudSelected, conflict = m_conflict[i] >= 0, hidden = m_hud[i].hidden;
@@ -1870,6 +2048,12 @@ void CCzmTouchEditor::DrawHud( void )
 			continue;
 		if( hidden )
 			p.opacity *= 0.3f; // shown pale, like hidden buttons
+
+		if( i == CzmHud::MESSAGES )
+		{
+			DrawMessageFrame( r, p.opacity, selected );
+			continue;
+		}
 
 		if( round )
 		{
@@ -1884,6 +2068,8 @@ void CCzmTouchEditor::DrawHud( void )
 		// the block exactly as in the match, at the player's opacity
 		if( i == CzmHud::RADAR )
 			CZM_DrawRadarPreview( m_iRadarStyle, r.x, r.y, r.w, p.opacity );
+		else if( i == CzmHud::CHAT )
+			DrawChatSample( m_iMsgStyle, r.x, r.y + r.h, (int)ChatLineHeight( H ), p.opacity, CZM_Font( CZMF_SMALL ));
 		else
 			CzmHud::Paint( painter, i, m_iHudStyle, p, CzmHud::samples[i], false );
 
@@ -2079,9 +2265,9 @@ void CCzmTouchEditor::DrawPanel( void )
 void CCzmTouchEditor::DrawHudPanel( void )
 {
 	const int kind = m_iHudSelected;
-	const bool radar = kind == CzmHud::RADAR;
+	const bool radar = kind == CzmHud::RADAR, messages = kind == CzmHud::CHAT || kind == CzmHud::MESSAGES;
 	const CzmHudBlock &b = m_hud[kind];
-	const int current = radar ? m_iRadarStyle : m_iHudStyle;
+	const int current = radar ? m_iRadarStyle : messages ? m_iMsgStyle : m_iHudStyle;
 	CzmMenuHudPainter painter;
 	HFont titleFont = CZM_Font( CZMF_NICK );
 	HFont smallFont = CZM_Font( CZMF_SMALL );
@@ -2096,6 +2282,31 @@ void CCzmTouchEditor::DrawHudPanel( void )
 	// a small copy of the block in the chosen style, at full opacity
 	if( radar )
 		CZM_DrawRadarPreview( m_iRadarStyle, m_panel.x + pad, m_panel.y + H * 0.02f, icon, 1.0f );
+	else if( messages )
+	{
+		// a tiny chat: three lines as coloured bars in the chosen look
+		const int x = m_panel.x + pad, y = m_panel.y + H * 0.02f, bar = Q_max( 3, icon / 7 ), gap = bar;
+		const int names[3][3] = { { 153, 204, 255 }, { 255, 63, 63 }, { 153, 255, 153 } };
+		const float lengths[3][2] = { { 0.25f, 0.5f }, { 0.32f, 0.38f }, { 0.0f, 0.62f } };
+
+		UI_FillRect( x, y, miniW, icon, PackRGBA( 40, 52, 60, 255 ));
+		for( int k = 0; k < 3; k++ )
+		{
+			int ly = y + icon - ( 3 - k ) * ( bar + gap ) - gap / 2, lx = x + bar;
+			int nameW = miniW * lengths[k][0], textW = miniW * lengths[k][1];
+
+			if( m_iMsgStyle == CzmHud::MSG_CZM )
+			{
+				UI_FillRect( lx - bar / 2, ly - gap / 2, nameW + textW + bar, bar + gap, PackRGBA( 10, 14, 22, 200 ));
+				UI_FillRect( lx - bar / 2, ly - gap / 2, 2, bar + gap, PackRGBA( 224, 37, 50, 255 ));
+			}
+			else if( m_iMsgStyle == CzmHud::MSG_OUTLINE )
+				UI_FillRect( lx - 1, ly - 1, nameW + textW + 2, bar + 2, PackRGBA( 0, 0, 0, 255 ));
+			if( nameW )
+				UI_FillRect( lx, ly, nameW, bar, PackRGBA( names[k][0], names[k][1], names[k][2], 255 ));
+			UI_FillRect( lx + nameW, ly, textW, bar, k == 2 ? PackRGBA( 153, 255, 153, 255 ) : PackRGBA( 255, 178, 0, 255 ));
+		}
+	}
 	else
 	{
 		CzmHud::Rect mini = { (float)( m_panel.x + pad ), (float)( m_panel.y + H * 0.02f ), (float)miniW, (float)icon, 1.0f, 1.0f };
@@ -2110,9 +2321,12 @@ void CCzmTouchEditor::DrawHudPanel( void )
 	}
 	else
 	{
+		const bool ru = CZM_IsRussian();
 		CZM_DrawText( smallFont, textX, m_panel.y + H * 0.02f + CZM_FontHeight( titleFont ) + 2, textW,
-			radar ? ( CZM_IsRussian() ? "Свои игроки, бомба, заложники" : "Your team, the bomb, hostages" )
-			: ( CZM_IsRussian() ? "Интерфейс матча, один на все схемы" : "Match HUD, the same in every layout" ), PackRGBA( 140, 146, 156, 255 ));
+			radar ? ( ru ? "Свои игроки, бомба, заложники" : "Your team, the bomb, hostages" )
+			: kind == CzmHud::CHAT ? ( ru ? "Новые строки внизу, ширина — ползунком" : "New lines at the bottom, the width with the slider" )
+			: kind == CzmHud::MESSAGES ? ( ru ? "Тексты сервера останутся внутри рамки" : "Server texts stay inside the frame" )
+			: ( ru ? "Интерфейс матча, один на все схемы" : "Match HUD, the same in every layout" ), PackRGBA( 140, 146, 156, 255 ));
 	}
 
 	// hide or show the block, back to its usual place
@@ -2121,7 +2335,9 @@ void CCzmTouchEditor::DrawHudPanel( void )
 	CZM_DrawButton( UI_DIR "button_secondary.png", m_hudReset, CZM_IsRussian() ? "На место" : "Default", CZM_White(), IsPressed( HIT_HUD_RESET ), CZMF_TILE_STATUS );
 
 	snprintf( text, sizeof( text ), "%d%%", (int)( b.scale * 100.0f + 0.5f ));
-	DrawSlider( m_size, ( b.scale - minScale ) / ( maxScale - minScale ), CZM_IsRussian() ? "Размер" : "Size", text );
+	DrawSlider( m_size, ( b.scale - minScale ) / ( maxScale - minScale ),
+		kind == CzmHud::CHAT ? ( CZM_IsRussian() ? "Ширина" : "Width" ) : kind == CzmHud::MESSAGES ? ( CZM_IsRussian() ? "Размер рамки" : "Frame size" )
+		: ( CZM_IsRussian() ? "Размер" : "Size" ), text );
 	snprintf( text, sizeof( text ), "%d%%", (int)( b.opacity * 100.0f + 0.5f ));
 	DrawSlider( m_opacity, ( b.opacity - 0.25f ) / 0.75f, CZM_IsRussian() ? "Видимость" : "Opacity", text );
 
@@ -2129,7 +2345,7 @@ void CCzmTouchEditor::DrawHudPanel( void )
 	for( int i = 0; i < HUD_STYLES; i++ )
 	{
 		bool active = i == current;
-		const char *name = radar ? CZM_RadarStyleName( i ) : CZM_IsRussian() ? s_hudStyles[i].ru : s_hudStyles[i].en;
+		const char *name = radar ? CZM_RadarStyleName( i ) : messages ? CZM_MessageStyleName( i ) : CZM_IsRussian() ? s_hudStyles[i].ru : s_hudStyles[i].en;
 
 		CZM_DrawButton( active ? UI_DIR "button_primary.png" : UI_DIR "button_secondary.png", m_hudStyles[i],
 			name, active ? CZM_White() : PackRGBA( 200, 205, 215, 255 ), IsPressed( HIT_HUD_STYLE + i ), CZMF_TILE_STATUS );
