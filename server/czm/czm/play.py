@@ -40,6 +40,9 @@ def combine(bundle: Path, data_apk: Path, out: Path) -> None:
         names = set(source.namelist())
         if "BundleConfig.pb" not in names or PACK_MANIFEST not in names:
             raise BuildError("это не сборка для Google Play с пакетом gamedata")
+        # the pack index (assets.pb) lists folders; the game data goes to assets/bundled
+        if f"{PACK}/assets.pb" in names and b"assets/bundled" not in source.read(f"{PACK}/assets.pb"):
+            raise BuildError("в пакете gamedata нет папки assets/bundled (заглушка должна лежать в ней)")
         if any(n.startswith("base/assets/") and n.endswith(tuple(GAME_DATA)) for n in names):
             raise BuildError("игровые данные не должны лежать в основном модуле")
         check_game_data(data)

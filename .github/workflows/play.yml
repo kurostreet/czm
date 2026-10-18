@@ -61,7 +61,8 @@ jobs:
           with zipfile.ZipFile(sys.argv[1]) as z:
               names = z.namelist()
               assert "gamedata/manifest/AndroidManifest.xml" in names, "no gamedata asset pack"
-              assert "gamedata/assets/czm-gamedata-pending.txt" in names, "no placeholder"
+              assert "gamedata/assets/bundled/czm-gamedata-pending.txt" in names, "no placeholder"
+              assert b"assets/bundled" in z.read("gamedata/assets.pb"), "the pack index must list assets/bundled"
               assert not any("game-data" in n for n in names), "game data must not come from CI"
               base = sum(i.compress_size for i in z.infolist() if i.filename.startswith("base/"))
               print(f"base module {base // 1048576} MB compressed")

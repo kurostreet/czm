@@ -55,7 +55,8 @@ class PlayBundleTests(unittest.TestCase):
     def bundle(self, **extra) -> Path:
         entries = {"BundleConfig.pb": b"cfg", "base/manifest/AndroidManifest.xml": b"base",
                    "base/dex/classes.dex": b"dex", "base/assets/bundled/client-resources.zip": b"client",
-                   play.PACK_MANIFEST: b"pack", f"{play.PACK}/assets/czm-gamedata-pending.txt": b"placeholder",
+                   play.PACK_MANIFEST: b"pack", f"{play.PACK}/assets/bundled/czm-gamedata-pending.txt": b"placeholder",
+                   f"{play.PACK}/assets.pb": b"\n\n\n\x06assets\x12\x00\n\x12\n\x0eassets/bundled\x12\x00",
                    "META-INF/OLD.RSA": b"old signature", "META-INF/MANIFEST.MF": b"old manifest"}
         entries.update(extra)
         path = self.settings.incoming_dir / play.incoming_name(COMMIT)
@@ -70,7 +71,7 @@ class PlayBundleTests(unittest.TestCase):
             self.assertEqual(z.read(f"{play.PACK}/assets/bundled/game-data.zip"), DATA)
             self.assertEqual(z.getinfo(f"{play.PACK}/assets/bundled/game-data.zip").compress_type, zipfile.ZIP_STORED)
             self.assertEqual(z.read("base/dex/classes.dex"), b"dex")
-        self.assertNotIn(f"{play.PACK}/assets/czm-gamedata-pending.txt", names)
+        self.assertNotIn(f"{play.PACK}/assets/bundled/czm-gamedata-pending.txt", names)
         self.assertNotIn("META-INF/OLD.RSA", names)
         self.assertNotIn("META-INF/MANIFEST.MF", names)       # jarsigner writes a fresh one
         self.assertFalse(any(n.startswith("base/assets/bundled/game-data") for n in names))
@@ -85,6 +86,8 @@ class PlayBundleTests(unittest.TestCase):
             play.combine(bundle, apk, self.root / "a.aab")
         with self.assertRaises(BuildError):
             play.combine(self.bundle(**{"base/assets/bundled/game-data.zip": b"x"}), apk, self.root / "b.aab")
+        with self.assertRaises(BuildError):           # an index without assets/bundled: Play would not see the data
+            play.combine(self.bundle(**{f"{play.PACK}/assets.pb": b"\n\n\n\x06assets\x12\x00"}), apk, self.root / "c.aab")
 
     def test_pending_bundle_is_signed_kept_and_failures_stay_for_a_look(self):
         self.data_apk()

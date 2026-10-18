@@ -4,7 +4,7 @@ on:
   push:
     branches: [feature/mobile-launcher]
     # every build goes to the players: server code and texts alone do not make an update
-    paths-ignore: ['server/**', '.github/**', '**/*.md', 'czm/whatsnew.txt']
+    paths-ignore: ['server/**', '.github/**', '**/*.md', 'czm/whatsnew.txt', 'android/gamedata/**']
   pull_request:
   workflow_dispatch:
 
