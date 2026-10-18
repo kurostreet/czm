@@ -34,7 +34,7 @@
       newsTitle: 'Что нового', version: 'Версия', mail: 'Почта', privacy: 'Конфиденциальность',
       betaTitle: 'Бета-тест в Google Play', betaShort: 'Бета-тест',
       betaCount: 'подтвердили участие', betaCountNote: 'Данные Google Play Console, проверяются вручную',
-      betaLead: 'Помоги выпустить игру в Google Play: нужно 12 тестировщиков на 14 дней. Тестеры первыми получают версию из Google Play.',
+      betaLead: 'Набираем 50 тестировщиков с запасом! Google требует минимум 12 участников на 14 дней. Присоединяйся и играй.',
       beta1: 'Вступи в группу тестировщиков', beta1Note: 'Нужен аккаунт Google — тот же, что в Google Play на телефоне.', beta1Btn: 'Вступить',
       beta2: 'Прими приглашение', beta2Note: 'Откроется Google Play. Если приглашения нет, проверь шаг 1.', beta2Btn: 'Стать тестером',
       beta3: 'Установи и играй', beta3Note: 'Заходи в игру хотя бы пару раз в неделю: Google проверяет, что тест живой.', beta3Btn: 'Открыть в Google Play'
@@ -62,7 +62,7 @@
       newsTitle: 'What’s new', version: 'Version', mail: 'Email', privacy: 'Privacy',
       betaTitle: 'Google Play beta test', betaShort: 'Beta test',
       betaCount: 'confirmed testers', betaCountNote: 'Google Play Console data, checked manually',
-      betaLead: 'Help release the game on Google Play: it needs 12 testers for 14 days. Testers get the Google Play version first.',
+      betaLead: 'Our goal is 50 testers as a safety margin! Google requires at least 12 opted-in testers for 14 days. Join and play.',
       beta1: 'Join the testers group', beta1Note: 'You need a Google account, the same one as in Google Play on your phone.', beta1Btn: 'Join',
       beta2: 'Accept the invitation', beta2Note: 'Google Play opens. If there is no invitation, check step 1.', beta2Btn: 'Become a tester',
       beta3: 'Install and play', beta3Note: 'Play at least a couple of times a week: Google checks that the test is alive.', beta3Btn: 'Open in Google Play'
@@ -456,8 +456,8 @@
     countTo('downloads', $('sDownloads'), stats.downloads, instant);
     if ($('sBetaTesters') && typeof stats.play_beta_testers === 'number') {
       $('sBetaTesters').textContent = fmt(stats.play_beta_testers);
-      $('sBetaBar').style.width = Math.min(100, stats.play_beta_testers / 12 * 100) + '%';
-      $('sBetaTrack').setAttribute('aria-valuenow', String(Math.min(12, stats.play_beta_testers)));
+      $('sBetaBar').style.width = Math.min(100, stats.play_beta_testers / 50 * 100) + '%';
+      $('sBetaTrack').setAttribute('aria-valuenow', String(Math.min(50, stats.play_beta_testers)));
     }
     if (stats.size_mb) { $('sSize').textContent = fmt(stats.size_mb); $('dSize').textContent = fmt(stats.size_mb); }
     $('dVersion').textContent = stats.version ? T.version + ' ' + stats.version : '—';
