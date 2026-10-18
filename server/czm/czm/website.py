@@ -44,15 +44,32 @@ def record_download(conn: sqlite3.Connection, ip: str) -> bool:
     return added
 
 
+def set_play_beta_testers(conn: sqlite3.Connection, count: int) -> None:
+    """Record ONLY the opted-in count checked in Google Play Console, not button clicks."""
+    if not isinstance(count, int) or not 0 <= count <= 1000000:
+        raise ValueError("invalid Play Console tester count")
+    ensure_counters(conn)
+    for name, value in (("play_beta_testers", count), ("play_beta_checked_at", int(time.time()))):
+        conn.execute(
+            "INSERT INTO site_counters(name, value) VALUES (?, ?) "
+            "ON CONFLICT(name) DO UPDATE SET value = excluded.value",
+            (name, value),
+        )
+
+
 def stats(conn: sqlite3.Connection) -> dict:
     ensure_counters(conn)
     players = conn.execute("SELECT COUNT(*) FROM players").fetchone()[0]
     online = min(social.online_count(conn), players)
     release = service.latest_release(conn)
+    beta_checked = _counter(conn, "play_beta_checked_at")
     return {
         "online": online,
         "offline": max(0, players - online),
         "downloads": _counter(conn, "downloads_base") + _counter(conn, "downloads"),
+        # A public number is shown only after an owner entered the count from Play Console.
+        "play_beta_testers": _counter(conn, "play_beta_testers") if beta_checked else None,
+        "play_beta_checked_at": beta_checked,
         "version": release["version"] if release else "",
         "size_mb": round(release["size"] / 1048576) if release and release.get("size") else 0,
     }
