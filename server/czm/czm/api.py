@@ -456,28 +456,9 @@ async def update(request: Request, code: int = 0):
 @download_router.api_route("/download", methods=["GET", "HEAD"])
 @download_router.api_route("/download/CounterZombieMobile.apk", methods=["GET", "HEAD"])
 async def download_latest(request: Request):
-    """One shareable link follows the published full APK, including rollbacks."""
-    def available(conn):
-        release = service.latest_release(conn)
-        if not release:
-            return None
-        name = release["url"].rsplit("/", 1)[-1]
-        path = get_settings().apk_dir / name
-        if path.is_file() and release["size"] > 0 and path.stat().st_size == release["size"]:
-            return release["url"]
-        return None
-
-    url = await in_db(available)
-    headers = {"Cache-Control": "no-store"}
-    if url and request.method == "GET":
-        try:
-            await in_db(website.record_download, client_ip(request))
-        except Exception:
-            log.warning("download not counted")  # the download itself goes on
-    if not url:
-        return JSONResponse({"error": "unavailable"}, status_code=503,
-                            headers={**headers, "Retry-After": "60"})
-    return RedirectResponse(url, status_code=307, headers=headers)
+    """Legacy website APK entry point; installation is now Google Play only."""
+    return JSONResponse({"error": "google_play_only", "message": "Join the Google Play beta"},
+                        status_code=410, headers={"Cache-Control": "no-store"})
 
 
 class SettingsIn(BaseModel):

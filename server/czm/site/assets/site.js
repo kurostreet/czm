@@ -16,7 +16,7 @@
       description: 'Мобильный зомби-шутер: орды зомби, серверы до 32 игроков, свои кнопки, друзья и живой чат. Скачай бесплатно для Android.',
       langLabel: 'Язык', themeLabel: 'День или ночь', share: 'Поделиться', copied: 'Ссылка скопирована', close: 'Закрыть', prev: 'Назад', next: 'Дальше',
       tagline: 'Мобильный зомби-шутер: орды зомби, серверы до 32 игроков, свои кнопки, друзья и живой чат.',
-      downloadCta: 'Скачать игру', statsLabel: 'Статистика', online: 'в игре', offline: 'не в сети', downloads: 'скачиваний', mb: 'МБ',
+      downloadCta: 'Принять участие в бета-тесте', statsLabel: 'Статистика', online: 'в игре', offline: 'не в сети', downloads: 'скачиваний', mb: 'МБ',
       shotsTitle: 'Кадры',
       shots: ['Бой на базе', 'Отряд у ворот', 'Зомби в храме', 'Вертолёт и орда', 'Главное меню', 'Серверы', 'Друзья', 'Управление', 'Профиль, аватары и спреи'],
       featTitle: 'Возможности',
@@ -30,7 +30,6 @@
       chatTitle: 'Чат игры', chatShort: 'Чат', chatOpen: 'Открыть чат', chatLock: 'Писать можно только в игре',
       roomsLabel: 'Комнаты чата', chatEmpty: 'В этой комнате пока тихо', chatLoading: 'Загружаем чат…',
       chatError: 'Чат сейчас не отвечает, попробуем ещё раз через несколько секунд', all: 'Все',
-      dlTitle: 'Заходи в игру', dlText: 'Бесплатно. Ссылка всегда ведёт на свежую версию, дальше игра обновляется сама.', dlButton: 'Скачать APK',
       newsTitle: 'Что нового', version: 'Версия', mail: 'Почта', privacy: 'Конфиденциальность',
       betaTitle: 'Бета-тест в Google Play', betaShort: 'Бета-тест',
       betaCount: 'подтвердили участие в Google Play', betaCountNote: 'По данным Google Play Console, обновляется вручную',
@@ -46,7 +45,7 @@
       description: 'A mobile zombie shooter: zombie hordes, servers for up to 32 players, your own buttons, friends and a live chat. Free for Android.',
       langLabel: 'Language', themeLabel: 'Day or night', share: 'Share', copied: 'Link copied', close: 'Close', prev: 'Previous', next: 'Next',
       tagline: 'A mobile zombie shooter: zombie hordes, servers for up to 32 players, your own buttons, friends and a live chat.',
-      downloadCta: 'Get the game', statsLabel: 'Statistics', online: 'playing', offline: 'offline', downloads: 'downloads', mb: 'MB',
+      downloadCta: 'Join the beta test', statsLabel: 'Statistics', online: 'playing', offline: 'offline', downloads: 'downloads', mb: 'MB',
       shotsTitle: 'Shots',
       shots: ['Fight at the base', 'Squad at the gate', 'Zombies in the temple', 'Helicopter and the horde', 'Main menu', 'Servers', 'Friends', 'Controls', 'Profile, avatars and sprays'],
       featTitle: 'Features',
@@ -60,7 +59,6 @@
       chatTitle: 'Game chat', chatShort: 'Chat', chatOpen: 'Open chat', chatLock: 'You can only write in the game',
       roomsLabel: 'Chat rooms', chatEmpty: 'Quiet in this room so far', chatLoading: 'Loading the chat…',
       chatError: 'The chat is not answering, trying again in a few seconds', all: 'All',
-      dlTitle: 'Join the game', dlText: 'Free. The link always leads to the latest version, then the game updates itself.', dlButton: 'Download APK',
       newsTitle: 'What’s new', version: 'Version', mail: 'Email', privacy: 'Privacy',
       betaTitle: 'Google Play beta test', betaShort: 'Beta test',
       betaCount: 'confirmed Google Play testers', betaCountNote: 'From Google Play Console, manually updated',
@@ -384,10 +382,7 @@
   });
 
   /* ---------- Google Play: store buttons and the beta test ---------- */
-  if (root.getAttribute('data-play-public') === '1') {
-    all('[data-play-public]').forEach(function (el) { el.hidden = false; });
-  }
-  var beta = $('beta');
+var beta = $('beta');
   var betaLinks = beta ? { group: beta.getAttribute('data-group') || '', optin: beta.getAttribute('data-optin') || '',
     store: beta.getAttribute('data-store') || '' } : {};
   function paintBeta() {
@@ -440,7 +435,7 @@
   });
 
   /* ---------- live numbers ---------- */
-  var stats = null, shown = { online: null, offline: null, downloads: null };
+  var stats = null, shown = { online: null, offline: null };
   function fmt(n) { return Number(n).toLocaleString(lang === 'ru' ? 'ru-RU' : 'en-US'); }
   function countTo(key, el, target, instant) {
     var from = shown[key];
@@ -457,7 +452,6 @@
     if (!stats) return;
     countTo('online', $('sOnline'), stats.online, instant);
     countTo('offline', $('sOffline'), stats.offline, instant);
-    countTo('downloads', $('sDownloads'), stats.downloads, instant);
     if ($('sBetaTesters')) {
       var testers = stats.play_beta_testers;
       $('sBetaTesters').textContent = typeof testers === 'number' ? fmt(testers) : '—';
@@ -467,8 +461,6 @@
       $('betaCountUpdated').textContent = T.betaCountNote + (checked ? ' · ' + new Date(checked * 1000).toLocaleString(lang === 'ru' ? 'ru-RU' : 'en-GB') : '');
     }
     paintBeta();
-    if (stats.size_mb) { $('sSize').textContent = fmt(stats.size_mb); $('dSize').textContent = fmt(stats.size_mb); }
-    $('dVersion').textContent = stats.version ? T.version + ' ' + stats.version : '—';
   }
   function loadStats() {
     if (doc.hidden) return;
@@ -476,7 +468,7 @@
       if (!d || typeof d.online !== 'number') return;
       var first = !stats;
       stats = d;
-      if (first) { shown.online = 0; shown.offline = 0; shown.downloads = 0; }
+      if (first) { shown.online = 0; shown.offline = 0; }
       renderStats(false);
     }).catch(function () { /* the numbers stay as they are */ });
   }
