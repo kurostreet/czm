@@ -86,6 +86,11 @@ header{position:sticky;top:0;z-index:30;background:var(--glass);-webkit-backdrop
 .btn-game .h-game{font-size:19px}
 .btn-ghost{display:inline-flex;align-items:center;min-height:52px;padding:0 20px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.24);color:#fff;text-decoration:none;font-weight:600;font-size:15px}
 .btn-ghost:hover{color:#fff;background:rgba(255,255,255,.14)}
+/* The only installation CTA is now beta signup; fit its label on narrow phones. */
+#beta{scroll-margin-top:86px}
+.beta-hero-cta{max-width:100%;min-height:62px}
+.beta-hero-cta .h-game{font-size:clamp(14px,3.8vw,19px);line-height:1.14;white-space:normal}
+@media(max-width:400px){.beta-hero-cta{width:100%;padding-right:14px}.beta-hero-cta .h-game{font-size:15px}}
 /* stats */
 .stats{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;margin-top:-16px;position:relative;z-index:2;padding-bottom:2px}
 .stats::-webkit-scrollbar{display:none}
@@ -135,18 +140,6 @@ header{position:sticky;top:0;z-index:30;background:var(--glass);-webkit-backdrop
 .chat-foot span{font-size:13px;color:var(--muted);margin-right:auto}
 .btn-red{min-height:44px;padding:0 18px;border-radius:999px;border:0;cursor:pointer;background:var(--red);color:#fff;font:600 14px "CZM Text"}
 .empty{margin:auto;padding:30px 16px;text-align:center;color:var(--muted)}
-/* download */
-.dl{position:relative;overflow:hidden;border-radius:20px;border:1px solid var(--line);background:var(--surface)}
-.dl .bgp{position:absolute;inset:0;background:url(/assets/art-3.webp?v=__V__) center/cover;opacity:.3}
-.dl .fade{position:absolute;inset:0;background:linear-gradient(90deg,var(--surface) 38%,transparent)}
-.dl .in{position:relative;padding:18px;display:flex;flex-wrap:wrap;gap:14px 22px;align-items:center}
-.dl .txt{flex:999 1 280px;min-width:0}
-.dl p{margin:6px 0 0;color:var(--muted);font-size:14px;line-height:1.5}
-.dl .btn-game{flex:none;white-space:nowrap}
-@media (max-width:560px){.dl .btn-game{flex:1 1 100%;justify-content:center;padding-right:30px}}
-.dl .btn-game .h-game{font-size:18px}
-.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
-.chips>span{font-size:13px;padding:5px 10px;border-radius:9px;background:var(--surface2);border:1px solid var(--line)}
 /* news */
 .news{border-left:2px solid var(--red);padding-left:14px;display:flex;flex-direction:column;gap:12px}
 .news .d{font-size:13px;color:var(--gold)}
@@ -236,11 +229,10 @@ footer .h-game{font-size:14px;color:var(--text);margin-right:auto}
 <h1 style="margin:0"><img class="title" src="/assets/title.png?v=__V__" alt="Counter Zombie Mobile · 32 players" width="1100" height="199"></h1>
 <p class="tagline" data-i18n="tagline">Мобильный зомби-шутер: орды зомби, серверы до 32 игроков, свои кнопки, друзья и живой чат.</p>
 <div class="ctas">
-<a class="btn-game" href="/download" data-dl>
-<span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M6 20h12"/></svg></span>
-<span class="h-game" data-i18n="downloadCta">Скачать игру</span>
+<a class="btn-game beta-hero-cta" href="#beta">
+<span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3.5 20v-1a5.5 5.5 0 0 1 11 0v1"/><path d="M19 8v6m-3-3h6"/></svg></span>
+<span class="h-game" data-i18n="downloadCta">Принять участие в бета-тесте</span>
 </a>
-<a class="btn-ghost" href="https://play.google.com/store/apps/details?id=dev.gaming.czm" rel="noopener" data-play-public hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M5 3.5v17a.8.8 0 0 0 1.2.7l14.6-8.5a.8.8 0 0 0 0-1.4L6.2 2.8A.8.8 0 0 0 5 3.5z"/></svg>&nbsp;Google Play</a>
 <a class="btn-ghost" href="https://t.me/counter_zombie_mobile" rel="noopener">Telegram</a>
 </div>
 </div>
@@ -250,10 +242,27 @@ footer .h-game{font-size:14px;color:var(--text);margin-right:auto}
 <div class="stats" role="list" data-i18n-aria="statsLabel" aria-label="Статистика">
 <div class="stat now" role="listitem"><span class="dot green pulse"></span><div><b id="sOnline">—</b><small data-i18n="online">в игре</small></div></div>
 <div class="stat" role="listitem"><div><b id="sOffline">—</b><small data-i18n="offline">не в сети</small></div></div>
-<div class="stat" role="listitem"><div><b id="sDownloads">—</b><small data-i18n="downloads">скачиваний</small></div></div>
-<div class="stat" role="listitem"><div><b><span id="sSize">—</span> <span data-i18n="mb">МБ</span></b><small>Android 5.0+</small></div></div>
 </div>
 </div>
+
+<!-- Official Google Play beta recruitment. Main hero links here; no APK downloads. -->
+<section class="sec wrap" id="beta" hidden
+  data-group="https://groups.google.com/g/counter-zombie-mobile-beta"
+  data-optin="https://play.google.com/apps/testing/dev.gaming.czm"
+  data-store="https://play.google.com/store/apps/details?id=dev.gaming.czm">
+<div class="card beta">
+<h2 class="h-game" data-i18n="betaTitle">Бета-тест в Google Play</h2>
+<p class="beta-status" id="betaStatus" role="status" data-i18n="betaPending">Google Play проверяет игру. Пока можно вступить в группу; шаги 2 и 3 откроются после одобрения.</p>
+<div class="beta-progress"><strong><span id="sBetaTesters">0</span> / 50</strong><span data-i18n="betaCount">подтвердили участие в Google Play</span><small id="betaCountUpdated" data-i18n="betaCountNote">По данным Google Play Console, обновляется вручную</small></div>
+<div class="beta-track" id="sBetaTrack" role="progressbar" data-i18n-aria="betaProgress" aria-label="Подтверждённые тестировщики" aria-valuemin="0" aria-valuemax="50" aria-valuenow="0"><div id="sBetaBar"></div></div>
+<p class="lead" data-i18n="betaLead">Набираем 50 тестировщиков с запасом! Google требует минимум 12 участников на 14 дней. Присоединяйся и играй.</p>
+<ol class="steps">
+<li class="step" data-step="1"><span class="n">1</span><span class="b"><b data-i18n="beta1">Вступи в группу тестировщиков</b><small data-i18n="beta1Note">Нужен аккаунт Google — тот же, что в Google Play на телефоне.</small></span><a class="btn-red" data-beta="group" target="_blank" rel="noopener" data-i18n="beta1Btn">Вступить</a></li>
+<li class="step locked" data-step="2"><span class="n">2</span><span class="b"><b data-i18n="beta2">Прими приглашение</b><small data-i18n="beta2Note">Откроется Google Play. Если приглашения нет, проверь шаг 1.</small></span><a class="btn-red" data-beta="optin" aria-disabled="true" tabindex="-1" target="_blank" rel="noopener" data-i18n="beta2Btn">Стать тестером</a></li>
+<li class="step locked" data-step="3"><span class="n">3</span><span class="b"><b data-i18n="beta3">Установи и играй</b><small data-i18n="beta3Note">Заходи в игру хотя бы пару раз в неделю: Google проверяет, что тест живой.</small></span><a class="btn-red" data-beta="store" aria-disabled="true" tabindex="-1" target="_blank" rel="noopener" data-i18n="beta3Btn">Открыть в Google Play</a></li>
+</ol>
+</div>
+</section>
 
 <section class="sec" id="shots" data-i18n-aria="shotsTitle" aria-label="Кадры">
 <div class="wrap"><h2 class="h-game" data-i18n="shotsTitle">Кадры</h2></div>
@@ -273,43 +282,6 @@ footer .h-game{font-size:14px;color:var(--text);margin-right:auto}
 <div class="chat-head"><h2 class="h-game" data-i18n="chatTitle">Чат игры</h2><span class="live"><span class="dot pulse"></span>LIVE</span></div>
 <div class="preview" id="preview"><div class="empty" data-i18n="chatLoading">Загружаем чат…</div></div>
 <div class="chat-foot"><span data-i18n="chatLock">Писать можно только в игре</span><button class="btn-red" data-open-chat aria-controls="sheet" aria-expanded="false" data-i18n="chatOpen">Открыть чат</button></div>
-</div>
-</section>
-
-<section class="sec wrap" id="download">
-<div class="dl">
-<div class="bgp" aria-hidden="true"></div><div class="fade" aria-hidden="true"></div>
-<div class="in">
-<div class="txt">
-<h2 class="h-game" style="margin:0" data-i18n="dlTitle">Заходи в игру</h2>
-<p data-i18n="dlText">Бесплатно. Ссылка всегда ведёт на свежую версию, дальше игра обновляется сама.</p>
-<div class="chips"><span id="dVersion">—</span><span><b id="dSize" style="font-weight:600">—</b> <i data-i18n="mb" style="font-style:normal">МБ</i></span><span>Android 5.0+</span></div>
-</div>
-<a class="btn-game" href="/download" data-dl>
-<span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M6 20h12"/></svg></span>
-<span class="h-game" data-i18n="dlButton">Скачать APK</span>
-</a>
-<a class="btn-ghost dl-play" href="https://play.google.com/store/apps/details?id=dev.gaming.czm" rel="noopener" data-play-public hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M5 3.5v17a.8.8 0 0 0 1.2.7l14.6-8.5a.8.8 0 0 0 0-1.4L6.2 2.8A.8.8 0 0 0 5 3.5z"/></svg>&nbsp;Google Play</a>
-</div>
-</div>
-</section>
-
-<!-- Google Play beta test. Shown when data-group has the Google Group link; data-play-public="1" on <html> shows the store buttons. -->
-<section class="sec wrap" id="beta" hidden
-  data-group="https://groups.google.com/g/counter-zombie-mobile-beta"
-  data-optin="https://play.google.com/apps/testing/dev.gaming.czm"
-  data-store="https://play.google.com/store/apps/details?id=dev.gaming.czm">
-<div class="card beta">
-<h2 class="h-game" data-i18n="betaTitle">Бета-тест в Google Play</h2>
-<p class="beta-status" id="betaStatus" role="status" data-i18n="betaPending">Google Play проверяет игру. Пока можно вступить в группу; шаги 2 и 3 откроются после одобрения.</p>
-<div class="beta-progress"><strong><span id="sBetaTesters">0</span> / 50</strong><span data-i18n="betaCount">подтвердили участие в Google Play</span><small id="betaCountUpdated" data-i18n="betaCountNote">По данным Google Play Console, обновляется вручную</small></div>
-<div class="beta-track" id="sBetaTrack" role="progressbar" data-i18n-aria="betaProgress" aria-label="Подтверждённые тестировщики" aria-valuemin="0" aria-valuemax="50" aria-valuenow="0"><div id="sBetaBar"></div></div>
-<p class="lead" data-i18n="betaLead">Набираем 50 тестировщиков с запасом! Google требует минимум 12 участников на 14 дней. Присоединяйся и играй.</p>
-<ol class="steps">
-<li class="step" data-step="1"><span class="n">1</span><span class="b"><b data-i18n="beta1">Вступи в группу тестировщиков</b><small data-i18n="beta1Note">Нужен аккаунт Google — тот же, что в Google Play на телефоне.</small></span><a class="btn-red" data-beta="group" target="_blank" rel="noopener" data-i18n="beta1Btn">Вступить</a></li>
-<li class="step locked" data-step="2"><span class="n">2</span><span class="b"><b data-i18n="beta2">Прими приглашение</b><small data-i18n="beta2Note">Откроется Google Play. Если приглашения нет, проверь шаг 1.</small></span><a class="btn-red" data-beta="optin" aria-disabled="true" tabindex="-1" target="_blank" rel="noopener" data-i18n="beta2Btn">Стать тестером</a></li>
-<li class="step locked" data-step="3"><span class="n">3</span><span class="b"><b data-i18n="beta3">Установи и играй</b><small data-i18n="beta3Note">Заходи в игру хотя бы пару раз в неделю: Google проверяет, что тест живой.</small></span><a class="btn-red" data-beta="store" aria-disabled="true" tabindex="-1" target="_blank" rel="noopener" data-i18n="beta3Btn">Открыть в Google Play</a></li>
-</ol>
 </div>
 </section>
 
