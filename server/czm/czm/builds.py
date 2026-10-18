@@ -16,7 +16,7 @@ import time
 import jwt
 from fastapi import APIRouter, Header, HTTPException, Request
 
-from . import service
+from . import play, service
 from .config import get_settings
 from .db import db
 
@@ -32,8 +32,8 @@ COMMIT = re.compile(r"^[0-9a-f]{40}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
-def check_token(token: str) -> dict:
-    """The claims of a valid token of our build workflow, or HTTPException 403."""
+def check_token(token: str, workflow_file: str | None = None) -> dict:
+    """The claims of a valid token of our build workflow (or of play.yml), or HTTPException 403."""
     settings = get_settings()
     try:
         key = _jwks.get_signing_key_from_jwt(token)
@@ -51,7 +51,7 @@ def check_token(token: str) -> dict:
         if str(claims.get(name, "")) != value:
             log.warning("build token for another %s: %s", name, claims.get(name))
             raise HTTPException(403, {"error": "token"})
-    workflow = f"{settings.build_repository}/{settings.build_workflow}@{settings.build_ref}"
+    workflow = f"{settings.build_repository}/{workflow_file or settings.build_workflow}@{settings.build_ref}"
     if claims.get("workflow_ref") != workflow or claims.get("event_name") not in ("push", "workflow_dispatch"):
         log.warning("build token from workflow %s (%s)", claims.get("workflow_ref"), claims.get("event_name"))
         raise HTTPException(403, {"error": "token"})
@@ -123,3 +123,45 @@ async def receive_build(request: Request, version: str, code: int, sha256: str, 
         trigger_assembly()
         log.info("build %s (%s, %d MB) received", version, commit[:7], size // 1048576)
         return {"ok": True, "build": build_id, "status": "new"}
+
+
+@router.post("/play-builds")
+async def receive_play_build(request: Request, version: str, code: int, sha256: str, commit: str,
+                             authorization: str | None = Header(default=None)):
+    """An unsigned bundle for Google Play from play.yml; `czm.cli assemble` adds the game data and signs it."""
+    settings = get_settings()
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(401, {"error": "token"})
+    claims = await asyncio.to_thread(check_token, authorization[7:].strip(), settings.play_workflow)
+    if not VERSION.match(version) or not COMMIT.match(commit) or not SHA256.match(sha256) or not 0 < code < 2**31:
+        raise HTTPException(400, {"error": "request"})
+    if claims.get("sha") != commit:
+        raise HTTPException(403, {"error": "commit"})
+    if (settings.play_dir / play.bundle_name(version)).is_file():
+        return {"ok": True, "status": "done"}                     # a retry of the workflow
+    if _busy.locked():
+        raise HTTPException(409, {"error": "busy"})
+    async with _busy:
+        folder = settings.incoming_dir
+        folder.mkdir(parents=True, exist_ok=True)
+        name = play.incoming_name(commit)
+        part = folder / (name + ".part")
+        limit = settings.build_max_mb * 1024 * 1024
+        digest, size = hashlib.sha256(), 0
+        try:
+            with part.open("wb") as f:
+                async for chunk in request.stream():
+                    size += len(chunk)
+                    if size > limit:
+                        raise HTTPException(413, {"error": "size"})
+                    digest.update(chunk)
+                    f.write(chunk)
+            if size == 0 or digest.hexdigest() != sha256:
+                raise HTTPException(400, {"error": "sha256"})
+            (folder / name).with_suffix(".version").write_text(version + "\n")
+            part.replace(folder / name)
+        finally:
+            part.unlink(missing_ok=True)
+        trigger_assembly()
+        log.info("Google Play bundle %s (%s, %d MB) received", version, commit[:7], size // 1048576)
+        return {"ok": True, "status": "new"}

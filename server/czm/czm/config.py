@@ -35,6 +35,13 @@ class Settings(BaseSettings):
     apksigner: str = "apksigner"
     keystore: str = ""                          # default: <data_dir>/signing/debug.keystore (public upstream debug key)
 
+    # Google Play: play.yml (started by hand) sends an unsigned bundle, the server adds the game
+    # data and signs it with the upload key; the owner uploads the result to Play Console
+    play_workflow: str = ".github/workflows/play.yml"
+    play_key_alias: str = "upload"
+    play_keep: int = 2                          # signed bundles kept on disk
+    jarsigner: str = "jarsigner"
+
     # chat rules
     rooms: str = "global,ru,en"
     message_max_chars: int = 200
@@ -101,6 +108,14 @@ class Settings(BaseSettings):
     @property
     def keystore_file(self) -> Path:
         return Path(self.keystore) if self.keystore else self.data_dir / "signing" / "debug.keystore"
+
+    @property
+    def play_dir(self) -> Path:
+        return self.apk_dir / "play"            # served at /dl/play/
+
+    @property
+    def play_keystore_file(self) -> Path:
+        return self.data_dir / "signing" / "play-upload.p12"
 
     @property
     def serverlist_file(self) -> Path:

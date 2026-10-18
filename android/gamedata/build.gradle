@@ -1,0 +1,13 @@
+// Google Play only: the game data (assets/bundled/game-data.*) is too big for the base module
+// (200 MB limit), so it travels in this install-time asset pack. Play installs it together with
+// the game and the app reads it through the same AssetManager paths as in the APK from the site.
+// The data never goes to GitHub: CI ships only the placeholder, the game server puts the real
+// files into the bundle and signs it (server/czm/czm/play.py).
+apply plugin: "com.android.asset-pack"
+
+assetPack {
+	packName = "gamedata"
+	dynamicDelivery {
+		deliveryType = "install-time"
+	}
+}

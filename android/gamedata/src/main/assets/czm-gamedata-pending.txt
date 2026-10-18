@@ -1,0 +1,1 @@
+The game server replaces this file with assets/bundled/game-data.zip and .json (server/czm/czm/play.py).

@@ -1,0 +1,97 @@
+name: Counter Zombie Mobile for Google Play
+
+# Started by hand (Actions → this workflow → Run workflow). Builds the Android App Bundle of the
+# open part of the game; the game server adds the game data into the asset pack `gamedata`,
+# signs the bundle with the upload key and keeps it at https://counter-zombie.ru/dl/play/.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write   # the game server checks this token before it takes the bundle
+
+concurrency:
+  group: play-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bundle:
+    name: Build the Google Play bundle
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - name: Checkout pinned sources and dependencies
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: 21
+          distribution: temurin
+          cache: gradle
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Install Android build tools
+        run: sdkmanager --install 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
+      - name: Apply engine patches
+        run: python3 scripts/apply_engine_patches.py
+      - name: Build the bundle
+        working-directory: android
+        run: ./gradlew --no-daemon bundleGooglePlayRelease
+      - name: Check the bundle
+        env:
+          AAB: android/app/build/outputs/bundle/googlePlayRelease/app-googlePlay-release.aab
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 https://github.com/google/bundletool/releases/download/1.17.2/bundletool-all-1.17.2.jar -o /tmp/bundletool.jar
+          java -jar /tmp/bundletool.jar validate --bundle "$AAB" > bundle-info.txt
+          java -jar /tmp/bundletool.jar dump manifest --bundle "$AAB" --xpath /manifest/@package > package.txt
+          java -jar /tmp/bundletool.jar dump manifest --bundle "$AAB" --xpath /manifest/@android:versionCode > code.txt
+          java -jar /tmp/bundletool.jar dump manifest --bundle "$AAB" --xpath /manifest/@android:versionName > version.txt
+          grep -qx "ru.kurostreet.counterzombiemobile" package.txt
+          if java -jar /tmp/bundletool.jar dump manifest --bundle "$AAB" | grep -q REQUEST_INSTALL_PACKAGES; then
+            echo "::error::the Google Play build must not install APKs itself"; exit 1
+          fi
+          python3 - "$AAB" <<'PY'
+          import sys, zipfile
+          with zipfile.ZipFile(sys.argv[1]) as z:
+              names = z.namelist()
+              assert "gamedata/manifest/AndroidManifest.xml" in names, "no gamedata asset pack"
+              assert "gamedata/assets/czm-gamedata-pending.txt" in names, "no placeholder"
+              assert not any("game-data" in n for n in names), "game data must not come from CI"
+              base = sum(i.compress_size for i in z.infolist() if i.filename.startswith("base/"))
+              print(f"base module {base // 1048576} MB compressed")
+              assert base < 190 * 1048576, "the base module must stay under the 200 MB Play limit"
+          PY
+          cp "$AAB" CounterZombieMobile-Play-unsigned.aab
+          sha256sum CounterZombieMobile-Play-unsigned.aab > CounterZombieMobile-Play-unsigned.aab.sha256
+          echo "$(cat package.txt) $(cat version.txt) ($(cat code.txt))"
+      - name: Send the bundle to the game server
+        # the server adds the game data and signs it with the upload key
+        run: |
+          set -euo pipefail
+          VERSION=$(cat version.txt)
+          CODE=$(cat code.txt)
+          SHA256=$(cut -d' ' -f1 CounterZombieMobile-Play-unsigned.aab.sha256)
+          echo "Sending $VERSION ($CODE), $(du -m CounterZombieMobile-Play-unsigned.aab | cut -f1) MB"
+          for attempt in 1 2 3 4; do
+            TOKEN=$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+              "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=kontrafps.ru" | python3 -c 'import json, sys; print(json.load(sys.stdin)["value"])')
+            echo "::add-mask::$TOKEN"
+            if curl -sS --fail-with-body --max-time 1200 -X POST -H "Expect:" \
+                -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/octet-stream" \
+                -T CounterZombieMobile-Play-unsigned.aab \
+                "https://kontrafps.ru/api/v1/play-builds?version=$VERSION&code=$CODE&sha256=$SHA256&commit=$GITHUB_SHA"; then
+              echo
+              echo "::notice::The signed bundle will be at https://counter-zombie.ru/dl/play/CounterZombieMobile-$VERSION.aab"
+              exit 0
+            fi
+            echo
+            echo "attempt $attempt failed"
+            sleep 30
+          done
+          exit 1

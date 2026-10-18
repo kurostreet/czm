@@ -7,7 +7,7 @@ set -euo pipefail
 COMMIT=${1:?usage: install.sh <commit>}
 REPO=https://raw.githubusercontent.com/kurostreet/czm/$COMMIT/server/czm
 FILES="requirements.txt czm/__init__.py czm/config.py czm/db.py czm/profanity.py czm/links.py czm/service.py czm/api.py
-       czm/bot.py czm/steam.py czm/main.py czm/cli.py czm/builds.py czm/assemble.py czm/apkpatch.py czm/mappics.py czm/accounts.py czm/settings.py czm/tab.py czm/social.py czm/website.py czm/settings_schema.json czm/tlds.txt
+       czm/bot.py czm/steam.py czm/main.py czm/cli.py czm/builds.py czm/assemble.py czm/apkpatch.py czm/mappics.py czm/accounts.py czm/settings.py czm/tab.py czm/social.py czm/website.py czm/play.py czm/settings_schema.json czm/tlds.txt
        deploy/czm.service deploy/czm.caddy deploy/install.sh deploy/czm-set
        deploy/czm-assemble.service deploy/czm-assemble.path deploy/czm-assemble.timer"
 # the public site (pages, pictures, fonts, script)
@@ -56,6 +56,25 @@ if [ ! -f /etc/czm/env ]; then
 fi
 chown root:czm /etc/czm/env
 chmod 640 /etc/czm/env
+
+# Google Play: jarsigner signs the bundles; the upload key is made once, its password stays in
+# /etc/czm/env (CZM_PLAY_KEY_PASSWORD) and is never printed; a copy of the key goes to /var/backups
+command -v jarsigner >/dev/null 2>&1 || \
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends openjdk-21-jdk-headless >/dev/null
+if [ ! -s /var/lib/czm/signing/play-upload.p12 ]; then
+  if ! grep -q '^CZM_PLAY_KEY_PASSWORD=.' /etc/czm/env; then
+    [ -z "$(tail -c1 /etc/czm/env)" ] || echo >> /etc/czm/env
+    echo "CZM_PLAY_KEY_PASSWORD=$(head -c 32 /dev/urandom | base64 | tr -d '/+=\n')" >> /etc/czm/env
+  fi
+  CZM_PLAY_KEY_PASSWORD=$(sed -n 's/^CZM_PLAY_KEY_PASSWORD=//p' /etc/czm/env | tail -n1) \
+    keytool -genkeypair -keystore /var/lib/czm/signing/play-upload.p12 -storetype PKCS12 \
+      -storepass:env CZM_PLAY_KEY_PASSWORD -alias upload -keyalg RSA -keysize 4096 -validity 10000 \
+      -dname "CN=Counter Zombie Mobile, O=kurostreet" >/dev/null 2>&1
+  chmod 600 /var/lib/czm/signing/play-upload.p12
+  install -d -m 700 /var/backups/czm-signing
+  cp /var/lib/czm/signing/play-upload.p12 /var/backups/czm-signing/play-upload.p12
+  chmod 600 /var/backups/czm-signing/play-upload.p12
+fi
 
 # the web server reads avatars, APK files and the server list
 chown -R czm:czm /var/lib/czm

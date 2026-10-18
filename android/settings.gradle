@@ -3,5 +3,6 @@ plugins {
 }
 
 include ':app'
+include ':gamedata'   // Google Play asset pack with the game data
 
 rootProject.name = 'CounterZombieMobile'
