@@ -182,6 +182,7 @@ footer .h-game{font-size:14px;color:var(--text);margin-right:auto}
 .btn-ghost svg{flex:none}
 .beta{padding:16px 16px 10px}
 .beta h2{margin:0}
+.beta-status{margin:12px 0;padding:12px 14px;border:1px solid var(--line);border-left:3px solid var(--red);border-radius:12px;background:var(--surface2);font-size:14px}
 .beta-progress{margin:14px 0;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px}
 .beta-progress strong{font:900 28px/1 "CZM Display";color:var(--red-ink);font-variant-numeric:tabular-nums}
 .beta-progress span{font-size:14px;color:var(--muted)}
@@ -300,13 +301,14 @@ footer .h-game{font-size:14px;color:var(--text);margin-right:auto}
   data-store="https://play.google.com/store/apps/details?id=dev.gaming.czm">
 <div class="card beta">
 <h2 class="h-game" data-i18n="betaTitle">Бета-тест в Google Play</h2>
-<div class="beta-progress"><strong><span id="sBetaTesters">0</span> / 50</strong><span data-i18n="betaCount">подтвердили участие</span><small data-i18n="betaCountNote">Данные Google Play Console, проверяются вручную</small></div>
-<div class="beta-track" id="sBetaTrack" role="progressbar" aria-label="Подтверждённые тестировщики" aria-valuemin="0" aria-valuemax="50" aria-valuenow="0"><div id="sBetaBar"></div></div>
+<p class="beta-status" id="betaStatus" role="status" data-i18n="betaPending">Google Play проверяет игру. Пока можно вступить в группу; шаги 2 и 3 откроются после одобрения.</p>
+<div class="beta-progress"><strong><span id="sBetaTesters">0</span> / 50</strong><span data-i18n="betaCount">подтвердили участие в Google Play</span><small id="betaCountUpdated" data-i18n="betaCountNote">По данным Google Play Console, обновляется вручную</small></div>
+<div class="beta-track" id="sBetaTrack" role="progressbar" data-i18n-aria="betaProgress" aria-label="Подтверждённые тестировщики" aria-valuemin="0" aria-valuemax="50" aria-valuenow="0"><div id="sBetaBar"></div></div>
 <p class="lead" data-i18n="betaLead">Набираем 50 тестировщиков с запасом! Google требует минимум 12 участников на 14 дней. Присоединяйся и играй.</p>
 <ol class="steps">
 <li class="step" data-step="1"><span class="n">1</span><span class="b"><b data-i18n="beta1">Вступи в группу тестировщиков</b><small data-i18n="beta1Note">Нужен аккаунт Google — тот же, что в Google Play на телефоне.</small></span><a class="btn-red" data-beta="group" target="_blank" rel="noopener" data-i18n="beta1Btn">Вступить</a></li>
-<li class="step" data-step="2"><span class="n">2</span><span class="b"><b data-i18n="beta2">Прими приглашение</b><small data-i18n="beta2Note">Откроется Google Play. Если приглашения нет, проверь шаг 1.</small></span><a class="btn-red" data-beta="optin" target="_blank" rel="noopener" data-i18n="beta2Btn">Стать тестером</a></li>
-<li class="step" data-step="3"><span class="n">3</span><span class="b"><b data-i18n="beta3">Установи и играй</b><small data-i18n="beta3Note">Заходи в игру хотя бы пару раз в неделю: Google проверяет, что тест живой.</small></span><a class="btn-red" data-beta="store" target="_blank" rel="noopener" data-i18n="beta3Btn">Открыть в Google Play</a></li>
+<li class="step locked" data-step="2"><span class="n">2</span><span class="b"><b data-i18n="beta2">Прими приглашение</b><small data-i18n="beta2Note">Откроется Google Play. Если приглашения нет, проверь шаг 1.</small></span><a class="btn-red" data-beta="optin" aria-disabled="true" tabindex="-1" target="_blank" rel="noopener" data-i18n="beta2Btn">Стать тестером</a></li>
+<li class="step locked" data-step="3"><span class="n">3</span><span class="b"><b data-i18n="beta3">Установи и играй</b><small data-i18n="beta3Note">Заходи в игру хотя бы пару раз в неделю: Google проверяет, что тест живой.</small></span><a class="btn-red" data-beta="store" aria-disabled="true" tabindex="-1" target="_blank" rel="noopener" data-i18n="beta3Btn">Открыть в Google Play</a></li>
 </ol>
 </div>
 </section>
