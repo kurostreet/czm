@@ -384,12 +384,12 @@ void CZM_Init( void )
 	EngFuncs::CvarRegister( "czm_menu_cards", "1", FCVAR_ARCHIVE ); // server menus as cards
 	EngFuncs::CvarRegister( "czm_hud_style", "0", FCVAR_ARCHIVE );
 	EngFuncs::CvarRegister( "czm_parallax", "1", FCVAR_ARCHIVE );
-	EngFuncs::CvarRegister( "czm_hud_radar_style", "0", FCVAR_ARCHIVE ); // classic, tactical, minimal
+	EngFuncs::CvarRegister( "czm_hud_radar_style", "2", FCVAR_ARCHIVE ); // classic, tactical, minimal (default)
 	EngFuncs::CvarRegister( "czm_hud_msg_style", "1", FCVAR_ARCHIVE );   // chat and server messages: classic, CZM, outline
 	for( int i=0;i<CzmHud::BLOCKS;i++ ) for( int k=0;k<5;k++ ) {
 		char name[64],value[32];
 		CzmHud::Key(name,sizeof(name),i,CzmHud::fields[k]);
-		snprintf(value,sizeof(value),"%.4f",k<2?CzmHud::defaults[i][k]:k<4?1.f:0.f);
+		snprintf(value,sizeof(value),"%.4f",k<2?CzmHud::defaults[i][k]:k==2?CzmHud::defaultScale[i]:k==3?1.f:CzmHud::defaultHidden[i]?1.f:0.f);
 		EngFuncs::CvarRegister(name,value,FCVAR_ARCHIVE);
 	}
 	EngFuncs::CvarRegister( "czm_open_profile", "0", 0 );

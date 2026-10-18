@@ -404,21 +404,21 @@ static CzmHudBlock HudClamp( int kind, CzmHudBlock b )
 {
 	b.x = CzmHud::Clamp( b.x, 0.01f, 0.99f, CzmHud::defaults[kind][0] );
 	b.y = CzmHud::Clamp( b.y, 0.01f, 0.99f, CzmHud::defaults[kind][1] );
-	b.scale = CzmHud::Clamp( b.scale, HudMinScale( kind ), HudMaxScale( kind ), 1.0f );
+	b.scale = CzmHud::Clamp( b.scale, HudMinScale( kind ), HudMaxScale( kind ), CzmHud::defaultScale[kind] );
 	b.opacity = CzmHud::Clamp( b.opacity, 0.25f, 1.0f, 1.0f );
 	return b;
 }
 
 static CzmHudBlock HudDefault( int kind )
 {
-	CzmHudBlock b = { CzmHud::defaults[kind][0], CzmHud::defaults[kind][1], 1.0f, 1.0f, false };
+	CzmHudBlock b = { CzmHud::defaults[kind][0], CzmHud::defaults[kind][1], CzmHud::defaultScale[kind], 1.0f, CzmHud::defaultHidden[kind] };
 	return b;
 }
 
 static void ReadHud( CzmHudBlock *blocks, int *style, int *radarStyle, int *msgStyle )
 {
 	*style = (int)CzmHud::Clamp( EngFuncs::GetCvarFloat( "czm_hud_style" ), 0, HUD_STYLES - 1, 0 );
-	*radarStyle = (int)CzmHud::Clamp( EngFuncs::GetCvarFloat( "czm_hud_radar_style" ), 0, CzmHud::RADAR_STYLES - 1, 0 );
+	*radarStyle = (int)CzmHud::Clamp( EngFuncs::GetCvarFloat( "czm_hud_radar_style" ), 0, CzmHud::RADAR_STYLES - 1, CzmHud::defaultRadarStyle );
 	*msgStyle = (int)CzmHud::Clamp( EngFuncs::GetCvarFloat( "czm_hud_msg_style" ), 0, CzmHud::MSG_STYLES - 1, 1 );
 	for( int i = 0; i < HUD_BLOCKS; i++ )
 	{
@@ -461,7 +461,7 @@ void CZM_TouchResetHud( void )
 	for( int i = 0; i < HUD_BLOCKS; i++ )
 		blocks[i] = HudDefault( i );
 	WriteHud( blocks, (int)CzmHud::Clamp( EngFuncs::GetCvarFloat( "czm_hud_style" ), 0, HUD_STYLES - 1, 0 ),
-		(int)CzmHud::Clamp( EngFuncs::GetCvarFloat( "czm_hud_radar_style" ), 0, CzmHud::RADAR_STYLES - 1, 0 ),
+		(int)CzmHud::Clamp( EngFuncs::GetCvarFloat( "czm_hud_radar_style" ), 0, CzmHud::RADAR_STYLES - 1, CzmHud::defaultRadarStyle ),
 		(int)CzmHud::Clamp( EngFuncs::GetCvarFloat( "czm_hud_msg_style" ), 0, CzmHud::MSG_STYLES - 1, 1 ));
 }
 
@@ -937,7 +937,7 @@ bool CCzmTouchEditor::Parse( const char *path )
 	for( line = data; line && *line; line = next )
 	{
 		char token[256], *p;
-		char args[13][128];
+		char args[14][128];
 		int count = 0;
 
 		next = strchr( line, '\n' );
@@ -951,7 +951,7 @@ bool CCzmTouchEditor::Parse( const char *path )
 			continue;
 
 		p = line;
-		while( count < 13 && ( p = EngFuncs::COM_ParseFile( p, token, sizeof( token ))) != NULL )
+		while( count < 14 && ( p = EngFuncs::COM_ParseFile( p, token, sizeof( token ))) != NULL )
 			Q_strncpy( args[count++], token, sizeof( args[0] ));
 
 		if( count < 12 || m_iButtons >= CZM_MAX_BUTTONS )
@@ -968,6 +968,11 @@ bool CCzmTouchEditor::Parse( const char *path )
 		for( int k = 0; k < 4; k++ )
 			b.color[k] = atoi( args[8 + k] );
 		b.flags = count > 12 ? atoi( args[12] ) : 0;
+
+		// "aspect" after the flags: the engine keeps such a button round on any screen,
+		// the default layout and exported configs rely on it; the editor does the same
+		if( count > 13 && atof( args[13] ) > 0.0f && b.texture[0] && b.texture[0] != '#' && ScreenHeight > 0 )
+			b.y2 = b.y1 + ( b.x2 - b.x1 ) * ScreenWidth / ScreenHeight * atof( args[13] );
 	}
 
 	EngFuncs::COM_FreeFile( data );

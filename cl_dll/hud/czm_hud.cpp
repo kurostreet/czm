@@ -50,10 +50,10 @@ struct GamePainter : CzmHud::Painter {
 }
 bool CZM_HudDraw(int kind,const char *value,bool warning) {
     if(!s_atlas || !g_iXash || kind<0 || kind>=CzmHud::COUNT) return false;
-    if(Value(kind,"hidden",0)>.5f) return true; // the player took it off the screen in the editor
+    if(Value(kind,"hidden",CzmHud::defaultHidden[kind])>.5f) return true; // the player took it off the screen in the editor
     int style=(int)CzmHud::Clamp(gEngfuncs.pfnGetCvarFloat("czm_hud_style"),0,2,0);
     CzmHud::Rect p=CzmHud::Layout(kind,style,ScreenWidth,ScreenHeight,Value(kind,"x",CzmHud::defaults[kind][0]),
-        Value(kind,"y",CzmHud::defaults[kind][1]),Value(kind,"scale",1),Value(kind,"opacity",1),(int)strlen(value));
+        Value(kind,"y",CzmHud::defaults[kind][1]),Value(kind,"scale",CzmHud::defaultScale[kind]),Value(kind,"opacity",1),(int)strlen(value));
     GamePainter painter;
     CzmHud::Paint(painter,kind,style,p,value,warning);
     return true;

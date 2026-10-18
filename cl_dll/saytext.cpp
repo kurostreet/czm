@@ -43,7 +43,7 @@ static CzmHud::Rect ChatRect( int lineHeight )
 {
 	return CzmHud::ChatLayout( ScreenWidth, ScreenHeight,
 		CZM_HudValue( CzmHud::CHAT, "x", CzmHud::defaults[CzmHud::CHAT][0] ), CZM_HudValue( CzmHud::CHAT, "y", CzmHud::defaults[CzmHud::CHAT][1] ),
-		CZM_HudValue( CzmHud::CHAT, "scale", 1 ), CZM_HudValue( CzmHud::CHAT, "opacity", 1 ), lineHeight > 0 ? lineHeight : 16 );
+		CZM_HudValue( CzmHud::CHAT, "scale", CzmHud::defaultScale[CzmHud::CHAT] ), CZM_HudValue( CzmHud::CHAT, "opacity", 1 ), lineHeight > 0 ? lineHeight : 16 );
 }
 
 #define LINE_START  10

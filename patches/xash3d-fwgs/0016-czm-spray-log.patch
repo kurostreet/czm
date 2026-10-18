@@ -1,0 +1,48 @@
+diff --git a/engine/client/cl_main.c b/engine/client/cl_main.c
+--- a/engine/client/cl_main.c
++++ b/engine/client/cl_main.c
+@@ -1105,8 +1105,14 @@
+ 	if( COM_StringEmptyOrNULL( name ))
+ 		return;
+ 
++	// Counter Zombie Mobile: the engine log tells whether a server takes our spray at all
++	Con_Printf( "Spray: the server asked for %s\n", name );
++
+ 	if( !cl_allow_upload.value )
++	{
++		Con_Printf( "Spray: not sent, cl_allowupload is 0\n" );
+ 		return;
++	}
+ 
+ 	if( Q_strlen( name ) != 36 || Q_strnicmp( name, "!MD5", 4 ))
+ 	{
+@@ -1153,7 +1159,9 @@
+ 		Netchan_CreateFileFragmentsFromBuffer( &cls.netchan, name, buf, size );
+ 		Netchan_FragSend( &cls.netchan );
+ 		Mem_Free( buf );
++		Con_Printf( "Spray: sent %i bytes\n", size );
+ 	}
++	else Con_Printf( "Spray: %s is not in %s, nothing sent\n", name, hpk_custom_file.string );
+ }
+ 
+ /*
+diff --git a/engine/client/parse/cl_parse.c b/engine/client/parse/cl_parse.c
+--- a/engine/client/parse/cl_parse.c
++++ b/engine/client/parse/cl_parse.c
+@@ -614,6 +614,8 @@
+ 	if( FBitSet( pRes->ucFlags, RES_CUSTOM ))
+ 		MSG_ReadBytes( msg, pRes->rgucMD5_hash, sizeof( pRes->rgucMD5_hash ), 16 );
+ 	pRes->playernum = i;
++	// Counter Zombie Mobile: other players' sprays come only from servers that take uploads
++	Con_Printf( "Spray: the server sent the spray of player %i (%i bytes)\n", i + 1, pRes->nDownloadSize );
+ 
+ 	if( !cl_allow_download.value )
+ 	{
+@@ -701,6 +703,7 @@
+ 
+ 	Netchan_CreateFragments( &cls.netchan, &sbuf );
+ 	Netchan_FragSend( &cls.netchan );
++	Con_Printf( "Spray: offered %i custom file(s) to the server\n", count );
+ 
+ 	cl.num_sent_resources = count;
+ 	if( count > 0 )

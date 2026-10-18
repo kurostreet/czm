@@ -63,7 +63,9 @@ final class SettingsData {
             for(int n=0;n<buttons.length();n++){
                 JSONArray b=buttons.getJSONArray(n);cfg.append("touch_addbutton");
                 for(int k=0;k<3;k++)cfg.append(" \"").append(b.getString(k)).append('"');
-                for(int k=3;k<12;k++)cfg.append(' ').append(b.get(k));cfg.append('\n');
+                for(int k=3;k<12;k++)cfg.append(' ').append(b.get(k));
+                // round buttons stay round on another screen: the engine recalculates the height (aspect 1)
+                String tex=b.getString(1);if(!tex.isEmpty()&&!tex.startsWith("#"))cfg.append(" 1");cfg.append('\n');
             }files.put(""+i,cfg.toString());
         }
         return new JSONObject().put("cvars",p.getJSONObject("cvars")).put("files",files);

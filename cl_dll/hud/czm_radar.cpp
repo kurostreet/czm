@@ -64,7 +64,7 @@ bool CZM_RadarDraw( float yaw, const CzmRadarMark *marks, int count, int *labelX
 	p = CzmHud::RadarLayout( ScreenWidth, ScreenHeight,
 		CZM_HudValue( CzmHud::RADAR, "x", CzmHud::defaults[CzmHud::RADAR][0] ),
 		CZM_HudValue( CzmHud::RADAR, "y", CzmHud::defaults[CzmHud::RADAR][1] ),
-		CZM_HudValue( CzmHud::RADAR, "scale", 1 ), CZM_HudValue( CzmHud::RADAR, "opacity", 1 ));
+		CZM_HudValue( CzmHud::RADAR, "scale", CzmHud::defaultScale[CzmHud::RADAR] ), CZM_HudValue( CzmHud::RADAR, "opacity", 1 ));
 
 	Picture( s_plates[style] ? s_plates[style] : s_plates[0], p.x, p.y, p.w, p.h, 255, 255, 255, p.opacity );
 
@@ -96,9 +96,11 @@ bool CZM_RadarDraw( float yaw, const CzmRadarMark *marks, int count, int *labelX
 	for( int i = 0; i < count; i++ )
 	{
 		const CzmRadarMark &m = marks[i];
-		float x = cx + m.x * inner, y = cy + m.y * inner;
 		int kind = m.kind >= 0 && m.kind < CZM_MARKS ? m.kind : CZM_MARK_DOT;
 		float s = kind == CZM_MARK_X ? size * 1.25f : size;
+		// a mark at the edge stays whole inside the radar, even on a tiny one
+		float reach = p.w * 0.5f - s * 0.5f < inner ? p.w * 0.5f - s * 0.5f : inner;
+		float x = cx + m.x * reach, y = cy + m.y * reach;
 
 		Picture( s_marks[kind] ? s_marks[kind] : s_marks[CZM_MARK_DOT], x - s * 0.5f, y - s * 0.5f, s, s, m.r, m.g, m.b, 1.f );
 	}
