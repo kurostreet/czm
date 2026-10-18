@@ -14,7 +14,7 @@
     ru: {
       title: 'Counter Zombie Mobile — зомби-шутер для Android',
       description: 'Мобильный зомби-шутер: орды зомби, серверы до 32 игроков, свои кнопки, друзья и живой чат. Скачай бесплатно для Android.',
-      langLabel: 'Язык', themeLabel: 'День или ночь', menu: 'Меню', close: 'Закрыть', prev: 'Назад', next: 'Дальше',
+      langLabel: 'Язык', themeLabel: 'День или ночь', share: 'Поделиться', copied: 'Ссылка скопирована', close: 'Закрыть', prev: 'Назад', next: 'Дальше',
       tagline: 'Мобильный зомби-шутер: орды зомби, серверы до 32 игроков, свои кнопки, друзья и живой чат.',
       downloadCta: 'Скачать игру', statsLabel: 'Статистика', online: 'в игре', offline: 'не в сети', downloads: 'скачиваний', mb: 'МБ',
       shotsTitle: 'Кадры',
@@ -36,7 +36,7 @@
     en: {
       title: 'Counter Zombie Mobile — a zombie shooter for Android',
       description: 'A mobile zombie shooter: zombie hordes, servers for up to 32 players, your own buttons, friends and a live chat. Free for Android.',
-      langLabel: 'Language', themeLabel: 'Day or night', menu: 'Menu', close: 'Close', prev: 'Previous', next: 'Next',
+      langLabel: 'Language', themeLabel: 'Day or night', share: 'Share', copied: 'Link copied', close: 'Close', prev: 'Previous', next: 'Next',
       tagline: 'A mobile zombie shooter: zombie hordes, servers for up to 32 players, your own buttons, friends and a live chat.',
       downloadCta: 'Get the game', statsLabel: 'Statistics', online: 'playing', offline: 'offline', downloads: 'downloads', mb: 'MB',
       shotsTitle: 'Shots',
@@ -115,7 +115,7 @@
     setTimeout(function () { flash.classList.remove('on'); }, 650);
   });
 
-  /* ---------- hero parallax ---------- */
+  /* ---------- hero parallax (mouse only: on phones the picture stays still) ---------- */
   var hero = $('top');
   function setTilt(x, y) {
     hero.style.setProperty('--mx', x.toFixed(3));
@@ -128,19 +128,6 @@
       setTilt(((e.clientX - r.left) / r.width - 0.5) * 2, ((e.clientY - r.top) / r.height - 0.5) * 2);
     });
     hero.addEventListener('pointerleave', function () { setTilt(0, 0); });
-    window.addEventListener('deviceorientation', function (e) {
-      if (e.gamma == null || e.beta == null) return;
-      setTilt(Math.max(-1, Math.min(1, e.gamma / 25)), Math.max(-1, Math.min(1, (e.beta - 45) / 30)));
-    });
-    var scrollQueued = false;
-    window.addEventListener('scroll', function () {
-      if (scrollQueued) return;
-      scrollQueued = true;
-      requestAnimationFrame(function () {
-        scrollQueued = false;
-        hero.style.setProperty('--sy', String(Math.min(window.scrollY, 700)));
-      });
-    }, { passive: true });
   }
 
   /* ---------- embers ---------- */
@@ -335,8 +322,8 @@
     else if (e.key === 'End') { e.preventDefault(); pickFeature(n - 1, true); }
   });
 
-  /* ---------- drawer and chat sheet ---------- */
-  var drawer = $('drawer'), sheet = $('sheet'), veil = $('veil'), menuBtn = $('menuBtn');
+  /* ---------- chat sheet ---------- */
+  var sheet = $('sheet'), veil = $('veil');
   var openPanel = null, panelFocus = null;
   function setOpen(el, on) {
     el.classList.toggle('on', on);
@@ -344,10 +331,8 @@
   }
   function closePanels() {
     if (!openPanel) return;
-    setOpen(drawer, false);
     setOpen(sheet, false);
     veil.classList.remove('on');
-    menuBtn.setAttribute('aria-expanded', 'false');
     all('[data-open-chat][aria-expanded]').forEach(function (b) { b.setAttribute('aria-expanded', 'false'); });
     root.style.overflow = '';
     openPanel = null;
@@ -362,13 +347,11 @@
     root.style.overflow = 'hidden';
     openPanel = el;
     panelFocus = keep;
-    menuBtn.setAttribute('aria-expanded', String(el === drawer));
     all('[data-open-chat][aria-expanded]').forEach(function (b) { b.setAttribute('aria-expanded', String(el === sheet)); });
     var first = el.querySelector('[data-close]');
     if (first) setTimeout(function () { first.focus({ preventScroll: true }); }, 50);
     if (el === sheet) { renderChat(false); scrollChatDown(); }
   }
-  menuBtn.addEventListener('click', function () { if (openPanel === drawer) closePanels(); else openOne(drawer); });
   veil.addEventListener('click', closePanels);
   all('[data-open-chat]').forEach(function (b) {
     b.addEventListener('click', function (e) { e.preventDefault(); openOne(sheet); });
@@ -382,6 +365,27 @@
     if (e.key === 'Escape') { if (boxAt >= 0) closeBox(); else closePanels(); }
     else if (boxAt >= 0 && e.key === 'ArrowRight') stepBox(1);
     else if (boxAt >= 0 && e.key === 'ArrowLeft') stepBox(-1);
+  });
+
+  /* ---------- share ---------- */
+  var toast = $('toast'), toastTimer = 0;
+  function say(text) {
+    toast.textContent = text;
+    toast.classList.add('on');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toast.classList.remove('on'); }, 2600);
+  }
+  $('share').addEventListener('click', function () {
+    var url = 'https://counter-zombie.ru/';
+    if (navigator.share) {
+      navigator.share({ title: 'Counter Zombie Mobile', text: T.tagline, url: url }).catch(function () { /* closed */ });
+      return;
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(function () { say(T.copied); }, function () { say(url); });
+    } else {
+      say(url);
+    }
   });
 
   /* ---------- live numbers ---------- */
