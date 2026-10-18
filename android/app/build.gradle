@@ -97,7 +97,7 @@ android {
 	productFlavors {
 		create("googlePlay") {
 			dimension = "version"
-			applicationId = "ru.kurostreet.counterzombiemobile"
+			applicationId = "dev.gaming.czm"   // the Google Play listing; the site APK stays ru.kurostreet.counterzombiemobile.test
 			buildConfigField("Boolean", "IS_GOOGLE_PLAY_BUILD", "true")
 		}
 

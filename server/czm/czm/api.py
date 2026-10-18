@@ -164,6 +164,7 @@ async def account_action(action: str, body: AuthIn, request: Request, background
         "me": lambda c: accounts.me(c, key),
         "logout": lambda c: accounts.logout(c, key),
         "logout-all": lambda c: accounts.logout(c, key, True),
+        "delete-account": lambda c: accounts.delete_account(c, key, body.password, ip),
         "email": lambda c: accounts.email_request(c, key, body.email, ip),
         "email-confirm": lambda c: accounts.email_confirm(c, key, body.code, ip),
         "recover": lambda c: accounts.recover(c, body.nick, ip),

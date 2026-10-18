@@ -156,6 +156,33 @@ def logout(conn, token, everywhere=False):
     return {"ok": True}
 
 
+def delete_account(conn, token, password, ip):
+    """The player deletes the account from the game (Google Play requires it): the password confirms it.
+
+    Gone: the account, its sessions and codes, email, cloud settings, friends, follows, blocks,
+    private dialogs, chat messages, status, the photo and the profile itself. Reports and bans stay:
+    they protect other players, and a ban is kept by the device hash, not by the profile.
+    """
+    rate(conn, "delete-ip", ip, 6, 3600)
+    player = authenticated(conn, token)
+    pid = player["id"]
+    rate(conn, "delete-player", str(pid), 5, 3600)
+    account = conn.execute("SELECT password_hash FROM accounts WHERE player=?", (pid,)).fetchone()
+    if not account or not password_matches(password, account["password_hash"]):
+        raise AuthError("credentials", 401)
+    conn.execute("DELETE FROM private_messages WHERE dialog IN (SELECT id FROM private_dialogs WHERE low=? OR high=?)", (pid, pid))
+    for sql in ("DELETE FROM private_dialogs WHERE low=? OR high=?",
+                "DELETE FROM social_follows WHERE source=? OR target=?",
+                "DELETE FROM social_blocks WHERE source=? OR target=?"):
+        conn.execute(sql, (pid, pid))
+    for table in ("social_profiles", "social_presence", "player_settings", "settings_history", "auth_codes",
+                  "account_sessions", "tab_bindings", "messages", "accounts"):
+        conn.execute(f"DELETE FROM {table} WHERE player=?", (pid,))
+    conn.execute("DELETE FROM players WHERE id=?", (pid,))
+    (get_settings().avatar_dir / f"{pid}.png").unlink(missing_ok=True)
+    return {"ok": True}
+
+
 MAIL_SUBJECTS = {"email": "подтверждение почты", "login": "вход в аккаунт"}
 MAIL_HEADINGS = {"email": "Подтверждение почты", "login": "Код для входа"}
 

@@ -253,6 +253,22 @@ final class CzmAccount {
             CzmDialog confirm = panel(a, ru ? "Завершить все сеансы?" : "End all sessions?", ru ? "Профиль и аватар сохранятся" : "Your profile and avatar will stay", ru ? "Выйти везде" : "Sign out everywhere", ru);
             confirm.submit.setOnClickListener(w -> send(confirm, "logout-all", credential, new JSONObject(), ru, r -> { clear(credential); confirm.dismiss(); })); confirm.show();
         });
+        d.link(ru ? "Удалить аккаунт" : "Delete account", v -> {
+            // Google Play: the account can be deleted from the game; the password confirms it.
+            CzmDialog confirm = panel(a, ru ? "Удалить аккаунт навсегда?" : "Delete the account for good?", info.optString("login"), ru ? "Удалить навсегда" : "Delete for good", ru);
+            confirm.note(ru ? "Удалятся аккаунт, почта, друзья, личные сообщения, сообщения в чате, фото и настройки в облаке. Вернуть их будет нельзя."
+                : "The account, email, friends, private messages, chat messages, photo and cloud settings will be deleted. They cannot be restored.");
+            EditText password = confirm.field(ru ? "Пароль аккаунта" : "Account password", true, 128);
+            confirm.submit.setOnClickListener(w -> {
+                try {
+                    send(confirm, "delete-account", credential, new JSONObject().put("password", password.getText().toString()), ru, r -> {
+                        clear(credential); confirm.dismiss(); d.dismiss();
+                    });
+                } catch (Exception e) { confirm.fail(error("network", ru)); }
+            });
+            confirm.setOnDismissListener(w -> password.setText(""));
+            confirm.show();
+        });
         d.submit.setOnClickListener(v -> send(d, "logout", credential, new JSONObject(), ru, result -> { clear(credential); d.dismiss(); }));
         d.show();
     }

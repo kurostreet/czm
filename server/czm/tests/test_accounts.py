@@ -69,6 +69,35 @@ class AccountTests(unittest.TestCase):
             self.assertEqual(self.client.get("/api/v1/chat/global", headers={"X-CZM-Key": key}).status_code, 401)
         self.assertEqual(self.client.get("/api/v1/chat/global", headers={"X-CZM-Key": token}).status_code, 200)
 
+    def test_account_deletion_needs_the_password_and_removes_the_profile(self):
+        cfg = get_settings(); cfg.avatar_dir.mkdir(); (cfg.avatar_dir / f"{self.player}.png").write_bytes(b"photo")
+        token = self.register()
+        friend_key = "friend-profile-secret-123456789"
+        with db.db() as conn:
+            service.set_photo(conn, self.player)
+            friend = service.hello(conn, friend_key, "device-2", "Friend", "1", "ru", "1")["id"]
+            conn.execute("INSERT INTO accounts(player,login,nick_key,password_hash,created) VALUES(?,?,?,?,?)",
+                         (friend, "Friend", "friend", "x", 1))
+            conn.execute("INSERT INTO social_follows(source,target,created) VALUES(?,?,1)", (friend, self.player))
+            dialog = conn.execute("INSERT INTO private_dialogs(low,high) VALUES(?,?)", tuple(sorted((friend, self.player)))).lastrowid
+            conn.execute("INSERT INTO private_messages(dialog,sender,text,created,nonce) VALUES(?,?,?,?,?)", (dialog, friend, "hi", 1, "n"))
+            conn.execute("INSERT INTO player_settings VALUES(?,?,?,?)", (self.player, 1, "{}", 1))
+            service.ban(conn, self.player, "week", "reason")
+        self.assertEqual(self.post("delete-account", token, password="WrongPassword1").status_code, 401)
+        self.assertEqual(self.post("delete-account", self.key, password="Password123").status_code, 401)  # a session is required
+        r = self.post("delete-account", token, password="Password123")
+        self.assertEqual(r.status_code, 200, r.text)
+        with db.db() as conn:
+            for table, column in (("players", "id"), ("accounts", "player"), ("messages", "player"), ("player_settings", "player"),
+                                  ("account_sessions", "player")):
+                self.assertIsNone(conn.execute(f"SELECT 1 FROM {table} WHERE {column}=?", (self.player,)).fetchone(), table)
+            self.assertIsNone(conn.execute("SELECT 1 FROM social_follows WHERE target=?", (self.player,)).fetchone())
+            self.assertIsNone(conn.execute("SELECT 1 FROM private_messages").fetchone())
+            self.assertIsNotNone(conn.execute("SELECT 1 FROM players WHERE id=?", (friend,)).fetchone())
+            self.assertIsNotNone(conn.execute("SELECT 1 FROM bans WHERE player=?", (self.player,)).fetchone())
+        self.assertFalse((cfg.avatar_dir / f"{self.player}.png").exists())
+        self.assertEqual(self.post("me", token).status_code, 401)
+
     def test_login_casefold_unicode_and_logout_sessions(self):
         first = self.register("Ｋuro")
         second = self.post("login", nick="kURO", password="Password123").json()["token"]

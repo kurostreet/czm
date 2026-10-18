@@ -49,7 +49,7 @@ python3 scripts/assemble_offline_apk.py \
 
 Публичный debug.keystore upstream применяется только для тестов и обеспечивает одинаковую
 подпись тестовых обновлений. Для публикации понадобится собственный ключ в закрытом хранилище.
-Google Play — отдельная AAB-сборка (вариант `googlePlayRelease`, пакет `ru.kurostreet.counterzombiemobile`,
+Google Play — отдельная AAB-сборка (вариант `googlePlayRelease`, пакет `dev.gaming.czm`,
 без обновлений из игры и без сжатия кода). Игровые данные идут в пакете ресурсов `gamedata` (install-time):
 основной модуль Google Play ограничен 200 МБ. Порядок: Actions → «Counter Zombie Mobile for Google Play» →
 Run workflow; CI отправляет неподписанный AAB на сервер, сервер кладёт игровые данные в `gamedata`,

@@ -52,7 +52,7 @@ jobs:
           java -jar /tmp/bundletool.jar dump manifest --bundle "$AAB" --xpath /manifest/@package > package.txt
           java -jar /tmp/bundletool.jar dump manifest --bundle "$AAB" --xpath /manifest/@android:versionCode > code.txt
           java -jar /tmp/bundletool.jar dump manifest --bundle "$AAB" --xpath /manifest/@android:versionName > version.txt
-          grep -qx "ru.kurostreet.counterzombiemobile" package.txt
+          grep -qx "dev.gaming.czm" package.txt
           if java -jar /tmp/bundletool.jar dump manifest --bundle "$AAB" | grep -q REQUEST_INSTALL_PACKAGES; then
             echo "::error::the Google Play build must not install APKs itself"; exit 1
           fi
