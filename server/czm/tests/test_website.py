@@ -84,6 +84,7 @@ class WebsiteTests(unittest.TestCase):
         initial = self.client.get("/api/v1/site/stats").json()
         self.assertIsNone(initial["play_beta_testers"])
         self.assertEqual(initial["play_beta_checked_at"], 0)
+        self.assertIs(initial["play_beta_open"], False)
         with db.db() as conn:
             website.set_play_beta_testers(conn, 0)
         api._site_stats.update(time=0.0, data=None)
@@ -97,6 +98,15 @@ class WebsiteTests(unittest.TestCase):
         api._site_stats.update(time=0.0, data=None)
         updated = self.client.get("/api/v1/site/stats").json()
         self.assertEqual(updated["play_beta_testers"], 13)
+        self.assertIs(updated["play_beta_open"], False)
+        with db.db() as conn:
+            website.set_play_beta_open(conn, True)
+        api._site_stats.update(time=0.0, data=None)
+        self.assertIs(self.client.get("/api/v1/site/stats").json()["play_beta_open"], True)
+        with db.db() as conn:
+            website.set_play_beta_open(conn, False)
+        api._site_stats.update(time=0.0, data=None)
+        self.assertIs(self.client.get("/api/v1/site/stats").json()["play_beta_open"], False)
 
     def test_chat_broadcast_merges_rooms_hides_masked_and_deleted_lines(self):
         a = self.player(1, "Kuro", "7")
