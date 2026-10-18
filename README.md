@@ -53,6 +53,13 @@ SDL — `98d1f3a45aae568ccd6ed5fec179330f47d4d356` (2.32.8).
 Игровые модели, карты, звуки и текстуры имеют отдельные условия распространения;
 для публичного выпуска и Google Play нужны соответствующие права.
 
+### Музыка главного меню
+
+`3rdparty/cs16client-extras/media/czm_sound.mp3` — трек «menu_loop_rain_3» из набора
+[Unreleased Zombie soundtrack](https://opengameart.org/content/unreleased-zombie-soundtrack),
+автор — Emma M. Andersson (Emma_MA), лицензия [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/).
+Изменения: перекодирован из WAV в MP3 160 кбит/с, громкость понижена на 0,4 дБ.
+
 Текущий план: [ROADMAP_RU.md](docs/ROADMAP_RU.md).
 Исходный план: [MOBILE_LAUNCHER_PLAN_RU.md](docs/MOBILE_LAUNCHER_PLAN_RU.md).
 Оформление: [BRANDING_RU.md](docs/BRANDING_RU.md).
