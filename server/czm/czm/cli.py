@@ -1,6 +1,8 @@
 """Server commands:
   python -m czm.cli add-release <apk> <version> <code>
   python -m czm.cli assemble
+  python -m czm.cli set-beta-testers <count-from-Play-Console>
+  python -m czm.cli set-beta-open 0|1  # 1 only when Play testing links work
 
 add-release moves an uploaded APK into the download folder and remembers it as the
 newest build. Players see it only after the owner publishes it in the bot (/release).
@@ -12,7 +14,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from . import db
+from . import db, website
 from .config import get_settings
 
 
@@ -37,6 +39,24 @@ def add_release(apk: Path, version: str, code: int) -> None:
 
 
 def main(argv: list[str]) -> int:
+    if len(argv) == 2 and argv[0] == "set-beta-open":
+        if argv[1] not in ("0", "1"):
+            print("Expected 0 (review pending) or 1 (approved and links verified)")
+            return 2
+        db.init()
+        with db.db() as conn:
+            website.set_play_beta_open(conn, argv[1] == "1")
+        print("Google Play beta opt-in:", "OPEN" if argv[1] == "1" else "WAITING FOR APPROVAL")
+        return 0
+    if len(argv) == 2 and argv[0] == "set-beta-testers":
+        if not argv[1].isdigit() or int(argv[1]) > 1000000:
+            print("Expected a non-negative count from Google Play Console")
+            return 2
+        db.init()
+        with db.db() as conn:
+            website.set_play_beta_testers(conn, int(argv[1]))
+        print(f"Google Play confirmed opted-in testers: {int(argv[1])}")
+        return 0
     if argv == ["assemble"]:
         import logging
         from . import play

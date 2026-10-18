@@ -80,6 +80,34 @@ class WebsiteTests(unittest.TestCase):
         self.assertEqual(len(stored), 2)
         self.assertFalse(any("1.1.1.1" in h or "2.2.2.2" in h for h in stored))
 
+    def test_play_beta_count_uses_console_confirmed_value_only(self):
+        initial = self.client.get("/api/v1/site/stats").json()
+        self.assertIsNone(initial["play_beta_testers"])
+        self.assertEqual(initial["play_beta_checked_at"], 0)
+        self.assertIs(initial["play_beta_open"], False)
+        with db.db() as conn:
+            website.set_play_beta_testers(conn, 0)
+        api._site_stats.update(time=0.0, data=None)
+        zero = self.client.get("/api/v1/site/stats").json()
+        self.assertEqual(zero["play_beta_testers"], 0)
+        self.assertGreater(zero["play_beta_checked_at"], 0)
+        with db.db() as conn:
+            website.set_play_beta_testers(conn, 13)
+            with self.assertRaises(ValueError):
+                website.set_play_beta_testers(conn, -1)
+        api._site_stats.update(time=0.0, data=None)
+        updated = self.client.get("/api/v1/site/stats").json()
+        self.assertEqual(updated["play_beta_testers"], 13)
+        self.assertIs(updated["play_beta_open"], False)
+        with db.db() as conn:
+            website.set_play_beta_open(conn, True)
+        api._site_stats.update(time=0.0, data=None)
+        self.assertIs(self.client.get("/api/v1/site/stats").json()["play_beta_open"], True)
+        with db.db() as conn:
+            website.set_play_beta_open(conn, False)
+        api._site_stats.update(time=0.0, data=None)
+        self.assertIs(self.client.get("/api/v1/site/stats").json()["play_beta_open"], False)
+
     def test_chat_broadcast_merges_rooms_hides_masked_and_deleted_lines(self):
         a = self.player(1, "Kuro", "7")
         b = self.player(2, "свага")
@@ -122,6 +150,17 @@ class InstallListTests(unittest.TestCase):
         self.assertEqual(modules - self.listed("FILES"), set())
         site = {p.relative_to(self.base).as_posix() for p in (self.base / "site").rglob("*") if p.is_file()}
         self.assertEqual(site, self.listed("SITE"))
+
+    def test_beta_group_is_publicly_listed_but_play_links_start_locked(self):
+        html = (self.base / "site" / "index.html").read_text()
+        js = (self.base / "site" / "assets" / "site.js").read_text()
+        self.assertIn('data-group="https://groups.google.com/g/counter-zombie-mobile-beta"', html)
+        self.assertIn('id="sBetaTesters">0</span> / 50', html)
+        self.assertIn('data-step="2"', html)
+        self.assertIn('data-step="3"', html)
+        self.assertIn('play_beta_open === true', js)
+        self.assertIn("link.removeAttribute('href')", js)
+        self.assertIn("link.setAttribute('aria-disabled', 'true')", js)
 
     def test_build_uploads_get_the_large_body_limit(self):
         caddy = (self.base / "deploy" / "czm.caddy").read_text()
