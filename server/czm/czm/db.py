@@ -190,6 +190,17 @@ CREATE TABLE IF NOT EXISTS release_patches (
     PRIMARY KEY (release_id, base_code, base_sha256)
 );
 
+-- the public site: download counter (one per address and day, addresses kept hashed for two days)
+CREATE TABLE IF NOT EXISTS site_counters (
+    name TEXT PRIMARY KEY,
+    value INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS site_downloads (
+    day INTEGER NOT NULL,
+    ip_hash TEXT NOT NULL,
+    PRIMARY KEY (day, ip_hash)
+);
+
 -- core APKs sent by GitHub Actions, assembled into releases by `czm.cli assemble`
 CREATE TABLE IF NOT EXISTS builds (
     id INTEGER PRIMARY KEY,

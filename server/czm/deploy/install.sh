@@ -7,9 +7,20 @@ set -euo pipefail
 COMMIT=${1:?usage: install.sh <commit>}
 REPO=https://raw.githubusercontent.com/kurostreet/czm/$COMMIT/server/czm
 FILES="requirements.txt czm/__init__.py czm/config.py czm/db.py czm/profanity.py czm/links.py czm/service.py czm/api.py
-       czm/bot.py czm/steam.py czm/main.py czm/cli.py czm/builds.py czm/assemble.py czm/apkpatch.py czm/mappics.py czm/accounts.py czm/settings.py czm/tab.py czm/social.py czm/settings_schema.json czm/tlds.txt
+       czm/bot.py czm/steam.py czm/main.py czm/cli.py czm/builds.py czm/assemble.py czm/apkpatch.py czm/mappics.py czm/accounts.py czm/settings.py czm/tab.py czm/social.py czm/website.py czm/settings_schema.json czm/tlds.txt
        deploy/czm.service deploy/czm.caddy deploy/install.sh deploy/czm-set
        deploy/czm-assemble.service deploy/czm-assemble.path deploy/czm-assemble.timer"
+# the public site (pages, pictures, fonts, script)
+SITE="site/index.html site/privacy.html site/assets/apple-touch-icon.png site/assets/art-3.webp
+      site/assets/avatar-1.png site/assets/avatar-10.png site/assets/avatar-2.png site/assets/avatar-3.png
+      site/assets/avatar-4.png site/assets/avatar-5.png site/assets/avatar-6.png site/assets/avatar-7.png
+      site/assets/avatar-8.png site/assets/avatar-9.png site/assets/ct.webp site/assets/env.webp
+      site/assets/favicon-64.png site/assets/logo-96.png site/assets/og.jpg site/assets/shot-1.webp
+      site/assets/shot-2.webp site/assets/shot-3.webp site/assets/shot-4.webp site/assets/shot-5.webp
+      site/assets/shot-6.webp site/assets/shot-7.webp site/assets/shot-8.webp site/assets/shot-9.webp
+      site/assets/site.js site/assets/title.png site/assets/zom.webp site/assets/fonts/Inter-Medium.woff
+      site/assets/fonts/Inter-SemiBold.woff site/assets/fonts/InterDisplay-Black.woff
+      site/assets/fonts/InterDisplay-BlackItalic.woff site/assets/fonts/OFL.txt"
 # the public debug key of the engine (the same one signs every build, or updates would not install)
 XASH=51353ff8d65e58300eeb2bd014867673f1f367c6
 KEYSTORE_URL=https://raw.githubusercontent.com/FWGS/xash3d-fwgs/$XASH/android/debug.keystore
@@ -18,7 +29,10 @@ DEST=/opt/czm/releases/$COMMIT
 id czm >/dev/null 2>&1 || useradd --system --home-dir /var/lib/czm --shell /usr/sbin/nologin czm
 mkdir -p "$DEST/czm" "$DEST/deploy" /var/lib/czm/avatars /var/lib/czm/apk /var/lib/czm/server-list \
          /var/lib/czm/incoming /var/lib/czm/signing /var/lib/czm/mappics /etc/czm
-for f in $FILES; do curl -fsSL "$REPO/$f" -o "$DEST/$f"; done
+mkdir -p "$DEST/site/assets/fonts"
+for f in $FILES $SITE; do curl -fsSL "$REPO/$f" -o "$DEST/$f"; done
+# links to pictures and the script change with every release, so browsers fetch the new ones
+sed -i "s/__V__/${COMMIT:0:7}/g" "$DEST/site/index.html"
 
 # automatic updates sign the APK with apksigner (Java)
 if ! command -v apksigner >/dev/null 2>&1; then

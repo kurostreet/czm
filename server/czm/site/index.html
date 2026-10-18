@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="ru" data-v="__V__">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Counter Zombie Mobile — зомби-шутер для Android</title>
+<meta name="description" content="Мобильный зомби-шутер: орды зомби, серверы до 32 игроков, свои кнопки, друзья и живой чат. Скачай бесплатно для Android.">
+<meta name="theme-color" content="#09090c">
+<link rel="canonical" href="https://counter-zombie.ru/">
+<link rel="icon" type="image/png" href="/assets/favicon-64.png">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Counter Zombie Mobile">
+<meta property="og:title" content="Counter Zombie Mobile — зомби-шутер для Android">
+<meta property="og:description" content="Орды зомби, серверы до 32 игроков, свои кнопки, друзья и живой чат. Бесплатно.">
+<meta property="og:url" content="https://counter-zombie.ru/">
+<meta property="og:image" content="https://counter-zombie.ru/assets/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<script>try{if(localStorage.getItem("czm-theme")==="light")document.documentElement.classList.add("light")}catch(e){}</script>
+<link rel="preload" href="/assets/env.webp?v=__V__" as="image">
+<link rel="preload" href="/assets/fonts/InterDisplay-BlackItalic.woff" as="font" type="font/woff" crossorigin>
+<style>
+@font-face{font-family:"CZM Display";src:url(/assets/fonts/InterDisplay-Black.woff) format("woff");font-weight:900;font-display:swap}
+@font-face{font-family:"CZM Display";src:url(/assets/fonts/InterDisplay-BlackItalic.woff) format("woff");font-weight:900;font-style:italic;font-display:swap}
+@font-face{font-family:"CZM Text";src:url(/assets/fonts/Inter-SemiBold.woff) format("woff");font-weight:600;font-display:swap}
+@font-face{font-family:"CZM Text";src:url(/assets/fonts/Inter-Medium.woff) format("woff");font-weight:500;font-display:swap}
+:root{--bg:#09090c;--surface:#131318;--surface2:#1c1c23;--line:rgba(255,255,255,.09);--text:#f2efe9;--muted:#a7a5ad;--red:#ef2834;--red-ink:#ff5d66;--gold:#f5b440;--glass:rgba(9,9,12,.6);--shadow:0 18px 44px rgba(0,0,0,.55);color-scheme:dark}
+:root.light{--bg:#efece6;--surface:#ffffff;--surface2:#e5e1da;--line:rgba(20,20,22,.11);--text:#16161a;--muted:#55545c;--red:#d21f2b;--red-ink:#b3141f;--gold:#8f5a00;--glass:rgba(255,255,255,.72);--shadow:0 14px 34px rgba(50,35,20,.16);color-scheme:light}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:500 16px/1.5 "CZM Text",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow-x:hidden;transition:background .5s ease,color .5s ease}
+a{color:var(--red-ink)}a:hover{color:var(--red)}
+:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+button{font:inherit;color:inherit}
+img{max-width:100%}
+.wrap{max-width:1120px;margin:0 auto;padding:0 16px}
+.h-game{font-family:"CZM Display",system-ui,sans-serif;font-weight:900;font-style:italic;text-transform:uppercase;letter-spacing:.5px;line-height:1}
+.sec{padding-top:30px}
+.sec h2{margin:0 0 12px;font-size:clamp(22px,3.2vw,30px)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow)}
+.icon-btn{width:44px;height:44px;border-radius:12px;border:1px solid var(--line);background:var(--surface2);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none}
+.pill{min-width:44px;min-height:34px;border:0;border-radius:999px;cursor:pointer;font:600 13px "CZM Text";background:transparent;color:var(--muted)}
+.pill[aria-pressed="true"]{background:var(--red);color:#fff}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--red);flex:none}
+.dot.green{background:#22c55e}
+.pulse{animation:pulse 1.8s ease-in-out infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(239,40,52,.6)}50%{box-shadow:0 0 0 6px rgba(239,40,52,0)}}
+.dot.green.pulse{animation-name:pulseg}
+@keyframes pulseg{0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,.6)}50%{box-shadow:0 0 0 6px rgba(34,197,94,0)}}
+/* header */
+header{position:sticky;top:0;z-index:30;background:var(--glass);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+.bar{display:flex;align-items:center;gap:10px;padding-top:8px;padding-bottom:8px}
+.brand{display:flex;align-items:center;gap:9px;text-decoration:none;color:var(--text);margin-right:auto}
+.brand img{width:36px;height:36px;border-radius:10px}
+.brand span{font-size:15px;line-height:1.05}
+.langs{display:none;background:var(--surface2);border:1px solid var(--line);border-radius:999px;padding:3px}
+@media (min-width:640px){.langs{display:flex}}
+.lamp-on{color:#ffcf5a;filter:drop-shadow(0 0 8px rgba(255,200,80,.85))}
+/* hero */
+.hero{position:relative;height:clamp(500px,72vh,640px);overflow:hidden;background:#050507}
+.layer{position:absolute;inset:-4%;background-size:cover;background-position:center;will-change:transform}
+.l-env{background-image:url(/assets/env.webp?v=__V__);transform:translate3d(calc(var(--mx,0)*-10px),calc(var(--my,0)*-6px + var(--sy,0)*.35px),0) scale(1.04);animation:envIn 1.6s ease-out both}
+.l-zom{background-image:url(/assets/zom.webp?v=__V__);transform:translate3d(calc(var(--mx,0)*-22px),calc(var(--my,0)*-12px + var(--sy,0)*.18px),0) scale(1.06);animation:zomIn 1.4s .35s cubic-bezier(.2,.8,.2,1) both}
+.l-ct{background-image:url(/assets/ct.webp?v=__V__);transform:translate3d(calc(var(--mx,0)*-36px),calc(var(--my,0)*-18px + var(--sy,0)*.06px),0) scale(1.08);animation:ctIn 1.2s .6s cubic-bezier(.2,.8,.2,1) both}
+@keyframes envIn{from{opacity:0;filter:brightness(.2)}to{opacity:1;filter:none}}
+@keyframes zomIn{from{opacity:0;translate:0 60px}to{opacity:1;translate:0 0}}
+@keyframes ctIn{from{opacity:0;translate:70px 0}to{opacity:1;translate:0 0}}
+.fog{position:absolute;left:-20%;right:-20%;bottom:0;height:45%;background:radial-gradient(ellipse at 30% 80%,rgba(160,30,40,.28),transparent 60%),radial-gradient(ellipse at 75% 90%,rgba(80,110,170,.22),transparent 55%);animation:fog 18s ease-in-out infinite alternate;pointer-events:none}
+@keyframes fog{from{transform:translateX(-4%)}to{transform:translateX(4%)}}
+.embers{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.shade{position:absolute;inset:0;background:linear-gradient(90deg,rgba(5,5,7,.78) 0%,rgba(5,5,7,.35) 45%,transparent 70%),linear-gradient(180deg,transparent 55%,rgba(5,5,7,.92) 100%)}
+.hero-in{position:relative;height:100%;display:flex;flex-direction:column;justify-content:flex-end;gap:14px;padding-bottom:30px}
+.title{width:min(520px,100%);height:auto;animation:slam .7s 1.1s cubic-bezier(.2,1.4,.4,1) both}
+@keyframes slam{0%{opacity:0;transform:scale(1.35);filter:blur(8px)}60%{opacity:1;transform:scale(.97);filter:blur(0) drop-shadow(0 0 28px rgba(239,40,52,.9))}100%{transform:scale(1);filter:drop-shadow(0 6px 22px rgba(0,0,0,.75))}}
+.tagline{margin:0;max-width:480px;font-size:clamp(15px,2vw,18px);line-height:1.45;color:#efeae2;text-shadow:0 2px 10px rgba(0,0,0,.9);animation:rise .8s 1.55s ease-out both}
+.ctas{display:flex;gap:10px;flex-wrap:wrap;align-items:center;animation:rise .8s 1.75s ease-out both}
+@keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+.btn-game{position:relative;overflow:hidden;display:inline-flex;align-items:center;gap:12px;min-height:56px;padding:0 26px 0 7px;border-radius:999px;background:linear-gradient(180deg,#f2333f,#c9151f);color:#fff;text-decoration:none;box-shadow:0 0 0 1px rgba(255,93,102,.4),0 10px 30px rgba(239,40,52,.5);transition:transform .2s ease,box-shadow .2s ease}
+.btn-game:hover{color:#fff;transform:translateY(-2px);box-shadow:0 0 0 1px rgba(255,93,102,.7),0 14px 40px rgba(239,40,52,.7)}
+.btn-game::after{content:"";position:absolute;top:0;bottom:0;width:40%;left:-60%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.35),transparent);animation:shine 3.6s 2.6s ease-in-out infinite}
+@keyframes shine{0%{left:-60%}30%,100%{left:130%}}
+.btn-game .ic{width:42px;height:42px;border-radius:50%;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;flex:none}
+.btn-game .h-game{font-size:19px}
+.btn-ghost{display:inline-flex;align-items:center;min-height:52px;padding:0 20px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.24);color:#fff;text-decoration:none;font-weight:600;font-size:15px}
+.btn-ghost:hover{color:#fff;background:rgba(255,255,255,.14)}
+/* stats */
+.stats{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;margin-top:-16px;position:relative;z-index:2;padding-bottom:2px}
+.stats::-webkit-scrollbar{display:none}
+.stat{flex:1 0 auto;min-width:118px;display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:14px;background:var(--surface);border:1px solid var(--line);border-top:2px solid var(--red);box-shadow:var(--shadow)}
+.stat b{display:block;font:900 20px/1 "CZM Display";font-variant-numeric:tabular-nums}
+.stat small{display:block;font-size:12px;color:var(--muted);margin-top:3px}
+.stat.now b{color:var(--gold)}
+/* screenshot strip */
+.strip{display:flex;gap:10px;overflow-x:auto;padding:0 16px 6px;scroll-padding-left:16px;scroll-snap-type:x mandatory;scrollbar-width:none;max-width:1120px;margin:0 auto}
+.strip::-webkit-scrollbar{display:none}
+.strip button{flex:none;padding:0;border:0;background:transparent;cursor:zoom-in;border-radius:14px;scroll-snap-align:start}
+.strip img{display:block;height:clamp(160px,28vw,250px);width:auto;border-radius:14px;border:1px solid var(--line);transition:transform .3s ease,box-shadow .3s ease}
+.strip button:hover img{transform:translateY(-3px);box-shadow:0 0 0 1px rgba(239,40,52,.6),0 14px 30px rgba(0,0,0,.5)}
+/* features */
+.feats{display:flex;flex-wrap:wrap;gap:14px;align-items:stretch}
+.tabs{flex:1 1 230px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.tab{display:flex;align-items:center;gap:12px;min-height:52px;padding:0 14px;border-radius:14px;cursor:pointer;text-align:left;border:1px solid var(--line);background:transparent;color:var(--muted);font:600 15px "CZM Text";transition:background .25s ease,border-color .25s ease,color .25s ease}
+.tab .dot{background:var(--line)}
+.tab[aria-selected="true"]{background:var(--surface);border-color:rgba(239,40,52,.6);color:var(--text)}
+.tab[aria-selected="true"] .dot{background:var(--red)}
+@media (max-width:560px){.tabs{flex-direction:row;overflow-x:auto;scrollbar-width:none}.tab{flex:none}}
+.panels{flex:999 1 460px;min-width:0;display:grid}
+.panel{grid-area:1/1;overflow:hidden;transition:opacity .45s ease,transform .45s ease;opacity:0;transform:translateY(10px);pointer-events:none}
+.panel.on{opacity:1;transform:none;pointer-events:auto}
+.panel .pic{aspect-ratio:16/7.5;background-size:cover;background-position:center;border-bottom:2px solid var(--red)}
+.panel .txt{padding:14px 16px 16px}
+.panel h3{margin:0;font-size:20px}
+.panel p{margin:6px 0 0;color:var(--muted);line-height:1.5;font-size:15px}
+/* chat */
+.chat-head{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.chat-head h2{margin:0 auto 0 0}
+.live{display:inline-flex;align-items:center;gap:7px;font:900 12px "CZM Display";letter-spacing:1px;color:var(--red-ink)}
+.msg{display:flex;gap:10px;padding:8px 14px;align-items:flex-start}
+.msg img{width:36px;height:36px;border-radius:50%;flex:none;border:2px solid var(--line);object-fit:cover;background:var(--surface2)}
+.msg .who{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}
+.msg .nick{font-weight:600;font-size:14px}
+.msg .tag{font-size:10px;font-weight:600;letter-spacing:.8px;padding:1px 6px;border-radius:5px;background:var(--surface2);color:var(--muted)}
+.msg .time{font-size:11px;color:var(--muted)}
+.msg p{margin:2px 0 0;font-size:15px;line-height:1.45;overflow-wrap:anywhere}
+.msg.new{animation:newmsg 1.2s ease}
+@keyframes newmsg{from{background:rgba(239,40,52,.18)}to{background:transparent}}
+.preview .msg{align-items:center;padding:9px 14px}
+.preview .msg img{width:30px;height:30px}
+.preview .msg .nick{flex:none}
+.preview .msg p{margin:0;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.chat-foot{display:flex;align-items:center;gap:10px;padding:10px 14px 14px;flex-wrap:wrap}
+.chat-foot span{font-size:13px;color:var(--muted);margin-right:auto}
+.btn-red{min-height:44px;padding:0 18px;border-radius:999px;border:0;cursor:pointer;background:var(--red);color:#fff;font:600 14px "CZM Text"}
+.empty{margin:auto;padding:30px 16px;text-align:center;color:var(--muted)}
+/* download */
+.dl{position:relative;overflow:hidden;border-radius:20px;border:1px solid var(--line);background:var(--surface)}
+.dl .bgp{position:absolute;inset:0;background:url(/assets/art-3.webp?v=__V__) center/cover;opacity:.3}
+.dl .fade{position:absolute;inset:0;background:linear-gradient(90deg,var(--surface) 38%,transparent)}
+.dl .in{position:relative;padding:18px;display:flex;flex-wrap:wrap;gap:14px 22px;align-items:center}
+.dl .txt{flex:999 1 280px;min-width:0}
+.dl p{margin:6px 0 0;color:var(--muted);font-size:14px;line-height:1.5}
+.dl .btn-game{flex:none;white-space:nowrap}
+@media (max-width:560px){.dl .btn-game{flex:1 1 100%;justify-content:center;padding-right:30px}}
+.dl .btn-game .h-game{font-size:18px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.chips>span{font-size:13px;padding:5px 10px;border-radius:9px;background:var(--surface2);border:1px solid var(--line)}
+/* news */
+.news{border-left:2px solid var(--red);padding-left:14px;display:flex;flex-direction:column;gap:12px}
+.news .d{font-size:13px;color:var(--gold)}
+.news .n{font-size:15px;margin-top:2px;white-space:pre-line}
+footer{border-top:1px solid var(--line);background:var(--surface);margin-top:40px}
+footer .wrap{padding-top:16px;padding-bottom:84px;display:flex;flex-wrap:wrap;gap:10px 20px;align-items:center;font-size:14px;color:var(--muted)}
+footer .h-game{font-size:14px;color:var(--text);margin-right:auto}
+/* floating chat, drawer, sheet, lightbox */
+.fab{position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:25;display:flex;align-items:center;gap:9px;min-height:52px;padding:0 18px 0 14px;border-radius:999px;border:1px solid rgba(255,255,255,.14);background:rgba(19,19,24,.92);color:#fff;cursor:pointer;box-shadow:0 10px 30px rgba(0,0,0,.5);font:600 15px "CZM Text"}
+.veil{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.55);opacity:0;pointer-events:none;transition:opacity .35s ease}
+.veil.on{opacity:1;pointer-events:auto}
+.drawer{position:fixed;top:0;right:0;bottom:0;z-index:45;width:min(320px,86%);background:var(--surface);border-left:1px solid var(--line);box-shadow:-20px 0 50px rgba(0,0,0,.5);transform:translateX(105%);transition:transform .4s cubic-bezier(.2,.8,.2,1),visibility .4s;visibility:hidden;display:flex;flex-direction:column}
+.drawer.on{transform:none;visibility:visible}
+.drawer .top{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:2px solid var(--red)}
+.drawer nav{display:flex;flex-direction:column;padding:8px}
+.drawer nav a{display:flex;align-items:center;min-height:50px;padding:0 12px;border-radius:12px;color:var(--text);text-decoration:none;font:600 16px "CZM Text"}
+.drawer nav a:hover{background:var(--surface2)}
+.drawer .langrow{padding:8px 20px;display:flex;gap:8px;align-items:center}
+.drawer .langrow span{color:var(--muted);font-size:14px;margin-right:auto}
+.drawer .langrow .pill{min-width:52px;min-height:40px;border:1px solid var(--line)}
+.drawer .btn-game{margin:auto 16px calc(18px + env(safe-area-inset-bottom));justify-content:center;padding:0 22px}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:45;max-width:760px;margin:0 auto;height:min(560px,88vh);background:var(--surface);border:1px solid var(--line);border-bottom:0;border-radius:22px 22px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.5);transform:translateY(105%);visibility:hidden;transition:transform .45s cubic-bezier(.2,.8,.2,1),visibility .45s;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom)}
+.sheet.on{transform:none;visibility:visible}
+.grip{align-self:center;width:64px;height:24px;border:0;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.grip span{width:44px;height:5px;border-radius:3px;background:var(--muted);opacity:.6}
+.rooms{display:flex;gap:5px;flex-wrap:wrap}
+.room{min-height:36px;padding:0 12px;border-radius:999px;cursor:pointer;font:600 13px "CZM Text";border:1px solid var(--line);background:transparent;color:var(--muted)}
+.room[aria-selected="true"]{background:var(--red);border-color:var(--red);color:#fff}
+.room i{font-style:normal;opacity:.7}
+.list{flex:1;overflow-y:auto;padding:6px 4px 6px 0;display:flex;flex-direction:column;scrollbar-width:thin;scrollbar-color:var(--red) transparent}
+.lock{padding:10px 14px 14px;border-top:1px solid var(--line);font-size:13px;color:var(--muted);display:flex;align-items:center;gap:8px}
+.box{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;opacity:0;visibility:hidden;transition:opacity .3s ease,visibility .3s}
+.box.on{opacity:1;visibility:visible}
+.box img{max-width:94vw;max-height:84vh;border-radius:12px}
+.box .nav{position:absolute;top:50%;transform:translateY(-50%);width:48px;height:48px;border-radius:50%;border:1px solid rgba(255,255,255,.25);background:rgba(0,0,0,.5);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.box .prev{left:10px}.box .next{right:10px}
+.box .x{position:absolute;right:12px;top:12px;width:48px;height:48px;border-radius:50%;border:1px solid rgba(255,255,255,.25);background:rgba(0,0,0,.5);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.box .cap{position:absolute;bottom:18px;left:0;right:0;text-align:center;color:#ddd;font-size:14px}
+.flash{position:fixed;inset:0;z-index:60;background:#000;opacity:0;pointer-events:none}
+.flash.on{animation:flicker .62s steps(1) both}
+@keyframes flicker{0%{opacity:0}15%{opacity:.75}25%{opacity:0}40%{opacity:.85}55%{opacity:.1}70%{opacity:.6}100%{opacity:0}}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}html{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<header>
+<div class="wrap bar">
+<a class="brand" href="#top"><img src="/assets/logo-96.png" alt=""><span class="h-game">Counter<br><span style="color:var(--red)">Zombie</span></span></a>
+<div class="langs" role="group" data-i18n-aria="langLabel" aria-label="Язык">
+<button class="pill" data-lang="ru" aria-pressed="true">RU</button>
+<button class="pill" data-lang="en" aria-pressed="false">EN</button>
+</div>
+<button class="icon-btn" id="lamp" data-i18n-aria="themeLabel" aria-label="День или ночь">
+<svg class="lamp-on" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.7.5 1.1 1.3 1.1 2.2h5c0-.9.4-1.7 1.1-2.2A6 6 0 0 0 12 3z"/></svg>
+</button>
+<button class="icon-btn" id="menuBtn" style="color:var(--text)" data-i18n-aria="menu" aria-label="Меню" aria-expanded="false" aria-controls="drawer">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M10 17h10"/></svg>
+</button>
+</div>
+</header>
+
+<main>
+<section class="hero" id="top">
+<div class="layer l-env" aria-hidden="true"></div>
+<div class="layer l-zom" aria-hidden="true"></div>
+<div class="layer l-ct" aria-hidden="true"></div>
+<div class="fog" aria-hidden="true"></div>
+<canvas class="embers" id="embers" aria-hidden="true"></canvas>
+<div class="shade" aria-hidden="true"></div>
+<div class="wrap hero-in">
+<h1 style="margin:0"><img class="title" src="/assets/title.png?v=__V__" alt="Counter Zombie Mobile · 32 players" width="1100" height="199"></h1>
+<p class="tagline" data-i18n="tagline">Мобильный зомби-шутер: орды зомби, серверы до 32 игроков, свои кнопки, друзья и живой чат.</p>
+<div class="ctas">
+<a class="btn-game" href="/download" data-dl>
+<span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M6 20h12"/></svg></span>
+<span class="h-game" data-i18n="downloadCta">Скачать игру</span>
+</a>
+<a class="btn-ghost" href="https://t.me/counter_zombie_mobile" rel="noopener">Telegram</a>
+</div>
+</div>
+</section>
+
+<div class="wrap">
+<div class="stats" role="list" data-i18n-aria="statsLabel" aria-label="Статистика">
+<div class="stat now" role="listitem"><span class="dot green pulse"></span><div><b id="sOnline">—</b><small data-i18n="online">в игре</small></div></div>
+<div class="stat" role="listitem"><div><b id="sOffline">—</b><small data-i18n="offline">не в сети</small></div></div>
+<div class="stat" role="listitem"><div><b id="sDownloads">—</b><small data-i18n="downloads">скачиваний</small></div></div>
+<div class="stat" role="listitem"><div><b><span id="sSize">—</span> <span data-i18n="mb">МБ</span></b><small>Android 5.0+</small></div></div>
+</div>
+</div>
+
+<section class="sec" id="shots" data-i18n-aria="shotsTitle" aria-label="Кадры">
+<div class="wrap"><h2 class="h-game" data-i18n="shotsTitle">Кадры</h2></div>
+<div class="strip" id="strip"></div>
+</section>
+
+<section class="sec wrap" id="features">
+<h2 class="h-game" data-i18n="featTitle">Возможности</h2>
+<div class="feats">
+<div class="tabs" role="tablist" id="tabs" data-i18n-aria="featTitle" aria-label="Возможности"></div>
+<div class="panels" id="panels"></div>
+</div>
+</section>
+
+<section class="sec wrap" id="chat">
+<div class="card" style="overflow:hidden">
+<div class="chat-head"><h2 class="h-game" data-i18n="chatTitle">Чат игры</h2><span class="live"><span class="dot pulse"></span>LIVE</span></div>
+<div class="preview" id="preview"><div class="empty" data-i18n="chatLoading">Загружаем чат…</div></div>
+<div class="chat-foot"><span data-i18n="chatLock">Писать можно только в игре</span><button class="btn-red" data-open-chat aria-controls="sheet" aria-expanded="false" data-i18n="chatOpen">Открыть чат</button></div>
+</div>
+</section>
+
+<section class="sec wrap" id="download">
+<div class="dl">
+<div class="bgp" aria-hidden="true"></div><div class="fade" aria-hidden="true"></div>
+<div class="in">
+<div class="txt">
+<h2 class="h-game" style="margin:0" data-i18n="dlTitle">Заходи в игру</h2>
+<p data-i18n="dlText">Бесплатно. Ссылка всегда ведёт на свежую версию, дальше игра обновляется сама.</p>
+<div class="chips"><span id="dVersion">—</span><span><b id="dSize" style="font-weight:600">—</b> <i data-i18n="mb" style="font-style:normal">МБ</i></span><span>Android 5.0+</span></div>
+</div>
+<a class="btn-game" href="/download" data-dl>
+<span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M6 20h12"/></svg></span>
+<span class="h-game" data-i18n="dlButton">Скачать APK</span>
+</a>
+</div>
+</div>
+</section>
+
+<section class="sec wrap" id="news">
+<h2 class="h-game" data-i18n="newsTitle">Что нового</h2>
+<div class="news" id="newsList"></div>
+</section>
+</main>
+
+<footer>
+<div class="wrap">
+<span class="h-game">Counter <span style="color:var(--red)">Zombie</span> Mobile</span>
+<a href="https://t.me/counter_zombie_mobile" rel="noopener">Telegram</a>
+<a href="mailto:kuro.street.inc@gmail.com" data-i18n="mail">Почта</a>
+<a href="https://github.com/kurostreet/czm" rel="noopener">GitHub</a>
+<a href="/privacy" data-i18n="privacy">Конфиденциальность</a>
+</div>
+</footer>
+
+<button class="fab" data-open-chat aria-controls="sheet" aria-expanded="false" data-i18n-aria="chatOpen" aria-label="Открыть чат">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ff5d66" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-8l-5 4v-4H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/></svg>
+<span data-i18n="chatShort">Чат</span>
+<span class="dot green pulse"></span>
+</button>
+
+<div class="veil" id="veil" aria-hidden="true"></div>
+<div class="flash" id="flash" aria-hidden="true"></div>
+
+<aside class="drawer" id="drawer" data-i18n-aria="menu" aria-label="Меню" aria-hidden="true">
+<div class="top"><span class="h-game" style="font-size:22px" data-i18n="menu">Меню</span>
+<button class="icon-btn" data-close style="color:var(--text)" data-i18n-aria="close" aria-label="Закрыть"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6 6 18"/></svg></button></div>
+<nav>
+<a href="#shots" data-close data-i18n="shotsTitle">Кадры</a>
+<a href="#features" data-close data-i18n="featTitle">Возможности</a>
+<a href="#chat" data-open-chat data-i18n="chatTitle">Чат игры</a>
+<a href="#news" data-close data-i18n="newsTitle">Что нового</a>
+<a href="https://t.me/counter_zombie_mobile" rel="noopener">Telegram</a>
+</nav>
+<div class="langrow"><span data-i18n="langLabel">Язык</span><button class="pill" data-lang="ru" aria-pressed="true">RU</button><button class="pill" data-lang="en" aria-pressed="false">EN</button></div>
+<a class="btn-game" href="/download" data-dl><span class="h-game" data-i18n="downloadCta">Скачать игру</span></a>
+</aside>
+
+<section class="sheet" id="sheet" data-i18n-aria="chatTitle" aria-label="Чат игры" aria-hidden="true">
+<button class="grip" data-close data-i18n-aria="close" aria-label="Закрыть"><span></span></button>
+<div class="chat-head" style="padding-top:0">
+<h2 class="h-game" style="font-size:22px" data-i18n="chatTitle">Чат игры</h2>
+<div class="rooms" role="tablist" id="rooms" data-i18n-aria="roomsLabel" aria-label="Комнаты чата"></div>
+</div>
+<div class="list" id="list" aria-live="polite"></div>
+<div class="lock"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><span data-i18n="chatLock">Писать можно только в игре</span></div>
+</section>
+
+<div class="box" id="box" role="dialog" aria-modal="true" data-i18n-aria="shotsTitle" aria-label="Кадры" aria-hidden="true">
+<img id="boxImg" alt="">
+<button class="nav prev" id="boxPrev" data-i18n-aria="prev" aria-label="Назад"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg></button>
+<button class="nav next" id="boxNext" data-i18n-aria="next" aria-label="Дальше"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
+<button class="x" data-close data-i18n-aria="close" aria-label="Закрыть"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6 6 18"/></svg></button>
+<span class="cap" id="boxCap"></span>
+</div>
+
+<script src="/assets/site.js?v=__V__" defer></script>
+</body>
+</html>

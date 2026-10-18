@@ -55,8 +55,23 @@ counter-zombie.ru, kontrafps.ru {
 		file_server
 	}
 
+	# the public site from the current release: pictures, fonts and the script (links carry ?v=<commit>)
+	handle /assets/* {
+		root * /opt/czm/current/site
+		header Cache-Control "public, max-age=604800"
+		file_server
+	}
+
+	# pages: / and /privacy; the hash allows the one inline line that applies the saved theme
 	handle {
-		respond "Counter Zombie Mobile" 200
+		root * /opt/czm/current/site
+		header {
+			Content-Security-Policy "default-src 'self'; script-src 'self' 'sha256-PT1f7ai2CTSaZ/SGiYakcFr5/ubFfkcq3Ba8RwmnjfI='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+			X-Frame-Options DENY
+			Cache-Control "no-cache"
+		}
+		try_files {path} {path}.html
+		file_server
 	}
 }
 

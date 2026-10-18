@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Конфиденциальность — Counter Zombie Mobile</title>
+<meta name="description" content="Какие данные хранит игра Counter Zombie Mobile и сайт counter-zombie.ru, зачем и как их удалить.">
+<meta name="theme-color" content="#09090c">
+<link rel="canonical" href="https://counter-zombie.ru/privacy">
+<link rel="icon" type="image/png" href="/assets/favicon-64.png">
+<script>try{if(localStorage.getItem("czm-theme")==="light")document.documentElement.classList.add("light")}catch(e){}</script>
+<style>
+@font-face{font-family:"CZM Display";src:url(/assets/fonts/InterDisplay-BlackItalic.woff) format("woff");font-weight:900;font-style:italic;font-display:swap}
+@font-face{font-family:"CZM Text";src:url(/assets/fonts/Inter-Medium.woff) format("woff");font-weight:500;font-display:swap}
+@font-face{font-family:"CZM Text";src:url(/assets/fonts/Inter-SemiBold.woff) format("woff");font-weight:600;font-display:swap}
+:root{--bg:#09090c;--surface:#131318;--line:rgba(255,255,255,.09);--text:#f2efe9;--muted:#a7a5ad;--red:#ef2834;--red-ink:#ff5d66;color-scheme:dark}
+:root.light{--bg:#efece6;--surface:#fff;--line:rgba(20,20,22,.11);--text:#16161a;--muted:#55545c;--red:#d21f2b;--red-ink:#b3141f;color-scheme:light}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:500 16px/1.6 "CZM Text",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+a{color:var(--red-ink)}
+:focus-visible{outline:2px solid #f5b440;outline-offset:3px}
+header{border-bottom:1px solid var(--line);background:var(--surface)}
+.wrap{max-width:760px;margin:0 auto;padding:0 16px}
+.bar{display:flex;align-items:center;gap:10px;min-height:60px}
+.bar a{display:flex;align-items:center;gap:9px;color:var(--text);text-decoration:none}
+.bar img{width:36px;height:36px;border-radius:10px}
+.h-game{font-family:"CZM Display",system-ui,sans-serif;font-weight:900;font-style:italic;text-transform:uppercase;line-height:1.05}
+main{padding:26px 0 60px}
+h1{font-size:clamp(26px,5vw,36px);margin:0 0 6px}
+h2{font-size:20px;margin:28px 0 8px;font-weight:600}
+p,li{color:var(--text)}
+.muted{color:var(--muted);font-size:14px}
+ul{padding-left:20px}
+li{margin:4px 0}
+hr{border:0;border-top:2px solid var(--red);margin:40px 0 0;width:64px}
+</style>
+</head>
+<body>
+<header><div class="wrap bar"><a href="/"><img src="/assets/logo-96.png" alt=""><span class="h-game">Counter <span style="color:var(--red)">Zombie</span> Mobile</span></a></div></header>
+<main class="wrap">
+<h1 class="h-game">Конфиденциальность</h1>
+<p class="muted">Действует с 18 октября 2026 года. Касается игры Counter Zombie Mobile для Android и сайта counter-zombie.ru.</p>
+
+<p>Игре не нужны ваше имя, телефон или документы. Всё, что хранится, лежит на нашем сервере в России и нужно только для работы игры: чата, друзей, профиля и обновлений. Мы ничего не продаём и не показываем рекламу.</p>
+
+<h2>Что хранит игра</h2>
+<ul>
+<li>Случайный ключ игрока, который создаётся на телефоне при первом запуске. На сервере лежит только его хеш.</li>
+<li>Хеш идентификатора устройства: по нему работает блокировка нарушителей. Сам идентификатор не хранится.</li>
+<li>Ник, выбранный аватар или ваше фото, язык игры, версия игры, время первого и последнего входа.</li>
+<li>Сообщения в общем чате (комнаты Global, RU, EN). Их видят все игроки и посетители сайта. Хранятся до 7 дней, не больше 300 последних в каждой комнате.</li>
+<li>Если вы заводите аккаунт: логин, хеш пароля и, по желанию, почта для входа по коду и восстановления пароля.</li>
+<li>Для аккаунта: друзья, подписки, блокировки, статус, личные сообщения, настройки игры (кнопки, HUD, звук) для восстановления после переустановки.</li>
+<li>Пока игра открыта: в сети ли вы и на каком сервере и карте играете. Это видят ваши друзья.</li>
+<li>Жалобы игроков и блокировки, если они были.</li>
+</ul>
+
+<h2>Что хранит сайт</h2>
+<ul>
+<li>Сайт не ставит cookie и не подключает счётчики посещений и рекламу.</li>
+<li>Язык и тема (день или ночь) запоминаются только в вашем браузере.</li>
+<li>Чтобы считать скачивания, при загрузке игры по ссылке сайта сохраняется хеш IP-адреса с солью. Он удаляется через два дня, сам адрес не хранится.</li>
+<li>Журнал запросов на сервере выключен.</li>
+</ul>
+
+<h2>Кому передаются данные</h2>
+<ul>
+<li>Письма с кодами отправляют почтовые сервисы Resend и SMTP.BZ. Им передаётся только адрес почты и текст письма с кодом.</li>
+<li>Игровые серверы в списке держат их владельцы. Когда вы заходите на сервер, он видит ваш ник и IP-адрес, как в любой сетевой игре.</li>
+<li>Больше никому, кроме случаев, когда этого прямо требует закон.</li>
+</ul>
+
+<h2>Как удалить данные</h2>
+<p>Напишите на <a href="mailto:kuro.street.inc@gmail.com">kuro.street.inc@gmail.com</a> или в <a href="https://t.me/counter_zombie_mobile" rel="noopener">группу в Telegram</a> и укажите ник. Мы удалим профиль, аккаунт, почту, фото и сообщения в течение 30 дней.</p>
+
+<h2>Дети</h2>
+<p>Игра не предназначена для детей младше 13 лет. Если ребёнок завёл аккаунт, напишите нам, и мы его удалим.</p>
+
+<h2>Изменения</h2>
+<p>Если правила поменяются, новая версия появится на этой странице с новой датой.</p>
+
+<hr>
+<h2 lang="en" style="margin-top:20px">Privacy, in short (English)</h2>
+<div lang="en">
+<p>The game needs no name, phone or documents. Data is kept on our server in Russia and used only to run the game: chat, friends, profile and updates. Nothing is sold, there are no ads.</p>
+<ul>
+<li>The game keeps a hash of a random player key, a hash of the device ID (for bans), nickname, avatar or your photo, language, game version and visit times.</li>
+<li>Public chat messages are visible to everyone, including site visitors, and are kept for up to 7 days.</li>
+<li>With an account: login, password hash, optional email for sign-in codes, friends, follows, blocks, private messages and game settings.</li>
+<li>The site sets no cookies and has no analytics. To count downloads it keeps a salted hash of the IP address for two days. Server request logs are off.</li>
+<li>Sign-in codes are sent by the email services Resend and SMTP.BZ. Game servers are run by their owners and see your nickname and IP address when you join.</li>
+<li>To delete your data, write to <a href="mailto:kuro.street.inc@gmail.com">kuro.street.inc@gmail.com</a> with your nickname. We delete it within 30 days.</li>
+</ul>
+</div>
+<p class="muted" style="margin-top:30px"><a href="/">← counter-zombie.ru</a></p>
+</main>
+</body>
+</html>

@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from PIL import Image
 from pydantic import BaseModel, Field
 
-from . import service, mappics, accounts, settings, tab, social
+from . import service, mappics, accounts, settings, tab, social, website
 from .config import get_settings
 from .db import db
 
@@ -409,6 +409,36 @@ async def online(request: Request):
     return {"online": _online["count"]}
 
 
+_site_stats = {"time": 0.0, "data": None}
+
+
+@router.get("/site/stats")
+async def site_stats(request: Request):
+    """Live numbers for counter-zombie.ru, counted at most every 20 s."""
+    _read_limit.check(client_ip(request))
+    if _site_stats["data"] is None or time.monotonic() - _site_stats["time"] > 20:
+        _site_stats["data"] = await in_db(website.stats)
+        _site_stats["time"] = time.monotonic()
+    return JSONResponse(_site_stats["data"], headers={"Cache-Control": "no-cache"})
+
+
+@router.get("/site/chat")
+async def site_chat(request: Request, after: int = 0):
+    """The game chat as a read-only broadcast: nobody writes from the site."""
+    _read_limit.check(client_ip(request))
+
+    def run(conn):
+        return {"messages": website.chat(conn, after), "deleted": website.deleted(conn, after)}
+
+    return JSONResponse(await in_db(run), headers={"Cache-Control": "no-cache"})
+
+
+@router.get("/site/news")
+async def site_news(request: Request):
+    _read_limit.check(client_ip(request))
+    return JSONResponse({"news": await in_db(website.news)}, headers={"Cache-Control": "public, max-age=300"})
+
+
 @router.get("/news")
 async def news(request: Request, after: int = 0):
     _read_limit.check(client_ip(request))
@@ -424,7 +454,7 @@ async def update(request: Request, code: int = 0):
 
 @download_router.api_route("/download", methods=["GET", "HEAD"])
 @download_router.api_route("/download/CounterZombieMobile.apk", methods=["GET", "HEAD"])
-async def download_latest():
+async def download_latest(request: Request):
     """One shareable link follows the published full APK, including rollbacks."""
     def available(conn):
         release = service.latest_release(conn)
@@ -438,6 +468,11 @@ async def download_latest():
 
     url = await in_db(available)
     headers = {"Cache-Control": "no-store"}
+    if url and request.method == "GET":
+        try:
+            await in_db(website.record_download, client_ip(request))
+        except Exception:
+            log.warning("download not counted")  # the download itself goes on
     if not url:
         return JSONResponse({"error": "unavailable"}, status_code=503,
                             headers={**headers, "Retry-After": "60"})
