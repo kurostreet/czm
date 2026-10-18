@@ -62,8 +62,10 @@ SDL — `98d1f3a45aae568ccd6ed5fec179330f47d4d356` (2.32.8).
   Изменения: версия-петля, 44,1 кГц, MP3 160 кбит/с, громкость +0,4 дБ.
 - `czm_music_city.mp3` — «EmptyCity: Background Music», автор yd,
   [OpenGameArt](https://opengameart.org/node/6681), лицензия CC0.
+  Изменения: MP3 160 кбит/с, громкость +8,6 дБ.
 - `czm_music_thoughts.mp3` — «Contemplation», автор Joth,
   [OpenGameArt](https://opengameart.org/node/85636), лицензия CC0.
+  Изменения: сведён в петлю (вступление убрано, конец склеен с началом за 2,5 с), громкость +5,6 дБ.
 - `czm_sound.mp3` — трек «menu_loop_rain_3» из набора
   [Unreleased Zombie soundtrack](https://opengameart.org/content/unreleased-zombie-soundtrack),
   автор — Emma M. Andersson (Emma_MA), лицензия [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/).
