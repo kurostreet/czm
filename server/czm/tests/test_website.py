@@ -80,6 +80,24 @@ class WebsiteTests(unittest.TestCase):
         self.assertEqual(len(stored), 2)
         self.assertFalse(any("1.1.1.1" in h or "2.2.2.2" in h for h in stored))
 
+    def test_play_beta_count_uses_console_confirmed_value_only(self):
+        initial = self.client.get("/api/v1/site/stats").json()
+        self.assertIsNone(initial["play_beta_testers"])
+        self.assertEqual(initial["play_beta_checked_at"], 0)
+        with db.db() as conn:
+            website.set_play_beta_testers(conn, 0)
+        api._site_stats.update(time=0.0, data=None)
+        zero = self.client.get("/api/v1/site/stats").json()
+        self.assertEqual(zero["play_beta_testers"], 0)
+        self.assertGreater(zero["play_beta_checked_at"], 0)
+        with db.db() as conn:
+            website.set_play_beta_testers(conn, 13)
+            with self.assertRaises(ValueError):
+                website.set_play_beta_testers(conn, -1)
+        api._site_stats.update(time=0.0, data=None)
+        updated = self.client.get("/api/v1/site/stats").json()
+        self.assertEqual(updated["play_beta_testers"], 13)
+
     def test_chat_broadcast_merges_rooms_hides_masked_and_deleted_lines(self):
         a = self.player(1, "Kuro", "7")
         b = self.player(2, "свага")
