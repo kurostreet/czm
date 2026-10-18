@@ -47,7 +47,7 @@ class WebsiteTests(unittest.TestCase):
         (get_settings().apk_dir / name).write_bytes(b"a" * 10)
         with db.db() as conn:
             conn.execute("INSERT INTO releases(version,code,file,size,sha256,notes,created,published) VALUES (?,?,?,?,?,?,?,?)",
-                         (f"1.35-{code}", code, name, 10, "a" * 64, "Новая музыка.", 1, 100 + code))
+                         (f"1.35-{code}", code, name, size, "a" * 64, "Новая музыка.", 1, 100 + code))
 
     def test_numbers_are_real_and_downloads_start_from_known_installs(self):
         a = self.player(1, "Kuro", "7")
