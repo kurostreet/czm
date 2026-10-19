@@ -23,8 +23,9 @@ concurrency:
 jobs:
   bundle:
     name: Build the Google Play bundle
-    # only after a players' build of a push that passed; never for pull requests
-    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    # only after a players' build of a push that passed; never for pull requests.
+    # "[no play]" in the commit message keeps that release away from Google Play (a review in progress stays as is)
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && !contains(github.event.workflow_run.head_commit.message, '[no play]'))
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     steps:

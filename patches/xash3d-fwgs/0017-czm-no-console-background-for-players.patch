@@ -1,0 +1,189 @@
+diff --git a/engine/client/cl_main.c b/engine/client/cl_main.c
+--- a/engine/client/cl_main.c
++++ b/engine/client/cl_main.c
+@@ -1206,6 +1206,7 @@
+ {
+ 	if( !cls.initialized )
+ 		return;
++	CZM_Loading_Dropped();
+ 	CL_Disconnect();
+ }
+ 
+diff --git a/engine/client/client.h b/engine/client/client.h
+--- a/engine/client/client.h
++++ b/engine/client/client.h
+@@ -820,6 +820,7 @@
+ void CZM_TrackInfoQuery( netadr_t adr );
+ void CZM_Loading_SetHostname( const char *hostname );
+ void CZM_Loading_SetError( const char *reason );
++void CZM_Loading_Dropped( void );
+ void CZM_Loading_PrecacheBegin( void );
+ void CZM_Loading_PrecacheStep( void );
+ void CZM_Loading_SpawnSent( void );
+diff --git a/engine/client/console.c b/engine/client/console.c
+--- a/engine/client/console.c
++++ b/engine/client/console.c
+@@ -147,6 +147,10 @@
+ 
+ static console_t		con;
+ 
++// Counter Zombie Mobile: a loading picture of the game replaces the console background of the game data
++#define CZM_CONBACK "gfx/czm/loading_3.png"
++static qboolean con_czm_background;
++
+ static void Con_ClearField( field_t *edit );
+ static void Field_CharEvent( field_t *edit, int ch );
+ static void Con_InvalidateFonts( void );
+@@ -1896,6 +1900,42 @@
+ 
+ /*
+ ================
++Con_DrawCzmBackground
++
++Counter Zombie Mobile: our wide picture fills the screen without stretching
++(cropped to the screen's shape) and is dimmed, so the text and the menu stay readable
++================
++*/
++static void Con_DrawCzmBackground( int lines )
++{
++	int w = REF_GET_PARM( PARM_TEX_SRC_WIDTH, con.background );
++	int h = REF_GET_PARM( PARM_TEX_SRC_HEIGHT, con.background );
++	float s1 = 0.0f, t1 = 0.0f, s2 = 1.0f, t2 = 1.0f;
++
++	if( w > 0 && h > 0 && refState.width > 0 && refState.height > 0 )
++	{
++		float screen = (float)refState.width / refState.height;
++		float image = (float)w / h;
++
++		if( screen > image )
++		{
++			t1 = ( 1.0f - image / screen ) * 0.5f;
++			t2 = 1.0f - t1;
++		}
++		else
++		{
++			s1 = ( 1.0f - screen / image ) * 0.5f;
++			s2 = 1.0f - s1;
++		}
++	}
++
++	ref.dllFuncs.Color4ub( 120, 120, 120, 255 );
++	ref.dllFuncs.R_DrawStretchPic( 0, lines - refState.height, refState.width, refState.height, s1, t1, s2, t2, con.background );
++	ref.dllFuncs.Color4ub( 255, 255, 255, 255 );
++}
++
++/*
++================
+ Con_DrawConsole
+ 
+ Draws the console with the solid background
+@@ -1915,9 +1955,16 @@
+ 	// draw the background
+ 	ref.dllFuncs.GL_SetRenderMode( kRenderNormal );
+ 	ref.dllFuncs.Color4ub( 255, 255, 255, 255 ); // to prevent grab color from screenfade
+-	if( refState.width * 3 / 4 < refState.height && lines >= refState.height )
+-		ref.dllFuncs.R_DrawStretchPic( 0, lines - refState.height, refState.width, refState.height - refState.width * 3 / 4, 0, 0, 1, 1, R_GetBuiltinTexture( REF_BLACK_TEXTURE ));
+-	ref.dllFuncs.R_DrawStretchPic( 0, lines - refState.width * 3 / 4, refState.width, refState.width * 3 / 4, 0, 0, 1, 1, con.background );
++	if( con_czm_background )
++	{
++		Con_DrawCzmBackground( lines );
++	}
++	else
++	{
++		if( refState.width * 3 / 4 < refState.height && lines >= refState.height )
++			ref.dllFuncs.R_DrawStretchPic( 0, lines - refState.height, refState.width, refState.height - refState.width * 3 / 4, 0, 0, 1, 1, R_GetBuiltinTexture( REF_BLACK_TEXTURE ));
++		ref.dllFuncs.R_DrawStretchPic( 0, lines - refState.width * 3 / 4, refState.width, refState.width * 3 / 4, 0, 0, 1, 1, con.background );
++	}
+ 
+ 	if( !con.curFont || !host.allow_console )
+ 		return; // nothing to draw
+@@ -2025,6 +2072,14 @@
+ 	case ca_disconnected:
+ 		if( cls.key_dest != key_menu )
+ 		{
++			// Counter Zombie Mobile: players have no console, outside a game their screen
++			// is the menu (thrown out of a game while a game window was open, for example)
++			if( !host.allow_console && !SV_Active( ) && !CZM_Loading_Active( ) && !UI_CreditsActive( ))
++			{
++				UI_SetActiveMenu( true );
++				break;
++			}
++
+ 			Con_DrawSolidConsole( refState.height );
+ 			Key_SetKeyDest( key_console );
+ 		}
+@@ -2328,7 +2383,13 @@
+ 	con.background = R_GetBuiltinTexture( REF_GRAY_TEXTURE );
+ #else
+ 	// loading console image
+-	con.background = Con_LoadSimpleConback( host.allow_console ? "conback" : "loading", flags );
++	con.background = 0;
++	if( g_fsapi.FileExists( CZM_CONBACK, false ))
++		con.background = ref.dllFuncs.GL_LoadTexture( CZM_CONBACK, NULL, 0, flags );
++	con_czm_background = con.background != 0 && con.background != R_GetBuiltinTexture( REF_DEFAULT_TEXTURE );
++
++	if( !con_czm_background )
++		con.background = Con_LoadSimpleConback( host.allow_console ? "conback" : "loading", flags );
+ 
+ 	if( !con.background ) // last chance - quake conback image
+ 	{
+diff --git a/engine/client/czm_loading.c b/engine/client/czm_loading.c
+--- a/engine/client/czm_loading.c
++++ b/engine/client/czm_loading.c
+@@ -91,6 +91,8 @@
+ 	char     info_map[64];
+ 	char     remote_host[64];
+ 	char     error[256];
++	char     game_error[256]; // why the server or an error ended the game, for the menu
++	double   game_error_time;
+ } czm;
+ 
+ static void CZM_SetString( convar_t *var, const char *value )
+@@ -768,13 +770,34 @@
+ 
+ void CZM_Loading_SetError( const char *reason )
+ {
++	if( COM_StringEmpty( reason ))
++		return;
++
++	// thrown out of a running game: kept until the disconnect, the first reason wins
++	if( !czm.active )
++	{
++		if( cls.state == ca_active && ( COM_StringEmpty( czm.game_error ) || host.realtime - czm.game_error_time > 5.0 ))
++		{
++			Q_strncpy( czm.game_error, reason, sizeof( czm.game_error ));
++			czm.game_error_time = host.realtime;
++		}
++		return;
++	}
++
+ 	// A later generic disconnect must not replace the server's original reason.
+-	if( !czm.active || czm.cancelled || !COM_StringEmpty( czm.error ) || COM_StringEmpty( reason ))
++	if( czm.cancelled || !COM_StringEmpty( czm.error ))
+ 		return;
+ 
+ 	Q_strncpy( czm.error, reason, sizeof( czm.error ));
+ }
+ 
++void CZM_Loading_Dropped( void )
++{
++	// the server or an error ended the game, not the player: the menu says so even without a reason
++	if( !czm.active )
++		CZM_Loading_SetError( "#connection_lost" );
++}
++
+ void CZM_Loading_PrecacheBegin( void )
+ {
+ 	int total = 0;
+@@ -878,6 +901,11 @@
+ 	if( !czm.active )
+ 	{
+ 		czm.forced = false;
++
++		// thrown out of the game: the menu tells the player why
++		if( !COM_StringEmpty( czm.game_error ) && host.realtime - czm.game_error_time <= 5.0 )
++			CZM_SetString( &czm_loading_error, va( "#dropped %s", czm.game_error ));
++		czm.game_error[0] = 0;
+ 		return;
+ 	}
+ 

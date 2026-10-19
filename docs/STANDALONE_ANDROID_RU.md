@@ -52,7 +52,8 @@ python3 scripts/assemble_offline_apk.py \
 Google Play — отдельная AAB-сборка (вариант `googlePlayRelease`, пакет `dev.gaming.czm`,
 без обновлений из игры и без сжатия кода). Игровые данные идут в пакете ресурсов `gamedata` (install-time):
 основной модуль Google Play ограничен 200 МБ. Порядок: после каждой успешной сборки для игроков
-«Counter Zombie Mobile for Google Play» запускается сам (или вручную: Actions → Run workflow); CI отправляет
+«Counter Zombie Mobile for Google Play» запускается сам (или вручную: Actions → Run workflow; `[no play]`
+в сообщении коммита оставляет этот выпуск только игрокам сайта, проверка Google не перезапускается); CI отправляет
 неподписанный AAB и `czm/whatsnew.txt` на сервер, сервер кладёт игровые данные в `gamedata`, подписывает
 ключом загрузки (`/var/lib/czm/signing/play-upload.p12`, пароль в `/etc/czm/env`, копия в
 `/var/backups/czm-signing`), выкладывает `https://counter-zombie.ru/dl/play/CounterZombieMobile-<версия>.aab`

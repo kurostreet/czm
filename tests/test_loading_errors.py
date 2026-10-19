@@ -1,4 +1,4 @@
-"""Run actual loading teardown and Host_EndGame: keep the cause of failed entry."""
+"""Run actual loading teardown and Host_EndGame: keep the cause of failed entry and of a lost game."""
 from pathlib import Path
 import subprocess
 import tempfile
@@ -25,6 +25,8 @@ class LoadingErrorsTests(unittest.TestCase):
         source = PREAMBLE
         source += function(loading, "static void CZM_End(") + "\n"
         source += function(loading, "void CZM_Loading_SetError(") + "\n"
+        source += function(loading, "void CZM_Loading_Dropped(") + "\n"
+        source += function(loading, "void CZM_Loading_Disconnected(") + "\n"
         source += "void CL_Disconnect() { cls.state = ca_disconnected; CZM_End(false); }\n"
         source += function(host, "void Host_EndGame(") + "\n"
         source += SCENARIO
@@ -50,8 +52,10 @@ typedef bool qboolean;
 #define Q_strncpy(d,s,n) snprintf(d,n,"%s",s)
 #define COM_StringEmpty(s) (!(s)[0])
 enum { ca_disconnected, ca_active, key_menu, CZM_STAGE_NONE };
-struct { bool active, forced, cancelled, seen_loading, reopen_menu; char error[256]; } czm;
+struct { bool active, forced, cancelled, seen_loading, reopen_menu; char error[256], game_error[256]; double game_error_time; } czm;
 struct { int state, key_dest; } cls;
+struct { double realtime; } host;
+const char *va(const char *f, ...) { static char b[1024]; va_list a; va_start(a,f); vsnprintf(b,sizeof(b),f,a); va_end(a); return b; }
 struct Var { std::string value; } czm_loading_error, czm_loading, czm_loading_stage;
 void CZM_SetString(Var *v, const char *s) { v->value=s; }
 void CZM_SetValue(Var *, float) {}
@@ -70,6 +74,8 @@ void Reset() {
  memset(&czm,0,sizeof(czm)); czm.active=true; czm.seen_loading=true;
  cls.state=ca_disconnected; cls.key_dest=key_menu; czm_loading_error.value.clear();
 }
+void InGame() { Reset(); czm.active=false; cls.state=ca_active; host.realtime=100; }
+void Drop() { CZM_Loading_Dropped(); cls.state=ca_disconnected; CZM_Loading_Disconnected(); }
 int main() {
  Reset();
  Host_EndGame(true,"Resource %s is missing\n","models/test.mdl");
@@ -97,6 +103,23 @@ int main() {
  assert(czm.error[0]==0);
  Reset(); czm.seen_loading=false; CL_Disconnect();
  assert(czm_loading_error.value.empty());
+ // thrown out of a running game: the menu gets the first reason
+ InGame(); CZM_Loading_SetError("Kicked by Console"); Drop();
+ assert(czm_loading_error.value=="#dropped Kicked by Console" && czm.game_error[0]==0);
+ InGame(); Drop();
+ assert(czm_loading_error.value=="#dropped #connection_lost");
+ InGame(); CZM_Loading_SetError("#connection_timeout"); CZM_Loading_SetError("later error");
+ cls.state=ca_disconnected; CZM_Loading_Disconnected();
+ assert(czm_loading_error.value=="#dropped #connection_timeout");
+ // the player left by himself, or an old reason: nothing to show
+ InGame(); cls.state=ca_disconnected; CZM_Loading_Disconnected();
+ assert(czm_loading_error.value.empty());
+ InGame(); CZM_Loading_SetError("old reason"); host.realtime+=60; cls.state=ca_disconnected; CZM_Loading_Disconnected();
+ assert(czm_loading_error.value.empty() && czm.game_error[0]==0);
+ // a drop while loading keeps the loading screen's own reason
+ Reset(); CZM_Loading_Dropped(); assert(czm.error[0]==0);
+ CZM_Loading_Disconnected();
+ assert(czm_loading_error.value=="#connect_failed");
  puts("LOADING_ERRORS_OK");
 }
 '''

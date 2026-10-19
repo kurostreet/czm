@@ -95,6 +95,8 @@ static const struct { const char *key, *ru, *en; } s_strings[] =
 	{ "err_banned", "Доступ на этот сервер закрыт.", "You are not allowed on this server." },
 	{ "err_kicked", "Сервер отключил тебя.", "The server disconnected you." },
 	{ "err_generic", "Не удалось подключиться к серверу.", "Could not connect to the server." },
+	{ "err_dropped", "Связь с сервером прервалась.", "The connection to the server was lost." },
+	{ "err_dropped_timeout", "Сервер перестал отвечать.\nСвязь с сервером прервалась.", "The server stopped responding.\nThe connection to the server was lost." },
 	// main screen
 	{ "nick_hint", "Нажми, чтобы открыть профиль", "Tap to open your profile" },
 	{ "in_game", "в игре", "playing" },
@@ -1160,13 +1162,20 @@ static void CZM_ShowPendingError( void )
 {
 	const char *error = EngFuncs::GetCvarString( "czm_loading_error" );
 	char reason[256], text[512];
+	bool dropped;
 
 	if( !error || !error[0] || !uiStatic.menu.IsActive( ))
 		return;
 
-	CZM_CleanReason( error, reason, sizeof( reason ));
+	// "#dropped <reason>": the server or an error ended a running game
+	dropped = !strncmp( error, "#dropped ", 9 );
+	CZM_CleanReason( dropped ? error + 9 : error, reason, sizeof( reason ));
 
-	if( !strcmp( reason, "#connect_failed" ))
+	if( dropped && ( !reason[0] || !strcmp( reason, "#connection_lost" )))
+		snprintf( text, sizeof( text ), "%s", CZM_T( "err_dropped" ));
+	else if( dropped && !strcmp( reason, "#connection_timeout" ))
+		snprintf( text, sizeof( text ), "%s", CZM_T( "err_dropped_timeout" ));
+	else if( !strcmp( reason, "#connect_failed" ))
 		snprintf( text, sizeof( text ), "%s", CZM_T( "err_connect" ));
 	else if( !strcmp( reason, "#connection_timeout" ))
 		snprintf( text, sizeof( text ), "%s", CZM_T( "err_timeout" ));
@@ -1179,7 +1188,7 @@ static void CZM_ShowPendingError( void )
 	else if( CZM_Contains( reason, "kick" ))
 		snprintf( text, sizeof( text ), "%s\n%s", CZM_T( "err_kicked" ), reason );
 	else
-		snprintf( text, sizeof( text ), "%s\n%s", CZM_T( "err_generic" ), reason );
+		snprintf( text, sizeof( text ), "%s\n%s", CZM_T( dropped ? "err_dropped" : "err_generic" ), reason );
 
 	EngFuncs::CvarSetString( "czm_loading_error", "" );
 	UI_ShowMessageBox( text );
