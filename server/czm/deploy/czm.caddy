@@ -74,6 +74,13 @@ counter-zombie.ru, kontrafps.ru {
 		file_server
 	}
 
+	# Google Play beta video guide; stored persistently outside release.
+	handle_path /media/* {
+		root * /var/lib/czm/tutorial
+		header Cache-Control "public, max-age=86400"
+		file_server
+	}
+
 	# pages: / and /privacy; the hash allows the one inline line that applies the saved theme
 	handle {
 		root * /opt/czm/current/site

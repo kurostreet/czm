@@ -152,7 +152,7 @@ class InstallListTests(unittest.TestCase):
         html = (self.base / "site" / "index.html").read_text()
         js = (self.base / "site" / "assets" / "site.js").read_text()
         self.assertIn('data-group="https://groups.google.com/g/counter-zombie-mobile-beta"', html)
-        self.assertIn('id="sBetaTesters">0</span> / 50', html)
+        self.assertIn('id="sBetaTesters">2</span> / 50', html)
         self.assertIn('data-step="2"', html)
         self.assertIn('data-step="3"', html)
         self.assertIn('play_beta_open === true', js)
@@ -173,6 +173,19 @@ class InstallListTests(unittest.TestCase):
         self.assertIn("Use the Google Play beta for installation", caddy)
         self.assertIn("respond @packages", caddy)
         self.assertIn("downloadCta: 'Join the beta test'", js)
+
+    def test_beta_video_guide_is_embedded_not_preloaded(self):
+        html = (self.base / "site" / "index.html").read_text()
+        js = (self.base / "site" / "assets" / "site.js").read_text()
+        caddy = (self.base / "deploy" / "czm.caddy").read_text()
+        self.assertIn('data-i18n="betaVideo">Видео инструкция', html)
+        self.assertIn('preload="none"', html)
+        self.assertIn('controls playsinline', html)
+        self.assertIn('src="/media/beta-instruction.mp4"', html)
+        self.assertIn('poster="/media/beta-instruction.jpg"', html)
+        self.assertIn("betaVideo: 'Video instructions'", js)
+        self.assertIn('handle_path /media/*', caddy)
+        self.assertIn('root * /var/lib/czm/tutorial', caddy)
 
     def test_build_uploads_get_the_large_body_limit(self):
         caddy = (self.base / "deploy" / "czm.caddy").read_text()
