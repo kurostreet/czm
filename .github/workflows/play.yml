@@ -1,10 +1,16 @@
 name: Counter Zombie Mobile for Google Play
 
-# Started by hand (Actions → this workflow → Run workflow). Builds the Android App Bundle of the
-# open part of the game; the game server adds the game data into the asset pack `gamedata`,
-# signs the bundle with the upload key and keeps it at https://counter-zombie.ru/dl/play/.
+# Starts by itself after every successful players' build of the release branch (and by hand:
+# Actions → this workflow → Run workflow). Builds the Android App Bundle of the open part of the
+# game; the game server adds the game data into the asset pack `gamedata`, signs the bundle with
+# the upload key, keeps it at https://counter-zombie.ru/dl/play/ and sends it to the Google Play
+# testing tracks (internal and closed test) for review.
 on:
   workflow_dispatch:
+  workflow_run:
+    workflows: ["Counter Zombie Mobile Android"]
+    types: [completed]
+    branches: [feature/mobile-launcher]
 
 permissions:
   contents: read
@@ -17,6 +23,8 @@ concurrency:
 jobs:
   bundle:
     name: Build the Google Play bundle
+    # only after a players' build of a push that passed; never for pull requests
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     steps:
@@ -83,6 +91,7 @@ jobs:
           VERSION=$(cat version.txt)
           CODE=$(cat code.txt)
           SHA256=$(cut -d' ' -f1 CounterZombieMobile-Play-unsigned.aab.sha256)
+          NOTES=$( [ -f czm/whatsnew.txt ] && base64 -w0 czm/whatsnew.txt || true )
           echo "Sending $VERSION ($CODE), $(du -m CounterZombieMobile-Play-unsigned.aab | cut -f1) MB"
           for attempt in 1 2 3 4; do
             TOKEN=$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
@@ -90,10 +99,10 @@ jobs:
             echo "::add-mask::$TOKEN"
             if curl -sS --fail-with-body --max-time 1200 -X POST -H "Expect:" \
                 -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/octet-stream" \
-                -T CounterZombieMobile-Play-unsigned.aab \
+                -H "X-CZM-Notes: $NOTES" -T CounterZombieMobile-Play-unsigned.aab \
                 "https://kontrafps.ru/api/v1/play-builds?version=$VERSION&code=$CODE&sha256=$SHA256&commit=$GITHUB_SHA"; then
               echo
-              echo "::notice::The signed bundle will be at https://counter-zombie.ru/dl/play/CounterZombieMobile-$VERSION.aab"
+              echo "::notice::The signed bundle will be at https://counter-zombie.ru/dl/play/CounterZombieMobile-$VERSION.aab and goes to the Google Play testing tracks"
               exit 0
             fi
             echo

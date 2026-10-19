@@ -8,6 +8,9 @@ its own app key (Play App Signing), so the upload key can be replaced through Pl
 
 The upload key and its password are made once by install.sh (`<data_dir>/signing/play-upload.p12`,
 CZM_PLAY_KEY_PASSWORD in /etc/czm/env) and never printed.
+
+When the Google Play service account key is there (play_publish.configured), every finished bundle
+also goes to the testing tracks and to Google's review; the owner hears about it in the bot.
 """
 import logging
 import os
@@ -16,7 +19,7 @@ import subprocess
 import zipfile
 from pathlib import Path
 
-from . import db
+from . import db, play_publish, service
 from .assemble import GAME_DATA, SIGNATURE, BuildError, check_game_data, previous_release_apk, sha256_of
 from .config import get_settings
 
@@ -119,7 +122,10 @@ def run_pending() -> int:
     done = 0
     for bundle in sorted(settings.incoming_dir.glob("*.play.aab")):
         version_file = bundle.with_suffix(".version")
+        notes_file = bundle.with_suffix(".notes")
         version = version_file.read_text().strip() if version_file.is_file() else bundle.name.split(".")[0]
+        notes = notes_file.read_text().strip() if notes_file.is_file() else ""
+        target = None
         try:
             target = assemble(bundle, version)
             log.info("Google Play bundle %s ready: %s (%d MB)", version, target.name, target.stat().st_size // 1048576)
@@ -128,6 +134,26 @@ def run_pending() -> int:
             log.exception("Google Play bundle %s failed: %s", version, e)
             bundle.replace(bundle.with_suffix(".failed"))
         version_file.unlink(missing_ok=True)
+        notes_file.unlink(missing_ok=True)
+        if target is not None and play_publish.configured():
+            send_to_testers(target, version, notes)
         done += 1
     return done
+
+
+def send_to_testers(target: Path, version: str, notes: str) -> None:
+    """Testing tracks and Google's review; the result goes to the bot either way."""
+    settings = get_settings()
+    tracks = ", ".join(settings.play_track_list)
+    if not notes:
+        with db.db() as conn:
+            notes = service.release_notes_for(conn, version)
+    try:
+        code = play_publish.publish(target, version, notes)
+        status, error = "sent", ""
+    except Exception as e:  # noqa: BLE001 — the bundle stays on the server for a manual upload
+        log.exception("Google Play bundle %s was not sent: %s", version, e)
+        code, status, error = None, "failed", str(e) or type(e).__name__
+    with db.db() as conn:
+        service.add_play_publish(conn, version, code, tracks, status, error)
 

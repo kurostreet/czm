@@ -216,6 +216,18 @@ CREATE TABLE IF NOT EXISTS builds (
     finished INTEGER,
     notified INTEGER NOT NULL DEFAULT 0
 );
+
+-- Google Play bundles sent to the testing tracks by `czm.cli assemble` (play_publish.py)
+CREATE TABLE IF NOT EXISTS play_publishes (
+    id INTEGER PRIMARY KEY,
+    version TEXT NOT NULL,
+    version_code INTEGER,
+    tracks TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL,                 -- sent, failed
+    error TEXT NOT NULL DEFAULT '',
+    created INTEGER NOT NULL,
+    notified INTEGER NOT NULL DEFAULT 0
+);
 """
 
 # columns added after the first version of a table

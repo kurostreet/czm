@@ -51,12 +51,17 @@ python3 scripts/assemble_offline_apk.py \
 подпись тестовых обновлений. Для публикации понадобится собственный ключ в закрытом хранилище.
 Google Play — отдельная AAB-сборка (вариант `googlePlayRelease`, пакет `dev.gaming.czm`,
 без обновлений из игры и без сжатия кода). Игровые данные идут в пакете ресурсов `gamedata` (install-time):
-основной модуль Google Play ограничен 200 МБ. Порядок: Actions → «Counter Zombie Mobile for Google Play» →
-Run workflow; CI отправляет неподписанный AAB на сервер, сервер кладёт игровые данные в `gamedata`,
-подписывает ключом загрузки (`/var/lib/czm/signing/play-upload.p12`, пароль в `/etc/czm/env`, копия в
-`/var/backups/czm-signing`) и выкладывает `https://counter-zombie.ru/dl/play/CounterZombieMobile-<версия>.aab`.
-Этот файл владелец загружает в Play Console. Ключ приложения хранит Google (Play App Signing), поэтому
-утерянный ключ загрузки заменяется через поддержку Play.
+основной модуль Google Play ограничен 200 МБ. Порядок: после каждой успешной сборки для игроков
+«Counter Zombie Mobile for Google Play» запускается сам (или вручную: Actions → Run workflow); CI отправляет
+неподписанный AAB и `czm/whatsnew.txt` на сервер, сервер кладёт игровые данные в `gamedata`, подписывает
+ключом загрузки (`/var/lib/czm/signing/play-upload.p12`, пароль в `/etc/czm/env`, копия в
+`/var/backups/czm-signing`), выкладывает `https://counter-zombie.ru/dl/play/CounterZombieMobile-<версия>.aab`
+и через Google Play Developer API ставит сборку во внутренний и закрытый тест (`CZM_PLAY_TRACKS`) с
+отправкой на проверку Google (`server/czm/czm/play_publish.py`). Доступ — сервисный аккаунт
+`czm-publisher@czm-play.iam.gserviceaccount.com` (только тестовые версии этой игры), ключ
+`/etc/czm/play-service-account.json` (root:czm 640, копия в `/var/backups/czm-signing`). Итог (отправлено или
+ошибка) приходит владельцу в бот; при ошибке файл можно загрузить в Play Console вручную.
+Ключ приложения хранит Google (Play App Signing), поэтому утерянный ключ загрузки заменяется через поддержку Play.
 
 ## Проверки
 

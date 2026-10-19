@@ -52,7 +52,9 @@ def check_token(token: str, workflow_file: str | None = None) -> dict:
             log.warning("build token for another %s: %s", name, claims.get(name))
             raise HTTPException(403, {"error": "token"})
     workflow = f"{settings.build_repository}/{workflow_file or settings.build_workflow}@{settings.build_ref}"
-    if claims.get("workflow_ref") != workflow or claims.get("event_name") not in ("push", "workflow_dispatch"):
+    # play.yml also starts by itself after a successful players' build (workflow_run, default branch only)
+    events = ("push", "workflow_dispatch") + (("workflow_run",) if workflow_file == settings.play_workflow else ())
+    if claims.get("workflow_ref") != workflow or claims.get("event_name") not in events:
         log.warning("build token from workflow %s (%s)", claims.get("workflow_ref"), claims.get("event_name"))
         raise HTTPException(403, {"error": "token"})
     return claims
@@ -127,7 +129,8 @@ async def receive_build(request: Request, version: str, code: int, sha256: str, 
 
 @router.post("/play-builds")
 async def receive_play_build(request: Request, version: str, code: int, sha256: str, commit: str,
-                             authorization: str | None = Header(default=None)):
+                             authorization: str | None = Header(default=None),
+                             x_czm_notes: str | None = Header(default=None)):
     """An unsigned bundle for Google Play from play.yml; `czm.cli assemble` adds the game data and signs it."""
     settings = get_settings()
     if not authorization or not authorization.lower().startswith("bearer "):
@@ -159,6 +162,11 @@ async def receive_play_build(request: Request, version: str, code: int, sha256: 
             if size == 0 or digest.hexdigest() != sha256:
                 raise HTTPException(400, {"error": "sha256"})
             (folder / name).with_suffix(".version").write_text(version + "\n")
+            try:                              # what's new, for the testers in Google Play
+                notes = base64.b64decode(x_czm_notes or "", validate=True).decode("utf-8")
+            except (binascii.Error, UnicodeDecodeError):
+                notes = ""
+            (folder / name).with_suffix(".notes").write_text(notes)
             part.replace(folder / name)
         finally:
             part.unlink(missing_ok=True)

@@ -35,12 +35,17 @@ class Settings(BaseSettings):
     apksigner: str = "apksigner"
     keystore: str = ""                          # default: <data_dir>/signing/debug.keystore (public upstream debug key)
 
-    # Google Play: play.yml (started by hand) sends an unsigned bundle, the server adds the game
-    # data and signs it with the upload key; the owner uploads the result to Play Console
+    # Google Play: play.yml (after each players' build, or by hand) sends an unsigned bundle, the
+    # server adds the game data, signs it with the upload key and, when the service account key is
+    # there, sends it to the testing tracks through the Google Play Developer API (play_publish.py)
     play_workflow: str = ".github/workflows/play.yml"
     play_key_alias: str = "upload"
     play_keep: int = 2                          # signed bundles kept on disk
     jarsigner: str = "jarsigner"
+    play_package: str = "dev.gaming.czm"
+    play_publish: bool = True                   # off: bundles are only kept for a manual upload
+    play_tracks: str = "internal,alpha"         # internal test, closed test (beta group)
+    play_service_account_file: Path = Path("/etc/czm/play-service-account.json")   # root:czm 640, never printed
 
     # chat rules
     rooms: str = "global,ru,en"
@@ -112,6 +117,10 @@ class Settings(BaseSettings):
     @property
     def play_dir(self) -> Path:
         return self.apk_dir / "play"            # served at /dl/play/
+
+    @property
+    def play_track_list(self) -> list[str]:
+        return [t.strip() for t in self.play_tracks.split(",") if t.strip()]
 
     @property
     def play_keystore_file(self) -> Path:

@@ -224,6 +224,27 @@ class OwnerBot:
             if sent or not self.owners:
                 await in_db(service.mark_build_notified, b["id"])
 
+    @staticmethod
+    def play_text(p: dict) -> str:
+        version = html.escape(p["version"])
+        if p["status"] == "sent":
+            return (f"🧪 Сборка <b>{version}</b> ({p['version_code']}) отправлена в Google Play: "
+                    f"{html.escape(p['tracks'])}.\nGoogle проверит её, после одобрения тестеры получат обновление.")
+        return (f"⚠️ Сборку {version} не удалось отправить в Google Play: {html.escape(p['error'])}\n"
+                "Подписанный файл лежит на сервере, его можно загрузить в Play Console вручную.")
+
+    async def notify_play(self) -> None:
+        for p in await in_db(service.unnotified_play_publishes):
+            sent = False
+            for owner in self.owners:
+                try:
+                    await self.bot.send_message(owner, self.play_text(p))
+                    sent = True
+                except TelegramAPIError as e:
+                    log.warning("could not send Google Play notice %s to %s: %s", p["id"], owner, e)
+            if sent or not self.owners:
+                await in_db(service.mark_play_publish_notified, p["id"])
+
     async def on_release_button(self, query: CallbackQuery, action: str, release_id: int) -> None:
         def act(conn):
             release = service.release_by_id(conn, release_id)
@@ -401,6 +422,7 @@ async def builds_loop(owner: OwnerBot) -> None:
     while True:
         try:
             await owner.notify_builds()
+            await owner.notify_play()
         except asyncio.CancelledError:
             raise
         except Exception as e:

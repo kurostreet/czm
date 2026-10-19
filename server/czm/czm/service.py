@@ -415,6 +415,25 @@ def mark_build_notified(conn: sqlite3.Connection, build_id: int) -> None:
     conn.execute("UPDATE builds SET notified = 1 WHERE id = ?", (build_id,))
 
 
+def add_play_publish(conn: sqlite3.Connection, version: str, code: int | None, tracks: str, status: str,
+                     error: str = "") -> None:
+    conn.execute("INSERT INTO play_publishes(version, version_code, tracks, status, error, created) VALUES (?,?,?,?,?,?)",
+                 (version, code, tracks, status, error[:500], now()))
+
+
+def release_notes_for(conn: sqlite3.Connection, version: str) -> str:
+    row = conn.execute("SELECT notes FROM releases WHERE version = ? ORDER BY id DESC LIMIT 1", (version,)).fetchone()
+    return row[0] if row else ""
+
+
+def unnotified_play_publishes(conn: sqlite3.Connection) -> list[dict]:
+    return [dict(r) for r in conn.execute("SELECT * FROM play_publishes WHERE notified = 0 ORDER BY id").fetchall()]
+
+
+def mark_play_publish_notified(conn: sqlite3.Connection, publish_id: int) -> None:
+    conn.execute("UPDATE play_publishes SET notified = 1 WHERE id = ?", (publish_id,))
+
+
 def stats(conn: sqlite3.Connection) -> dict:
     t = now()
     one = lambda q, *a: conn.execute(q, a).fetchone()[0]  # noqa: E731
