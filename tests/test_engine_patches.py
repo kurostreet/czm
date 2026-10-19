@@ -34,7 +34,9 @@ class EnginePatchTests(unittest.TestCase):
             content = "diff --git a/screen.c b/screen.c\n" + "".join(difflib.unified_diff(
                 old.splitlines(True), new.splitlines(True), fromfile="a/screen.c", tofile="b/screen.c"))
             (self.patches / name).write_text(content)
-        scope = patch.multiple(module, ENGINE=self.engine, ENGINE_PATCHES=self.patches)
+        no_sdl = Path(temp.name) / "no-sdl-patches"
+        no_sdl.mkdir()
+        scope = patch.multiple(module, ENGINE=self.engine, ENGINE_PATCHES=self.patches, SDL_PATCHES=no_sdl)
         scope.start()
         self.addCleanup(scope.stop)
 

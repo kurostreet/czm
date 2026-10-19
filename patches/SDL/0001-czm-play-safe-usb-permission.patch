@@ -1,0 +1,77 @@
+diff --git a/android-project/app/src/main/java/org/libsdl/app/HIDDeviceManager.java b/android-project/app/src/main/java/org/libsdl/app/HIDDeviceManager.java
+index 21a1c1d..a007cf4 100644
+--- a/android-project/app/src/main/java/org/libsdl/app/HIDDeviceManager.java
++++ b/android-project/app/src/main/java/org/libsdl/app/HIDDeviceManager.java
+@@ -72,8 +72,12 @@ public class HIDDeviceManager {
+                 UsbDevice usbDevice = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
+                 handleUsbDeviceDetached(usbDevice);
+             } else if (action.equals(HIDDeviceManager.ACTION_USB_PERMISSION)) {
++                // CZM: the PendingIntent is immutable, so the device is our own extra and the
++                // answer is read from UsbManager instead of the system's filled-in extras
+                 UsbDevice usbDevice = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
+-                handleUsbDevicePermission(usbDevice, intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false));
++                if (usbDevice != null) {
++                    handleUsbDevicePermission(usbDevice, mUsbManager.hasPermission(usbDevice));
++                }
+             }
+         }
+     };
+@@ -193,7 +197,12 @@ public class HIDDeviceManager {
+         filter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);
+         filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
+         filter.addAction(HIDDeviceManager.ACTION_USB_PERMISSION);
+-        mContext.registerReceiver(mUsbBroadcast, filter);
++        // CZM: not exported (system broadcasts still arrive)
++        if (Build.VERSION.SDK_INT >= 33 /* Android 13.0 (TIRAMISU) */) {
++            mContext.registerReceiver(mUsbBroadcast, filter, 0x4 /* Context.RECEIVER_NOT_EXPORTED */);
++        } else {
++            mContext.registerReceiver(mUsbBroadcast, filter);
++        }
+ 
+         for (UsbDevice usbDevice : mUsbManager.getDeviceList().values()) {
+             handleUsbDeviceAttached(usbDevice);
+@@ -404,7 +413,12 @@ public class HIDDeviceManager {
+         IntentFilter filter = new IntentFilter();
+         filter.addAction(BluetoothDevice.ACTION_ACL_CONNECTED);
+         filter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED);
+-        mContext.registerReceiver(mBluetoothBroadcast, filter);
++        // CZM: not exported (system broadcasts still arrive)
++        if (Build.VERSION.SDK_INT >= 33 /* Android 13.0 (TIRAMISU) */) {
++            mContext.registerReceiver(mBluetoothBroadcast, filter, 0x4 /* Context.RECEIVER_NOT_EXPORTED */);
++        } else {
++            mContext.registerReceiver(mBluetoothBroadcast, filter);
++        }
+ 
+         if (mIsChromebook) {
+             mHandler = new Handler(Looper.getMainLooper());
+@@ -584,20 +598,17 @@ public class HIDDeviceManager {
+         if (usbDevice != null && !mUsbManager.hasPermission(usbDevice)) {
+             HIDDeviceOpenPending(deviceID);
+             try {
+-                final int FLAG_MUTABLE = 0x02000000; // PendingIntent.FLAG_MUTABLE, but don't require SDK 31
+-                int flags;
+-                if (Build.VERSION.SDK_INT >= 31 /* Android 12.0 (S) */) {
+-                    flags = FLAG_MUTABLE;
+-                } else {
+-                    flags = 0;
++                // CZM: an immutable PendingIntent for our own package only (Google Play flags
++                // mutable implicit ones); Android 5.x has no immutable flag, so no request there
++                if (Build.VERSION.SDK_INT < 23 /* Android 6.0 (M) */) {
++                    HIDDeviceOpenResult(deviceID, false);
++                    return false;
+                 }
+-                if (Build.VERSION.SDK_INT >= 33 /* Android 14.0 (U) */) {
+-                   Intent intent = new Intent(HIDDeviceManager.ACTION_USB_PERMISSION);
+-                   intent.setPackage(mContext.getPackageName());
+-                   mUsbManager.requestPermission(usbDevice, PendingIntent.getBroadcast(mContext, 0, intent, flags));
+-               } else {
+-                   mUsbManager.requestPermission(usbDevice, PendingIntent.getBroadcast(mContext, 0, new Intent(HIDDeviceManager.ACTION_USB_PERMISSION), flags));
+-               }
++                final int FLAG_IMMUTABLE = 0x04000000; // PendingIntent.FLAG_IMMUTABLE
++                Intent intent = new Intent(HIDDeviceManager.ACTION_USB_PERMISSION);
++                intent.setPackage(mContext.getPackageName());
++                intent.putExtra(UsbManager.EXTRA_DEVICE, usbDevice);
++                mUsbManager.requestPermission(usbDevice, PendingIntent.getBroadcast(mContext, 0, intent, FLAG_IMMUTABLE));
+             } catch (Exception e) {
+                 Log.v(TAG, "Couldn't request permission for USB device " + usbDevice);
+                 HIDDeviceOpenResult(deviceID, false);

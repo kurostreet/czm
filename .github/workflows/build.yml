@@ -53,7 +53,7 @@ jobs:
         run: |
           curl -fsSL --retry 3 https://repo.maven.apache.org/maven2/org/json/json/20240303/json-20240303.jar -o /tmp/czm-json.jar
           echo '3cf6cd6892e32e2b4c1c39e0f52f5248a2f5b37646fdfbb79a66b46b618414ed  /tmp/czm-json.jar' | sha256sum -c -
-          javac --release 11 -cp /tmp/czm-json.jar -d /tmp/czm-java-check android/app/src/main/java/ru/kurostreet/counterzombiemobile/ApkUpdate.java tests/ApkUpdateTest.java
+          javac --release 11 -cp /tmp/czm-json.jar -d /tmp/czm-java-check android/app/src/git/java/ru/kurostreet/counterzombiemobile/ApkUpdate.java tests/ApkUpdateTest.java
           CZM_JAVA_CLASSES=/tmp/czm-java-check CZM_JSON_JAR=/tmp/czm-json.jar python3 -m unittest discover -s tests -p test_apk_update.py -v
           CZM_JSON_JAR=/tmp/czm-json.jar python3 -m unittest discover -s tests -p test_account_client.py -v
           CZM_JSON_JAR=/tmp/czm-json.jar python3 -m unittest discover -s tests -p test_settings_data.py -v

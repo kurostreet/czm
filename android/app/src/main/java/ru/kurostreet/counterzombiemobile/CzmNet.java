@@ -1,17 +1,9 @@
 package ru.kurostreet.counterzombiemobile;
 
 import android.annotation.SuppressLint;
-import android.app.PendingIntent;
-import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
-import android.content.ComponentName;
-import android.content.pm.ApplicationInfo;
-import android.content.pm.PackageManager;
 import android.content.pm.PackageInfo;
-import android.content.pm.PackageInstaller;
-import android.net.Uri;
 import android.os.Build;
 import android.provider.Settings;
 import android.util.Log;
@@ -43,7 +35,6 @@ import org.libsdl.app.SDLActivity;
 public final class CzmNet {
     private static final String TAG = "CzmNet";
     private static final ExecutorService POOL = Executors.newFixedThreadPool(3);
-    private static final ExecutorService UPDATE = Executors.newSingleThreadExecutor();
     private static final ConcurrentHashMap<Integer, String> RESULTS = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<Integer, Integer> GENERATIONS = new ConcurrentHashMap<>();
     private static final AtomicInteger NEXT = new AtomicInteger(1);
@@ -306,183 +297,35 @@ public final class CzmNet {
     }
 
     // update from inside the game ----------------------------------------------
-
-    public static final int UPDATE_IDLE = 0;
-    public static final int UPDATE_DOWNLOADING = 1;
-    public static final int UPDATE_VERIFYING = 2;
-    public static final int UPDATE_READY = 3;
-    public static final int UPDATE_ERROR = 4;
-    public static final int UPDATE_INSTALLING = 5;
-    public static final int UPDATE_PERMISSION = 6;
-
-    private static final String INSTALL_ACTION = "ru.kurostreet.counterzombiemobile.INSTALL_STATUS";
-    private static volatile int updateState = UPDATE_IDLE;
-    private static volatile long updateDone, updateTotal;
-    private static volatile boolean updateCancel;
-    private static volatile String updateError = "";
-    private static File updateFile;
-    private static BroadcastReceiver installReceiver;
-    private static volatile int installSession = -1;
+    // Only the site build updates itself (SelfUpdate in src/git); the Google Play build has
+    // no installer code at all and asks Google Play instead (StoreUpdates in src/googlePlay).
 
     /** "state done total error": the menu draws the bar from it. */
     public static String updateState() {
-        return updateState + " " + updateDone + " " + updateTotal + " " + updateError;
+        return SelfUpdate.state();
     }
 
     public static void updateCancel() {
-        updateCancel = true;
+        SelfUpdate.cancel();
     }
 
-    /** Downloads a patch when possible, then hands the verified signed APK to Android. */
+    /** Downloads a patch when possible, then keeps the verified signed APK for updateInstall. */
     public static void updateStart(final String url, final String sha256, final long size,
                                    final String patchUrl, final String patchSha, final long patchSize, final String baseSha) {
-        if (!canSelfUpdate() || updateState == UPDATE_DOWNLOADING || updateState == UPDATE_VERIFYING || updateState == UPDATE_INSTALLING) return;
+        if (!canSelfUpdate()) return;
         Context ctx = context();
-        if (ctx == null) return;
-        updateCancel = false;
-        updateError = "";
-        updateTotal = patchSize > 0 ? patchSize : size;
-        updateDone = 0;
-        updateState = UPDATE_VERIFYING;
-        final File dir = new File(ctx.getFilesDir(), "update");
-        final File installed = new File(ctx.getApplicationInfo().sourceDir);
-        UPDATE.execute(new Runnable() {
-            @Override public void run() {
-                try {
-                    updateFile = ApkUpdate.prepare(dir, installed, url, sha256, size, patchUrl, patchSha, patchSize, baseSha,
-                        new ApkUpdate.Progress() {
-                            @Override public boolean cancelled() { return updateCancel; }
-                            @Override public void update(boolean verifying, long done, long total) {
-                                updateDone = done;
-                                updateTotal = total;
-                                updateState = verifying ? UPDATE_VERIFYING : UPDATE_DOWNLOADING;
-                            }
-                        });
-                    updateState = updateCancel ? UPDATE_IDLE : UPDATE_READY;
-                } catch (Exception e) {
-                    Log.w(TAG, "update download failed", e);
-                    fail(e instanceof ApkUpdate.UpdateException ? ((ApkUpdate.UpdateException) e).reason : "network");
-                    if (updateCancel) updateState = UPDATE_IDLE;
-                }
-            }
-        });
-    }
-
-    private static void fail(String why) {
-        updateError = why;
-        updateState = UPDATE_ERROR;
+        if (ctx != null) SelfUpdate.start(ctx, url, sha256, size, patchUrl, patchSha, patchSize, baseSha);
     }
 
     /** Hands the downloaded APK to Android; the system asks the player to confirm. */
     public static void updateInstall() {
-        final Context ctx = context();
-        final File apk = updateFile;
-        if (ctx == null || apk == null || updateState != UPDATE_READY && updateState != UPDATE_PERMISSION) return;
-
-        // Android 8+: the player allows installs from this app once
-        if (Build.VERSION.SDK_INT >= 26 && !ctx.getPackageManager().canRequestPackageInstalls()) {
-            updateState = UPDATE_PERMISSION;
-            Intent settings = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + ctx.getPackageName()));
-            settings.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            try {
-                ctx.startActivity(settings);
-            } catch (Exception e) {
-                Log.w(TAG, "no install settings screen", e);
-            }
-            return;
-        }
-
-        updateState = UPDATE_INSTALLING;
-        UPDATE.execute(new Runnable() {
-            @Override public void run() {
-                try {
-                    registerInstallReceiver(ctx);
-                    PackageInstaller installer = ctx.getPackageManager().getPackageInstaller();
-                    PackageInstaller.SessionParams params = new PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL);
-                    params.setAppPackageName(ctx.getPackageName());
-                    int sessionId = installer.createSession(params);
-                    installSession = sessionId;
-                    try (PackageInstaller.Session session = installer.openSession(sessionId)) {
-                        try (InputStream in = new FileInputStream(apk); OutputStream out = session.openWrite("base.apk", 0, apk.length())) {
-                            copy(in, out, Long.MAX_VALUE);
-                            session.fsync(out);
-                        }
-                        Intent status = new Intent(INSTALL_ACTION).setPackage(ctx.getPackageName());
-                        int flags = PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 31 ? PendingIntent.FLAG_MUTABLE : 0);
-                        session.commit(PendingIntent.getBroadcast(ctx, sessionId, status, flags).getIntentSender());
-                    }
-                } catch (Exception e) {
-                    Log.w(TAG, "install failed", e);
-                    fail("install");
-                }
-            }
-        });
-    }
-
-    /**
-     * The confirm screen comes inside the install answer. Only a screen of a system app (the
-     * Android installer) is opened, by its exact name and without access grants to our files:
-     * someone else's intent cannot be passed through the game (Intent Redirection).
-     */
-    static Intent systemConfirm(Context c, Intent confirm) {
-        if (confirm == null) return null;
-        PackageManager pm = c.getPackageManager();
-        ComponentName target = confirm.resolveActivity(pm);
-        if (target == null) return null;
-        try {
-            ApplicationInfo app = pm.getApplicationInfo(target.getPackageName(), 0);
-            if ((app.flags & ApplicationInfo.FLAG_SYSTEM) == 0) return null;
-        } catch (PackageManager.NameNotFoundException e) {
-            return null;
-        }
-        Intent safe = new Intent(confirm);
-        safe.setComponent(target);
-        safe.removeFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-            | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION | Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
-        safe.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        return safe;
-    }
-
-    private static synchronized void registerInstallReceiver(Context ctx) {
-        if (installReceiver != null) return;
-        installReceiver = new BroadcastReceiver() {
-            @Override public void onReceive(Context c, Intent intent) {
-                // only the answer about our own install session counts
-                if (intent.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, -2) != installSession) return;
-                int status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE);
-                if (status == PackageInstaller.STATUS_PENDING_USER_ACTION) {
-                    Intent confirm = systemConfirm(c, intent.getParcelableExtra(Intent.EXTRA_INTENT));
-                    if (confirm == null) {
-                        fail("install");
-                    } else {
-                        try {
-                            c.startActivity(confirm);
-                        } catch (Exception e) {
-                            Log.w(TAG, "no confirm screen", e);
-                            fail("install");
-                        }
-                    }
-                } else if (status == PackageInstaller.STATUS_SUCCESS) {
-                    updateState = UPDATE_IDLE; // Android restarts the app with the new version
-                } else {
-                    // cancelled by the player or refused: the file stays, the button too
-                    Log.w(TAG, "install status " + status + ": " + intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE));
-                    updateState = status == PackageInstaller.STATUS_FAILURE_ABORTED ? UPDATE_READY : UPDATE_ERROR;
-                    if (updateState == UPDATE_ERROR) updateError = "install";
-                }
-            }
-        };
-        IntentFilter filter = new IntentFilter(INSTALL_ACTION);
-        Context app = ctx.getApplicationContext();
-        if (Build.VERSION.SDK_INT >= 33) app.registerReceiver(installReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
-        else app.registerReceiver(installReceiver, filter);
+        Context ctx = context();
+        if (ctx != null && canSelfUpdate()) SelfUpdate.install(ctx);
     }
 
     /** The updated app no longer needs the downloaded file. */
     public static void updateCleanup() {
         Context ctx = context();
-        if (ctx == null) return;
-        File[] files = new File(ctx.getFilesDir(), "update").listFiles();
-        if (files != null && updateState == UPDATE_IDLE) for (File f : files) f.delete();
+        if (ctx != null) SelfUpdate.cleanup(ctx);
     }
 }

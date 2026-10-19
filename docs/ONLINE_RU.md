@@ -53,8 +53,10 @@
 
 ## Как устроено в игре
 
-- **Сеть** — Android: `CzmNet.java` (HTTPS, загрузки, установка через PackageInstaller).
-  - `ApkUpdate.java` выполняет потоковую докачку и восстановление APK, проверяет границы диапазонов и контрольные суммы. Серверный формат: `server/czm/czm/apkpatch.py`.
+- **Сеть** — Android: `CzmNet.java` (HTTPS, загрузки).
+  - Обновление из игры есть только в сборке для сайта (`android/app/src/git`): `SelfUpdate.java` скачивает и ставит APK через PackageInstaller, ответ установщика приходит в `InstallStatusReceiver` (не экспортирован, PendingIntent с точным адресом), окно подтверждения открывается только у системного установщика. В сборке для Google Play этого кода нет (там `SelfUpdate` — пустышка, обновляет Google Play).
+  - `ApkUpdate.java` (тоже `src/git`) выполняет потоковую докачку и восстановление APK, проверяет границы диапазонов и контрольные суммы. Серверный формат: `server/czm/czm/apkpatch.py`.
+  - SDL правится патчами из `patches/SDL/` (их накладывает `scripts/apply_engine_patches.py`): запрос доступа к USB-геймпаду идёт через неизменяемый PendingIntent нашего пакета, приёмники не экспортированы.
   - Меню вызывает его через JNI (`czm/menu/CzmNet.cpp`), `JNIEnv` даёт SDL.
   - Запросы не блокируют игру: меню получает номер и спрашивает ответ каждый кадр.
 - **Игрок** — `czm/menu/CzmOnline.cpp`:

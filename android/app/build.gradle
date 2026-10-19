@@ -148,6 +148,7 @@ def embeddedEngine = tasks.register("buildBundledEngine", Exec) {
 	inputs.files("../../scripts/build_android_engine.py", "../../scripts/create_resource_pack.py",
 		"../../scripts/apply_engine_patches.py")
 	inputs.files(fileTree("../../patches/xash3d-fwgs"))
+	inputs.files(fileTree("../../patches/SDL"))
 	outputs.dir("build/generated/engine/jniLibs")
 	outputs.file("build/generated/bundle-assets/bundled/engine-resources.zip")
 	outputs.file("build/generated/bundle-assets/bundled/engine-resources.json")
