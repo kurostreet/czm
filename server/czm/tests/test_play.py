@@ -35,7 +35,9 @@ class PlayBundleTests(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
-        env = patch.dict(os.environ, {"CZM_DATA_DIR": temp.name})
+        # never the real Google Play key of the server: these bundles are fakes
+        env = patch.dict(os.environ, {"CZM_DATA_DIR": temp.name,
+                                      "CZM_PLAY_SERVICE_ACCOUNT_FILE": str(Path(temp.name) / "no-key.json")})
         env.start()
         self.addCleanup(env.stop)
         get_settings.cache_clear()
