@@ -69,28 +69,30 @@ class UpdateApiTests(unittest.TestCase):
         file.unlink()
         self.assertNotIn("patch_url", self.client.get("/api/v1/update?code=100").json()["update"])
 
-    def test_download_follows_publication_and_rollback_without_caching(self):
+    def test_public_apk_download_stays_disabled_during_publication_and_rollback(self):
         self.release(100)
         draft = self.release(200, published=False)
 
-        def check(code):
+        def check():
             for route in ("/download", "/download/CounterZombieMobile.apk"):
                 for method in ("GET", "HEAD"):
-                    with self.subTest(route=route, method=method, code=code):
+                    with self.subTest(route=route, method=method):
                         response = self.client.request(method, route, follow_redirects=False)
-                        self.assertEqual(response.status_code, 307)
-                        self.assertEqual(response.headers["location"], get_settings().public_url + f"/dl/test-{code}.apk")
+                        self.assertEqual(response.status_code, 410)
+                        self.assertNotIn("location", response.headers)
                         self.assertEqual(response.headers["cache-control"], "no-store")
+                        if method == "GET":
+                            self.assertEqual(response.json()["error"], "google_play_only")
 
-        check(100)  # a newer draft must never replace the installed-data APK
+        check()  # published APK and a newer draft both remain inaccessible
         with db.db() as conn:
             service.publish_release(conn, draft, "New version")
-        check(200)
+        check()  # publishing a new APK must not reopen direct downloads
         with db.db() as conn:
             service.unpublish_release(conn, draft)
-        check(100)
+        check()  # rolling back must not reopen direct downloads
 
-    def test_download_rejects_absent_unpublished_or_incomplete_release(self):
+    def test_public_apk_download_rejects_absent_draft_or_damaged_release(self):
         for state in ("absent", "draft", "missing", "truncated"):
             with self.subTest(state=state):
                 if state == "draft":
@@ -101,11 +103,12 @@ class UpdateApiTests(unittest.TestCase):
                     (self.folder / "test-100.apk").unlink()
                 elif state == "truncated":
                     (self.folder / "test-100.apk").write_bytes(b"incomplete")
-                response = self.client.get("/download", follow_redirects=False)
-                self.assertEqual(response.status_code, 503)
-                self.assertEqual(response.json(), {"error": "unavailable"})
-                self.assertEqual(response.headers["cache-control"], "no-store")
-                self.assertEqual(response.headers["retry-after"], "60")
+                for route in ("/download", "/download/CounterZombieMobile.apk"):
+                    for method in ("GET", "HEAD"):
+                        response = self.client.request(method, route, follow_redirects=False)
+                        self.assertEqual(response.status_code, 410)
+                        self.assertNotIn("location", response.headers)
+                        self.assertEqual(response.headers["cache-control"], "no-store")
 
     def test_retention_removes_all_patches_of_expired_targets(self):
         for code in range(1, 6):
