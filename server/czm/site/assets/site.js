@@ -1,4 +1,4 @@
-/* counter-zombie.ru: language, day/night lamp, parallax, embers, screenshot strip, live numbers and chat. */
+/* counter-zombie.ru: language, day/night lamp, parallax, feature imagery, live numbers and chat. */
 (function () {
   'use strict';
   var doc = document, root = doc.documentElement;
@@ -17,8 +17,6 @@
       langLabel: 'Язык', themeLabel: 'День или ночь', share: 'Поделиться', copied: 'Ссылка скопирована', close: 'Закрыть', prev: 'Назад', next: 'Дальше',
       tagline: 'Мобильный зомби-шутер: орды зомби, серверы до 32 игроков, свои кнопки, друзья и живой чат.',
       downloadCta: 'Принять участие в бета-тесте', statsLabel: 'Статистика', online: 'в игре', offline: 'не в сети', downloads: 'скачиваний', mb: 'МБ',
-      shotsTitle: 'Кадры',
-      shots: ['Бой на базе', 'Отряд у ворот', 'Зомби в храме', 'Вертолёт и орда', 'Главное меню', 'Серверы', 'Друзья', 'Управление', 'Профиль, аватары и спреи'],
       featTitle: 'Возможности',
       feats: [
         ['Серверы', 'Большой список серверов с зомби-режимами: фильтры, избранное, пинг и быстрая игра одной кнопкой.'],
@@ -46,8 +44,6 @@
       langLabel: 'Language', themeLabel: 'Day or night', share: 'Share', copied: 'Link copied', close: 'Close', prev: 'Previous', next: 'Next',
       tagline: 'A mobile zombie shooter: zombie hordes, servers for up to 32 players, your own buttons, friends and a live chat.',
       downloadCta: 'Join the beta test', statsLabel: 'Statistics', online: 'playing', offline: 'offline', downloads: 'downloads', mb: 'MB',
-      shotsTitle: 'Shots',
-      shots: ['Fight at the base', 'Squad at the gate', 'Zombies in the temple', 'Helicopter and the horde', 'Main menu', 'Servers', 'Friends', 'Controls', 'Profile, avatars and sprays'],
       featTitle: 'Features',
       feats: [
         ['Servers', 'A big list of zombie-mode servers: filters, favourites, ping and quick play in one tap.'],
@@ -91,7 +87,6 @@
       if (typeof v === 'string') el.setAttribute('aria-label', v);
     });
     all('[data-lang]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-lang') === lang)); });
-    buildStrip();
     buildFeatures();
     renderStats(true);
     renderChat(false);
@@ -195,81 +190,9 @@
   }
   startEmbers();
 
-  /* ---------- screenshot strip and viewer ---------- */
-  var strip = $('strip'), box = $('box'), boxImg = $('boxImg'), boxCap = $('boxCap');
-  var shotIndex = 0, pausedUntil = 0, boxAt = -1, stripVisible = true, lastFocus = null;
+  /* Feature screenshots remain available through the tabbed Features section. */
   var V = root.getAttribute('data-v') || '';
   function shotSrc(i) { return '/assets/shot-' + (i + 1) + '.webp' + (V ? '?v=' + V : ''); }
-  function buildStrip() {
-    strip.textContent = '';
-    T.shots.forEach(function (name, i) {
-      var b = doc.createElement('button');
-      b.type = 'button';
-      b.setAttribute('aria-label', name);
-      var img = doc.createElement('img');
-      img.src = shotSrc(i);
-      img.alt = name;
-      img.width = (i === 1 || i === 2) ? 1066 : 1287;
-      img.height = 600;
-      img.decoding = 'async';
-      if (i > 2) img.loading = 'lazy';
-      b.appendChild(img);
-      b.addEventListener('click', function () { openBox(i); });
-      strip.appendChild(b);
-    });
-  }
-  var pauseStrip = function () { pausedUntil = Date.now() + 9000; };
-  ['pointerdown', 'wheel', 'touchstart', 'focusin'].forEach(function (ev) { strip.addEventListener(ev, pauseStrip, { passive: true }); });
-  if ('IntersectionObserver' in window) {
-    new IntersectionObserver(function (e) { stripVisible = e[0].isIntersecting; }).observe(strip);
-  }
-  if (!reduce) {
-    setInterval(function () {
-      if (Date.now() < pausedUntil || boxAt >= 0 || doc.hidden || !stripVisible) return;
-      var items = strip.children;
-      if (!items.length) return;
-      shotIndex = (shotIndex + 1) % items.length;
-      if (strip.scrollLeft + strip.clientWidth >= strip.scrollWidth - 4) shotIndex = 0;
-      strip.scrollTo({ left: shotIndex === 0 ? 0 : items[shotIndex].offsetLeft - 16, behavior: 'smooth' });
-    }, 3500);
-  }
-  function showBox() {
-    boxImg.src = shotSrc(boxAt);
-    boxImg.alt = T.shots[boxAt];
-    boxCap.textContent = T.shots[boxAt] + ' · ' + (boxAt + 1) + '/' + T.shots.length;
-  }
-  function openBox(i) {
-    pauseStrip();
-    lastFocus = doc.activeElement;
-    boxAt = i;
-    showBox();
-    box.classList.add('on');
-    box.setAttribute('aria-hidden', 'false');
-    box.querySelector('.x').focus();
-  }
-  function closeBox() {
-    if (boxAt < 0) return;
-    boxAt = -1;
-    box.classList.remove('on');
-    box.setAttribute('aria-hidden', 'true');
-    if (lastFocus && lastFocus.focus) lastFocus.focus();
-  }
-  function stepBox(d) {
-    if (boxAt < 0) return;
-    boxAt = (boxAt + d + T.shots.length) % T.shots.length;
-    showBox();
-  }
-  $('boxPrev').addEventListener('click', function () { stepBox(-1); });
-  $('boxNext').addEventListener('click', function () { stepBox(1); });
-  box.addEventListener('click', function (e) { if (e.target === box) closeBox(); });
-  var touchX = null;
-  box.addEventListener('touchstart', function (e) { touchX = e.touches[0].clientX; }, { passive: true });
-  box.addEventListener('touchend', function (e) {
-    if (touchX == null) return;
-    var dx = e.changedTouches[0].clientX - touchX;
-    touchX = null;
-    if (Math.abs(dx) > 50) stepBox(dx < 0 ? 1 : -1);
-  });
 
   /* ---------- feature tabs ---------- */
   var tabs = $('tabs'), panels = $('panels'), feat = 0;
@@ -372,13 +295,11 @@
   });
   all('[data-close]').forEach(function (b) {
     b.addEventListener('click', function () {
-      if (b.closest('#box')) closeBox(); else closePanels();
+      closePanels();
     });
   });
   doc.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') { if (boxAt >= 0) closeBox(); else closePanels(); }
-    else if (boxAt >= 0 && e.key === 'ArrowRight') stepBox(1);
-    else if (boxAt >= 0 && e.key === 'ArrowLeft') stepBox(-1);
+    if (e.key === 'Escape') closePanels();
   });
 
   /* ---------- Google Play: store buttons and the beta test ---------- */
