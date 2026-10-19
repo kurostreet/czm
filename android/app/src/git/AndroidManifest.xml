@@ -2,4 +2,12 @@
 <!-- Builds outside Google Play update themselves from inside the game (CzmNet.java). -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <!-- CzmNet.systemConfirm checks that the install confirm screen belongs to a system app;
+         Android 11+ shows that app to the game only when it is listed here -->
+    <queries>
+        <intent>
+            <action android:name="android.content.pm.action.CONFIRM_INSTALL" />
+        </intent>
+    </queries>
 </manifest>

@@ -6,6 +6,9 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.ComponentName;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageManager;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageInstaller;
 import android.net.Uri;
@@ -319,6 +322,7 @@ public final class CzmNet {
     private static volatile String updateError = "";
     private static File updateFile;
     private static BroadcastReceiver installReceiver;
+    private static volatile int installSession = -1;
 
     /** "state done total error": the menu draws the bar from it. */
     public static String updateState() {
@@ -397,6 +401,7 @@ public final class CzmNet {
                     PackageInstaller.SessionParams params = new PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL);
                     params.setAppPackageName(ctx.getPackageName());
                     int sessionId = installer.createSession(params);
+                    installSession = sessionId;
                     try (PackageInstaller.Session session = installer.openSession(sessionId)) {
                         try (InputStream in = new FileInputStream(apk); OutputStream out = session.openWrite("base.apk", 0, apk.length())) {
                             copy(in, out, Long.MAX_VALUE);
@@ -414,15 +419,42 @@ public final class CzmNet {
         });
     }
 
+    /**
+     * The confirm screen comes inside the install answer. Only a screen of a system app (the
+     * Android installer) is opened, by its exact name and without access grants to our files:
+     * someone else's intent cannot be passed through the game (Intent Redirection).
+     */
+    static Intent systemConfirm(Context c, Intent confirm) {
+        if (confirm == null) return null;
+        PackageManager pm = c.getPackageManager();
+        ComponentName target = confirm.resolveActivity(pm);
+        if (target == null) return null;
+        try {
+            ApplicationInfo app = pm.getApplicationInfo(target.getPackageName(), 0);
+            if ((app.flags & ApplicationInfo.FLAG_SYSTEM) == 0) return null;
+        } catch (PackageManager.NameNotFoundException e) {
+            return null;
+        }
+        Intent safe = new Intent(confirm);
+        safe.setComponent(target);
+        safe.removeFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION | Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
+        safe.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        return safe;
+    }
+
     private static synchronized void registerInstallReceiver(Context ctx) {
         if (installReceiver != null) return;
         installReceiver = new BroadcastReceiver() {
             @Override public void onReceive(Context c, Intent intent) {
+                // only the answer about our own install session counts
+                if (intent.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, -2) != installSession) return;
                 int status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE);
                 if (status == PackageInstaller.STATUS_PENDING_USER_ACTION) {
-                    Intent confirm = intent.getParcelableExtra(Intent.EXTRA_INTENT);
-                    if (confirm != null) {
-                        confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    Intent confirm = systemConfirm(c, intent.getParcelableExtra(Intent.EXTRA_INTENT));
+                    if (confirm == null) {
+                        fail("install");
+                    } else {
                         try {
                             c.startActivity(confirm);
                         } catch (Exception e) {
