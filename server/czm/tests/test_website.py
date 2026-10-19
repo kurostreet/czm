@@ -165,7 +165,7 @@ class InstallListTests(unittest.TestCase):
         caddy = (self.base / "deploy" / "czm.caddy").read_text()
         self.assertIn('href="#beta"', html)
         self.assertIn('data-i18n="downloadCta">Принять участие в бета-тесте', html)
-        self.assertLess(html.index('id="beta"'), html.index('id="shots"'))
+        self.assertLess(html.index('id="beta"'), html.index('id="features"'))
         self.assertNotIn('href="/download"', html)
         self.assertNotIn('id="download"', html)
         self.assertNotIn('Скачать APK', html)
@@ -173,6 +173,21 @@ class InstallListTests(unittest.TestCase):
         self.assertIn("Use the Google Play beta for installation", caddy)
         self.assertIn("respond @packages", caddy)
         self.assertIn("downloadCta: 'Join the beta test'", js)
+
+    def test_duplicate_shots_gallery_is_removed_but_features_keep_images(self):
+        html = (self.base / "site" / "index.html").read_text()
+        js = (self.base / "site" / "assets" / "site.js").read_text()
+        self.assertNotIn('id="shots"', html)
+        self.assertNotIn('id="strip"', html)
+        self.assertNotIn('id="box"', html)
+        self.assertNotIn('Кадры</h2>', html)
+        self.assertIn('id="features"', html)
+        self.assertIn('id="tabs"', html)
+        self.assertIn('id="panels"', html)
+        self.assertIn('FEAT_SHOTS[i] - 1', js)
+        self.assertIn('function shotSrc(i)', js)
+        self.assertNotIn('buildStrip()', js)
+        self.assertLess(html.index('id="beta"'), html.index('id="features"'))
 
     def test_beta_video_guide_is_embedded_not_preloaded(self):
         html = (self.base / "site" / "index.html").read_text()
