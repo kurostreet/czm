@@ -174,20 +174,26 @@ class InstallListTests(unittest.TestCase):
         self.assertIn("respond @packages", caddy)
         self.assertIn("downloadCta: 'Join the beta test'", js)
 
-    def test_duplicate_shots_gallery_is_removed_but_features_keep_images(self):
+    def test_gameplay_shots_carousel_is_separate_from_features(self):
         html = (self.base / "site" / "index.html").read_text()
         js = (self.base / "site" / "assets" / "site.js").read_text()
-        self.assertNotIn('id="shots"', html)
-        self.assertNotIn('id="strip"', html)
-        self.assertNotIn('id="box"', html)
-        self.assertNotIn('Кадры</h2>', html)
+        self.assertIn('id="shots"', html)
+        self.assertIn('id="strip"', html)
+        self.assertIn('id="box"', html)
+        self.assertIn('Кадры</h2>', html)
         self.assertIn('id="features"', html)
         self.assertIn('id="tabs"', html)
         self.assertIn('id="panels"', html)
         self.assertIn('FEAT_SHOTS[i] - 1', js)
         self.assertIn('function shotSrc(i)', js)
-        self.assertNotIn('buildStrip()', js)
-        self.assertLess(html.index('id="beta"'), html.index('id="features"'))
+        self.assertIn('function gallerySrc(i)', js)
+        self.assertIn('buildStrip()', js)
+        self.assertIn("gallery: ['Игровая сцена: бой'", js)
+        self.assertLess(html.index('id="beta"'), html.index('id="shots"'))
+        self.assertLess(html.index('id="shots"'), html.index('id="features"'))
+        for i in range(1, 5):
+            self.assertTrue((self.base / 'site' / 'assets' / f'gameplay-{i}.webp').is_file())
+        self.assertIn('scroll-snap-type:x mandatory', html)
 
     def test_beta_video_guide_is_embedded_not_preloaded(self):
         html = (self.base / "site" / "index.html").read_text()
