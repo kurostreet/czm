@@ -183,8 +183,8 @@ def delete_account(conn, token, password, ip):
     return {"ok": True}
 
 
-MAIL_SUBJECTS = {"email": "подтверждение почты", "login": "вход в аккаунт"}
-MAIL_HEADINGS = {"email": "Подтверждение почты", "login": "Код для входа"}
+MAIL_SUBJECTS = {"email": "подтверждение почты", "login": "вход в аккаунт", "password": "изменение пароля"}
+MAIL_HEADINGS = {"email": "Подтверждение почты", "login": "Код для входа", "password": "Изменение пароля"}
 
 
 def mail_texts(code, purpose):
@@ -304,7 +304,7 @@ def email_confirm(conn, token, code, ip):
     if conn.execute("SELECT 1 FROM accounts WHERE email=? AND player!=?", (address, player["id"])).fetchone():
         raise AuthError("email_used", 409)
     conn.execute("UPDATE accounts SET email=? WHERE player=?", (address, player["id"]))
-    conn.execute("DELETE FROM auth_codes WHERE player=? AND purpose IN ('login','reset')", (player["id"],))
+    conn.execute("DELETE FROM auth_codes WHERE player=? AND purpose IN ('login','reset','password')", (player["id"],))
     return account_info(conn, player)
 
 
@@ -353,6 +353,35 @@ def recover(conn, nick, ip):
         issue_code(conn, row["player"], "reset", row["email"])
     # Do not disclose whether a login or a verified recovery address exists.
     return {"ok": True}
+
+
+def password_change_request(conn, token, ip):
+    player = authenticated(conn, token)
+    rate(conn, "password-mail-player", str(player["id"]), 3, 3600)
+    rate(conn, "password-mail-ip", ip, 6, 3600)
+    row = conn.execute("SELECT email FROM accounts WHERE player=?", (player["id"],)).fetchone()
+    if not row or not row["email"]:
+        raise AuthError("email_required", 409)
+    if not get_settings().mail_ready:
+        raise AuthError("mail_unavailable", 503)
+    code = issue_code(conn, player["id"], "password", row["email"], deliver=False)
+    return row["email"], code, "password", player["id"]
+
+
+def password_change_confirm(conn, token, code, password, repeat, ip):
+    player = authenticated(conn, token)
+    rate(conn, "password-confirm-ip", ip, 20)
+    valid_password(password)
+    if password != repeat:
+        raise AuthError("repeat")
+    row = conn.execute("SELECT email FROM accounts WHERE player=?", (player["id"],)).fetchone()
+    target = consume_code(conn, player["id"], "password", code)
+    if not row or not row["email"] or target != row["email"]:
+        raise AuthError("code")
+    conn.execute("UPDATE accounts SET password_hash=? WHERE player=?", (password_hash(password), player["id"]))
+    conn.execute("DELETE FROM account_sessions WHERE player=?", (player["id"],))
+    conn.execute("DELETE FROM auth_codes WHERE player=?", (player["id"],))
+    return new_session(conn, player)
 
 
 def reset(conn, nick, code, password, repeat, ip):

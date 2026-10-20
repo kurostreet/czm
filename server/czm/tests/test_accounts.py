@@ -226,11 +226,88 @@ class AccountTests(unittest.TestCase):
         with self.mail() as sent:
             self.post("email-login", email="test@example.com"); old = sent[-1][1]
             self.post("recover", nick="Kuro")
+            self.post("password-change", token)
             self.post("email", token, email="new@example.com")
             self.assertEqual(self.post("email-confirm", token, code=sent[-1][1]).status_code, 200)
             self.assertEqual(self.post("email-login-confirm", email="test@example.com", code=old).status_code, 400)
             with db.db() as conn:
                 self.assertEqual(conn.execute("SELECT COUNT(*) FROM auth_codes").fetchone()[0], 0)
+
+    def test_password_change_requires_session_verified_email_and_mail_service(self):
+        token=self.register()
+        with self.mail() as sent:
+            self.assertEqual(self.post("password-change",self.key).status_code,401)
+            self.assertEqual(self.post("password-change-confirm",self.key,code="123456",password="NewPassword123",repeat="NewPassword123").status_code,401)
+            self.assertEqual(self.post("password-change",token).json()["error"],"email_required")
+            self.post("email",token,email="pending@example.com")
+            self.assertEqual(self.post("password-change",token).json()["error"],"email_required")
+            self.assertEqual(len(sent),1)
+            self.post("email-confirm",token,code=sent[-1][1])
+        self.assertEqual(self.post("password-change",token).status_code,503)
+        with db.db() as conn:
+            self.assertIsNone(conn.execute("SELECT 1 FROM auth_codes WHERE purpose='password'").fetchone())
+
+    def test_password_change_preserves_profile_and_rotates_all_sessions(self):
+        token=self.verified_email()
+        other=self.post("login",nick="Kuro",password="Password123").json()["token"]
+        with db.db() as conn:
+            conn.execute("INSERT INTO player_settings VALUES(?,?,?,?)",(self.player,1,'{}',1))
+            conn.execute("INSERT INTO development_access(player,created) VALUES(?,?)",(self.player,1))
+        with self.mail() as sent:
+            self.post("recover",nick="Kuro")
+            self.post("email-login",email="test@example.com")
+            response=self.post("password-change",token,email="attacker@example.com")
+            self.assertEqual(response.status_code,200,response.text)
+            self.assertEqual(response.json(),{"ok":True,"email":"test@example.com","id":self.player})
+            address,code,purpose=sent[-1]
+            self.assertEqual((address,purpose),("test@example.com","password"))
+            self.assertNotIn(code,response.text)
+            result=self.post("password-change-confirm",token,code=code,password="ChangedPassword1",repeat="ChangedPassword1")
+            self.assertEqual(result.status_code,200,result.text)
+            fresh=result.json()["token"]
+            self.assertNotIn(fresh,(token,other))
+            self.assertEqual(result.json()["profile"]["id"],self.player)
+            self.assertEqual(self.post("me",token).status_code,401)
+            self.assertEqual(self.post("me",other).status_code,401)
+            self.assertEqual(self.post("me",fresh).status_code,200)
+            self.assertEqual(self.post("password-change-confirm",fresh,code=code,password="ChangedPassword2",repeat="ChangedPassword2").status_code,400)
+            self.assertEqual(self.post("login",nick="Kuro",password="Password123").status_code,401)
+            self.assertEqual(self.post("login",nick="Kuro",password="ChangedPassword1").status_code,200)
+        with db.db() as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM auth_codes").fetchone()[0],0)
+            self.assertIsNotNone(conn.execute("SELECT 1 FROM player_settings WHERE player=?",(self.player,)).fetchone())
+            self.assertIsNotNone(conn.execute("SELECT 1 FROM development_access WHERE player=?",(self.player,)).fetchone())
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM messages WHERE player=?",(self.player,)).fetchone()[0],1)
+
+    def test_password_change_validation_attempts_expiry_and_code_scope(self):
+        token=self.verified_email()
+        with self.mail() as sent:
+            self.post("email-login",email="test@example.com")
+            self.assertEqual(self.post("password-change-confirm",token,code=sent[-1][1],password="NewPassword123",repeat="NewPassword123").status_code,400)
+            self.post("password-change",token);code=sent[-1][1]
+            with db.db() as conn:
+                guest="other-password-profile-123456789"
+                service.hello(conn,guest,"other-device","Other","","en","old")
+                other=accounts.register(conn,guest,"Other","AnotherPassword1","AnotherPassword1","other-ip")["token"]
+            self.assertEqual(self.post("password-change-confirm",other,code=code,password="NewPassword123",repeat="NewPassword123").status_code,400)
+            self.assertEqual(self.post("password-change-confirm",token,code=code,password="short",repeat="short").json()["error"],"password")
+            self.assertEqual(self.post("password-change-confirm",token,code=code,password="NewPassword123",repeat="Different123").json()["error"],"repeat")
+            for _ in range(5):
+                self.assertEqual(self.post("password-change-confirm",token,code="wrong",password="NewPassword123",repeat="NewPassword123").status_code,400)
+            self.assertEqual(self.post("password-change-confirm",token,code=code,password="NewPassword123",repeat="NewPassword123").status_code,400)
+            self.post("password-change",token);code=sent[-1][1]
+            with db.db() as conn:conn.execute("UPDATE auth_codes SET expires=1 WHERE purpose='password'")
+            self.assertEqual(self.post("password-change-confirm",token,code=code,password="NewPassword123",repeat="NewPassword123").status_code,400)
+            self.assertEqual(self.post("me",token).status_code,200)
+
+    def test_password_change_request_rate_and_changed_email(self):
+        token=self.verified_email()
+        with self.mail() as sent:
+            self.post("password-change",token);code=sent[-1][1]
+            with db.db() as conn:conn.execute("UPDATE accounts SET email='changed@example.com' WHERE player=?",(self.player,))
+            self.assertEqual(self.post("password-change-confirm",token,code=code,password="NewPassword123",repeat="NewPassword123").status_code,400)
+            self.post("password-change",token);self.post("password-change",token)
+            self.assertEqual(self.post("password-change",token).status_code,429)
 
     def test_email_signin_delivery_failure_does_not_disclose_account(self):
         self.verified_email()

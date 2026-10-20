@@ -70,6 +70,7 @@ final class CzmAccount {
         CzmServerAuth.session(SDLActivity.getContext(), "");
         token = ""; synced = false; ++generation; event = "{\"guest\":true}";
         CzmCloud.clear();
+        clearPendingPassword(SDLActivity.getContext());
     }
     private static void expired(String expected) {
         try { clear(expected); } catch (Exception ignored) {}
@@ -132,6 +133,8 @@ final class CzmAccount {
         case "mail_unavailable": return ru ? "Отправка писем ещё не настроена." : "Email delivery has not been configured yet.";
         case "email": return ru ? "Проверьте адрес почты." : "Check the email address.";
         case "email_used": return ru ? "Эта почта привязана к другому аккаунту." : "This email belongs to another account.";
+        case "email_required": return ru ? "Сначала привяжите и подтвердите почту в аккаунте." : "Link and verify your email in the account first.";
+        case "account_changed": return ru ? "Аккаунт изменился. Откройте его снова." : "Account changed. Open it again.";
         case "code": return ru ? "Код неверен или истёк. Запросите новый." : "Invalid or expired code. Request a new one.";
         case "session": return ru ? "Войдите в аккаунт снова." : "Please sign in again.";
         case "profile": return ru ? "Дождитесь подключения профиля и повторите." : "Wait for your profile to connect and retry.";
@@ -141,6 +144,7 @@ final class CzmAccount {
 
     private interface Done { void run(JSONObject result) throws Exception; }
     private static void send(CzmDialog d, String action, String credential, JSONObject body, boolean ru, Done done) {
+        final int requestGeneration=generation();
         d.busy(true);
         WORK.execute(() -> {
             String response = raw(action, credential, body);
@@ -148,6 +152,7 @@ final class CzmAccount {
                 if (d.activity.isFinishing()) return;
                 d.busy(false);
                 if (!d.isShowing()) return;
+                if (requestGeneration!=generation()) { d.fail(error("account_changed",ru)); return; }
                 try {
                     if (status(response) != 200) {
                         String code = status(response) == 0 ? "network" : object(response).optString("error");
@@ -188,6 +193,27 @@ final class CzmAccount {
                 android.os.SystemClock.elapsedRealtime() + state.resendDelay(System.currentTimeMillis()));
     }
 
+    private static android.content.SharedPreferences passwordStore(Context c) {
+        return c.getSharedPreferences("czm_pending_password_change", Context.MODE_PRIVATE);
+    }
+    private static void clearPendingPassword(Context c) { if(c!=null)passwordStore(c).edit().clear().apply(); }
+    private static PasswordChangeState pendingPassword(Context c) {
+        android.content.SharedPreferences p=passwordStore(c);
+        PasswordChangeState state=PasswordChangeState.restore(p.getInt("owner",0),p.getString("email",""),
+            p.getLong("expires",0),p.getLong("resend",0),System.currentTimeMillis());
+        if(state==null&&p.contains("owner"))clearPendingPassword(c);
+        return state;
+    }
+    private static void rememberPassword(Context c,int owner,String email) {
+        PasswordChangeState state=PasswordChangeState.requested(owner,email,System.currentTimeMillis());
+        passwordStore(c).edit().putInt("owner",owner).putString("email",email).putLong("expires",state.mail.expiresAt)
+            .putLong("resend",state.mail.resendAt).apply();
+        passwordThrottle(state);
+    }
+    private static void passwordThrottle(PasswordChangeState state) {
+        mailAt.put("password:"+state.owner,android.os.SystemClock.elapsedRealtime()+state.mail.resendDelay(System.currentTimeMillis()));
+    }
+
     // Activity recreation can also restart the native engine. Wait for its guest profile key
     // before restoring the dialog; no credentials or profile keys need to be persisted for it.
     static void rememberContext(String legacy, String nick, boolean ru) {
@@ -211,7 +237,14 @@ final class CzmAccount {
             editor.dismiss(); editor = null;
         }
         load();
-        synchronized (CzmAccount.class) { if (!token.isEmpty()) { clearPending(a); return; } }
+        synchronized (CzmAccount.class) {
+            if (!token.isEmpty()) {
+                clearPending(a);
+                if(pendingPassword(a)!=null)show(profileKey,profileNick,russian);
+                return;
+            }
+        }
+        if(pendingPassword(a)!=null)clearPendingPassword(a);
         EmailLoginState state = pending(a);
         if (state != null) {
             restoreThrottle(state);
@@ -220,6 +253,9 @@ final class CzmAccount {
     }
 
     private static void signedIn(CzmDialog d, JSONObject result, boolean ru) throws Exception {
+        signedIn(d,result,ru,false);
+    }
+    private static void signedIn(CzmDialog d, JSONObject result, boolean ru, boolean passwordChanged) throws Exception {
         synchronized (CzmAccount.class) {
             String next = result.getString("token");
             if (!next.matches("czms1_[A-Za-z0-9_-]{43}")) throw new IllegalArgumentException();
@@ -227,7 +263,8 @@ final class CzmAccount {
             profile(result.getJSONObject("profile"));
         }
         clearPending(d.activity);
-        d.dismiss(); Toast.makeText(d.activity, ru ? "Вход выполнен" : "Signed in", Toast.LENGTH_SHORT).show();
+        clearPendingPassword(d.activity);
+        d.dismiss(); Toast.makeText(d.activity, passwordChanged ? (ru?"Пароль изменён":"Password changed") : (ru ? "Вход выполнен" : "Signed in"), Toast.LENGTH_SHORT).show();
     }
 
     static void show(String legacy, String nick, boolean ru) {
@@ -316,10 +353,18 @@ final class CzmAccount {
     }
 
     private static void details(Activity a, String legacy, String nick, String credential, JSONObject info, boolean ru) {
+        PasswordChangeState pending=pendingPassword(a);
+        if(pending!=null) {
+            if(pending.belongsTo(info.optInt("id"),info.optString("email"))) {
+                passwordThrottle(pending);passwordChange(a,legacy,nick,credential,info,ru,true);return;
+            }
+            clearPendingPassword(a);
+        }
         CzmDialog d = panel(a, ru ? "Аккаунт CZM" : "CZM account", info.optString("login") + " · ID " + info.optInt("id"), ru ? "Выйти" : "Sign out", ru);
         d.link(ru ? "Настройки в облаке" : "Cloud settings", v -> CzmCloud.show(a,ru));
         d.note((ru ? "Почта для входа и восстановления: " : "Sign-in and recovery email: ") + (info.optString("email").isEmpty() ? (ru ? "не привязана" : "not linked") : info.optString("email")));
         d.link(ru ? (info.optString("email").isEmpty() ? "Привязать почту" : "Изменить почту") : (info.optString("email").isEmpty() ? "Link email" : "Change email"), v -> email(a, legacy, nick, credential, ru, false));
+        d.link(ru?"Изменить пароль":"Change password",v->passwordChange(a,legacy,nick,credential,info,ru,false));
         if (!info.optBoolean("mail_ready")) d.note(ru ? "Отправка писем пока недоступна. Для входа используйте пароль." : "Email is temporarily unavailable. Use your password to sign in.");
         d.link(ru ? "Выйти на всех устройствах" : "Sign out on all devices", v -> {
             // An explicit second tap keeps this separate from signing out of the current phone.
@@ -343,6 +388,43 @@ final class CzmAccount {
             confirm.show();
         });
         d.submit.setOnClickListener(v -> send(d, "logout", credential, new JSONObject(), ru, result -> { clear(credential); d.dismiss(); }));
+        d.show();
+    }
+
+    private static void passwordChange(Activity a,String legacy,String nick,String credential,JSONObject info,boolean ru,boolean confirm) {
+        String address=info.optString("email");int owner=info.optInt("id");
+        CzmDialog d=panel(a,ru?"Изменить пароль":"Change password",address.isEmpty()?"":address,
+            confirm?(ru?"Сохранить пароль":"Save password"):(ru?"Получить код":"Get code"),ru);
+        d.cancel.setOnClickListener(v->{clearPendingPassword(a);details(a,legacy,nick,credential,info,ru);});
+        d.setOnCancelListener(v->clearPendingPassword(a));
+        if(address.isEmpty()) {
+            d.note(error("email_required",ru));d.submit.setVisibility(View.GONE);
+            d.link(ru?"Привязать почту":"Link email",v->email(a,legacy,nick,credential,ru,false));d.show();return;
+        }
+        d.note(confirm?(ru?"Введите код из письма, новый пароль и повторите его.":"Enter the email code, a new password and repeat it."):
+            (ru?"Отправим код на подтверждённую почту аккаунта. Код действует 10 минут.":"We will send a code to the account's verified email. It expires in 10 minutes."));
+        d.note(ru?"После смены пароля другие устройства выйдут из аккаунта. На этом устройстве вход сохранится.":"Changing the password signs out other devices. You will stay signed in here.");
+        if(!confirm) {
+            d.submit.setOnClickListener(v->send(d,"password-change",credential,new JSONObject(),ru,result->{
+                if(result.optInt("id")!=owner)throw new IllegalArgumentException();
+                info.put("email",result.getString("email"));rememberPassword(a,owner,info.getString("email"));
+                passwordChange(a,legacy,nick,credential,info,ru,true);
+            }));d.show();return;
+        }
+        EditText code=d.codeField(ru?"Код из письма":"Email code");
+        EditText password=d.field(ru?"Новый пароль (от 8 символов)":"New password (8+ characters)",true,128);
+        EditText repeat=d.field(ru?"Повторите новый пароль":"Repeat new password",true,128);
+        resend(d,"password:"+owner,ru,()->send(d,"password-change",credential,new JSONObject(),ru,result->{
+            if(result.optInt("id")!=owner||!address.equals(result.optString("email"))){clearPendingPassword(a);throw new IllegalArgumentException();}
+            rememberPassword(a,owner,address);code.setText("");
+        }));
+        d.submit.setOnClickListener(v->{try {
+            if(password.getText().length()<8){d.fail(error("password",ru));return;}
+            if(!password.getText().toString().equals(repeat.getText().toString())){d.fail(error("repeat",ru));return;}
+            send(d,"password-change-confirm",credential,new JSONObject().put("code",code.getText().toString())
+                .put("password",password.getText().toString()).put("repeat",repeat.getText().toString()),ru,result->signedIn(d,result,ru,true));
+        }catch(Exception e){d.fail(error("network",ru));}});
+        d.setOnDismissListener(v->{code.setText("");password.setText("");repeat.setText("");if(editor==d)editor=null;});
         d.show();
     }
 

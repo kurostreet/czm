@@ -168,6 +168,8 @@ async def account_action(action: str, body: AuthIn, request: Request, background
         "delete-account": lambda c: accounts.delete_account(c, key, body.password, ip),
         "email": lambda c: accounts.email_request(c, key, body.email, ip),
         "email-confirm": lambda c: accounts.email_confirm(c, key, body.code, ip),
+        "password-change": lambda c: accounts.password_change_request(c, key, ip),
+        "password-change-confirm": lambda c: accounts.password_change_confirm(c, key, body.code, body.password, body.repeat, ip),
         "recover": lambda c: accounts.recover(c, body.nick, ip),
         "reset": lambda c: accounts.reset(c, body.nick, body.code, body.password, body.repeat, ip),
     }
@@ -186,6 +188,10 @@ async def account_action(action: str, body: AuthIn, request: Request, background
         if result:
             background_tasks.add_task(accounts.deliver_login_code, *result)
         result = {"ok": True}
+    elif action == "password-change" and status == 200:
+        address, code, purpose, owner = result
+        background_tasks.add_task(accounts.deliver_login_code, address, code, purpose)
+        result = {"ok": True, "email": address, "id": owner}
     return JSONResponse(result, status_code=status, headers={"Cache-Control": "no-store"})
 
 
