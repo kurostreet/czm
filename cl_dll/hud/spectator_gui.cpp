@@ -36,6 +36,7 @@ version.
 #include "vgui_parser.h"
 #include "triangleapi.h"
 #include "draw_util.h"
+#include "czm_hud.h"
 
 /*
  * We will draw all elements inside a box. It's size 16x10.
@@ -179,7 +180,13 @@ int CHudSpectatorGui::Draw( float flTime )
 
 	int r = 255, g = 140, b = 0;
 
+	// Counter Zombie Mobile: one of three looks from Settings → HUD instead of the black bars
+	const bool czm = CZM_SpectatorDraw( g_iUser2, m_bBombPlanted ? "" : label.m_szTimer,
+		label.m_iCounterTerrorists, label.m_iTerrorists, gHUD.m_Spectator.m_drawstatus && gHUD.m_Spectator.m_drawstatus->value );
+
 	// at first, draw these silly black bars
+	if( !czm )
+	{
 	int startpos = 0;
 	if( gHUD.m_Spectator.m_pip->value != INSET_OFF ) // pip adjust
 	{
@@ -250,6 +257,7 @@ int CHudSpectatorGui::Draw( float flTime )
 			DrawUtils::DrawHudNumberString( INT_XPOS(12.5) - 10, INT_YPOS(2) * 0.5,  INT_XPOS(12.5) - 50, label.m_iTerrorists,        r, g, b );
 		}
 	}
+	} // !czm
 
 	if( m_menuFlags & ROOT_MENU )
 	{
@@ -351,13 +359,13 @@ int CHudSpectatorGui::Draw( float flTime )
 		}
 	}
 
-	//if( !label.m_szNameAndHealth[0] )
-	//{
+	if( !czm )
+	{
 		int iLen = DrawUtils::HudStringLen( label.m_szNameAndHealth );
 		GetTeamColor( r, g, b, g_PlayerExtraInfo[ g_iUser2 ].teamnumber );
 		DrawUtils::DrawHudString( ScreenWidth * 0.5 - iLen * 0.5, INT_YPOS(9) - gHUD.GetCharHeight() * 0.5 , ScreenWidth,
 								  label.m_szNameAndHealth, r, g, b );
-	//}
+	}
 
 	return 1;
 }

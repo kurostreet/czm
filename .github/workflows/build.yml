@@ -77,6 +77,8 @@ jobs:
           python3 -m unittest discover -s tests -p test_touch_editor.py -v
           python3 -m unittest discover -s tests -p test_game_hud.py -v
           python3 -m unittest discover -s tests -p test_settings_apply.py -v
+          python3 -m unittest discover -s tests -p test_spectator_overlay.py -v
+          python3 -m unittest discover -s tests -p test_default_layout.py -v
       - name: Build engine and client from source
         working-directory: android
         run: ./gradlew --no-daemon assembleGitDebug

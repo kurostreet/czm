@@ -4,20 +4,21 @@
 #include <cstdio>
 
 namespace CzmHud {
-// COUNT text blocks, then the radar, the match chat and the frame of server messages;
-// BLOCKS is everything the editor moves
-enum { HEALTH, ARMOR, TIMER, MONEY, AMMO, COUNT, RADAR = COUNT, CHAT, MESSAGES, BLOCKS };
+// COUNT text blocks, then the radar, the match chat, the frame of server messages and the
+// indicator of server files downloading in a match; BLOCKS is everything the editor moves
+enum { HEALTH, ARMOR, TIMER, MONEY, AMMO, COUNT, RADAR = COUNT, CHAT, MESSAGES, DOWNLOADS, BLOCKS };
 enum { RADAR_CLASSIC, RADAR_TACTICAL, RADAR_MINIMAL, RADAR_STYLES };
 // the chat and the server messages: as in CS, on dark plates, with a dark outline
 enum { MSG_CLASSIC, MSG_CZM, MSG_OUTLINE, MSG_STYLES };
-static const char *const keys[BLOCKS] = { "hp", "armor", "time", "money", "ammo", "radar", "chat", "msgs" };
+static const char *const keys[BLOCKS] = { "hp", "armor", "time", "money", "ammo", "radar", "chat", "msgs", "dl" };
 // The default layout, made by the owner in the game (scripts/layouts/scheme1.json): health, time
 // and armor in the bottom row, money under the radar on the left, the ammo shown on the reload
 // button instead of its own block. The frame of server messages is the whole screen, so they
-// stay where the server put them. A reset in the editor brings these back.
-static const float defaults[BLOCKS][2] = {{.394429f,.947409f},{.603303f,.947409f},{.5f,.936167f},{.055261f,.327329f},{.66813f,.947698f},{.067959f,.138f},{.156f,.685833f},{.5f,.5f}};
-static const float defaultScale[BLOCKS] = { .753453f, .754714f, 1, .748406f, .748406f, 1, .6f, 1 };
-static const bool defaultHidden[BLOCKS] = { false, false, false, false, true, false, false, false };
+// stay where the server put them. The download indicator sits at the top in the middle, under
+// the first row of buttons. A reset in the editor brings these back.
+static const float defaults[BLOCKS][2] = {{.394429f,.947409f},{.603303f,.947409f},{.5f,.936167f},{.055261f,.327329f},{.66813f,.947698f},{.067959f,.138f},{.156f,.685833f},{.5f,.5f},{.5f,.19f}};
+static const float defaultScale[BLOCKS] = { .753453f, .754714f, 1, .748406f, .748406f, 1, .6f, 1, 1 };
+static const bool defaultHidden[BLOCKS] = { false, false, false, false, true, false, false, false, false };
 static const int defaultHudStyle = 0, defaultRadarStyle = RADAR_MINIMAL, defaultMessageStyle = MSG_CZM;
 static const int chatLines = 5;
 // The HUD grows with the screen height, but on screens narrower than 2.1:1 (16:9 phones, tablets)
@@ -85,6 +86,21 @@ inline Rect MessageFrame(float sw, float sh, float x, float y, float scale, floa
     x=Clamp(x,0,sw-w,0);
     y=Clamp(y,0,sh-h,0);
     return {x,y,w,h,scale,opacity};
+}
+// the download indicator: a plate with the words and the percent, at least as tall as the text
+inline Rect DownloadLayout(float sw, float sh, float x, float y, float scale, float opacity, float lineHeight) {
+    scale = Clamp(scale,.6f,1.6f,1);
+    opacity = Clamp(opacity,.25f,1,1);
+    const float unit=Base(sw,sh)/480.0f*scale;
+    float h=28*unit, w=196*unit;
+    if(h<lineHeight*1.7f) h=lineHeight*1.7f;
+    if(w>sw*.6f) w=sw*.6f;
+    if(h>sh*.15f) h=sh*.15f;
+    x=Clamp(x,.01f,.99f,defaults[DOWNLOADS][0])*sw-w/2;
+    y=Clamp(y,.01f,.99f,defaults[DOWNLOADS][1])*sh-h/2;
+    x=Clamp(x,sw*.012f,sw-sw*.012f-w,sw*.012f);
+    y=Clamp(y,sh*.018f,sh-sh*.018f-h,sh*.018f);
+    return {x,y,w,h,unit,opacity};
 }
 // what the radar shows inside its frame, a share of the half side
 inline float RadarInner(int style) { return style==RADAR_TACTICAL ? .86f : .84f; }

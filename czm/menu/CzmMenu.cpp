@@ -354,6 +354,8 @@ static const struct { const char *key, *ru, *en; } s_strings[] =
 	{ "s_radar_style_hint", "Вид мини-карты. Место и размер — Управление → Кнопки и интерфейс", "How the minimap looks. Place and size: Controls → Buttons and HUD" },
 	{ "s_msg_style", "Чат и сообщения сервера", "Chat and server messages" },
 	{ "s_msg_style_hint", "Как они выглядят в матче. Место — Управление → Кнопки и интерфейс", "How they look in a match. Place: Controls → Buttons and HUD" },
+	{ "s_spec_style", "Режим наблюдателя", "Spectator view" },
+	{ "s_spec_style_hint", "Что видно после смерти: счёт, время и за кем смотришь", "After you die: the score, the time and who you watch" },
 	{ "setup_title", "Добро пожаловать!", "Welcome!" },
 	{ "setup_text", "Выбери язык и придумай ник", "Choose a language and a nickname" },
 	{ "setup_go", "Играть", "Play" },
@@ -397,6 +399,7 @@ void CZM_Init( void )
 	EngFuncs::CvarRegister( "czm_parallax", "1", FCVAR_ARCHIVE );
 	EngFuncs::CvarRegister( "czm_hud_radar_style", "2", FCVAR_ARCHIVE ); // classic, tactical, minimal (default)
 	EngFuncs::CvarRegister( "czm_hud_msg_style", "1", FCVAR_ARCHIVE );   // chat and server messages: classic, CZM, outline
+	EngFuncs::CvarRegister( "czm_hud_spec_style", "1", FCVAR_ARCHIVE );  // spectator overlay: minimal, card (default), cinema
 	for( int i=0;i<CzmHud::BLOCKS;i++ ) for( int k=0;k<5;k++ ) {
 		char name[64],value[32];
 		CzmHud::Key(name,sizeof(name),i,CzmHud::fields[k]);
@@ -532,6 +535,7 @@ void CZM_CreateFonts( float scale )
 		{ "CZM Black", 25, 900 },       // CZMF_SHOP_CARD_PRICE
 		{ "CZM BlackItalic", 36, 900 }, // CZMF_MENU_TITLE
 		{ "CZM BlackItalic", 30, 900 }, // CZMF_TILE_NAME
+		{ "CZM Medium", 10, 500 },      // CZMF_TINY
 	};
 
 	for( int i = 0; i < CZMF_COUNT; i++ )

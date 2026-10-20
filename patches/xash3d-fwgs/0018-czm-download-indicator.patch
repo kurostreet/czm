@@ -1,0 +1,38 @@
+diff --git a/engine/client/console.c b/engine/client/console.c
+--- a/engine/client/console.c
++++ b/engine/client/console.c
+@@ -1763,7 +1763,8 @@
+ 	if( CZM_Loading_Active( ))
+ 		return; // the loading screen shows download progress itself
+ 
+-	if( scr_download.value != -1.0f )
++	// Counter Zombie Mobile: players see the download indicator of the HUD, the line stays for developers
++	if( scr_download.value != -1.0f && host.allow_console )
+ 	{
+ 		string dlstring;
+ 		int length;
+diff --git a/engine/client/czm_loading.c b/engine/client/czm_loading.c
+--- a/engine/client/czm_loading.c
++++ b/engine/client/czm_loading.c
+@@ -51,6 +51,7 @@
+ static CVAR_DEFINE_AUTO( czm_loading_players, "", 0, "players on the server for the loading screen" );
+ static CVAR_DEFINE_AUTO( czm_loading_ping, "", 0, "ping to the server in milliseconds for the loading screen" );
+ static CVAR_DEFINE_AUTO( czm_loading_error, "", 0, "why the last connection failed, shown by the menu" );
++static CVAR_DEFINE_AUTO( czm_download_files, "0", 0, "server files still downloading in a match (read by the HUD indicator)" );
+ 
+ static struct
+ {
+@@ -715,6 +716,7 @@
+ 
+ 	CZM_MicTest_Frame();
+ 	if(czm.active&&CZM_AndroidFlag("loadingCancel"))CZM_Cancel();
++	CZM_SetValue( &czm_download_files, scr_download.value >= 0.0f ? host.downloadcount : 0 );
+ 
+ 	if( czm.forced && !czm.active && cls.state == ca_active )
+ 		loading_state = false; // changelevel on a local server, wait for the reconnect
+@@ -957,4 +959,5 @@
+ 	Cvar_RegisterVariable( &czm_loading_players );
+ 	Cvar_RegisterVariable( &czm_loading_ping );
+ 	Cvar_RegisterVariable( &czm_loading_error );
++	Cvar_RegisterVariable( &czm_download_files );
+ }

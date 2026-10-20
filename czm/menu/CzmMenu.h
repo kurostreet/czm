@@ -47,6 +47,7 @@ enum CzmFontId
 	CZMF_SHOP_CARD_PRICE,
 	CZMF_MENU_TITLE,
 	CZMF_TILE_NAME,   // server name on a main-screen tile, two lines
+	CZMF_TINY,        // words in the small match previews of the settings
 	CZMF_COUNT
 };
 
@@ -254,6 +255,8 @@ void CZM_DrawRadarPreview( int style, int x, int y, int size, float opacity ); /
 const char *CZM_RadarStyleName( int style );
 void CZM_DrawMessagePreview( int style, int x, int y, int w, int h ); // chat and server texts in a look
 const char *CZM_MessageStyleName( int style );
+void CZM_DrawSpectatorPreview( int style, int x, int y, int w, int h ); // the spectator overlay in a look
+const char *CZM_SpectatorStyleName( int style );
 
 /*
  * shop (buy menu) and server menus as cards

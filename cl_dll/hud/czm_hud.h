@@ -20,3 +20,9 @@ void CZM_AmmoReset();
 void CZM_AmmoFrameBegin();
 void CZM_AmmoReport(int weapon, int clip, int reserve);
 void CZM_AmmoFrameEnd();
+
+// the spectator overlay in the style of czm_hud_spec_style and the download indicator (czm_overlay.cpp)
+int CZM_SpectatorStyle();
+// false: the CZM HUD cannot draw, use the stock overlay
+bool CZM_SpectatorDraw(int target, const char *timer, int scoreCT, int scoreT, bool status);
+void CZM_DownloadsDraw();

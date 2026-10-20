@@ -321,6 +321,8 @@ void SetRadarStyle( float v ) { SetCvar( "czm_hud_radar_style", bound( 0, (int)v
 // how the chat and the server messages look
 float GetMsgStyle( void ) { return bound( 0, (int)GetCvar( "czm_hud_msg_style" ), 2 ); }
 void SetMsgStyle( float v ) { SetCvar( "czm_hud_msg_style", bound( 0, (int)v, 2 )); EngFuncs::ClientCmd( false, "host_writeconfig\n" ); }
+float GetSpecStyle( void ) { return bound( 0, (int)GetCvar( "czm_hud_spec_style" ), 2 ); }
+void SetSpecStyle( float v ) { SetCvar( "czm_hud_spec_style", bound( 0, (int)v, 2 )); EngFuncs::ClientCmd( false, "host_writeconfig\n" ); }
 void SetTabStyle( float v ) { SetCvar( "czm_tab_style", bound( 0, (int)v, 2 )); }
 
 /*
@@ -345,6 +347,7 @@ enum ERowType
 	ROW_HUDEDIT,
 	ROW_RADAR,    // three radar looks as cards
 	ROW_MSGSTYLE, // three looks of the chat and server messages as cards
+	ROW_SPECSTYLE, // three looks of the spectator overlay as cards
 	ROW_MIC,      // microphone test: level meter and a start/stop button
 };
 
@@ -429,6 +432,7 @@ const CzmRow s_hud[] =
 {
 	{ ROW_RADAR, "s_radar_style", "s_radar_style_hint", GetRadarStyle, SetRadarStyle, NULL, 0, 2, 1, 0, {}, 3 },
 	{ ROW_MSGSTYLE, "s_msg_style", "s_msg_style_hint", GetMsgStyle, SetMsgStyle, NULL, 0, 2, 1, 0, {}, 3 },
+	{ ROW_SPECSTYLE, "s_spec_style", "s_spec_style_hint", GetSpecStyle, SetSpecStyle, NULL, 0, 2, 1, 0, {}, 3 },
 	{ ROW_CHOICE, "s_tab_style", "s_tab_style_hint", GetTabStyle, SetTabStyle, NULL, 0, 2, 1, 0, { "opt_tab_default", "opt_tab_compact", "opt_tab_tactical" }, 3 },
 	{ ROW_TABPREVIEW, "s_tab_preview", "s_tab_preview_hint", NULL, NULL, NULL, 0, 0, 0, 0, {}, 0 },
 };
@@ -742,7 +746,7 @@ void CCzmSettings::Layout( void )
 			h = rowH * 1.6f;
 		else if( row.type == ROW_TABPREVIEW )
 			h = H * 0.50f;
-		else if( row.type == ROW_RADAR || row.type == ROW_MSGSTYLE )
+		else if( row.type == ROW_RADAR || row.type == ROW_MSGSTYLE || row.type == ROW_SPECSTYLE )
 			h = H * 0.47f;
 		else if( row.type == ROW_SPRAYS || row.type == ROW_AVATARS )
 		{
@@ -820,6 +824,7 @@ void CCzmSettings::Layout( void )
 			break;
 		case ROW_RADAR:
 		case ROW_MSGSTYLE:
+		case ROW_SPECSTYLE:
 		{
 			// three cards under the title: the picture and its name
 			int cardGap = H * 0.025f, cardW = ( l.rect.w - cardGap * 2 ) / 3, cardH = h - H * 0.135f;
@@ -1004,6 +1009,7 @@ void CCzmSettings::Activate( int hit )
 		case ROW_CHOICE:
 		case ROW_RADAR:
 		case ROW_MSGSTYLE:
+		case ROW_SPECSTYLE:
 		case ROW_COLORS:
 			if( part >= 0 )
 			{
@@ -1392,7 +1398,7 @@ void CCzmSettings::DrawRow( int i )
 	HFont hintFont = CZM_Font( CZMF_SMALL );
 	bool dim = !RowActive( i );
 	const char *hint = row.hint ? CZM_T( row.hint ) : NULL;
-	bool cards = row.type == ROW_SPRAYS || row.type == ROW_AVATARS || row.type == ROW_TABPREVIEW || row.type == ROW_RADAR || row.type == ROW_MSGSTYLE;
+	bool cards = row.type == ROW_SPRAYS || row.type == ROW_AVATARS || row.type == ROW_TABPREVIEW || row.type == ROW_RADAR || row.type == ROW_MSGSTYLE || row.type == ROW_SPECSTYLE;
 	int labelW = ( cards ? l.rect.w : l.control.x - l.rect.x - H * 0.03f );
 	int labelH = CZM_FontHeight( labelFont ), hintH = CZM_FontHeight( hintFont );
 	int blockH = labelH + ( hint ? hintH + H * 0.008f : 0 );
@@ -1499,6 +1505,28 @@ void CCzmSettings::DrawRow( int i )
 			CZM_DrawMessagePreview( k, shot.x, shot.y, shot.w, shot.h );
 			UI::Scissor::PopScissor();
 			CZM_DrawText( nameFont, p.x, p.y + p.h - nameH - H * 0.022f, p.w, CZM_MessageStyleName( k ),
+				k == current ? CZM_White() : PackRGBA( 200, 205, 215, 255 ), QM_CENTER );
+		}
+		break;
+	}
+	case ROW_SPECSTYLE:
+	{
+		int current = (int)GetSpecStyle(), corner = H * 0.02f;
+		HFont nameFont = CZM_Font( CZMF_TILE_STATUS );
+
+		for( int k = 0; k < l.numParts; k++ )
+		{
+			const CzmRect &p = l.parts[k];
+			bool pressed = IsPressed( HIT_ROW + i * 20 + 1 + k );
+			int nameH = CZM_FontHeight( nameFont ), inset = H * 0.018f;
+			CzmRect shot = CZM_Rect( p.x + inset, p.y + inset, p.w - inset * 2, p.h - nameH - H * 0.06f );
+
+			CZM_DrawSliced( k == current ? UI_DIR "card_on.png" : UI_DIR "card.png", p.x, p.y, p.w, p.h, 30, corner,
+				pressed ? PackRGBA( 200, 200, 200, 255 ) : CZM_White());
+			UI::Scissor::PushScissor( shot.x, shot.y, shot.w, shot.h );
+			CZM_DrawSpectatorPreview( k, shot.x, shot.y, shot.w, shot.h );
+			UI::Scissor::PopScissor();
+			CZM_DrawText( nameFont, p.x, p.y + p.h - nameH - H * 0.022f, p.w, CZM_SpectatorStyleName( k ),
 				k == current ? CZM_White() : PackRGBA( 200, 205, 215, 255 ), QM_CENTER );
 		}
 		break;

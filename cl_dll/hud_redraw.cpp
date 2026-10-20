@@ -164,6 +164,9 @@ int CHud :: Redraw( float flTime, int intermission )
 
 		if( !intermission && IN_AutoRunActive( ))
 			CZM_DrawAutoRunLabel( flTime );
+
+		// server files still downloading: the indicator where the player put it in the editor
+		CZM_DownloadsDraw();
 	}
 	CZM_AmmoFrameEnd(); // the reload button shows the clip only while the ammo HUD has one
 
