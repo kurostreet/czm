@@ -19,7 +19,7 @@ from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.types import (BotCommand, BufferedInputFile, CallbackQuery, InlineKeyboardButton,
                            InlineKeyboardMarkup, Message)
 
-from . import service
+from . import service, website
 from .config import Settings, get_settings
 from .db import db
 
@@ -27,6 +27,7 @@ log = logging.getLogger("czm.bot")
 MSK = timezone(timedelta(hours=3))
 LENGTHS = {"w": "week", "m": "month", "f": "forever"}
 LENGTH_NAMES = {"week": "неделю", "month": "месяц", "forever": "навсегда"}
+BETA_GOAL = 50                                  # the scale of the beta counter on the site
 
 HELP = (
     "<b>Counter Zombie Mobile — бот владельца</b>\n\n"
@@ -38,6 +39,7 @@ HELP = (
     "/release — что сейчас у игроков, /release <i>текст</i> — поправить «что нового»\n"
     "/ban <i>ID</i> week|month|forever <i>причина</i> — бан игрока\n"
     "/unban <i>ID</i> — разбан, /bans — кто забанен\n"
+    "/tester <i>число</i> — сколько тестировщиков в бете Google Play показывает сайт, /tester — сколько сейчас\n"
     "/stats — сводка"
 )
 
@@ -271,6 +273,27 @@ class OwnerBot:
             except TelegramAPIError as e:
                 log.warning("could not edit build message: %s", e)
 
+    async def on_tester(self, message: Message, command: CommandObject) -> None:
+        """The number of beta testers on the site, entered by the owner from Play Console."""
+        if not self.allowed(message.from_user and message.from_user.id):
+            return
+        arg = (command.args or "").strip()
+        if not arg:
+            s = await in_db(website.stats)
+            count = s["play_beta_testers"]
+            if count is None:
+                await message.answer("На сайте число тестировщиков ещё не указано. Так: /tester 7")
+                return
+            checked = datetime.fromtimestamp(s["play_beta_checked_at"], MSK).strftime("%d.%m.%Y %H:%M")
+            await message.answer(f"На сайте тестировщиков: {count} из {BETA_GOAL} (указано {checked}).\n"
+                                 "Поменять: /tester число")
+            return
+        if not arg.isdigit() or int(arg) > 1000000:
+            await message.answer("Так: /tester 7 — сколько тестировщиков в бете Google Play")
+            return
+        await in_db(website.set_play_beta_testers, int(arg))
+        await message.answer(f"✅ На сайте теперь тестировщиков: {int(arg)} из {BETA_GOAL}.")
+
     async def on_ban(self, message: Message, command: CommandObject) -> None:
         if not self.allowed(message.from_user and message.from_user.id):
             return
@@ -369,6 +392,7 @@ class OwnerBot:
                 BotCommand(command="news", description="Новость в колокольчик"),
                 BotCommand(command="release", description="Что сейчас у игроков"),
                 BotCommand(command="bans", description="Кто забанен"),
+                BotCommand(command="tester", description="Тестировщики беты на сайте"),
                 BotCommand(command="unban", description="Разбан игрока"),
                 BotCommand(command="stats", description="Сводка"),
                 BotCommand(command="help", description="Как пользоваться"),
@@ -394,6 +418,7 @@ def build(settings: Settings) -> tuple[Bot, Dispatcher, OwnerBot]:
     router.message.register(owner.on_ban, Command("ban"))
     router.message.register(owner.on_unban, Command("unban"))
     router.message.register(owner.on_bans, Command("bans"))
+    router.message.register(owner.on_tester, Command("tester"))
     router.message.register(owner.on_message)
     router.callback_query.register(owner.on_callback)
     dispatcher = Dispatcher()
