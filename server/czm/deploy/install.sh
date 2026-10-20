@@ -4,6 +4,9 @@
 # Secrets stay on the server in /etc/czm/env; the first install takes the bot from the
 # video project settings (/etc/fva/env) and makes a new pepper. Nothing is printed.
 set -euo pipefail
+# Release code and static files must remain readable by the service account,
+# even when the caller used a private umask for its database backup.
+umask 022
 COMMIT=${1:?usage: install.sh <commit>}
 REPO=https://raw.githubusercontent.com/kurostreet/czm/$COMMIT/server/czm
 FILES="requirements.txt czm/__init__.py czm/config.py czm/db.py czm/profanity.py czm/links.py czm/service.py czm/api.py
