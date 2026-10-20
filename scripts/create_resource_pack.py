@@ -36,7 +36,7 @@ def make_pack(output, entries, required=()):
     finally:
         temporary.unlink(missing_ok=True)
 
-def from_directories(output, directories):
+def from_directories(output, directories, overrides=None):
     entries = {}
     for directory in directories:
         root = Path(directory)
@@ -47,6 +47,8 @@ def from_directories(output, directories):
                 if path.is_symlink():
                     raise ValueError("Symlink in resource pack: " + str(path))
                 entries[path.relative_to(root).as_posix()] = path.read_bytes
+    for name, path in (overrides or {}).items():
+        entries[name] = Path(path).read_bytes
     make_pack(output, entries)
 
 if __name__ == "__main__":

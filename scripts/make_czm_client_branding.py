@@ -51,13 +51,21 @@ def main():
     text(multiplayer, "Multiplayer", (0, 0, 460, 76), (232, 237, 246), 44)
     ImageDraw.Draw(multiplayer).line((80, 76, 380, 76), fill=(232, 62, 76), width=2)
     multiplayer.save(ART / "gfx/shell/head_multi.bmp")
+    multiplayer.save(ART / "gfx/shell/head_multi.tga")
 
     background = Image.open(ART / "gfx/czm/loading_3.png").convert("RGB")
     splash = ImageOps.fit(background, (640, 480), method=Image.Resampling.LANCZOS)
     title = ImageOps.contain(Image.open(ART / "gfx/czm/title.png").convert("RGBA"), (550, 110))
     splash.paste(title, ((640 - title.width) // 2, 20), title)
     splash.save(ART / "gfx/shell/splash.bmp")
-    print("Client splash, multiplayer heading and 71 button labels use CZM artwork")
+
+    gamma = ImageOps.fit(background, (256, 256), method=Image.Resampling.LANCZOS)
+    draw = ImageDraw.Draw(gamma)
+    # Keep a full grayscale ramp for the legacy brightness calibration screen.
+    for x in range(256):
+        draw.line((x, 224, x, 255), fill=(x, x, x))
+    gamma.save(ART / "gfx/shell/gamma.tga")
+    print("Client and engine UI artwork uses CZM art, fonts and brightness ramp")
 
 
 if __name__ == "__main__":

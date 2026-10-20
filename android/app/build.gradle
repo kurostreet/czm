@@ -149,6 +149,9 @@ def embeddedEngine = tasks.register("buildBundledEngine", Exec) {
 	inputs.files(fileTree("../../3rdparty/SDL") { exclude "**/.git/**" })
 	inputs.files("../../scripts/build_android_engine.py", "../../scripts/create_resource_pack.py",
 		"../../scripts/apply_engine_patches.py")
+	inputs.files("../../3rdparty/cs16client-extras/gfx/shell/btns_main.bmp",
+		"../../3rdparty/cs16client-extras/gfx/shell/head_multi.tga",
+		"../../3rdparty/cs16client-extras/gfx/shell/gamma.tga")
 	inputs.files(fileTree("../../patches/xash3d-fwgs"))
 	inputs.files(fileTree("../../patches/SDL"))
 	outputs.dir("build/generated/engine/jniLibs")
