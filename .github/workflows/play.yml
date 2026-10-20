@@ -50,7 +50,7 @@ jobs:
         run: python3 scripts/apply_engine_patches.py
       - name: Build the bundle
         working-directory: android
-        run: ./gradlew --no-daemon bundleGooglePlayRelease
+        run: ./gradlew --no-daemon :app:checkGooglePlayReleaseDuplicateClasses :app:bundleGooglePlayRelease
       - name: Check the bundle
         env:
           AAB: android/app/build/outputs/bundle/googlePlayRelease/app-googlePlay-release.aab
