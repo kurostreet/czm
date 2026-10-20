@@ -120,7 +120,8 @@ def deleted(conn: sqlite3.Connection, after: int) -> list[int]:
 
 def news(conn: sqlite3.Connection) -> list[dict]:
     rows = conn.execute(
-        "SELECT version, notes, published FROM releases WHERE published IS NOT NULL ORDER BY code DESC LIMIT ?",
+        "SELECT version, notes, published FROM releases WHERE published IS NOT NULL "
+        "AND channel != 'development' ORDER BY code DESC LIMIT ?",
         (NEWS_LIMIT,),
     ).fetchall()
     return [{"version": r["version"], "notes": (r["notes"] or service.DEFAULT_NOTES).strip()[:600], "ts": r["published"]}

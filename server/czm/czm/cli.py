@@ -3,9 +3,12 @@
   python -m czm.cli assemble
   python -m czm.cli set-beta-testers <count-from-Play-Console>
   python -m czm.cli set-beta-open 0|1  # 1 only when Play testing links work
+  python -m czm.cli create-dev-invite
+  python -m czm.cli publish-migration <release-id>
 
 add-release moves an uploaded APK into the download folder and remembers it as the
-newest build. Players see it only after the owner publishes it in the bot (/release).
+newest private development build. The owner publishes it in the bot (/release).
+Only publish-migration exposes the final transition APK to existing public installs.
 assemble turns the core APKs sent by GitHub Actions into releases (czm-assemble.service)
 and finishes the bundles for Google Play sent by play.yml.
 """
@@ -32,7 +35,7 @@ def add_release(apk: Path, version: str, code: int) -> None:
     target.chmod(0o644)
     with db.db() as conn:
         conn.execute(
-            "INSERT INTO releases (version, code, file, size, sha256, created) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO releases (version, code, file, size, sha256, created, channel) VALUES (?, ?, ?, ?, ?, ?, 'development')",
             (version, code, name, target.stat().st_size, digest.hexdigest(), db.now()),
         )
     print(f"release {version} ({code}) ready: {target.stat().st_size // 1024 // 1024} MB, publish it in the bot with /release")

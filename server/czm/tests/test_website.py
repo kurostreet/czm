@@ -127,6 +127,10 @@ class WebsiteTests(unittest.TestCase):
     def test_news_lists_the_latest_published_releases(self):
         for code in (5, 6, 7, 8):
             self.release(code)
+        self.release(9)
+        with db.db() as conn:
+            conn.execute("UPDATE releases SET channel='migration' WHERE code=8")
+            conn.execute("UPDATE releases SET channel='development', notes='Private test only' WHERE code=9")
         news = self.client.get("/api/v1/site/news").json()["news"]
         self.assertEqual([n["version"] for n in news], ["1.35-8", "1.35-7", "1.35-6"])
         self.assertEqual(news[0]["notes"], "Новая музыка.")

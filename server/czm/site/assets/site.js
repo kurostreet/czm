@@ -24,7 +24,7 @@
         ['Кнопки и HUD', 'Расставь кнопки, здоровье, деньги, радар и чат как удобно. Три схемы управления и три вида радара, перекрытия видно сразу.'],
         ['Друзья и чат', 'Друзья, подписки, личные сообщения и приглашения в игру. Мировой чат Global, RU и EN.'],
         ['Профиль и облако', 'Ник, аватар или своё фото, спреи. Вход по нику или коду на почту, настройки возвращаются после переустановки.'],
-        ['Обновления', 'Новые версии приходят прямо в игре и скачиваются только изменения.']
+        ['Обновления', 'Устанавливай новые версии через Google Play и участвуй в бета-тесте.']
       ],
       chatTitle: 'Чат игры', chatShort: 'Чат', chatOpen: 'Открыть чат', chatLock: 'Писать можно только в игре',
       roomsLabel: 'Комнаты чата', chatEmpty: 'В этой комнате пока тихо', chatLoading: 'Загружаем чат…',
@@ -53,7 +53,7 @@
         ['Buttons and HUD', 'Place buttons, health, money, radar and chat where you like. Three control schemes and three radar styles, overlaps show at once.'],
         ['Friends and chat', 'Friends, follows, private messages and game invites. A world chat: Global, RU and EN.'],
         ['Profile and cloud', 'Nickname, avatar or your own photo, sprays. Sign in with a nickname or an email code, settings come back after a reinstall.'],
-        ['Updates', 'New versions arrive in the game, and only the changes are downloaded.']
+        ['Updates', 'Get new versions through Google Play and take part in the beta test.']
       ],
       chatTitle: 'Game chat', chatShort: 'Chat', chatOpen: 'Open chat', chatLock: 'You can only write in the game',
       roomsLabel: 'Chat rooms', chatEmpty: 'Quiet in this room so far', chatLoading: 'Loading the chat…',
