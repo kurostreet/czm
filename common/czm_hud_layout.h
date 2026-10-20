@@ -14,10 +14,10 @@ static const char *const keys[BLOCKS] = { "hp", "armor", "time", "money", "ammo"
 // The default layout, made by the owner in the game (scripts/layouts/scheme1.json): health, time
 // and armor in the bottom row, money under the radar on the left, the ammo shown on the reload
 // button instead of its own block. The frame of server messages is the whole screen, so they
-// stay where the server put them. The download indicator sits at the top in the middle, under
-// the first row of buttons. A reset in the editor brings these back.
-static const float defaults[BLOCKS][2] = {{.394429f,.947409f},{.603303f,.947409f},{.5f,.936167f},{.055261f,.327329f},{.66813f,.947698f},{.067959f,.138f},{.156f,.685833f},{.5f,.5f},{.5f,.19f}};
-static const float defaultScale[BLOCKS] = { .753453f, .754714f, 1, .748406f, .748406f, 1, .6f, 1, 1 };
+// stay where the server put them. The download indicator sits at the bottom left, beside the
+// health block. A reset in the editor brings these back.
+static const float defaults[BLOCKS][2] = {{.3944f,.9474f},{.6033f,.9474f},{.5f,.9362f},{.0553f,.3273f},{.6681f,.9477f},{.068f,.138f},{.156f,.6858f},{.5f,.5f},{.176813f,.952833f}};
+static const float defaultScale[BLOCKS] = { .7535f, .7547f, 1, .7484f, .7484f, 1, .6f, 1, 1 };
 static const bool defaultHidden[BLOCKS] = { false, false, false, false, true, false, false, false, false };
 static const int defaultHudStyle = 0, defaultRadarStyle = RADAR_MINIMAL, defaultMessageStyle = MSG_CZM;
 static const int chatLines = 5;

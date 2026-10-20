@@ -47,6 +47,8 @@ public final class CzmNet {
     }
 
     public static void accountShow(String legacy, String nick, boolean russian) { CzmAccount.show(legacy, nick, russian); }
+    public static void accountRegister(String legacy, String nick, boolean russian) { CzmAccount.register(legacy, nick, russian); }
+    public static void accountContext(String legacy, String nick, boolean russian) { CzmAccount.rememberContext(legacy, nick, russian); }
     public static byte[] accountEvent() { return CzmAccount.event(); }
     public static void colorShow(int r, int g, int b, boolean ru) { CzmColorPicker.show(r, g, b, ru); }
     public static byte[] colorEvent() { return CzmColorPicker.event(); }

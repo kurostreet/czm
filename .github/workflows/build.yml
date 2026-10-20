@@ -135,6 +135,7 @@ jobs:
                   assert b"menu_czmchat" in menu and b"/api/v1/hello" in menu and b"ru/kurostreet/counterzombiemobile/CzmNet" in menu, abi
                   assert b"czm/tapscroll.wav" in menu and b"https://counter-zombie.ru%s" in menu, abi
                   assert b"serverAuthShow" in menu and b"accountShow" in menu and b"accountEvent" in menu, abi
+                  assert b"accountRegister" in menu and b"accountContext" in menu and b"setup_register" in menu, abi
                   assert b"colorShow" in menu and b"colorEvent" in menu and b"czm_tab_style" in menu, abi
                   assert b"/api/v1/tab/bind" in menu and b"/api/v1/tab/resolve" in menu, abi
                   engine = apk.read("lib/" + abi + "/libxash.so")

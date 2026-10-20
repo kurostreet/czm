@@ -67,9 +67,11 @@ public final class CzmGameActivity extends XashActivity implements AudioManager.
         focus = audio == null || audio.requestAudioFocus(this, AudioManager.STREAM_MUSIC,
                 AudioManager.AUDIOFOCUS_GAIN) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED;
         updateAudio();
+        CzmAccount.resume(this);
     }
 
     @Override protected void onPause() {
+        CzmAccount.pause(this);
         foreground = false;
         updateAudio();
         if (audio != null) audio.abandonAudioFocus(this);
@@ -98,6 +100,7 @@ public final class CzmGameActivity extends XashActivity implements AudioManager.
     @Override protected void onStop(){backgroundIntent=false;super.onStop();}
 
     @Override public void onDestroy() {
+        CzmAccount.destroy(this);
         ui.removeCallbacksAndMessages(null);
         if (audio != null) audio.abandonAudioFocus(this);
         super.onDestroy();

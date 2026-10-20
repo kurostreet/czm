@@ -11,6 +11,16 @@ JAVA = ROOT / "android/app/src/main/java/ru/kurostreet/counterzombiemobile"
 
 
 class AccountClientTests(unittest.TestCase):
+    def test_pending_email_login_survives_recreation(self):
+        if not shutil.which("javac"):
+            self.skipTest("requires javac")
+        with tempfile.TemporaryDirectory() as temp:
+            subprocess.run(["javac", "--release", "11", "-encoding", "UTF-8", "-d", temp,
+                            str(JAVA / "EmailLoginState.java"), str(ROOT / "tests/EmailLoginStateTest.java")], check=True)
+            result = subprocess.run(["java", "-cp", temp, "ru.kurostreet.counterzombiemobile.EmailLoginStateTest"],
+                                    check=True, capture_output=True, text=True)
+            self.assertIn("EMAIL_LOGIN_RESTORE_OK", result.stdout)
+
     def test_restore_origin_and_switching_requests(self):
         sdk = os.environ.get("CZM_ANDROID_JAR") or str(Path(os.environ.get("ANDROID_HOME", "/missing")) / "platforms/android-36/android.jar")
         json = os.environ.get("CZM_JSON_JAR", "/missing")
@@ -27,7 +37,7 @@ class AccountClientTests(unittest.TestCase):
             }
             for name, text in sources.items():
                 (tmp / (name + ".java")).write_text(text)
-            files = [str(JAVA / (name + ".java")) for name in ("CzmNet", "CzmAccount", "CzmDialog", "CzmServerAuth", "ServerAuthData", "CzmColorPicker", "ColorWheelData", "CzmCodeInput", "CzmCloud", "SettingsData", "SettingsSchema", "CzmLayoutActivity", "CzmLayoutProvider", "ServerQuery")]
+            files = [str(JAVA / (name + ".java")) for name in ("CzmNet", "CzmAccount", "EmailLoginState", "CzmDialog", "CzmServerAuth", "ServerAuthData", "CzmColorPicker", "ColorWheelData", "CzmCodeInput", "CzmCloud", "SettingsData", "SettingsSchema", "CzmLayoutActivity", "CzmLayoutProvider", "ServerQuery")]
             files.append(str(JAVA / "CzmDownloads.java"))
             # the site build's flavor classes (the Google Play StoreUpdates needs the Play library)
             git = ROOT / "android/app/src/git/java/ru/kurostreet/counterzombiemobile"

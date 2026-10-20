@@ -360,6 +360,7 @@ static const struct { const char *key, *ru, *en; } s_strings[] =
 	{ "setup_text", "Выбери язык и придумай ник", "Choose a language and a nickname" },
 	{ "setup_go", "Играть", "Play" },
 	{ "setup_login", "Уже играл? Войти в аккаунт", "Played before? Sign in" },
+	{ "setup_register", "Зарегистрироваться", "Create an account" },
 	{ "quick_title", "БЫСТРАЯ ИГРА", "QUICK PLAY" },
 	{ "quick_search", "ИЩЕМ СЕРВЕР", "SEARCHING" },
 	{ "quick_hint", "Лучший открытый зомби-сервер по онлайну и пингу", "The best open zombie server by players and ping" },
@@ -403,7 +404,7 @@ void CZM_Init( void )
 	for( int i=0;i<CzmHud::BLOCKS;i++ ) for( int k=0;k<5;k++ ) {
 		char name[64],value[32];
 		CzmHud::Key(name,sizeof(name),i,CzmHud::fields[k]);
-		snprintf(value,sizeof(value),"%.4f",k<2?CzmHud::defaults[i][k]:k==2?CzmHud::defaultScale[i]:k==3?1.f:CzmHud::defaultHidden[i]?1.f:0.f);
+		snprintf(value,sizeof(value),"%.6f",k<2?CzmHud::defaults[i][k]:k==2?CzmHud::defaultScale[i]:k==3?1.f:CzmHud::defaultHidden[i]?1.f:0.f);
 		EngFuncs::CvarRegister(name,value,FCVAR_ARCHIVE);
 	}
 	EngFuncs::CvarRegister( "czm_open_profile", "0", 0 );

@@ -22,6 +22,9 @@ final class CzmAccount {
     private static int generation;
     private static CzmDialog editor;
     private static final java.util.Map<String,Long> mailAt=new java.util.HashMap<>();
+    private static Activity foregroundActivity;
+    private static String profileKey = "", profileNick = "";
+    private static boolean contextReady, russian;
     private CzmAccount() {}
 
     static boolean serviceUrl(String address) {
@@ -163,6 +166,59 @@ final class CzmAccount {
         return d;
     }
 
+    private static android.content.SharedPreferences pendingStore(Context context) {
+        return context.getSharedPreferences("czm_pending_email_login", Context.MODE_PRIVATE);
+    }
+    private static void clearPending(Context context) { pendingStore(context).edit().clear().apply(); }
+    private static EmailLoginState pending(Context context) {
+        android.content.SharedPreferences p = pendingStore(context);
+        EmailLoginState state = EmailLoginState.restore(p.getString("email", ""), p.getLong("expires", 0),
+                p.getLong("resend", 0), System.currentTimeMillis());
+        if (state == null && p.contains("email")) clearPending(context);
+        return state;
+    }
+    private static void rememberEmail(Context context, String email) {
+        EmailLoginState state = EmailLoginState.requested(email, System.currentTimeMillis());
+        pendingStore(context).edit().putString("email", state.email).putLong("expires", state.expiresAt)
+                .putLong("resend", state.resendAt).apply();
+        restoreThrottle(state);
+    }
+    private static void restoreThrottle(EmailLoginState state) {
+        mailAt.put("login:" + state.email.toLowerCase(java.util.Locale.ROOT),
+                android.os.SystemClock.elapsedRealtime() + state.resendDelay(System.currentTimeMillis()));
+    }
+
+    // Activity recreation can also restart the native engine. Wait for its guest profile key
+    // before restoring the dialog; no credentials or profile keys need to be persisted for it.
+    static void rememberContext(String legacy, String nick, boolean ru) {
+        Context context = SDLActivity.getContext(); if (!(context instanceof Activity)) return;
+        Activity a = (Activity)context;
+        a.runOnUiThread(() -> {
+            profileKey = legacy; profileNick = nick; russian = ru; contextReady = true;
+            restoreEmail(a);
+        });
+    }
+    static void resume(Activity a) { foregroundActivity = a; restoreEmail(a); }
+    static void pause(Activity a) { if (foregroundActivity == a) foregroundActivity = null; }
+    static void destroy(Activity a) {
+        pause(a);
+        if (editor != null && editor.activity == a) editor.dismiss();
+    }
+    private static void restoreEmail(Activity a) {
+        if (!contextReady || foregroundActivity != a || a.isFinishing() || a.isDestroyed()) return;
+        if (editor != null) {
+            if (editor.activity == a && editor.isShowing()) return;
+            editor.dismiss(); editor = null;
+        }
+        load();
+        synchronized (CzmAccount.class) { if (!token.isEmpty()) { clearPending(a); return; } }
+        EmailLoginState state = pending(a);
+        if (state != null) {
+            restoreThrottle(state);
+            emailLogin(a, profileKey, profileNick, russian, true, state.email);
+        }
+    }
+
     private static void signedIn(CzmDialog d, JSONObject result, boolean ru) throws Exception {
         synchronized (CzmAccount.class) {
             String next = result.getString("token");
@@ -170,18 +226,34 @@ final class CzmAccount {
             CzmServerAuth.session(d.activity, next); token = next; ++generation;
             profile(result.getJSONObject("profile"));
         }
+        clearPending(d.activity);
         d.dismiss(); Toast.makeText(d.activity, ru ? "Вход выполнен" : "Signed in", Toast.LENGTH_SHORT).show();
     }
 
     static void show(String legacy, String nick, boolean ru) {
+        show(legacy, nick, ru, false);
+    }
+    static void register(String legacy, String nick, boolean ru) {
+        show(legacy, nick, ru, true);
+    }
+    private static void show(String legacy, String nick, boolean ru, boolean registration) {
         Context context = SDLActivity.getContext(); if (!(context instanceof Activity)) return;
         Activity a = (Activity)context;
         a.runOnUiThread(() -> {
-            if (a.isFinishing() || (editor != null && editor.isShowing())) return;
+            if (a.isFinishing() || a.isDestroyed()) return;
+            if (editor != null && editor.activity != a) editor.dismiss();
+            if (editor != null && editor.isShowing()) return;
+            profileKey = legacy; profileNick = nick; russian = ru; contextReady = true;
             load();
             final String saved;
             synchronized (CzmAccount.class) { saved = token; }
-            if (saved.isEmpty()) form(a, legacy, nick, "login", ru);
+            if (saved.isEmpty()) {
+                EmailLoginState state = registration ? null : pending(a);
+                if (state != null) {
+                    restoreThrottle(state);
+                    emailLogin(a, legacy, nick, ru, true, state.email);
+                } else form(a, legacy, nick, registration ? "register" : "login", ru);
+            }
             else {
                 CzmDialog d = panel(a, ru ? "Аккаунт CZM" : "CZM account", ru ? "Проверяем сеанс…" : "Checking session…", "…", ru);
                 d.submit.setVisibility(View.GONE);
@@ -192,6 +264,7 @@ final class CzmAccount {
     }
 
     private static void form(Activity a, String legacy, String nick, String mode, boolean ru) {
+        clearPending(a);
         boolean register = mode.equals("register"), recovery = mode.equals("recover"), reset = mode.equals("reset");
         String title = register ? (ru ? "Создать аккаунт" : "Create account") : recovery || reset ? (ru ? "Восстановить пароль" : "Reset password") : (ru ? "Вход в CZM" : "Sign in to CZM");
         CzmDialog d = panel(a, title, register ? (ru ? "Сохраним текущий профиль и аватар" : "Keep your current profile and avatar")
@@ -279,6 +352,7 @@ final class CzmAccount {
     }
 
     private static void emailLogin(Activity a, String legacy, String nick, boolean ru, boolean confirm, String address) {
+        if (!confirm) clearPending(a);
         CzmDialog d=panel(a,ru?"Вход по почте":"Sign in with email",confirm?address:(ru?"Введите почту, подтверждённую в аккаунте":"Use the email verified in your account"),confirm?(ru?"Войти":"Sign in"):(ru?"Получить код":"Get code"),ru);
         EditText input=confirm?d.codeField(ru?"Код из письма":"Email code"):d.field("Email",false,254);
         input.setInputType(confirm?InputType.TYPE_CLASS_NUMBER:InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
@@ -286,7 +360,7 @@ final class CzmAccount {
         String throttle="login:"+address.toLowerCase(java.util.Locale.ROOT);
         if(confirm) {
             d.note(ru?"Если почта привязана к аккаунту, код отправлен. Проверьте также «Спам».":"If this email is linked, a code was sent. Also check Spam.");
-            resend(d,throttle,ru,()->{try{send(d,"email-login","",new JSONObject().put("email",address),ru,result->mailAt.put(throttle,android.os.SystemClock.elapsedRealtime()+60000));}catch(Exception e){d.fail(error("email",ru));}});
+            resend(d,throttle,ru,()->{try{send(d,"email-login","",new JSONObject().put("email",address),ru,result->rememberEmail(a,address));}catch(Exception e){d.fail(error("email",ru));}});
             d.link(ru?"Изменить адрес":"Change email address",v->emailLogin(a,legacy,nick,ru,false,address));
         }
         d.link(ru?"Войти по паролю":"Use password instead",v->form(a,legacy,nick,"login",ru));
@@ -297,10 +371,12 @@ final class CzmAccount {
                 if(confirm)body.put("code",input.getText().toString());
                 send(d,confirm?"email-login-confirm":"email-login","",body,ru,result->{
                     if(confirm)signedIn(d,result,ru);
-                    else{mailAt.put("login:"+email.toLowerCase(java.util.Locale.ROOT),android.os.SystemClock.elapsedRealtime()+60000);emailLogin(a,legacy,nick,ru,true,email);}
+                    else{rememberEmail(a,email);emailLogin(a,legacy,nick,ru,true,email);}
                 });
             }catch(Exception e){d.fail(error("email",ru));}
         });
+        d.cancel.setOnClickListener(v -> { clearPending(a); d.dismiss(); });
+        d.setOnCancelListener(v -> clearPending(a));
         d.setOnDismissListener(v->{if(confirm)input.setText("");if(editor==d)editor=null;});
         d.show();
     }

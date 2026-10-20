@@ -339,6 +339,7 @@ void CZM_OnlineFrame( void )
 			return;
 		s_online.started = true;
 		LoadKey();
+		CZM_AccountContext( s_online.key, EngFuncs::GetCvarString( "name" ));
 		s_online.nextHello = now;
 	}
 

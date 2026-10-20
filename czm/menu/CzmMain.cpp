@@ -106,6 +106,7 @@ private:
 		HIT_SETUP_NICK,
 		HIT_SETUP_GO,
 		HIT_SETUP_LOGIN, // played before: sign in, the account brings the settings back
+		HIT_SETUP_REGISTER,
 		HIT_ABOUT_TELEGRAM,
 		HIT_ABOUT_GROUP,
 		HIT_ABOUT_SITE,
@@ -149,7 +150,7 @@ private:
 	CzmRect m_panel, m_close, m_quitYes, m_quitNo, m_version;
 	CzmRect m_aboutLogo, m_aboutRows[CZM_ABOUT_ROWS];
 	CzmRect m_update, m_updateButton;
-	CzmRect m_setupLang, m_setupNick, m_setupGo, m_setupLogin;
+	CzmRect m_setupLang, m_setupNick, m_setupGo, m_setupLogin, m_setupRegister;
 	CzmRect m_quick;
 	char m_szQuickNote[160];   // why the search found nothing, shown for a few seconds
 	double m_flQuickNote;
@@ -287,7 +288,8 @@ void CCzmMainMenu::Layout( void )
 		m_setupLang = CZM_Rect( m_panel.x + ( pw - H * 0.30f ) / 2, m_panel.y + ph * 0.27f, H * 0.30f, lineH );
 		m_setupNick = CZM_Rect( m_panel.x + pad, m_panel.y + ph * 0.43f, pw - pad * 2, lineH );
 		m_setupLogin = CZM_Rect( m_panel.x + ( pw - H * 0.56f ) / 2, m_panel.y + ph - pad - loginH, H * 0.56f, loginH );
-		m_setupGo = CZM_Rect( m_panel.x + ( pw - H * 0.40f ) / 2, m_setupLogin.y - H * 0.022f - H * 0.085f, H * 0.40f, H * 0.085f );
+		m_setupRegister = CZM_Rect( m_setupLogin.x, m_setupLogin.y - H * 0.014f - loginH, m_setupLogin.w, loginH );
+		m_setupGo = CZM_Rect( m_panel.x + ( pw - H * 0.40f ) / 2, m_setupRegister.y - H * 0.022f - H * 0.085f, H * 0.40f, H * 0.085f );
 	}
 	else if( m_overlay == OV_QUIT )
 	{
@@ -342,6 +344,8 @@ int CCzmMainMenu::HitTest( void ) const
 			return HIT_SETUP_GO;
 		if( m_setupLogin.HasCursor( ))
 			return HIT_SETUP_LOGIN;
+		if( m_setupRegister.HasCursor( ))
+			return HIT_SETUP_REGISTER;
 		return HIT_PANEL; // the window stays until the player finishes it
 	}
 
@@ -458,6 +462,10 @@ void CCzmMainMenu::Activate( int hit )
 		// the window closes by itself once the account signs in (CzmOnline finishes the first start)
 		m_nick.End();
 		CZM_AccountShow( CZM_OnlineKey(), "" );
+		break;
+	case HIT_SETUP_REGISTER:
+		m_nick.End();
+		CZM_AccountRegister( CZM_OnlineKey(), m_nick.text );
 		break;
 	case HIT_NAV + 4:
 		m_overlay = OV_ABOUT;
@@ -1294,6 +1302,8 @@ void CCzmMainMenu::DrawSetup( void )
 			CZM_T( "nick_bad" ), PackRGBA( 248, 113, 113, 255 ), QM_CENTER );
 
 	CZM_DrawButton( UI_DIR "button_primary.png", m_setupGo, CZM_T( "setup_go" ), CZM_White(), IsPressed( HIT_SETUP_GO ));
+	CZM_DrawButton( UI_DIR "button_secondary.png", m_setupRegister, CZM_T( "setup_register" ), PackRGBA( 220, 224, 232, 255 ),
+		IsPressed( HIT_SETUP_REGISTER ), CZMF_TILE_STATUS );
 	CZM_DrawButton( UI_DIR "button_secondary.png", m_setupLogin, CZM_T( "setup_login" ), PackRGBA( 220, 224, 232, 255 ),
 		IsPressed( HIT_SETUP_LOGIN ), CZMF_TILE_STATUS );
 }

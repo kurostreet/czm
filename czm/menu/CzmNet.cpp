@@ -157,15 +157,19 @@ void CZM_ServerAuthShow( const char *address, const char *name )
 	CZM_End( env );
 }
 
-void CZM_AccountShow( const char *key, const char *nick )
+static void CZM_AccountAction( const char *method, const char *key, const char *nick )
 {
 	JNIEnv *env;
 	jclass cls;
 	if( !CZM_Begin( &env, &cls )) return;
-	jmethodID m = CZM_Method( env, cls, "accountShow", "(Ljava/lang/String;Ljava/lang/String;Z)V" );
+	jmethodID m = CZM_Method( env, cls, method, "(Ljava/lang/String;Ljava/lang/String;Z)V" );
 	if( m ) env->CallStaticVoidMethod( cls, m, env->NewStringUTF( key ), env->NewStringUTF( nick ), (jboolean)CZM_IsRussian() );
 	CZM_End( env );
 }
+
+void CZM_AccountShow( const char *key, const char *nick ) { CZM_AccountAction( "accountShow", key, nick ); }
+void CZM_AccountRegister( const char *key, const char *nick ) { CZM_AccountAction( "accountRegister", key, nick ); }
+void CZM_AccountContext( const char *key, const char *nick ) { CZM_AccountAction( "accountContext", key, nick ); }
 
 bool CZM_AccountEvent( CUtlString &body )
 {
@@ -512,6 +516,8 @@ bool CZM_NetAvailable( void ) { return false; }
 bool CZM_CopyText( const char * ) { return false; }
 void CZM_ServerAuthShow( const char *, const char * ) {}
 void CZM_AccountShow( const char *, const char * ) {}
+void CZM_AccountRegister( const char *, const char * ) {}
+void CZM_AccountContext( const char *, const char * ) {}
 bool CZM_AccountEvent( CUtlString & ) { return false; }
 void CZM_LayoutsShow( void ) {}
 bool CZM_WidgetEvent( CUtlString & ) { return false; }

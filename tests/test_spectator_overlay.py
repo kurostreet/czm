@@ -84,7 +84,8 @@ int main()
 	CzmHud::Fit( c, "Свага", 1, fit, sizeof( fit ));
 	assert( !fit[0] );
 	CzmHud::Rect d = CzmHud::DownloadLayout( 2000, 932, CzmHud::defaults[CzmHud::DOWNLOADS][0], CzmHud::defaults[CzmHud::DOWNLOADS][1], 1, 1, 20 );
-	assert( fabsf( d.x + d.w / 2 - 1000 ) < 1 && d.y > 932 * .1f && d.y + d.h < 932 * .3f );
+	// The owner's default keeps downloads at the bottom left, clear of the central HUD.
+	assert( d.x + d.w / 2 < 2000 * .25f && d.y > 932 * .85f && d.y + d.h < 932 );
 	printf( "OVERLAY_OK %d\n", calls );
 	return 0;
 }
