@@ -6,15 +6,20 @@ replacement, not a conversion of the game data into an independent asset set.
 import hashlib
 import io
 import json
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 import re
 import shutil
 import struct
 import tempfile
 from contextlib import contextmanager
 import zipfile
+import PIL
+from PIL import Image
 
-OVERLAY = "gfx/czm/legacy-ui.zip"
+from .ui_art import ART_REVISION, make_entries
+
+OVERLAY = "gfx/czm/legacy-ui.json"
+ART = {"background": "gfx/czm/loading_3.png", "title": "gfx/czm/title.png", "logo": "logos/czm_logo.png"}
 DATA = "assets/bundled/game-data.zip"
 META = "assets/bundled/game-data.json"
 WAD_ENTRY = struct.Struct("<iiiBBBB16s")
@@ -42,24 +47,24 @@ def replace_wad_logos(data: bytes, replacements: dict[str, bytes], game: str) ->
     return struct.pack("<4sii", magic, count, 12 + len(body)) + body + entries
 
 
-def _overlay(core: zipfile.ZipFile, prefix: str) -> tuple[bytes, dict[str, bytes]] | None:
+def _overlay(core: zipfile.ZipFile, prefix: str) -> tuple[str, dict[str, bytes]] | None:
     path = prefix + OVERLAY
     if path not in core.namelist():
         return None  # compatible with older, already-built cores and rollback tools
-    payload = core.read(path)
-    with zipfile.ZipFile(io.BytesIO(payload)) as archive:
-        replacements = {}
-        for info in archive.infolist():
-            name = info.filename
-            parts = PurePosixPath(name).parts
-            if info.is_dir() or len(parts) < 2 or parts[0] not in ("valve", "cstrike") or ".." in parts or "\\" in name:
-                raise ValueError("invalid UI replacement path")
-            if info.file_size > 8 * 1024 * 1024 or name.lower() in replacements:
-                raise ValueError("invalid UI replacement entry")
-            replacements[name.lower()] = archive.read(info)
-        if not all(f"{g}/cached.wad" in replacements and f"{g}/gfx/conback.lmp" in replacements for g in ("valve", "cstrike")):
-            raise ValueError("missing UI background replacements")
-    return payload, replacements
+    marker = json.loads(core.read(path))
+    if marker != {"format": 1, "art_revision": ART_REVISION}:
+        raise ValueError("unsupported UI artwork revision")
+    digest = hashlib.sha256()
+    digest.update(Path(__file__).with_name("ui_art.py").read_bytes())
+    digest.update(PIL.__version__.encode())
+    artwork = {}
+    for key, name in ART.items():
+        info = core.getinfo(prefix + name)
+        if info.file_size > 16 * 1024 * 1024:
+            raise ValueError("UI source image is too large")
+        artwork[key] = core.read(info)
+        digest.update(name.encode() + b"\0" + hashlib.sha256(artwork[key]).digest())
+    return digest.hexdigest(), artwork
 
 
 @contextmanager
@@ -69,12 +74,17 @@ def game_resources(data: zipfile.ZipFile, core: zipfile.ZipFile, folder: Path, p
     if overlay is None:
         yield [(name, None, data.getinfo(name).file_size) for name in (DATA, META)]
         return
-    payload, replacements = overlay
+    brand, artwork = overlay
     old_meta = json.loads(data.read(META))
-    brand = hashlib.sha256(payload).hexdigest()
     if old_meta.get("ui_branding") == brand:
         yield [(name, None, data.getinfo(name).file_size) for name in (DATA, META)]
         return
+
+    images = {}
+    for key, contents in artwork.items():
+        with Image.open(io.BytesIO(contents)) as image:
+            images[key] = image.convert("RGB" if key == "background" else "RGBA")
+    replacements = {name.lower(): contents for name, contents in make_entries(**images).items()}
 
     with tempfile.TemporaryDirectory(prefix="czm-ui-", dir=folder) as temp:
         pack = Path(temp) / "game-data.zip"

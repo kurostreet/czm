@@ -7,8 +7,10 @@ import struct
 import tempfile
 import unittest
 import zipfile
+from PIL import Image
 
-from czm.game_branding import DATA, META, OVERLAY, WAD_ENTRY, game_resources, replace_wad_logos
+from czm.game_branding import ART, DATA, META, OVERLAY, WAD_ENTRY, game_resources, replace_wad_logos
+from czm.ui_art import make_entries
 
 
 def zipped(entries):
@@ -41,9 +43,15 @@ class GameBrandingTests(unittest.TestCase):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         self.root = Path(temp.name)
-        self.art = {f"{g}/{n}": b"our background" for g in ("valve", "cstrike")
-                    for n in ("cached.wad", "gfx/conback.lmp")}
-        self.art.update({"valve/gfx/lambda.lmp": b"our logo", "cstrike/gfx/vgui/CS_logo.tga": b"our title"})
+        images = {"background": Image.new("RGB", (16, 16), (30, 80, 100)),
+                  "title": Image.new("RGBA", (16, 8), (220, 30, 40, 255)),
+                  "logo": Image.new("RGBA", (16, 16), (220, 30, 40, 255))}
+        self.sources = {}
+        for key, image in images.items():
+            out = io.BytesIO()
+            image.save(out, "PNG")
+            self.sources[ART[key]] = out.getvalue()
+        self.art = {name.lower(): contents for name, contents in make_entries(**images).items()}
         self.game = {"cstrike/maps/de_test.bsp": b"map bytes", "cstrike/models/p_test.mdl": b"model bytes",
                      "valve/cached.wad": b"old UI", "cstrike/cached.wad": b"old UI",
                      "valve/gfx/conback.lmp": b"old UI", "cstrike/gfx/vgui/CS_logo.tga": b"old UI",
@@ -55,8 +63,11 @@ class GameBrandingTests(unittest.TestCase):
                      "required": [{"path": "cstrike/maps/de_test.bsp", "bytes": len(b"map bytes")}]}
         self.data = zipped({DATA: self.pack, META: json.dumps(self.meta).encode()})
 
-    def resources(self, prefix="assets/", art=None):
-        return zipfile.ZipFile(io.BytesIO(zipped({prefix + OVERLAY: zipped(self.art if art is None else art)})))
+    def core_entries(self, prefix="assets/", marker=b'{"format":1,"art_revision":1}'):
+        return {prefix + OVERLAY: marker, **{prefix + name: contents for name, contents in self.sources.items()}}
+
+    def resources(self, prefix="assets/", marker=b'{"format":1,"art_revision":1}'):
+        return zipfile.ZipFile(io.BytesIO(zipped(self.core_entries(prefix, marker))))
 
     def converted(self, prefix="assets/"):
         with zipfile.ZipFile(io.BytesIO(self.data)) as data, self.resources(prefix) as core:
@@ -70,10 +81,12 @@ class GameBrandingTests(unittest.TestCase):
             self.assertEqual(game.testzip(), None)
             self.assertEqual(game.read("cstrike/maps/de_test.bsp"), b"map bytes")
             self.assertEqual(game.read("cstrike/models/p_test.mdl"), b"model bytes")
-            self.assertEqual(game.read("valve/gfx/conback.lmp"), b"our background")
-            self.assertEqual(game.read("cstrike/gfx/vgui/cs_logo.tga"), b"our title")
+            self.assertEqual(game.read("valve/gfx/conback.lmp"), self.art["valve/gfx/conback.lmp"])
+            self.assertEqual(game.read("cstrike/gfx/vgui/cs_logo.tga"), self.art["cstrike/gfx/vgui/cs_logo.tga"])
             self.assertNotIn("cstrike/gfx/vgui/CS_logo.tga", game.namelist())
-            self.assertEqual(wad_lumps(game.read("valve/gfx.wad")), {"LAMBDA": b"our logo", "CONCHARS": b"original font"})
+            self.assertEqual(wad_lumps(game.read("valve/gfx.wad")), {"LAMBDA": self.art["valve/gfx/lambda.lmp"], "CONCHARS": b"original font"})
+            for info in game.infolist():
+                self.assertNotEqual(game.read(info), b"old UI")
             self.assertIn(b'game "Counter Zombie Mobile"', game.read("cstrike/liblist.gam"))
             self.assertIn(b'gamedll "dlls/test.so"', game.read("cstrike/liblist.gam"))
             self.assertEqual(meta["files"], len(game.namelist()))
@@ -97,8 +110,8 @@ class GameBrandingTests(unittest.TestCase):
                 self.assertEqual(entries, [(DATA, None, len(self.pack)), (META, None, len(json.dumps(self.meta).encode()))])
 
     def test_invalid_overlay_or_wad_stops_packaging(self):
-        for entries in ({"../escape": b"no"}, {"valve/gfx/conback.lmp": b"incomplete"}):
-            with zipfile.ZipFile(io.BytesIO(self.data)) as data, self.resources(art=entries) as core:
+        for marker in (b"{}", b'{"format":1,"art_revision":999}'):
+            with zipfile.ZipFile(io.BytesIO(self.data)) as data, self.resources(marker=marker) as core:
                 with self.assertRaises(ValueError), game_resources(data, core, self.root):
                     pass
         for contents in (b"", b"WAD3" + b"\xff" * 8, wad({"LAMBDA": b"logo"})[:-1]):
@@ -113,17 +126,16 @@ class GameBrandingTests(unittest.TestCase):
             self.skipTest(str(error))
         data = self.root / "old.apk"
         data.write_bytes(self.data)
-        overlay = zipped(self.art)
         for kind in ("apk", "aab"):
             core = self.root / ("core." + kind)
             out = self.root / ("out." + kind)
             if kind == "apk":
-                core.write_bytes(zipped({"AndroidManifest.xml": b"base", "assets/" + OVERLAY: overlay}))
+                core.write_bytes(zipped({"AndroidManifest.xml": b"base", **self.core_entries()}))
                 assemble.combine(core, data, out)
                 prefix = ""
             else:
                 core.write_bytes(zipped({"BundleConfig.pb": b"cfg", play.PACK_MANIFEST: b"pack",
-                                         "gamedata/assets.pb": b"assets/bundled", "base/assets/" + OVERLAY: overlay}))
+                                         "gamedata/assets.pb": b"assets/bundled", **self.core_entries("base/assets/")}))
                 play.combine(core, data, out)
                 prefix = "gamedata/"
             with zipfile.ZipFile(out) as archive:
@@ -131,7 +143,7 @@ class GameBrandingTests(unittest.TestCase):
                 pack = archive.read(prefix + DATA)
                 self.assertEqual(meta["sha256"], hashlib.sha256(pack).hexdigest())
                 with zipfile.ZipFile(io.BytesIO(pack)) as game:
-                    self.assertEqual(game.read("valve/gfx/conback.lmp"), b"our background")
+                    self.assertEqual(game.read("valve/gfx/conback.lmp"), self.art["valve/gfx/conback.lmp"])
                     self.assertEqual(game.read("cstrike/models/p_test.mdl"), b"model bytes")
 
 
