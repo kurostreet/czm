@@ -21,6 +21,7 @@ from pathlib import Path
 from . import db, service
 from .apkpatch import make_patch
 from .config import get_settings
+from .game_branding import game_resources
 
 log = logging.getLogger("czm.assemble")
 GAME_DATA = ("assets/bundled/game-data.zip", "assets/bundled/game-data.json")
@@ -71,7 +72,8 @@ def check_game_data(source: zipfile.ZipFile) -> None:
 
 def combine(core: Path, data_apk: Path, out: Path) -> None:
     """Core entries without the old signature, then the game data as stored, aligned entries."""
-    with zipfile.ZipFile(core) as source, zipfile.ZipFile(data_apk) as data, zipfile.ZipFile(out, "w") as target:
+    with zipfile.ZipFile(core) as source, zipfile.ZipFile(data_apk) as data, zipfile.ZipFile(out, "w") as target, \
+            game_resources(data, source, out.parent) as resources:
         check_game_data(data)
         for info in source.infolist():
             upper = info.filename.upper()
@@ -82,13 +84,12 @@ def combine(core: Path, data_apk: Path, out: Path) -> None:
             info = aligned_info(info, target.fp.tell())
             with source.open(info.filename) as src, target.open(info, "w") as dst:
                 shutil.copyfileobj(src, dst, 1 << 20)
-        for name in GAME_DATA:
-            old = data.getinfo(name)
+        for name, path, size in resources:
             info = zipfile.ZipInfo(name, (2026, 1, 1, 0, 0, 0))
             info.compress_type = zipfile.ZIP_STORED
-            info.file_size = old.file_size
+            info.file_size = size
             info = aligned_info(info, target.fp.tell())
-            with data.open(old) as src, target.open(info, "w", force_zip64=old.file_size > 0x7FFFFFFF) as dst:
+            with (path.open("rb") if path else data.open(name)) as src, target.open(info, "w", force_zip64=size > 0x7FFFFFFF) as dst:
                 shutil.copyfileobj(src, dst, 1 << 20)
     with zipfile.ZipFile(out) as archive, out.open("rb") as raw:
         for info in archive.infolist():

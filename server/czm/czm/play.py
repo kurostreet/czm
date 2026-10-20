@@ -22,6 +22,7 @@ from pathlib import Path
 from . import db, play_publish, service
 from .assemble import GAME_DATA, SIGNATURE, BuildError, check_game_data, previous_release_apk, sha256_of
 from .config import get_settings
+from .game_branding import game_resources
 
 log = logging.getLogger("czm.play")
 PACK = "gamedata"                                   # android/gamedata, delivery: install-time
@@ -39,7 +40,8 @@ def bundle_name(version: str) -> str:
 def combine(bundle: Path, data_apk: Path, out: Path) -> None:
     """The bundle without its pack placeholder and old signature, plus the game data in the pack."""
     with zipfile.ZipFile(bundle) as source, zipfile.ZipFile(data_apk) as data, \
-            zipfile.ZipFile(out, "w", allowZip64=True) as target:
+            zipfile.ZipFile(out, "w", allowZip64=True) as target, \
+            game_resources(data, source, out.parent, prefix="base/assets/") as resources:
         names = set(source.namelist())
         if "BundleConfig.pb" not in names or PACK_MANIFEST not in names:
             raise BuildError("это не сборка для Google Play с пакетом gamedata")
@@ -57,12 +59,11 @@ def combine(bundle: Path, data_apk: Path, out: Path) -> None:
                 continue                                # the placeholder
             with source.open(info) as src, target.open(info, "w") as dst:
                 shutil.copyfileobj(src, dst, 1 << 20)
-        for name in GAME_DATA:                          # assets/bundled/game-data.* → gamedata/assets/bundled/
-            old = data.getinfo(name)
+        for name, path, size in resources:              # assets/bundled/game-data.* → gamedata/assets/bundled/
             info = zipfile.ZipInfo(f"{PACK}/{name}", (2026, 1, 1, 0, 0, 0))
             info.compress_type = zipfile.ZIP_STORED
-            info.file_size = old.file_size
-            with data.open(old) as src, target.open(info, "w", force_zip64=old.file_size > 0x7FFFFFFF) as dst:
+            info.file_size = size
+            with (path.open("rb") if path else data.open(name)) as src, target.open(info, "w", force_zip64=size > 0x7FFFFFFF) as dst:
                 shutil.copyfileobj(src, dst, 1 << 20)
 
 
