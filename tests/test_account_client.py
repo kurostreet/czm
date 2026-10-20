@@ -41,7 +41,7 @@ class AccountClientTests(unittest.TestCase):
             files.append(str(JAVA / "CzmDownloads.java"))
             # the site build's flavor classes (the Google Play StoreUpdates needs the Play library)
             git = ROOT / "android/app/src/git/java/ru/kurostreet/counterzombiemobile"
-            files += [str(git / (name + ".java")) for name in ("StoreUpdates", "SelfUpdate", "InstallStatusReceiver", "ApkUpdate")]
+            files += [str(git / (name + ".java")) for name in ("StoreUpdates", "SelfUpdate", "InstallStatusReceiver", "ApkUpdate", "DistributionAccess", "DevelopmentInvite")]
             cp = os.pathsep.join([json, sdk])
             subprocess.run(["javac", "--release", "11", "-encoding", "UTF-8", "-cp", cp, "-d", temp] +
                            [str(x) for x in tmp.glob("*.java")] + files + [str(ROOT / "tests/AccountClientTest.java"),str(ROOT / "tests/DownloadsStateTest.java")], check=True)

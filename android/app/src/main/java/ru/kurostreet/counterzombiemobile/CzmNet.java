@@ -50,6 +50,9 @@ public final class CzmNet {
     public static void accountRegister(String legacy, String nick, boolean russian) { CzmAccount.register(legacy, nick, russian); }
     public static void accountContext(String legacy, String nick, boolean russian) { CzmAccount.rememberContext(legacy, nick, russian); }
     public static byte[] accountEvent() { return CzmAccount.event(); }
+    public static void distributionShow(String key,String nick,boolean ru){DistributionAccess.show(key,nick,ru);}
+    public static void distributionHelp(String key,String nick,boolean ru){DistributionAccess.help(key,nick,ru);}
+    public static boolean distributionChanged(){return DistributionAccess.changed();}
     public static void colorShow(int r, int g, int b, boolean ru) { CzmColorPicker.show(r, g, b, ru); }
     public static byte[] colorEvent() { return CzmColorPicker.event(); }
     public static byte[] cloudEvent() { byte[] event=CzmCloud.event();return event!=null?event:CzmLayoutActivity.event(); }

@@ -115,7 +115,8 @@ private:
 		HIT_QUICK,                  // quick play under the logo
 		HIT_NAV,                    // 5 navigation items
 		HIT_TILE = HIT_NAV + 5,     // one per server
-		HIT_LAST = HIT_TILE + CZM_MAX_TILES
+		HIT_RETIRE = HIT_TILE + CZM_MAX_TILES,
+		HIT_LAST = HIT_RETIRE + 6
 	};
 
 	void Layout( void );
@@ -133,6 +134,7 @@ private:
 	void DrawSetup( void );
 	void FinishSetup( void );
 	void DrawQuick( void );
+	void DrawRetired( void );
 
 	int m_overlay;
 	int m_iPressed;
@@ -152,6 +154,7 @@ private:
 	CzmRect m_update, m_updateButton;
 	CzmRect m_setupLang, m_setupNick, m_setupGo, m_setupLogin, m_setupRegister;
 	CzmRect m_quick;
+	CzmRect m_retire[6];
 	char m_szQuickNote[160];   // why the search found nothing, shown for a few seconds
 	double m_flQuickNote;
 	CzmTextEdit m_nick;
@@ -183,7 +186,7 @@ void CCzmMainMenu::Show()
 	CZM_QueryServers( true );
 	CZM_ApplyStartupSettings();
 
-	if( CZM_FirstStart( ))
+	if( CZM_FirstStart( ) && CZM_OnlinePlayAllowed( ))
 	{
 		m_overlay = OV_SETUP;
 		m_bNickWarning = false;
@@ -194,7 +197,7 @@ void CCzmMainMenu::Show()
 	EngFuncs::CvarSetValue( "scr_drawversion", 0.0f );
 
 	// a game started from the server list ended: back to the list
-	if( m_overlay == OV_NONE )
+	if( m_overlay == OV_NONE && CZM_OnlinePlayAllowed() )
 		CZM_ServerListReturn();
 }
 
@@ -203,7 +206,7 @@ void CCzmMainMenu::Think()
 	CMenuFramework::Think();
 
 	// keep the tiles fresh while the player looks at them
-	if( m_pStack->Current() == this && !CL_IsActive() && EngFuncs::GetCvarFloat( "czm_loading" ) == 0.0f )
+	if( CZM_OnlinePlayAllowed() && m_pStack->Current() == this && !CL_IsActive() && EngFuncs::GetCvarFloat( "czm_loading" ) == 0.0f )
 		CZM_QueryServers( false );
 }
 
@@ -216,6 +219,8 @@ void CCzmMainMenu::Layout( void )
 
 	W = ScreenWidth;
 	H = ScreenHeight;
+	for( int i = 0; i < 6; ++i )
+		m_retire[i] = CZM_Rect( W * ( i % 2 ? 0.51f : 0.14f ), H * ( 0.52f + ( i / 2 ) * 0.11f ), W * 0.35f, H * 0.078f );
 	m_iMargin = W * 0.03f;
 
 	// header: avatar, nick and the hint under it
@@ -334,6 +339,13 @@ int CCzmMainMenu::HitTest( void ) const
 {
 	const int grow = ScreenHeight * 0.015f;
 
+	if( !CZM_OnlinePlayAllowed() )
+	{
+		if( m_lang.HasCursor() ) return uiStatic.cursorX < m_lang.x + m_lang.w / 2 ? HIT_LANG_RU : HIT_LANG_EN;
+		for( int i = 0; i < 6; ++i ) if( m_retire[i].HasCursor() ) return HIT_RETIRE + i;
+		return HIT_PANEL;
+	}
+
 	if( m_overlay == OV_SETUP )
 	{
 		if( m_setupLang.HasCursor( ))
@@ -411,6 +423,20 @@ void CCzmMainMenu::Activate( int hit )
 
 	if( hit != HIT_VERSION )
 		CZM_PlayClick();
+
+	if( !CZM_OnlinePlayAllowed() && hit != HIT_LANG_RU && hit != HIT_LANG_EN )
+	{
+		switch( hit - HIT_RETIRE )
+		{
+		case 0: EngFuncs::ShellExecute( "https://counter-zombie.ru/#beta", NULL, false ); break;
+		case 1: CZM_DistributionHelp( CZM_OnlineKey(), m_szNick ); break;
+		case 2: CZM_AccountShow( CZM_OnlineKey(), m_szNick ); break;
+		case 3: CZM_LayoutsShow(); break;
+		case 4: CZM_DistributionShow( CZM_OnlineKey(), m_szNick ); break;
+		case 5: EngFuncs::ClientCmd( false, "quit\n" ); break;
+		}
+		return;
+	}
 
 	switch( hit )
 	{
@@ -583,6 +609,12 @@ bool CCzmMainMenu::KeyDown( int key )
 		// a tap outside the field hides the keyboard
 		if( m_nick.active && m_iPressed != HIT_SETUP_NICK )
 			m_nick.End();
+		return true;
+	}
+
+	if( !CZM_OnlinePlayAllowed() && UI::Key::IsEscape( key ) )
+	{
+		Activate( HIT_RETIRE + 5 );
 		return true;
 	}
 
@@ -1358,9 +1390,46 @@ void CCzmMainMenu::DrawOverlay( void )
 	DrawAbout();
 }
 
+void CCzmMainMenu::DrawRetired( void )
+{
+	UI_FillRect( 0, 0, W, H, PackRGBA( 0, 0, 0, 165 ) );
+	CZM_DrawPanel( CZM_Rect( W * 0.09f, H * 0.075f, W * 0.82f, H * 0.84f ) );
+	HFont title = CZM_Font( CZMF_PANEL_TITLE ), text = CZM_Font( CZMF_PANEL_TEXT ), small = CZM_Font( CZMF_SMALL );
+	CZM_DrawText( title, W * 0.13f, H * 0.12f, W * 0.74f, CZM_T( "retired_title" ), CZM_White(), QM_CENTER );
+	const char *keys[] = { "retired_intro", "retired_step1", "retired_step2" };
+	for( int i = 0; i < 3; ++i )
+	{
+		const char *value = CZM_T( keys[i] ); int starts[3];
+		int lines = CZM_WrapText( text, value, W * 0.72f, starts, 2 );
+		for( int l = 0; l < lines; ++l )
+		{
+			char line[512]; CZM_WrapLine( value, starts, l, line, sizeof( line ) );
+			CZM_DrawText( text, W * 0.14f, H * ( 0.225f + i * 0.095f ) + l * CZM_FontHeight( text ), W * 0.72f,
+				line, PackRGBA( 220, 225, 234, 255 ), i == 0 ? QM_CENTER : 0 );
+		}
+	}
+	static const char *labels[] = { "retired_beta", "retired_help", "retired_account", "retired_layout", "retired_testing", "retired_exit" };
+	for( int i = 0; i < 6; ++i )
+		CZM_DrawButton( i == 0 ? UI_DIR "button_primary.png" : UI_DIR "button_secondary.png", m_retire[i], CZM_T( labels[i] ),
+			CZM_White(), IsPressed( HIT_RETIRE + i ), CZMF_TILE_STATUS );
+	CZM_DrawText( small, W * 0.13f, H * 0.86f, W * 0.74f, CZM_T( "retired_keep" ), CZM_Grey(), QM_CENTER );
+	CzmRect ru = CZM_Rect( m_lang.x, m_lang.y, m_lang.w / 2, m_lang.h );
+	CzmRect en = CZM_Rect( ru.x + ru.w, ru.y, ru.w, ru.h );
+	CZM_DrawButton( UI_DIR "button_secondary.png", ru, "RU", CZM_IsRussian() ? CZM_White() : CZM_Grey(), IsPressed( HIT_LANG_RU ), CZMF_SMALL );
+	CZM_DrawButton( UI_DIR "button_secondary.png", en, "EN", CZM_IsRussian() ? CZM_Grey() : CZM_White(), IsPressed( HIT_LANG_EN ), CZMF_SMALL );
+}
+
 void CCzmMainMenu::Draw()
 {
 	Layout();
+	if( !CZM_OnlinePlayAllowed() )
+	{
+		DrawRetired();
+		CZM_StartupReady();
+		return;
+	}
+	if( CZM_NetCanSelfUpdate() )
+		CZM_DrawText( CZM_Font( CZMF_SMALL ), W * 0.35f, H * 0.025f, W * 0.3f, CZM_T( "retired_dev" ), PackRGBA( 250, 120, 120, 255 ), QM_CENTER );
 
 	// darker top edge so the header reads on any art
 	CZM_DrawImage( UI_DIR "fade_top.png", 0, 0, W, H * 0.22f, CZM_White( 200 ));

@@ -7,11 +7,11 @@ from collections import defaultdict, deque
 from typing import Any, Callable
 
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, FileResponse, HTMLResponse
 from PIL import Image
 from pydantic import BaseModel, Field
 
-from . import service, mappics, accounts, settings, tab, social, website
+from . import service, mappics, accounts, settings, tab, social, website, distribution
 from .config import get_settings
 from .db import db
 
@@ -92,7 +92,7 @@ async def hello(body: HelloIn, request: Request):
 
     def run(conn):
         player = service.hello(conn, body.key, body.device, body.nick, body.avatar, body.lang, body.version, body.keep_avatar)
-        release = service.latest_release(conn, base_code=body.code)
+        release = distribution.update_for(conn, body.key, body.code, player=player)
         return {
             "id": player["id"],
             "avatar": service.avatar_ref(player),
@@ -101,10 +101,11 @@ async def hello(body: HelloIn, request: Request):
             "update": release if release and release["code"] > body.code else None,
             "rooms": get_settings().room_list,
             "max_chars": get_settings().message_max_chars,
+            "distribution": {"development": distribution.allowed(conn, player)},
         }
 
     try:
-        return await in_db(run)
+        return JSONResponse(await in_db(run), headers={"Cache-Control": "no-store"})
     except accounts.AuthError as error:
         return JSONResponse({"error": error.code}, status_code=error.status)
 
@@ -447,10 +448,41 @@ async def news(request: Request, after: int = 0):
 
 
 @router.get("/update")
-async def update(request: Request, code: int = 0):
+async def update(request: Request, code: int = 0, x_czm_key: str | None = Header(default=None)):
     _read_limit.check(client_ip(request))
-    release = await in_db(lambda conn: service.latest_release(conn, base_code=code))
-    return {"update": release if release and release["code"] > code else None}
+    release = await in_db(distribution.update_for, x_czm_key or "", code)
+    return JSONResponse({"update": release}, headers={"Cache-Control": "no-store"})
+
+
+class DevelopmentIn(BaseModel):
+    invite: str = Field(min_length=32, max_length=32, pattern=r"^[A-Za-z0-9_-]{32}$")
+
+
+@router.post("/development/activate")
+async def development_activate(body: DevelopmentIn, request: Request, x_czm_key: str | None = Header(default=None)):
+    _upload_limit.check(client_ip(request))
+    try:
+        return JSONResponse(await in_db(distribution.activate, x_czm_key or "", body.invite), headers={"Cache-Control": "no-store"})
+    except accounts.AuthError as e:
+        return JSONResponse({"error": e.code}, status_code=e.status, headers={"Cache-Control": "no-store"})
+
+
+@router.get("/development/invite/{token}")
+async def development_invitation(token: str, request: Request):
+    _read_limit.check(client_ip(request))
+    page = await in_db(distribution.invite_page, token)
+    if page is None:
+        raise HTTPException(404)
+    return HTMLResponse(page, headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer",
+        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"})
+
+
+@download_router.api_route("/dl/{filename}", methods=["GET", "HEAD"])
+async def distribution_download(filename: str, ticket: str = "", invite: str = ""):
+    path = await in_db(distribution.download_path, filename, ticket, invite)
+    if path is None:
+        return JSONResponse({"error": "google_play_only"}, status_code=403, headers={"Cache-Control": "no-store"})
+    return FileResponse(path, filename=path.name, headers={"Cache-Control": "private, no-store", "Referrer-Policy": "no-referrer"})
 
 
 @download_router.api_route("/download", methods=["GET", "HEAD"])

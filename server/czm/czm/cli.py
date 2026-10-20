@@ -14,7 +14,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from . import db, website
+from . import db, website, distribution
 from .config import get_settings
 
 
@@ -39,6 +39,17 @@ def add_release(apk: Path, version: str, code: int) -> None:
 
 
 def main(argv: list[str]) -> int:
+    if argv == ["create-dev-invite"]:
+        db.init()
+        with db.db() as conn:
+            print(distribution.issue_invite(conn))
+        return 0
+    if len(argv) == 2 and argv[0] == "publish-migration" and argv[1].isdigit():
+        db.init()
+        with db.db() as conn:
+            distribution.publish_migration(conn, int(argv[1]))
+        print("Final public migration APK published; later APKs remain private.")
+        return 0
     if len(argv) == 2 and argv[0] == "set-beta-open":
         if argv[1] not in ("0", "1"):
             print("Expected 0 (review pending) or 1 (approved and links verified)")

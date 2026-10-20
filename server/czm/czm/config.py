@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     build_ref: str = "refs/heads/feature/mobile-launcher"
     build_workflow: str = ".github/workflows/build.yml"
     build_audience: str = "kontrafps.ru"
-    build_autopublish: bool = True              # players get every build at once
+    build_autopublish: bool = True              # publish to the PRIVATE development channel only
     build_max_mb: int = 700
     build_keep: int = 3                         # release APK files kept on disk
     apksigner: str = "apksigner"

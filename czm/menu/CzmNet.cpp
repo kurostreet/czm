@@ -170,6 +170,16 @@ static void CZM_AccountAction( const char *method, const char *key, const char *
 void CZM_AccountShow( const char *key, const char *nick ) { CZM_AccountAction( "accountShow", key, nick ); }
 void CZM_AccountRegister( const char *key, const char *nick ) { CZM_AccountAction( "accountRegister", key, nick ); }
 void CZM_AccountContext( const char *key, const char *nick ) { CZM_AccountAction( "accountContext", key, nick ); }
+void CZM_DistributionShow( const char *key, const char *nick ) { CZM_AccountAction( "distributionShow", key, nick ); }
+void CZM_DistributionHelp( const char *key, const char *nick ) { CZM_AccountAction( "distributionHelp", key, nick ); }
+bool CZM_DistributionChanged( void )
+{
+	JNIEnv *env; jclass cls;
+	if( !CZM_Begin( &env, &cls )) return false;
+	jmethodID m = CZM_Method( env, cls, "distributionChanged", "()Z" );
+	bool changed = m && env->CallStaticBooleanMethod( cls, m ) != JNI_FALSE;
+	CZM_End( env ); return changed;
+}
 
 bool CZM_AccountEvent( CUtlString &body )
 {
@@ -518,6 +528,9 @@ void CZM_ServerAuthShow( const char *, const char * ) {}
 void CZM_AccountShow( const char *, const char * ) {}
 void CZM_AccountRegister( const char *, const char * ) {}
 void CZM_AccountContext( const char *, const char * ) {}
+void CZM_DistributionShow( const char *, const char * ) {}
+void CZM_DistributionHelp( const char *, const char * ) {}
+bool CZM_DistributionChanged( void ) { return false; }
 bool CZM_AccountEvent( CUtlString & ) { return false; }
 void CZM_LayoutsShow( void ) {}
 bool CZM_WidgetEvent( CUtlString & ) { return false; }

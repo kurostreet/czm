@@ -171,8 +171,10 @@ class InstallListTests(unittest.TestCase):
         self.assertNotIn('id="download"', html)
         self.assertNotIn('Скачать APK', html)
         self.assertNotIn('id="sDownloads"', html)
-        self.assertIn("Use the Google Play beta for installation", caddy)
-        self.assertIn("respond @packages", caddy)
+        self.assertIn("handle /dl/*", caddy)
+        downloads = caddy.split("handle /dl/*", 1)[1].split("}", 1)[0]
+        self.assertIn("reverse_proxy 127.0.0.1:8200", downloads)
+        self.assertNotIn("file_server", downloads)
         self.assertIn("downloadCta: 'Join the beta test'", js)
 
     def test_gameplay_shots_carousel_is_separate_from_features(self):

@@ -46,6 +46,8 @@ static struct
 	char sentAvatar[80];
 	bool ready;
 	bool account;
+	bool development;
+	bool refreshDistribution;
 	int identity;
 	int player;
 	char myAvatar[32];
@@ -72,6 +74,11 @@ static struct
 	double nextOnline;
 	int onlineCount;      // -1 until the service answers
 } s_online;
+
+bool CZM_OnlinePlayAllowed( void )
+{
+	return !CZM_NetCanSelfUpdate() || s_online.development;
+}
 
 static struct
 {
@@ -220,17 +227,19 @@ static void OnHello( int status, const char *body )
 
 	if( status != 200 || !j.Parse( body ))
 	{
-		if( status == 401 ) s_online.ready = false;
+		if( status == 401 ) { s_online.ready = false; s_online.development = false; }
 		s_online.nextHello = EngFuncs::DoubleTime() + ( status == 409 ? 1.0 : RETRY_AFTER );
 		return;
 	}
 
 	s_online.ready = true;
+	s_online.development = j.Bool( j.Get( j.Get( 0, "distribution" ), "development" ));
 	s_online.player = j.Int( j.Get( 0, "id" ));
 	Q_strncpy( s_online.myAvatar, j.String( j.Get( 0, "avatar" )), sizeof( s_online.myAvatar ));
 	ReadBan( j, j.Get( 0, "ban" ));
 	s_online.newsLast = j.Int( j.Get( 0, "news" ));
 	s_online.nextHello = EngFuncs::DoubleTime() + HELLO_EVERY;
+	if( s_online.refreshDistribution ) { s_online.refreshDistribution = false; s_online.nextHello = 0; }
 
 	update = j.Get( 0, "update" );
 	if( j.Type( update ) == CzmJson::T_OBJECT && CZM_NetCanSelfUpdate( ))
@@ -346,6 +355,12 @@ void CZM_OnlineFrame( void )
 	if( !s_online.key[0] )
 		return;
 	StoreUpdateFrame( now );
+	if( CZM_DistributionChanged() )
+	{
+		s_online.development = false;
+		s_online.nextHello = now;
+		if( s_online.helloId ) s_online.refreshDistribution = true;
+	}
 	// Account changes arrive from Java without a password or session token in the engine.
 	if( CZM_AccountEvent( body ))
 	{
@@ -354,6 +369,7 @@ void CZM_OnlineFrame( void )
 		{
 			s_online.identity++;
 			s_online.account=false;
+			s_online.development=false;
 			CZM_TabReset();
 			s_online.ready = false;
 			s_online.player = 0;
@@ -414,7 +430,7 @@ void CZM_OnlineFrame( void )
 	}
     { CUtlString request;if(CZM_WidgetEvent(request)) {
         char address[64],protocol[8],tail;
-        if(sscanf(request.Get(),"%63s %7s %c",address,protocol,&tail)==2 && strspn(address,"0123456789.:")==strlen(address) && (!strcmp(protocol,"gs")||!strcmp(protocol,"49"))) {
+        if(CZM_OnlinePlayAllowed() && sscanf(request.Get(),"%63s %7s %c",address,protocol,&tail)==2 && strspn(address,"0123456789.:")==strlen(address) && (!strcmp(protocol,"gs")||!strcmp(protocol,"49"))) {
             EngFuncs::CvarSetString("czm_connect_adr",address);EngFuncs::CvarSetString("czm_connect_name",address);EngFuncs::ClientCmdF(false,"connect \"%s\" %s\n",address,protocol);
         }
     }}

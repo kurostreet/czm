@@ -312,13 +312,20 @@ def _release(r: sqlite3.Row | None) -> dict | None:
         return None
     return {
         "id": r["id"], "version": r["version"], "code": r["code"], "size": r["size"], "sha256": r["sha256"],
-        "notes": r["notes"], "url": f"{get_settings().public_url}/dl/{r['file']}", "published": r["published"],
+        "notes": r["notes"], "url": f"{get_settings().public_url}/dl/{r['file']}", "published": r["published"], "channel": r["channel"],
     }
 
 
-def latest_release(conn: sqlite3.Connection, published_only: bool = True, *, base_code: int | None = None) -> dict | None:
-    query = "SELECT * FROM releases WHERE published IS NOT NULL ORDER BY code DESC LIMIT 1" if published_only else \
-        "SELECT * FROM releases ORDER BY id DESC LIMIT 1"
+def latest_release(conn: sqlite3.Connection, published_only: bool = True, *, base_code: int | None = None,
+                   channel: str = "legacy") -> dict | None:
+    if channel == "development":
+        scope = "channel IN ('development', 'migration')"
+    elif published_only:
+        # The final migration APK remains pinned for old installs while private builds advance.
+        scope = "channel = CASE WHEN EXISTS (SELECT 1 FROM releases WHERE channel='migration' AND published IS NOT NULL) THEN 'migration' ELSE 'legacy' END"
+    else:
+        scope = "1=1"
+    query = f"SELECT * FROM releases WHERE {scope}" + (" AND published IS NOT NULL" if published_only else "") + " ORDER BY code DESC LIMIT 1"
     release = _release(conn.execute(query).fetchone())
     if release and base_code is not None and 0 < base_code < release["code"]:
         for patch in conn.execute("SELECT * FROM release_patches WHERE release_id = ? AND base_code = ? ORDER BY size",
@@ -345,7 +352,11 @@ def release_news_text(version: str, notes: str) -> str:
 def publish_release(conn: sqlite3.Connection, release_id: int, notes: str) -> None:
     """Players get the update, and the bell keeps what is new as a news item."""
     notes = notes.strip()[:1000] or DEFAULT_NOTES
-    row = conn.execute("SELECT version, news_id FROM releases WHERE id = ?", (release_id,)).fetchone()
+    row = conn.execute("SELECT version, news_id, channel FROM releases WHERE id = ?", (release_id,)).fetchone()
+    if row and row["channel"] == "development":
+        # Development releases never make public news or replace the migration APK.
+        conn.execute("UPDATE releases SET published=?, notes=? WHERE id=?", (now(), notes.strip() or DEFAULT_NOTES, release_id))
+        return
     if row is None:
         return
     text = release_news_text(row["version"], notes)
@@ -404,7 +415,7 @@ def finish_build(conn: sqlite3.Connection, build_id: int, status: str, error: st
 
 def unnotified_builds(conn: sqlite3.Connection) -> list[dict]:
     rows = conn.execute(
-        "SELECT b.*, r.size AS release_size, r.published AS release_published, r.notes AS release_notes "
+        "SELECT b.*, r.size AS release_size, r.published AS release_published, r.notes AS release_notes, r.channel AS release_channel "
         "FROM builds b LEFT JOIN releases r ON r.id = b.release_id "
         "WHERE b.status IN ('done', 'failed') AND b.notified = 0 ORDER BY b.id"
     ).fetchall()

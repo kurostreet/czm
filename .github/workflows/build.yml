@@ -3,7 +3,7 @@ name: Counter Zombie Mobile Android
 on:
   push:
     branches: [feature/mobile-launcher]
-    # every build goes to the players: server code and texts alone do not make an update
+    # APK builds go only to the authenticated development channel. Play is released manually.
     paths-ignore: ['server/**', '.github/**', '**/*.md', 'czm/whatsnew.txt', 'android/gamedata/**']
   pull_request:
   workflow_dispatch:
@@ -45,6 +45,8 @@ jobs:
           java -cp /tmp/czm-java-check ArchiveExtractorTest
       - name: Check server credential isolation and encrypted storage
         run: |
+          javac --release 11 -d /tmp/czm-auth-check android/app/src/git/java/ru/kurostreet/counterzombiemobile/DevelopmentInvite.java tests/DevelopmentInviteTest.java
+          java -cp /tmp/czm-auth-check ru.kurostreet.counterzombiemobile.DevelopmentInviteTest
           javac --release 11 -d /tmp/czm-auth-check android/app/src/main/java/ru/kurostreet/counterzombiemobile/ServerAuthData.java tests/ServerAuthDataTest.java
           java -cp /tmp/czm-auth-check ru.kurostreet.counterzombiemobile.ServerAuthDataTest
           javac --release 11 -d /tmp/czm-auth-check android/app/src/main/java/ru/kurostreet/counterzombiemobile/ColorWheelData.java tests/ColorWheelDataTest.java

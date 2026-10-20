@@ -228,11 +228,24 @@ CREATE TABLE IF NOT EXISTS play_publishes (
     created INTEGER NOT NULL,
     notified INTEGER NOT NULL DEFAULT 0
 );
+
+-- Private APK testing: a one-use invitation grants access to one registered game account.
+CREATE TABLE IF NOT EXISTS development_access (
+    player INTEGER PRIMARY KEY REFERENCES players(id),
+    created INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS development_invites (
+    token_hash TEXT PRIMARY KEY,
+    created INTEGER NOT NULL,
+    expires INTEGER NOT NULL,
+    player INTEGER REFERENCES players(id),
+    used INTEGER
+);
 """
 
 # columns added after the first version of a table
 COLUMNS = {
-    "releases": {"news_id": "INTEGER", "auto": "INTEGER NOT NULL DEFAULT 0"},
+    "releases": {"news_id": "INTEGER", "auto": "INTEGER NOT NULL DEFAULT 0", "channel": "TEXT NOT NULL DEFAULT 'legacy'"},
     "reports": {"private_message": "INTEGER"},
 }
 

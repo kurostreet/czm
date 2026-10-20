@@ -97,6 +97,19 @@ static const struct { const char *key, *ru, *en; } s_strings[] =
 	{ "err_generic", "Не удалось подключиться к серверу.", "Could not connect to the server." },
 	{ "err_dropped", "Связь с сервером прервалась.", "The connection to the server was lost." },
 	{ "err_dropped_timeout", "Сервер перестал отвечать.\nСвязь с сервером прервалась.", "The server stopped responding.\nThe connection to the server was lost." },
+	// retirement of public APK distribution; Google Play is unaffected
+	{ "retired_title", "Эта версия больше не поддерживается", "This version is no longer supported" },
+	{ "retired_intro", "Продолжайте играть в актуальную версию через Google Play!", "Continue playing the current version through Google Play!" },
+	{ "retired_step1", "1. Откройте официальный сайт: counter-zombie.ru/#beta", "1. Open the official website: counter-zombie.ru/#beta" },
+	{ "retired_step2", "2. Вступите в группу, подтвердите участие в бета-тесте и установите игру.", "2. Join the group, opt into the beta and install the game." },
+	{ "retired_beta", "Перейти к бета-тесту", "Join the beta" },
+	{ "retired_help", "Помощь с установкой", "Installation help" },
+	{ "retired_account", "Аккаунт и настройки", "Account and settings" },
+	{ "retired_layout", "Сохранить раскладку", "Export control layout" },
+	{ "retired_testing", "Тестовый доступ", "Private test access" },
+	{ "retired_exit", "Выйти", "Exit" },
+	{ "retired_keep", "Не удаляйте старую игру до сохранения аккаунта и настроек.", "Keep the old game until your account and settings are saved." },
+	{ "retired_dev", "ЛИЧНЫЙ ТЕСТОВЫЙ КАНАЛ", "PRIVATE DEVELOPMENT CHANNEL" },
 	// main screen
 	{ "nick_hint", "Нажми, чтобы открыть профиль", "Tap to open your profile" },
 	{ "in_game", "в игре", "playing" },
@@ -1095,6 +1108,7 @@ int CZM_PingUpdate( int old, int fresh )
 
 void CZM_ConnectToServer( int index )
 {
+	if( !CZM_OnlinePlayAllowed() ) return;
 	CzmServer *server = CZM_Server( index );
 
 	if( !server )

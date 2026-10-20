@@ -950,6 +950,7 @@ void CCzmServers::AddHistory( const CzmEntry *e )
 
 void CCzmServers::Connect( CzmEntry *e, const char *password )
 {
+	if( !CZM_OnlinePlayAllowed() ) return;
 	if( !e )
 		return;
 
@@ -971,6 +972,7 @@ void CCzmServers::Connect( CzmEntry *e, const char *password )
 
 void CCzmServers::QuickStart( void )
 {
+	if( !CZM_OnlinePlayAllowed() ) return;
 	m_bQuick = true;
 	m_flQuickStart = EngFuncs::DoubleTime();
 	Refresh( false ); // asks the master list again only when it is old

@@ -204,6 +204,9 @@ class OwnerBot:
         notes = html.escape(b.get("release_notes") or "")
         published = state == "published" if state else bool(b.get("release_published"))
         rid = b["release_id"]
+        if b.get("release_channel") == "development":
+            text = f"Готова личная тестовая сборка <b>{version}</b> ({size})\n{notes}\n\nДоступна только аккаунтам разработки. В Google Play не отправлена."
+            return text, None
         if published:
             text = f"🚀 <b>Вышло обновление {version}</b> ({size})\n{notes}\n\nИгроки увидят его в колокольчике в течение 10 минут."
             button = InlineKeyboardButton(text="↩️ Отменить выпуск", callback_data=f"ru:{rid}")

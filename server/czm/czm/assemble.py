@@ -143,6 +143,9 @@ def remove_old_files(conn) -> None:
     published = service.latest_release(conn)
     if published:
         keep.add(published["url"].rsplit("/", 1)[-1])
+    development = service.latest_release(conn, channel="development")
+    if development:
+        keep.add(development["url"].rsplit("/", 1)[-1])
     for row in conn.execute("SELECT file FROM releases"):
         if row["file"] not in keep:
             (settings.apk_dir / row["file"]).unlink(missing_ok=True)
@@ -210,7 +213,7 @@ def assemble_build(build) -> int:
     with db.db() as conn:
         conn.execute("DELETE FROM releases WHERE file = ? AND published IS NULL", (name,))
         release_id = conn.execute(
-            "INSERT INTO releases (version, code, file, size, sha256, created, auto) VALUES (?, ?, ?, ?, ?, ?, 1)",
+            "INSERT INTO releases (version, code, file, size, sha256, created, auto, channel) VALUES (?, ?, ?, ?, ?, ?, 1, 'development')",
             (build["version"], build["code"], name, size, digest, db.now()),
         ).lastrowid
         for patch in patches:
@@ -218,7 +221,7 @@ def assemble_build(build) -> int:
                          (release_id, patch["base_code"], patch["base_sha256"], patch["file"], patch["size"], patch["sha256"]))
         if settings.build_autopublish:
             notes = build["notes"].strip()
-            last = service.latest_release(conn)
+            last = service.latest_release(conn, channel="development")
             if last and notes == last["notes"].strip():
                 notes = ""        # the text of the previous update was not changed: a general line
             service.publish_release(conn, release_id, notes)

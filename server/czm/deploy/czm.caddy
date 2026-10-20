@@ -53,13 +53,9 @@ counter-zombie.ru, kontrafps.ru {
 		file_server
 	}
 
-	# Do not allow direct APK downloads, even when old URLs are shared.
-	# Leave other /dl resources accessible for compatibility with installed clients.
-	handle_path /dl/* {
-		@packages path_regexp (?i)\.apk$
-		respond @packages "Use the Google Play beta for installation" 403
-		root * /var/lib/czm/apk
-		file_server
+	# Only the final migration APK is public. Other APKs and patches require a private ticket.
+	handle /dl/* {
+		reverse_proxy 127.0.0.1:8200
 	}
 
 	handle_path /server-list/* {
