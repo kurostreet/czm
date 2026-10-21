@@ -74,6 +74,7 @@ jobs:
           python3 -m unittest discover -s tests -p test_tab_avatars.py -v
           python3 -m unittest discover -s tests -p test_social_menu.py -v
           python3 -m unittest discover -s tests -p test_loading_errors.py -v
+          python3 -m unittest discover -s tests -p test_connection_notices.py -v
           python3 -m unittest discover -s tests -p test_background_downloads.py -v
           /tmp/czm-server-check/bin/python -m unittest discover -s tests -p test_sprays.py -v
           python3 -m unittest discover -s tests -p test_touch_editor.py -v

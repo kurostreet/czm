@@ -197,6 +197,15 @@ def brand_udll_int(source):
     )
 
 
+def brand_message_box(source):
+    filename = "controls/YesNoMessageBox.cpp"
+    source = replace_once(source, '#include "Utils.h"\n', '#include "Utils.h"\n#include "CzmMenu.h"\n', filename)
+    source = replace_once(source, '\tstatic CMenuYesNoMessageBox msgBox( true );\n', '', filename)
+    # Keep the upstream input-device recovery action; other engine alerts use our card.
+    return replace_once(source, '\tmsgBox.SetMessage( msg );\n\tmsgBox.Show();',
+                        '\tCZM_ShowMessage( msg );', filename)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("upstream", type=Path)
@@ -210,6 +219,7 @@ def main():
         "menus/ServerBrowser.cpp": brand_server_browser,
         "menus/ConnectionProgress.cpp": brand_connection_progress,
         "udll_int.cpp": brand_udll_int,
+        "controls/YesNoMessageBox.cpp": brand_message_box,
     }
     for filename, transform in transforms.items():
         content = transform((args.upstream / filename).read_text())

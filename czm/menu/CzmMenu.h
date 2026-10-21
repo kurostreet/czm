@@ -212,6 +212,11 @@ enum
 };
 
 void CZM_OpenSettings( int tab );
+int CZM_DiagnosticsMode( void );
+void CZM_SetDiagnosticsMode( int mode );
+bool CZM_DiagnosticsRequired( const char *reason );
+void CZM_ShowNotice( const char *title, const char *text, const char *details = "", bool diagnostics = false );
+void CZM_ShowMessage( const char *text );
 
 bool CZM_NickIsValid( const char *nick );
 void CZM_SetNick( const char *nick );

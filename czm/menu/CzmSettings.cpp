@@ -235,6 +235,8 @@ bool MicTestAvailable( void ) { return !CL_IsActive(); }
 // game
 float GetLang( void ) { return CZM_IsRussian() ? 0 : 1; }
 void SetLang( float v ) { CZM_SetLanguage( v == 0.0f ); }
+float GetDiagnostics( void ) { return CZM_DiagnosticsMode(); }
+void SetDiagnostics( float v ) { CZM_SetDiagnosticsMode( (int)v ); }
 
 const char *s_xhairSizes[] = { "auto", "small", "medium", "large" };
 float GetXhairSize( void )
@@ -349,6 +351,7 @@ enum ERowType
 	ROW_MSGSTYLE, // three looks of the chat and server messages as cards
 	ROW_SPECSTYLE, // three looks of the spectator overlay as cards
 	ROW_MIC,      // microphone test: level meter and a start/stop button
+	ROW_SECTION,
 };
 
 enum EFormat
@@ -426,6 +429,8 @@ const CzmRow s_game[] =
 	{ ROW_CHOICE, "s_shop", "s_shop_hint", GetShop, SetShop, NULL, 0, 2, 1, 0, { "opt_wheel", "opt_grid", "opt_classic" }, 3 },
 	{ ROW_SWITCH, "s_shop_auto", "s_shop_auto_hint", GetShopAuto, SetShopAuto, NULL, 0, 1, 1, 0, {}, 0 },
 	{ ROW_SWITCH, "s_menucards", "s_menucards_hint", GetMenuCards, SetMenuCards, NULL, 0, 1, 1, 0, {}, 0 },
+	{ ROW_SECTION, "s_advanced", NULL, NULL, NULL, NULL, 0, 0, 0, 0, {}, 0 },
+	{ ROW_CHOICE, "s_diagnostics", "s_diagnostics_hint", GetDiagnostics, SetDiagnostics, NULL, 0, 2, 1, 0, { "diag_off", "diag_basic", "diag_detailed" }, 3 },
 };
 
 const CzmRow s_hud[] =
@@ -742,7 +747,9 @@ void CCzmSettings::Layout( void )
 		RowLayout &l = m_rows[i];
 		int h = rowH;
 
-		if( row.type == ROW_XHAIR )
+		if( row.type == ROW_SECTION )
+			h = H * 0.055f;
+		else if( row.type == ROW_XHAIR )
 			h = rowH * 1.6f;
 		else if( row.type == ROW_TABPREVIEW )
 			h = H * 0.50f;
@@ -778,7 +785,7 @@ void CCzmSettings::Layout( void )
 		case ROW_CHOICE:
 		{
 			int ch = H * 0.064f;
-			int cw = row.get == GetRenderer || row.get == GetTabStyle || row.get == GetMenuMusic ? controlW : Q_min( controlW, (int)( row.numOptions * H * 0.16f ));
+			int cw = row.get == GetRenderer || row.get == GetTabStyle || row.get == GetMenuMusic || row.get == GetDiagnostics ? controlW : Q_min( controlW, (int)( row.numOptions * H * 0.16f ));
 			l.control = CZM_Rect( l.rect.x + l.rect.w - cw, l.rect.y + ( h - ch ) / 2, cw, ch );
 			for( int k = 0; k < row.numOptions; k++ )
 				l.parts[k] = CZM_Rect( l.control.x + l.control.w * k / row.numOptions, l.control.y,
@@ -1394,6 +1401,11 @@ void CCzmSettings::DrawRow( int i )
 {
 	const CzmRow &row = Row( i );
 	const RowLayout &l = m_rows[i];
+	if( row.type == ROW_SECTION )
+	{
+		CZM_DrawText( CZM_Font( CZMF_SMALL ), l.rect.x, l.rect.y + H * .018f, l.rect.w, CZM_T( row.label ), CZM_Grey() );
+		return;
+	}
 	HFont labelFont = CZM_Font( CZMF_TILE_STATUS );
 	HFont hintFont = CZM_Font( CZMF_SMALL );
 	bool dim = !RowActive( i );
@@ -1408,6 +1420,9 @@ void CCzmSettings::DrawRow( int i )
 		labelY = l.rect.y + H * 0.03f;
 	else
 		labelY = l.rect.y + ( l.rect.h - blockH ) / 2;
+
+	if( row.get == GetDiagnostics )
+		hint = CZM_T( GetDiagnostics() == 0 ? "diag_off_hint" : GetDiagnostics() == 1 ? "diag_basic_hint" : "diag_detailed_hint" );
 
 	// the gyroscope row explains why it is off
 	if( row.get == GetGyro && !GyroAvailable( ))

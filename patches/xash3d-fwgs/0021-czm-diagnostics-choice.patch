@@ -1,0 +1,74 @@
+diff --git a/engine/client/cl_main.c b/engine/client/cl_main.c
+--- a/engine/client/cl_main.c
++++ b/engine/client/cl_main.c
+@@ -1253,10 +1253,22 @@
+ 	*(uint32_t*)(cls.steamid + 4) = LittleLong( ((uint32_t*)buf)[5] );
+ }
+ 
++// Apply the player's archived choice, never a server-selected debug level.
++void CZM_Diagnostics_Apply( void )
++{
++	convar_t *choice = Cvar_FindVar( "czm_diagnostics" );
++	if( choice && CZM_Loading_Enabled() )
++		Cvar_DirectSetValue( &host_developer, bound( 0, (int)choice->value, 2 ));
++}
++
+ // Build credentials only into the packet for its actual destination. Never mutate
+ // cls.userinfo: config writes, local player info and later connections stay clean.
+ static const char *CZM_ConnectUserinfo( netadr_t adr, char *out, size_t size )
+ {
++ CZM_Diagnostics_Apply();
++ // Remember the actual packet destination, including redirects and console joins.
++ Cvar_Set( "czm_retry_address", NET_AdrToString( adr ));
++ Cvar_Set( "czm_retry_protocol", cls.net_protocol == PROTO_GOLDSRC ? "gs" : "49" );
+  Q_strncpy( out, cls.userinfo, size );
+ #ifdef __ANDROID__
+  JNIEnv *env = Android_GetNativeObject( "JNIEnv" );
+@@ -1850,6 +1862,7 @@
+ 	cls.state = ca_connected;
+ 	cls.signon = 0;
+ 
++	CZM_Diagnostics_Apply();
+ 	CL_ServerCommand( true, "new" );
+ 
+ 	cl.validsequence = 0;		// haven't gotten a valid frame update yet
+diff --git a/engine/client/czm_loading.c b/engine/client/czm_loading.c
+--- a/engine/client/czm_loading.c
++++ b/engine/client/czm_loading.c
+@@ -966,6 +966,9 @@
+ 
+ void CZM_Loading_Init( void )
+ {
++	Cvar_Get( "czm_diagnostics", "1", FCVAR_ARCHIVE | FCVAR_PRIVILEGED, "player diagnostic mode: off, basic, detailed" );
++	Cvar_Get( "czm_retry_address", "", FCVAR_PRIVILEGED, "last connection packet destination" );
++	Cvar_Get( "czm_retry_protocol", "", FCVAR_PRIVILEGED, "last connection packet protocol" );
+ 	Cmd_AddRestrictedCommand( "czm_queryserver", CZM_QueryServer_f, "query a server for the menu tiles" );
+ 	Cmd_AddRestrictedCommand( "czm_mictest", CZM_MicTest_f, "microphone test for the settings screen: czm_mictest 1|0" );
+ 	Cvar_RegisterVariable( &czm_miclevel );
+diff --git a/engine/client/client.h b/engine/client/client.h
+--- a/engine/client/client.h
++++ b/engine/client/client.h
+@@ -807,6 +807,7 @@
+ //
+ // czm_loading.c
+ //
++void CZM_Diagnostics_Apply( void );
+ void CZM_Loading_Init( void );
+ void CZM_Loading_Frame( void );
+ qboolean CZM_Loading_WaitForForeground( void );
+diff --git a/engine/common/host.c b/engine/common/host.c
+--- a/engine/common/host.c
++++ b/engine/common/host.c
+@@ -1318,6 +1318,12 @@
+ 
+ 	host.change_game = false;	// done
+ 	Cbuf_ExecStuffCmds();	// execute stuffcmds (commandline)
++#ifndef XASH_DEDICATED
++	// Legacy userconfig.cfg runs after config.cfg and can overwrite developer.
++	// Restore the archived player choice after all startup configs have executed.
++	if( host.type == HOST_NORMAL )
++		CZM_Diagnostics_Apply();
++#endif
+ 	SCR_CheckStartupVids();	// must be last
+ 
+ #ifndef XASH_DEDICATED

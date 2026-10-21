@@ -88,6 +88,24 @@ static const struct { const char *key, *ru, *en; } s_strings[] =
 	{ "ms", "мс", "ms" },
 	{ "cancel", "Отмена", "Cancel" },
 	// connection errors
+	{ "notice_title", "Уведомление", "Notice" },
+	{ "notice_connection", "Подключение к серверу", "Server connection" },
+	{ "notice_close", "Закрыть", "Close" },
+	{ "notice_details", "Причина сервера", "Server message" },
+	{ "notice_less", "Скрыть подробности", "Hide details" },
+	{ "diag_server_title", "Сервер требует выключить диагностику", "This server requires diagnostics to be off" },
+	{ "diag_server_text", "Выключите диагностику и повторите вход. Выбранный режим сохранится в настройках игры.", "Turn diagnostics off and reconnect. Your choice will be saved in the game settings." },
+	{ "diag_retry", "Выключить диагностику и повторить вход", "Turn diagnostics off and reconnect" },
+	{ "diag_retry_only", "Повторить вход", "Reconnect" },
+	{ "s_advanced", "ДОПОЛНИТЕЛЬНО", "ADVANCED" },
+	{ "s_diagnostics", "Диагностика игры", "Game diagnostics" },
+	{ "s_diagnostics_hint", "Некоторые серверы требуют выключить диагностику", "Some servers require diagnostics to be off" },
+	{ "diag_off", "Выключена", "Off" },
+	{ "diag_basic", "Базовая", "Basic" },
+	{ "diag_detailed", "Подробная", "Detailed" },
+	{ "diag_off_hint", "Отладка выключена · совместимость с серверами", "Debugging off · server compatibility" },
+	{ "diag_basic_hint", "Основные сообщения · по умолчанию", "Basic diagnostic messages · default" },
+	{ "diag_detailed_hint", "Расширенные сведения для поиска ошибок", "Detailed information for troubleshooting" },
 	{ "err_connect", "Соединение прервалось до входа в игру.\nПричина отключения не передана.", "The connection closed before entering the game.\nNo disconnect reason was provided." },
 	{ "err_timeout", "Сервер не ответил за отведённое время.\nСоединение закрыто по таймауту.", "The server did not respond in time.\nThe connection timed out." },
 	{ "err_full", "Сервер заполнен.\nПопробуй позже или выбери другой режим.", "The server is full.\nTry again later or pick another mode." },
@@ -1210,7 +1228,10 @@ static void CZM_ShowPendingError( void )
 		snprintf( text, sizeof( text ), "%s\n%s", CZM_T( dropped ? "err_dropped" : "err_generic" ), reason );
 
 	EngFuncs::CvarSetString( "czm_loading_error", "" );
-	UI_ShowMessageBox( text );
+	if( CZM_DiagnosticsRequired( reason ) && !CZM_Contains( reason, "ban" ))
+		CZM_ShowNotice( CZM_T( "diag_server_title" ), CZM_T( "diag_server_text" ), reason, true );
+	else
+		CZM_ShowNotice( CZM_T( "notice_connection" ), text );
 }
 
 /*

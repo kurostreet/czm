@@ -13,7 +13,7 @@ endif()
 
 get_target_property(CZM_MENU_SOURCES menu SOURCES)
 foreach(CZM_MENU_FILE BaseMenu.cpp controls/BackgroundBitmap.cpp menus/Main.cpp font/FontManager.cpp
-        menus/ServerBrowser.cpp menus/ConnectionProgress.cpp udll_int.cpp)
+        menus/ServerBrowser.cpp menus/ConnectionProgress.cpp controls/YesNoMessageBox.cpp udll_int.cpp)
     set(CZM_UPSTREAM_MENU_FILE "${CZM_MENU_SOURCE_DIR}/${CZM_MENU_FILE}")
     list(FIND CZM_MENU_SOURCES "${CZM_UPSTREAM_MENU_FILE}" CZM_MENU_SOURCE_INDEX)
     if(CZM_MENU_SOURCE_INDEX EQUAL -1)
@@ -40,6 +40,7 @@ target_sources(menu PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/czm/menu/CzmMapPics.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/czm/menu/CzmChat.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/czm/menu/CzmSocial.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/czm/menu/CzmNotice.cpp"
 )
 # the menu reaches the Android side (CzmNet.java) through SDL's JNIEnv, found with dlopen;
 # menu is defined in the mainui directory, linking it from here needs CMP0079
@@ -56,4 +57,5 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${CZM_MENU_SOURCE_DIR}/menus/ServerBrowser.cpp"
     "${CZM_MENU_SOURCE_DIR}/menus/ConnectionProgress.cpp"
     "${CZM_MENU_SOURCE_DIR}/udll_int.cpp"
+    "${CZM_MENU_SOURCE_DIR}/controls/YesNoMessageBox.cpp"
 )
