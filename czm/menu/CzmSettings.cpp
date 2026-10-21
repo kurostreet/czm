@@ -450,7 +450,7 @@ const CzmRow s_profile[] =
 	{ ROW_SPRAYS, "s_spray", "s_spray_hint", NULL, NULL, NULL, 0, 0, 0, 0, {}, 0 },
 };
 
-const struct
+constexpr struct
 {
 	const char *label;
 	const char *icon;
@@ -466,7 +466,14 @@ const struct
 	{ "tab_profile", UI_DIR "icon_user.png", s_profile, sizeof( s_profile ) / sizeof( s_profile[0] ) },
 };
 
-#define MAX_ROWS 12
+// Size the layout from the actual tabs so a new row cannot be silently hidden.
+constexpr int SettingsRowCapacity( int tab = 0, int largest = 0 )
+{
+	return tab == CZM_TAB_COUNT ? largest : SettingsRowCapacity( tab + 1,
+		s_tabs[tab].count > largest ? s_tabs[tab].count : largest );
+}
+
+enum { MAX_ROWS = SettingsRowCapacity() };
 
 void FillClipped( int x, int y, int w, int h, unsigned int color, const CzmRect &clip )
 {
@@ -741,7 +748,7 @@ void CCzmSettings::Layout( void )
 
 	// rows, scrolled
 	total = 0;
-	for( int i = 0; i < RowCount() && i < MAX_ROWS; i++ )
+	for( int i = 0; i < RowCount(); i++ )
 	{
 		const CzmRow &row = Row( i );
 		RowLayout &l = m_rows[i];
@@ -906,7 +913,7 @@ int CCzmSettings::HitTest( void ) const
 	if( !m_clip.Contains( x, y ))
 		return HIT_NONE;
 
-	for( int i = 0; i < RowCount() && i < MAX_ROWS; i++ )
+	for( int i = 0; i < RowCount(); i++ )
 	{
 		const RowLayout &l = m_rows[i];
 		const CzmRow &row = Row( i );
@@ -1726,7 +1733,7 @@ void CCzmSettings::Draw()
 
 	CZM_DrawPanel( m_panel );
 	UI::Scissor::PushScissor( m_clip.x, m_clip.y, m_clip.w, m_clip.h );
-	for( int i = 0; i < RowCount() && i < MAX_ROWS; i++ )
+	for( int i = 0; i < RowCount(); i++ )
 		DrawRow( i );
 	UI::Scissor::PopScissor();
 
