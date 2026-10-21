@@ -23,7 +23,7 @@ jobs:
       CZM_PLAY_SERVICE_ACCOUNT_FILE: /nonexistent
       CZM_SMTP_HOST: ''
       CZM_RESEND_API_KEY: ''
-      CZM_DATA_DIR: ${{ runner.temp }}/czm-test-data
+      CZM_DATA_DIR: /tmp/czm-test-data
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
