@@ -17,6 +17,16 @@
       langLabel: 'Язык', themeLabel: 'День или ночь', share: 'Поделиться', copied: 'Ссылка скопирована', close: 'Закрыть', prev: 'Назад', next: 'Дальше',
       tagline: 'Мобильный зомби-шутер: орды зомби, серверы до 32 игроков, свои кнопки, друзья и живой чат.',
       downloadCta: 'Принять участие в бета-тесте', statsLabel: 'Статистика', online: 'в игре', offline: 'не в сети', downloads: 'скачиваний', mb: 'МБ',
+      launchStatus: 'Бета-тест уже идёт', launchFinished: '14-дневный этап завершён',
+      launchTitle: 'На пути к', launchAccent: 'глобальному релизу',
+      launchLead: 'Присоединяйся к бета-тесту и помоги сделать игру лучше перед большим запуском.',
+      countdownLabel: 'До завершения 14-дневного этапа', countdownFinished: 'Готовимся к следующему этапу',
+      clockDays: 'дней', clockHours: 'часов', clockMinutes: 'минут', clockSeconds: 'секунд',
+      launchNote: 'Ориентир завершения:', launchEndedNote: 'Этап завершился:',
+      launchReview: 'После теста — заявка на глобальный релиз и проверка Google Play.', launchJoin: 'Участвовать в бете',
+      overviewTitle: 'Видеообзор игры', overviewPlay: 'Смотреть видеообзор игры',
+      overviewNote: 'Живой геймплей Counter Zombie Mobile: зомби, командная игра и управление на телефоне.',
+      overviewError: 'Не удалось загрузить видео. Попробуй запустить его ещё раз.', overviewFallback: 'Браузер не поддерживает видео.',
       shotsTitle: 'Кадры', gallery: ['Игровая сцена: бой', 'Игровая сцена: начало раунда', 'Зомби-режим: локация', 'Зомби-режим: сражение'],
       featTitle: 'Возможности', featLead: 'Загляни в игру. Выбирай раздел и знакомься с интерфейсом.',
       featBadge: '10 экранов игры', featHint: 'Настоящие скриншоты игры · Нажми на экран, чтобы рассмотреть детали',
@@ -53,6 +63,16 @@
       langLabel: 'Language', themeLabel: 'Day or night', share: 'Share', copied: 'Link copied', close: 'Close', prev: 'Previous', next: 'Next',
       tagline: 'A mobile zombie shooter: zombie hordes, servers for up to 32 players, your own buttons, friends and a live chat.',
       downloadCta: 'Join the beta test', statsLabel: 'Statistics', online: 'playing', offline: 'offline', downloads: 'downloads', mb: 'MB',
+      launchStatus: 'The beta is live', launchFinished: 'The 14-day stage has ended',
+      launchTitle: 'On the road to', launchAccent: 'global release',
+      launchLead: 'Join the beta and help us make the game better before the big launch.',
+      countdownLabel: 'Until the end of the 14-day stage', countdownFinished: 'Getting ready for the next stage',
+      clockDays: 'days', clockHours: 'hours', clockMinutes: 'minutes', clockSeconds: 'seconds',
+      launchNote: 'Target completion:', launchEndedNote: 'Stage ended:',
+      launchReview: 'After testing: an application for global release and a Google Play review.', launchJoin: 'Join the beta',
+      overviewTitle: 'Game video overview', overviewPlay: 'Play the game overview',
+      overviewNote: 'Real Counter Zombie Mobile gameplay: zombies, teamwork and touch controls.',
+      overviewError: 'The video could not load. Please try playing it again.', overviewFallback: 'Your browser does not support video.',
       shotsTitle: 'Screenshots', gallery: ['Gameplay: battle', 'Gameplay: round start', 'Zombie mode: location', 'Zombie mode: combat'],
       featTitle: 'Features', featLead: 'Take a look inside. Choose a section and explore the game interface.',
       featBadge: '10 game screens', featHint: 'Real game screenshots · Tap a screen to take a closer look',
@@ -120,6 +140,7 @@
     buildStrip();
     buildFeatures();
     if (boxAt >= 0) showBox();
+    paintCountdown();
     renderStats(true);
     renderChat(false);
     renderNews();
@@ -526,6 +547,53 @@ var beta = $('beta');
     paintBeta();
   }
 
+  /* ---------- one shared beta milestone, independent of visits and time zones ---------- */
+  var countdown = $('beta-countdown'), serverOffset = 0;
+  var betaStart = countdown ? Date.parse(countdown.getAttribute('data-start')) : NaN;
+  var betaEnd = countdown ? Date.parse(countdown.getAttribute('data-end')) : NaN;
+  function countdownParts(now, start, end) {
+    var seconds = Math.ceil(Math.max(0, end - Math.max(start, now)) / 1000);
+    return {
+      days: Math.floor(seconds / 86400), hours: Math.floor(seconds / 3600) % 24,
+      minutes: Math.floor(seconds / 60) % 60, seconds: seconds % 60,
+      progress: Math.max(0, Math.min(1, (now - start) / (end - start))), finished: now >= end
+    };
+  }
+  function paintCountdown() {
+    if (!countdown) return;
+    if (!isFinite(betaStart) || !isFinite(betaEnd) || betaEnd <= betaStart) { countdown.hidden = true; return; }
+    var p = countdownParts(Date.now() + serverOffset, betaStart, betaEnd);
+    [['betaDays',p.days],['betaHours',p.hours],['betaMinutes',p.minutes],['betaSeconds',p.seconds]].forEach(function (unit) {
+      var value = String(unit[1]).padStart(2, '0');
+      if ($(unit[0]).textContent !== value) $(unit[0]).textContent = value;
+    });
+    $('betaTimeBar').style.width = (p.progress * 100).toFixed(3) + '%';
+    $('launchCard').classList.toggle('finished', p.finished);
+    $('launchStatus').textContent = p.finished ? T.launchFinished : T.launchStatus;
+    $('countdownLabel').textContent = p.finished ? T.countdownFinished : T.countdownLabel;
+    $('launchNote').textContent = p.finished ? T.launchEndedNote : T.launchNote;
+    $('betaEndDate').textContent = new Intl.DateTimeFormat(lang === 'ru' ? 'ru-RU' : 'en-GB', {
+      timeZone:'Europe/Moscow', day:'numeric', month:'long', hour:'2-digit', minute:'2-digit'
+    }).format(new Date(betaEnd)) + (lang === 'ru' ? ' МСК' : ' MSK');
+  }
+  setInterval(function () { if (!doc.hidden) paintCountdown(); }, 1000);
+
+  /* ---------- gameplay overview: no autoplay or video preload ---------- */
+  var overview = $('gameOverview'), overviewPlay = $('overviewPlay'), overviewStatus = $('overviewStatus');
+  if (overview && overviewPlay) {
+    overviewPlay.addEventListener('click', function () {
+      overviewStatus.hidden = true;
+      if (overview.error) overview.load();
+      var play = overview.play();
+      if (play && play.catch) play.catch(function () {
+        overviewStatus.hidden = false;
+        overviewPlay.hidden = false;
+      });
+    });
+    overview.addEventListener('play', function () { overviewPlay.hidden = true; overviewStatus.hidden = true; });
+    overview.addEventListener('error', function () { overviewStatus.hidden = false; overviewPlay.hidden = false; });
+  }
+
   /* ---------- share ---------- */
   var toast = $('toast'), toastTimer = 0;
   function say(text) {
@@ -577,7 +645,15 @@ var beta = $('beta');
   }
   function loadStats() {
     if (doc.hidden) return;
-    fetch('/api/v1/site/stats', { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+    var requestedAt = Date.now();
+    fetch('/api/v1/site/stats', { cache: 'no-store' }).then(function (r) {
+      var serverDate = Date.parse(r.headers.get('Date'));
+      if (r.ok && isFinite(serverDate)) {
+        serverOffset = serverDate + (Date.now() - requestedAt) / 2 - Date.now();
+        paintCountdown();
+      }
+      return r.ok ? r.json() : null;
+    }).then(function (d) {
       if (!d || typeof d.online !== 'number') return;
       var first = !stats;
       stats = d;
@@ -738,6 +814,6 @@ var beta = $('beta');
   setInterval(loadStats, 30000);
   setInterval(loadChat, 5000);
   doc.addEventListener('visibilitychange', function () {
-    if (!doc.hidden) { loadStats(); loadChat(); startEmbers(); }
+    if (!doc.hidden) { paintCountdown(); loadStats(); loadChat(); startEmbers(); }
   });
 })();

@@ -91,6 +91,32 @@ header{position:sticky;top:0;z-index:30;background:var(--glass);-webkit-backdrop
 .beta-hero-cta{max-width:100%;min-height:62px}
 .beta-hero-cta .h-game{font-size:clamp(14px,3.8vw,19px);line-height:1.14;white-space:normal}
 @media(max-width:400px){.beta-hero-cta{width:100%;padding-right:14px}.beta-hero-cta .h-game{font-size:15px}}
+/* A shared, fixed beta milestone. The timer never restarts for a new visitor. */
+#beta-countdown{scroll-margin-top:82px;margin-top:24px}
+.launch-card{position:relative;overflow:hidden;padding:25px 28px;border:1px solid rgba(239,40,52,.35);border-radius:20px;background:radial-gradient(ellipse at 100% 0,rgba(239,40,52,.14),transparent 62%),var(--surface);box-shadow:var(--shadow)}
+.launch-card::before{content:"";position:absolute;left:28px;right:28px;top:0;height:2px;background:linear-gradient(90deg,var(--red),var(--gold),transparent)}
+.launch-main{display:grid;grid-template-columns:1fr 1fr;gap:22px 36px;align-items:center}
+.launch-live{display:inline-flex;align-items:center;gap:8px;margin-bottom:12px;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--gold)}
+.launch-live .dot{width:7px;height:7px;background:#22c55e}
+.launch-card h2{margin:0;font-size:clamp(24px,3.2vw,35px);line-height:1.1}
+.launch-card h2 em{font-style:inherit;color:var(--red-ink)}
+.launch-copy p{margin:9px 0 0;max-width:440px;font-size:14px;color:var(--muted)}
+.launch-label{margin:0 0 9px;text-align:center;font-size:12px;color:var(--muted)}
+.countdown{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.countdown>div{text-align:center;padding:12px 3px 9px;border-radius:12px;border:1px solid var(--line);background:var(--bg)}
+.countdown b{display:block;color:var(--text);font:900 clamp(28px,4.4vw,43px)/1 "CZM Display",system-ui,sans-serif;font-variant-numeric:tabular-nums}
+.countdown small{display:block;margin-top:7px;color:var(--muted);font-size:11px}
+.countdown>div:first-child{border-color:rgba(245,180,64,.4)}
+.countdown>div:first-child b{color:var(--gold)}
+.launch-progress{height:4px;margin-top:22px;overflow:hidden;border-radius:99px;background:var(--surface2)}
+.launch-progress span{display:block;width:0;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--red),var(--gold))}
+.launch-foot{display:flex;align-items:center;justify-content:space-between;gap:12px 24px;margin-top:13px;color:var(--muted);font-size:12px}
+.launch-foot p{margin:0;max-width:660px}
+.launch-foot time{color:var(--text);white-space:nowrap}
+.launch-join{flex:none;display:inline-flex;align-items:center;gap:8px;color:var(--red-ink);font-weight:600;text-decoration:none;min-height:36px}
+.launch-join svg{width:16px;height:16px}
+.launch-card.finished .launch-live .dot{background:var(--gold)}
+@media(max-width:700px){.launch-card{padding:22px 18px}.launch-main{grid-template-columns:1fr;gap:20px}.launch-card::before{left:18px;right:18px}.launch-live{margin-bottom:9px;font-size:10px}.launch-card h2{font-size:27px}.launch-copy p{font-size:13px}.launch-label{text-align:left}.countdown b{font-size:34px}.countdown>div{padding:11px 3px 9px}.launch-foot{flex-wrap:wrap;gap:8px}.launch-progress{margin-top:18px}}
 /* stats */
 .stats{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;margin-top:-16px;position:relative;z-index:2;padding-bottom:2px}
 .stats::-webkit-scrollbar{display:none}
@@ -105,6 +131,21 @@ header{position:sticky;top:0;z-index:30;background:var(--glass);-webkit-backdrop
 .strip img{display:block;height:clamp(160px,29vw,250px);width:auto;max-width:none;aspect-ratio:1536/716;object-fit:cover;border-radius:14px;border:1px solid var(--line);transition:transform .3s ease,box-shadow .3s ease}
 .strip button:hover img{transform:translateY(-3px);box-shadow:0 0 0 1px rgba(239,40,52,.6),0 14px 30px rgba(0,0,0,.5)}
 @media(max-width:600px){.strip img{height:clamp(172px,45vw,220px)}}
+/* The gameplay overview uses native controls and downloads only when requested. */
+#overview{scroll-margin-top:82px}
+.overview-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:13px}
+.overview-head h2{margin:0}
+.overview-length{flex:none;font-size:12px;color:var(--gold);border:1px solid var(--line);border-radius:999px;padding:6px 10px}
+.overview-card{overflow:hidden}
+.overview-stage{position:relative;aspect-ratio:2316/1080;background:#06080c}
+.overview-stage video{display:block;width:100%;height:100%;object-fit:contain}
+.overview-play{position:absolute;inset:0 0 44px;display:flex;align-items:center;justify-content:center;border:0;background:linear-gradient(180deg,rgba(0,0,0,.04),rgba(0,0,0,.15));cursor:pointer}
+.overview-play span{display:grid;place-items:center;width:76px;height:76px;border-radius:50%;background:var(--red);color:#fff;box-shadow:0 0 0 9px rgba(239,40,52,.18),0 12px 36px rgba(0,0,0,.5);transition:transform .2s ease}
+.overview-play:hover span{transform:scale(1.08)}
+.overview-play svg{width:25px;height:25px;margin-left:4px}
+.overview-note{padding:15px 18px;color:var(--muted);font-size:14px;margin:0}
+.overview-status{padding:0 18px 14px;color:var(--red-ink);font-size:13px;margin:0}
+@media(max-width:600px){.overview-head{align-items:flex-start}.overview-head h2{font-size:23px;line-height:1.1}.overview-play span{width:54px;height:54px;box-shadow:0 0 0 6px rgba(239,40,52,.18)}.overview-play svg{width:20px;height:20px}.overview-note{font-size:13px;padding:13px 14px}}
 /* Features: the real game interface, with every screen available on demand. */
 #features{scroll-margin-top:82px}
 .features-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px}
@@ -273,6 +314,33 @@ footer .h-game{font-size:14px;color:var(--text);margin-right:auto}
 </div>
 </div>
 
+<section class="wrap" id="beta-countdown" aria-labelledby="launchTitle"
+  data-start="2026-10-21T20:51:00+03:00" data-end="2026-11-04T20:51:00+03:00">
+<div class="launch-card" id="launchCard">
+<div class="launch-main">
+<div class="launch-copy">
+<span class="launch-live"><span class="dot" aria-hidden="true"></span><span id="launchStatus" data-i18n="launchStatus">Бета-тест уже идёт</span></span>
+<h2 class="h-game" id="launchTitle"><span data-i18n="launchTitle">На пути к</span><br><em data-i18n="launchAccent">глобальному релизу</em></h2>
+<p data-i18n="launchLead">Присоединяйся к бета-тесту и помоги сделать игру лучше перед большим запуском.</p>
+</div>
+<div>
+<p class="launch-label" id="countdownLabel" data-i18n="countdownLabel">До завершения 14-дневного этапа</p>
+<div class="countdown" role="timer" aria-live="off" aria-labelledby="countdownLabel">
+<div><b id="betaDays">14</b><small data-i18n="clockDays">дней</small></div>
+<div><b id="betaHours">00</b><small data-i18n="clockHours">часов</small></div>
+<div><b id="betaMinutes">00</b><small data-i18n="clockMinutes">минут</small></div>
+<div><b id="betaSeconds">00</b><small data-i18n="clockSeconds">секунд</small></div>
+</div>
+</div>
+</div>
+<div class="launch-progress" aria-hidden="true"><span id="betaTimeBar"></span></div>
+<div class="launch-foot">
+<p><span id="launchNote" data-i18n="launchNote">Ориентир завершения:</span> <time id="betaEndDate" datetime="2026-11-04T20:51:00+03:00">4 ноября, 20:51 МСК</time><br><span data-i18n="launchReview">После теста — заявка на глобальный релиз и проверка Google Play.</span></p>
+<a class="launch-join" href="#beta"><span data-i18n="launchJoin">Участвовать в бете</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6"/></svg></a>
+</div>
+</div>
+</section>
+
 <!-- Official Google Play beta recruitment. Main hero links here; no APK downloads. -->
 <section class="sec wrap" id="beta" hidden
   data-group="https://groups.google.com/g/counter-zombie-mobile-beta"
@@ -305,6 +373,21 @@ footer .h-game{font-size:14px;color:var(--text);margin-right:auto}
 <section class="sec" id="shots" data-i18n-aria="shotsTitle" aria-label="Кадры">
 <div class="wrap"><h2 class="h-game" data-i18n="shotsTitle">Кадры</h2></div>
 <div class="strip" id="strip" aria-label="Карусель игровых скриншотов"></div>
+</section>
+
+<section class="sec wrap" id="overview" aria-labelledby="overviewTitle">
+<div class="overview-head"><h2 class="h-game" id="overviewTitle" data-i18n="overviewTitle">Видеообзор игры</h2><span class="overview-length">2:35</span></div>
+<div class="card overview-card">
+<div class="overview-stage">
+<video id="gameOverview" controls playsinline preload="none" poster="/media/game-overview-199702.jpg" width="2316" height="1080" data-i18n-aria="overviewTitle" aria-label="Видеообзор игры">
+<source src="/media/game-overview-199702.mp4" type="video/mp4">
+<p data-i18n="overviewFallback">Браузер не поддерживает видео.</p>
+</video>
+<button type="button" class="overview-play" id="overviewPlay" data-i18n-aria="overviewPlay" aria-label="Смотреть видеообзор игры"><span><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 3v18l16-9z"/></svg></span></button>
+</div>
+<p class="overview-note" data-i18n="overviewNote">Живой геймплей Counter Zombie Mobile: зомби, командная игра и управление на телефоне.</p>
+<p class="overview-status" id="overviewStatus" role="status" hidden data-i18n="overviewError">Не удалось загрузить видео. Попробуй запустить его ещё раз.</p>
+</div>
 </section>
 
 <section class="sec wrap" id="features">
