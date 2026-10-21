@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, FileResponse, HTML
 from PIL import Image
 from pydantic import BaseModel, Field
 
-from . import service, mappics, accounts, settings, tab, social, website, distribution
+from . import service, mappics, accounts, settings, tab, social, website, distribution, lobbies
 from .config import get_settings
 from .db import db
 
@@ -517,3 +517,97 @@ async def save_account_settings(body: SettingsIn,x_czm_key: str | None = Header(
         except accounts.AuthError as e:return e.status,{"error":e.code}
     status,result=await in_db(run)
     return JSONResponse(result,status_code=status,headers={"Cache-Control":"no-store"})
+
+
+# Ephemeral team lobbies. Existing clients do not call these routes.
+_lobby_limit = _Limiter(180, 60)
+
+async def lobby_result(request, action):
+    _lobby_limit.check(client_ip(request))
+    try:
+        return JSONResponse(await in_db(action), headers={"Cache-Control":"no-store"})
+    except accounts.AuthError as error:
+        return JSONResponse({"error": error.code}, status_code=error.status,
+                            headers={"Cache-Control":"no-store"})
+
+class LobbyCreateIn(BaseModel):
+    title: str = Field(min_length=3, max_length=160)
+    description: str = Field(default="", max_length=400)
+    visibility: str = Field(pattern=r"^(public|private)$")
+    capacity: int = Field(ge=2, le=6)
+    server: str = Field(min_length=7, max_length=64)
+    proto: str = Field(pattern=r"^(gs|49)$")
+    nonce: str = Field(min_length=12, max_length=64)
+
+class LobbyReadyIn(BaseModel):
+    revision: int = Field(ge=1)
+    ready: bool
+
+class LobbyServerIn(BaseModel):
+    server: str = Field(min_length=7,max_length=64)
+    proto: str = Field(pattern=r"^(gs|49)$")
+
+class LobbyTargetIn(BaseModel):
+    target: int = Field(gt=0)
+
+class LobbyMessageIn(BaseModel):
+    text: str = Field(min_length=1, max_length=400)
+    nonce: str = Field(min_length=12, max_length=64)
+
+@router.post("/lobbies")
+async def lobby_create(body:LobbyCreateIn, request:Request,
+                       x_czm_key:str|None=Header(default=None)):
+    return await lobby_result(request,lambda c:lobbies.create(
+        c,x_czm_key or "",body.title,body.description,body.visibility,
+        body.capacity,body.server,body.proto,body.nonce))
+
+@router.get("/lobbies")
+async def lobby_catalog(request:Request, offset:int=0,
+                        x_czm_key:str|None=Header(default=None)):
+    return await lobby_result(request,lambda c:lobbies.catalog(c,x_czm_key or "",max(0,min(offset,1000000))))
+
+@router.get("/lobbies/mine")
+async def lobby_mine(request:Request,x_czm_key:str|None=Header(default=None)):
+    return await lobby_result(request,lambda c:lobbies.mine(c,x_czm_key or ""))
+
+@router.get("/lobbies/{room}")
+async def lobby_detail(room:str,request:Request,x_czm_key:str|None=Header(default=None)):
+    return await lobby_result(request,lambda c:lobbies.detail(c,x_czm_key or "",room))
+
+@router.post("/lobbies/{room}/join")
+async def lobby_join(room:str,request:Request,x_czm_key:str|None=Header(default=None)):
+    return await lobby_result(request,lambda c:lobbies.join(c,x_czm_key or "",room))
+
+@router.post("/lobbies/{room}/leave")
+async def lobby_leave(room:str,request:Request,x_czm_key:str|None=Header(default=None)):
+    return await lobby_result(request,lambda c:lobbies.leave(c,x_czm_key or "",room))
+
+@router.post("/lobbies/{room}/ready")
+async def lobby_ready(room:str,body:LobbyReadyIn,request:Request,
+                      x_czm_key:str|None=Header(default=None)):
+    return await lobby_result(request,lambda c:lobbies.ready(c,x_czm_key or "",room,body.revision,body.ready))
+
+@router.post("/lobbies/{room}/server")
+async def lobby_server(room:str,body:LobbyServerIn,request:Request,
+                       x_czm_key:str|None=Header(default=None)):
+    return await lobby_result(request,lambda c:lobbies.change_server(c,x_czm_key or "",room,body.server,body.proto))
+
+@router.post("/lobbies/{room}/transfer")
+async def lobby_transfer(room:str,body:LobbyTargetIn,request:Request,
+                         x_czm_key:str|None=Header(default=None)):
+    return await lobby_result(request,lambda c:lobbies.transfer(c,x_czm_key or "",room,body.target))
+
+@router.post("/lobbies/{room}/kick")
+async def lobby_kick(room:str,body:LobbyTargetIn,request:Request,
+                     x_czm_key:str|None=Header(default=None)):
+    return await lobby_result(request,lambda c:lobbies.kick(c,x_czm_key or "",room,body.target))
+
+@router.get("/lobbies/{room}/messages")
+async def lobby_messages(room:str,request:Request,before:int=0,
+                         x_czm_key:str|None=Header(default=None)):
+    return await lobby_result(request,lambda c:lobbies.chat(c,x_czm_key or "",room,max(0,before)))
+
+@router.post("/lobbies/{room}/messages")
+async def lobby_send(room:str,body:LobbyMessageIn,request:Request,
+                     x_czm_key:str|None=Header(default=None)):
+    return await lobby_result(request,lambda c:lobbies.send(c,x_czm_key or "",room,body.text,body.nonce))

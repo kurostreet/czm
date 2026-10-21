@@ -288,6 +288,8 @@ def init() -> None:
         conn = connect()
         try:
             conn.executescript(SCHEMA)
+            from . import lobbies
+            conn.executescript(lobbies.LOBBY_SCHEMA)
             for table, columns in COLUMNS.items():
                 have = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
                 for name, kind in columns.items():
