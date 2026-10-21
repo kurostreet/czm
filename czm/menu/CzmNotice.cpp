@@ -210,7 +210,12 @@ void CCzmNotice::Draw()
 	CZM_DrawButton( CanRetry()?UI_DIR "button_secondary.png":UI_DIR "button_primary.png",m_close,CZM_T("notice_close"),CZM_White(),Pressed(CLOSE),CZMF_PANEL_TEXT );
 }
 
-ADD_MENU3( menu_czmnotice, CCzmNotice, UI_CzmNotice_Menu ) {}
+ADD_MENU3( menu_czmnotice, CCzmNotice, UI_CzmNotice_Menu );
+
+void UI_CzmNotice_Menu( void )
+{
+	CZM_ShowNotice( CZM_T("notice_title"), "" );
+}
 
 void CZM_ShowNotice( const char *title, const char *text, const char *details, bool diagnostics )
 {

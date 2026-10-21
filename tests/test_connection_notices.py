@@ -22,6 +22,12 @@ class ConnectionNoticeTests(unittest.TestCase):
         # Separate the default argument from the pointer token for C++ parsing.
         stub = stub.replace('const char*=""', 'const char* = ""')
         stub = stub.replace('struct Cursor{int cursorY;}', 'struct Cursor{int cursorY;struct{bool IsActive(){return true;}}menu;}')
+        upstream_header = ROOT / "3rdparty/mainui_cpp/BaseMenu.h"
+        if not upstream_header.exists():
+            upstream_header = ROOT.parent / "czm/3rdparty/mainui_cpp/BaseMenu.h"
+        header = upstream_header.read_text()
+        stub += '\nclass CMenuEntry{public:CMenuEntry(const char*,void(*precache)(),void(*)(),void(*)()){precache();}};\n'
+        stub += '#undef ADD_MENU3\n' + header[header.index('#define ADD_MENU4('):header.index('#define ADD_COMMAND(')]
         source = (ROOT / "czm/menu/CzmNotice.cpp").read_text()
         source = re.sub(r'^#include .*\n', '', source, flags=re.M).replace('private:', 'public:')
         strings = (ROOT / "czm/menu/CzmMenu.cpp").read_text()
