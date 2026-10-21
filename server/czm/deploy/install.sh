@@ -22,6 +22,7 @@ SITE="site/index.html site/privacy.html site/assets/apple-touch-icon.png site/as
       site/assets/gameplay-1.webp site/assets/gameplay-2.webp site/assets/gameplay-3.webp site/assets/gameplay-4.webp site/assets/shot-1.webp
       site/assets/shot-2.webp site/assets/shot-3.webp site/assets/shot-4.webp site/assets/shot-5.webp
       site/assets/shot-6.webp site/assets/shot-7.webp site/assets/shot-8.webp site/assets/shot-9.webp
+      site/assets/feature-menu.webp site/assets/feature-servers.webp site/assets/feature-chat.webp site/assets/feature-controls.webp site/assets/feature-graphics.webp site/assets/feature-audio.webp site/assets/feature-game.webp site/assets/feature-hud.webp site/assets/feature-profile.webp site/assets/feature-friends.webp
       site/assets/site.js site/assets/title.png site/assets/zom.webp site/assets/fonts/Inter-Medium.woff
       site/assets/fonts/Inter-SemiBold.woff site/assets/fonts/InterDisplay-Black.woff
       site/assets/fonts/InterDisplay-BlackItalic.woff site/assets/fonts/OFL.txt"

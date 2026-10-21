@@ -105,21 +105,41 @@ header{position:sticky;top:0;z-index:30;background:var(--glass);-webkit-backdrop
 .strip img{display:block;height:clamp(160px,29vw,250px);width:auto;max-width:none;aspect-ratio:1536/716;object-fit:cover;border-radius:14px;border:1px solid var(--line);transition:transform .3s ease,box-shadow .3s ease}
 .strip button:hover img{transform:translateY(-3px);box-shadow:0 0 0 1px rgba(239,40,52,.6),0 14px 30px rgba(0,0,0,.5)}
 @media(max-width:600px){.strip img{height:clamp(172px,45vw,220px)}}
-/* features */
-.feats{display:flex;flex-wrap:wrap;gap:14px;align-items:stretch}
-.tabs{flex:1 1 230px;display:flex;flex-direction:column;gap:6px;min-width:0}
-.tab{display:flex;align-items:center;gap:12px;min-height:52px;padding:0 14px;border-radius:14px;cursor:pointer;text-align:left;border:1px solid var(--line);background:transparent;color:var(--muted);font:600 15px "CZM Text";transition:background .25s ease,border-color .25s ease,color .25s ease}
-.tab .dot{background:var(--line)}
-.tab[aria-selected="true"]{background:var(--surface);border-color:rgba(239,40,52,.6);color:var(--text)}
-.tab[aria-selected="true"] .dot{background:var(--red)}
-@media (max-width:560px){.tabs{flex-direction:row;overflow-x:auto;scrollbar-width:none}.tab{flex:none}}
-.panels{flex:999 1 460px;min-width:0;display:grid}
-.panel{grid-area:1/1;overflow:hidden;transition:opacity .45s ease,transform .45s ease;opacity:0;transform:translateY(10px);pointer-events:none}
-.panel.on{opacity:1;transform:none;pointer-events:auto}
-.panel .pic{aspect-ratio:16/7.5;background-size:cover;background-position:center;border-bottom:2px solid var(--red)}
-.panel .txt{padding:14px 16px 16px}
-.panel h3{margin:0;font-size:20px}
-.panel p{margin:6px 0 0;color:var(--muted);line-height:1.5;font-size:15px}
+/* Features: the real game interface, with every screen available on demand. */
+#features{scroll-margin-top:82px}
+.features-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px}
+.features-head h2{margin-bottom:8px}
+.features-head p{margin:0;max-width:600px;color:var(--muted);font-size:15px}
+.features-badge{flex:none;display:flex;align-items:center;gap:8px;margin-top:3px;padding:7px 11px;border:1px solid var(--line);border-radius:999px;font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)}
+.features-badge .dot{width:6px;height:6px;background:var(--gold)}
+.feats{padding:10px;overflow:hidden;background:linear-gradient(135deg,var(--surface2),var(--surface) 42%);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow)}
+.tabs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;padding-bottom:10px;min-width:0}
+.tab{display:flex;align-items:center;justify-content:center;gap:9px;min-height:48px;padding:8px 10px;border-radius:11px;cursor:pointer;text-align:center;border:1px solid transparent;background:transparent;color:var(--muted);font:600 14px "CZM Text";transition:background .2s ease,border-color .2s ease,color .2s ease}
+.tab svg{width:19px;height:19px;flex:none;opacity:.8}
+.tab:hover{background:var(--surface2);color:var(--text)}
+.tab[aria-selected="true"]{background:var(--red);border-color:rgba(255,255,255,.15);color:#fff;box-shadow:0 4px 14px rgba(239,40,52,.2)}
+.tab[aria-selected="true"] svg{opacity:1}
+.panels{min-width:0}
+.panel{overflow:hidden;background:var(--surface);border:1px solid var(--line);border-radius:14px}
+.panel.on{animation:featureIn .25s ease both}
+@keyframes featureIn{from{opacity:.6;transform:translateY(4px)}to{opacity:1;transform:none}}
+.feature-screen{position:relative;display:block;width:100%;padding:0;border:0;border-bottom:1px solid var(--line);background:#090b10;cursor:zoom-in;aspect-ratio:1536/716;overflow:hidden}
+.feature-screen img{display:block;width:100%;height:100%;object-fit:contain}
+.feature-zoom{position:absolute;right:12px;bottom:12px;display:flex;align-items:center;gap:7px;min-height:34px;padding:0 11px;border-radius:9px;border:1px solid rgba(255,255,255,.22);background:rgba(8,10,14,.85);color:#fff;font-size:12px;backdrop-filter:blur(8px);transition:background .2s}
+.feature-zoom svg{width:16px;height:16px}
+.feature-screen:hover .feature-zoom{background:var(--red)}
+.panel .txt{display:flex;align-items:center;gap:16px;padding:20px}
+.feature-number{align-self:flex-start;flex:none;padding-top:2px;color:var(--red-ink);font:900 22px/1 "CZM Display";font-variant-numeric:tabular-nums}
+.feature-copy{flex:1;min-width:0}
+.panel h3{margin:0;font-size:21px}
+.panel p{margin:7px 0 0;max-width:750px;color:var(--muted);line-height:1.55;font-size:14px}
+.feature-nav{display:flex;gap:6px;flex:none}
+.feature-nav .icon-btn{width:40px;height:40px;border-radius:50%;background:transparent}
+.feature-nav .icon-btn:hover{color:var(--text);border-color:var(--red)}
+.feature-nav svg{width:18px;height:18px}
+.features-foot{margin:12px 2px 2px;text-align:center;font-size:12px;color:var(--muted)}
+@media(max-width:700px){.features-head{gap:8px}.features-badge{font-size:10px;padding:6px 8px}.features-badge .dot{display:none}.features-head p{font-size:14px}.feats{padding:7px;border-radius:17px}.tabs{display:flex;overflow-x:auto;gap:5px;padding:1px 1px 10px;scroll-padding-inline:1px;scrollbar-width:thin;scrollbar-color:var(--red) transparent}.tab{flex:none;min-height:46px;padding:8px 13px;font-size:13px}.tab svg{width:17px;height:17px}.panel .txt{padding:16px 13px;gap:10px;align-items:flex-start}.feature-number{font-size:19px}.panel h3{font-size:19px}.panel p{font-size:13px}.feature-nav{gap:4px}.feature-nav .icon-btn{width:34px;height:34px;min-width:34px}.feature-zoom{right:7px;bottom:7px;min-height:30px;padding:0 8px;font-size:11px}.features-foot{font-size:11px}}
+@media(max-width:420px){.features-head{flex-wrap:wrap}.features-badge{order:-1}.features-head>div{width:100%}.panel .txt{flex-wrap:wrap}.feature-copy{flex-basis:calc(100% - 40px)}.feature-nav{margin-left:auto}.feature-zoom span{display:none}}
 /* chat */
 .chat-head{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
 .chat-head h2{margin:0 auto 0 0}
@@ -288,11 +308,16 @@ footer .h-game{font-size:14px;color:var(--text);margin-right:auto}
 </section>
 
 <section class="sec wrap" id="features">
-<h2 class="h-game" data-i18n="featTitle">Возможности</h2>
+<div class="features-head">
+<div><h2 class="h-game" data-i18n="featTitle">Возможности</h2>
+<p data-i18n="featLead">Загляни в игру. Выбирай раздел и знакомься с интерфейсом.</p></div>
+<span class="features-badge"><span class="dot" aria-hidden="true"></span><span data-i18n="featBadge">10 экранов игры</span></span>
+</div>
 <div class="feats">
 <div class="tabs" role="tablist" id="tabs" data-i18n-aria="featTitle" aria-label="Возможности"></div>
 <div class="panels" id="panels"></div>
 </div>
+<p class="features-foot" data-i18n="featHint">Настоящие скриншоты игры · Нажми на экран, чтобы рассмотреть детали</p>
 </section>
 
 <section class="sec wrap" id="chat">

@@ -18,13 +18,20 @@
       tagline: 'Мобильный зомби-шутер: орды зомби, серверы до 32 игроков, свои кнопки, друзья и живой чат.',
       downloadCta: 'Принять участие в бета-тесте', statsLabel: 'Статистика', online: 'в игре', offline: 'не в сети', downloads: 'скачиваний', mb: 'МБ',
       shotsTitle: 'Кадры', gallery: ['Игровая сцена: бой', 'Игровая сцена: начало раунда', 'Зомби-режим: локация', 'Зомби-режим: сражение'],
-      featTitle: 'Возможности',
+      featTitle: 'Возможности', featLead: 'Загляни в игру. Выбирай раздел и знакомься с интерфейсом.',
+      featBadge: '10 экранов игры', featHint: 'Настоящие скриншоты игры · Нажми на экран, чтобы рассмотреть детали',
+      featZoom: 'На весь экран', featOpen: 'Открыть экран: ', featPrev: 'Предыдущий раздел', featNext: 'Следующий раздел',
       feats: [
-        ['Серверы', 'Большой список серверов с зомби-режимами: фильтры, избранное, пинг и быстрая игра одной кнопкой.'],
-        ['Кнопки и HUD', 'Расставь кнопки, здоровье, деньги, радар и чат как удобно. Три схемы управления и три вида радара, перекрытия видно сразу.'],
-        ['Друзья и чат', 'Друзья, подписки, личные сообщения и приглашения в игру. Мировой чат Global, RU и EN.'],
-        ['Профиль и облако', 'Ник, аватар или своё фото, спреи. Вход по нику или коду на почту, настройки возвращаются после переустановки.'],
-        ['Обновления', 'Устанавливай новые версии через Google Play и участвуй в бета-тесте.']
+        ['Главное меню', 'Всё для старта на одном экране: быстрая игра, любимые серверы, чат и друзья. Уведомления помогут не пропустить новости и обновления.'],
+        ['Серверы', 'Найди свой сервер: поиск по названию, карте или IP, фильтры и сортировка. Смотри пинг, свободные места и игроков, сохраняй любимые серверы.'],
+        ['Общий чат', 'Общайся с игроками до начала матча. Переключайся между Global, RU и EN, выбирай аватар и оставайся на связи с сообществом.'],
+        ['Управление', 'Три схемы кнопок, редактор управления и HUD, обмен раскладками. Настрой чувствительность камеры, прицеливания и гироскоп под себя.'],
+        ['Графика', 'Выбери подходящий режим отрисовки, яркость и лимит FPS. Настрой размер текста и HUD, количество эффектов и отображение пинга.'],
+        ['Звук', 'Отрегулируй игру, музыку и голосовой чат отдельно. Выбери трек меню, настрой громкость голосов и проверь микрофон перед матчем.'],
+        ['Игра', 'Свой прицел: размер, цвет, прозрачность и динамика. Выбирай руку с оружием, вид магазина и другие игровые параметры.'],
+        ['HUD', 'Три вида радара и варианты оформления чата. Подбери удобный вид интерфейса, а положение и размер элементов измени в редакторе управления.'],
+        ['Профиль', 'Твой ник, аватар или своё фото и спрей в игре. Привяжи почту к игровому аккаунту и сохраняй настройки в облаке.'],
+        ['Друзья', 'Находи игроков по ID, добавляй друзей и общайся в личных сообщениях. Управляй подписками, подписчиками и списком блокировок.']
       ],
       chatTitle: 'Чат игры', chatShort: 'Чат', chatOpen: 'Открыть чат', chatLock: 'Писать можно только в игре',
       roomsLabel: 'Комнаты чата', chatEmpty: 'В этой комнате пока тихо', chatLoading: 'Загружаем чат…',
@@ -47,13 +54,20 @@
       tagline: 'A mobile zombie shooter: zombie hordes, servers for up to 32 players, your own buttons, friends and a live chat.',
       downloadCta: 'Join the beta test', statsLabel: 'Statistics', online: 'playing', offline: 'offline', downloads: 'downloads', mb: 'MB',
       shotsTitle: 'Screenshots', gallery: ['Gameplay: battle', 'Gameplay: round start', 'Zombie mode: location', 'Zombie mode: combat'],
-      featTitle: 'Features',
+      featTitle: 'Features', featLead: 'Take a look inside. Choose a section and explore the game interface.',
+      featBadge: '10 game screens', featHint: 'Real game screenshots · Tap a screen to take a closer look',
+      featZoom: 'Full screen', featOpen: 'Open screen: ', featPrev: 'Previous section', featNext: 'Next section',
       feats: [
-        ['Servers', 'A big list of zombie-mode servers: filters, favourites, ping and quick play in one tap.'],
-        ['Buttons and HUD', 'Place buttons, health, money, radar and chat where you like. Three control schemes and three radar styles, overlaps show at once.'],
-        ['Friends and chat', 'Friends, follows, private messages and game invites. A world chat: Global, RU and EN.'],
-        ['Profile and cloud', 'Nickname, avatar or your own photo, sprays. Sign in with a nickname or an email code, settings come back after a reinstall.'],
-        ['Updates', 'Get new versions through Google Play and take part in the beta test.']
+        ['Main menu', 'Everything you need to get started: quick play, favourite servers, chat and friends. Notifications keep you up to date with game news and updates.'],
+        ['Servers', 'Find a server by name, map or IP, with filters and sorting. Check ping, available slots and players, and save your favourites.'],
+        ['Global chat', 'Meet the community before a match. Switch between Global, RU and EN, choose an avatar and stay in touch with other players.'],
+        ['Controls', 'Three button layouts, a controls and HUD editor, and layout sharing. Adjust camera, aiming and gyroscope sensitivity to suit you.'],
+        ['Graphics', 'Choose a rendering mode, brightness and FPS limit. Adjust text and HUD size, effects and the on-screen ping display.'],
+        ['Audio', 'Adjust game audio, music and voice chat separately. Choose a menu track, set voice volume and check your microphone before a match.'],
+        ['Game', 'Make the crosshair yours: size, colour, transparency and movement. Choose your weapon hand, shop style and other game options.'],
+        ['HUD', 'Three radar styles and different chat designs. Choose the look you like, then use the controls editor to change element positions and sizes.'],
+        ['Profile', 'Your nickname, avatar or personal photo, and in-game spray. Link an email to your game account and save your settings in the cloud.'],
+        ['Friends', 'Find players by ID, add friends and chat in private messages. Manage your follows, followers and blocked players.']
       ],
       chatTitle: 'Game chat', chatShort: 'Chat', chatOpen: 'Open chat', chatLock: 'You can only write in the game',
       roomsLabel: 'Chat rooms', chatEmpty: 'Quiet in this room so far', chatLoading: 'Loading the chat…',
@@ -70,7 +84,19 @@
       beta3: 'Install and play', beta3Note: 'Play at least a couple of times a week: Google checks that the test is alive.', beta3Btn: 'Open in Google Play'
     }
   };
-  var FEAT_SHOTS = [6, 8, 7, 9, 5];
+  var FEAT_SHOTS = ['menu', 'servers', 'chat', 'controls', 'graphics', 'audio', 'game', 'hud', 'profile', 'friends'];
+  var FEAT_ICONS = [
+    '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+    '<rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/><path d="M7 6.5h.01M7 17.5h.01M11 6.5h6M11 17.5h6"/>',
+    '<path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5Z"/>',
+    '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="9" r="4"/><path d="M12 13v8"/>',
+    '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
+    '<path d="m11 5-6 4H2v6h3l6 4V5ZM15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/>',
+    '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>',
+    '<path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/><circle cx="12" cy="12" r="3"/>',
+    '<circle cx="12" cy="7" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/>',
+    '<circle cx="9" cy="8" r="3"/><path d="M2 21v-2a7 7 0 0 1 14 0v2M16 4a4 4 0 0 1 0 8M19 15a6 6 0 0 1 3 5v1"/>'
+  ];
   var lang = store.get('czm-lang');
   if (lang !== 'ru' && lang !== 'en') lang = /^(ru|uk|be|kk)\b/i.test(navigator.language || 'ru') ? 'ru' : 'en';
   var T = TEXT[lang];
@@ -93,6 +119,7 @@
     all('[data-lang]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-lang') === lang)); });
     buildStrip();
     buildFeatures();
+    if (boxAt >= 0) showBox();
     renderStats(true);
     renderChat(false);
     renderNews();
@@ -197,11 +224,12 @@
 
   /* Feature screenshots remain available through the tabbed Features section. */
   var V = root.getAttribute('data-v') || '';
-  function shotSrc(i) { return '/assets/shot-' + (i + 1) + '.webp' + (V ? '?v=' + V : ''); }
+  function shotSrc(i) { return '/assets/feature-' + FEAT_SHOTS[i] + '.webp' + (V ? '?v=' + V : ''); }
 
   /* ---------- gameplay screenshot carousel and lightbox ---------- */
   var strip = $('strip'), box = $('box'), boxImg = $('boxImg'), boxCap = $('boxCap');
-  var galleryIndex = 0, pausedUntil = 0, boxAt = -1, stripVisible = true, lastFocus = null;
+  var galleryIndex = 0, pausedUntil = 0, boxAt = -1, boxKind = 'gallery', boxScroll = '';
+  var stripVisible = true, lastFocus = null;
   function gallerySrc(i) { return '/assets/gameplay-' + (i + 1) + '.webp' + (V ? '?v=' + V : ''); }
   function buildStrip() {
     strip.textContent = '';
@@ -237,13 +265,20 @@
     }, 3500);
   }
   function showBox() {
-    boxImg.src = gallerySrc(boxAt);
-    boxImg.alt = T.gallery[boxAt];
-    boxCap.textContent = T.gallery[boxAt] + ' · ' + (boxAt + 1) + '/' + T.gallery.length;
+    var features = boxKind === 'features';
+    var title = features ? T.feats[boxAt][0] : T.gallery[boxAt];
+    var count = features ? T.feats.length : T.gallery.length;
+    boxImg.src = features ? shotSrc(boxAt) : gallerySrc(boxAt);
+    boxImg.alt = title;
+    boxCap.textContent = title + ' · ' + (boxAt + 1) + '/' + count;
+    box.setAttribute('aria-label', features ? T.featTitle : T.shotsTitle);
   }
-  function openBox(i) {
+  function openBox(i, kind) {
     pauseStrip();
     lastFocus = doc.activeElement;
+    boxScroll = root.style.overflow;
+    root.style.overflow = 'hidden';
+    boxKind = kind || 'gallery';
     boxAt = i;
     showBox();
     box.classList.add('on');
@@ -255,11 +290,17 @@
     boxAt = -1;
     box.classList.remove('on');
     box.setAttribute('aria-hidden','true');
-    if (lastFocus && lastFocus.focus) lastFocus.focus();
+    root.style.overflow = boxScroll;
+    if (boxKind === 'features') {
+      var screen = $('panel-' + feat).querySelector('.feature-screen');
+      screen.focus({ preventScroll:true });
+    } else if (lastFocus && lastFocus.focus) lastFocus.focus({ preventScroll:true });
   }
   function stepBox(delta) {
     if (boxAt < 0) return;
-    boxAt = (boxAt + delta + T.gallery.length) % T.gallery.length;
+    var count = boxKind === 'features' ? T.feats.length : T.gallery.length;
+    boxAt = (boxAt + delta + count) % count;
+    if (boxKind === 'features') pickFeature(boxAt, false);
     showBox();
   }
   $('boxPrev').addEventListener('click', function () { stepBox(-1); });
@@ -276,6 +317,35 @@
 
   /* ---------- feature tabs ---------- */
   var tabs = $('tabs'), panels = $('panels'), feat = 0;
+  function featureIcon(paths) {
+    var svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '1.8');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.innerHTML = paths; // Only the static, local icon paths above are used here.
+    return svg;
+  }
+  function featureNav(delta) {
+    var b = doc.createElement('button');
+    b.type = 'button';
+    b.className = 'icon-btn';
+    b.setAttribute('aria-label', delta < 0 ? T.featPrev : T.featNext);
+    b.appendChild(featureIcon(delta < 0 ? '<path d="m15 5-7 7 7 7"/>' : '<path d="m9 5 7 7-7 7"/>'));
+    b.addEventListener('click', function () {
+      pickFeature((feat + delta + T.feats.length) % T.feats.length, false);
+      // The old panel becomes hidden; retain focus on the matching visible control.
+      $('panel-' + feat).querySelectorAll('.feature-nav button')[delta < 0 ? 0 : 1].focus({ preventScroll:true });
+    });
+    return b;
+  }
+  function loadFeature(i) {
+    var img = $('panel-' + i).querySelector('img');
+    if (!img.hasAttribute('src')) img.src = shotSrc(i);
+  }
   function buildFeatures() {
     tabs.textContent = '';
     panels.textContent = '';
@@ -289,47 +359,81 @@
       tab.setAttribute('aria-selected', String(on));
       tab.setAttribute('aria-controls', 'panel-' + i);
       tab.tabIndex = on ? 0 : -1;
-      var dot = doc.createElement('span');
-      dot.className = 'dot';
-      tab.appendChild(dot);
+      tab.appendChild(featureIcon(FEAT_ICONS[i]));
       tab.appendChild(doc.createTextNode(f[0]));
       tab.addEventListener('click', function () { pickFeature(i, false); });
       tabs.appendChild(tab);
 
       var panel = doc.createElement('div');
-      panel.className = 'panel card' + (on ? ' on' : '');
+      panel.className = 'panel' + (on ? ' on' : '');
       panel.id = 'panel-' + i;
       panel.setAttribute('role', 'tabpanel');
       panel.setAttribute('aria-labelledby', 'tab-' + i);
-      if (!on) panel.setAttribute('aria-hidden', 'true');
-      var pic = doc.createElement('div');
-      pic.className = 'pic';
-      pic.style.backgroundImage = 'url(' + shotSrc(FEAT_SHOTS[i] - 1) + ')';
+      panel.hidden = !on;
+      var pic = doc.createElement('button');
+      pic.type = 'button';
+      pic.className = 'feature-screen';
+      pic.setAttribute('aria-label', T.featOpen + f[0]);
+      pic.setAttribute('aria-haspopup', 'dialog');
+      var img = doc.createElement('img');
+      img.alt = f[0];
+      img.width = 1536;
+      img.height = 716;
+      img.decoding = 'async';
+      img.loading = 'lazy';
+      pic.appendChild(img);
+      var zoom = doc.createElement('span');
+      zoom.className = 'feature-zoom';
+      zoom.setAttribute('aria-hidden', 'true');
+      zoom.appendChild(featureIcon('<path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/>'));
+      var zoomText = doc.createElement('span');
+      zoomText.textContent = T.featZoom;
+      zoom.appendChild(zoomText);
+      pic.appendChild(zoom);
+      pic.addEventListener('click', function () { openBox(i, 'features'); });
       var txt = doc.createElement('div');
       txt.className = 'txt';
+      var number = doc.createElement('span');
+      number.className = 'feature-number';
+      number.setAttribute('aria-hidden', 'true');
+      number.textContent = String(i + 1).padStart(2, '0');
+      var copy = doc.createElement('div');
+      copy.className = 'feature-copy';
       var h = doc.createElement('h3');
       h.className = 'h-game';
       h.textContent = f[0];
       var p = doc.createElement('p');
       p.textContent = f[1];
-      txt.appendChild(h);
-      txt.appendChild(p);
+      copy.appendChild(h);
+      copy.appendChild(p);
+      var nav = doc.createElement('div');
+      nav.className = 'feature-nav';
+      nav.appendChild(featureNav(-1));
+      nav.appendChild(featureNav(1));
+      txt.appendChild(number);
+      txt.appendChild(copy);
+      txt.appendChild(nav);
       panel.appendChild(pic);
       panel.appendChild(txt);
       panels.appendChild(panel);
     });
+    loadFeature(feat);
   }
   function pickFeature(i, focus) {
     feat = i;
     all('#tabs .tab').forEach(function (t, n) {
       t.setAttribute('aria-selected', String(n === i));
       t.tabIndex = n === i ? 0 : -1;
-      if (n === i && focus) t.focus();
+      if (n === i) {
+        if (focus) t.focus({ preventScroll:true });
+        if (tabs.scrollWidth > tabs.clientWidth) tabs.scrollTo({ left:t.offsetLeft - tabs.offsetLeft - (tabs.clientWidth - t.offsetWidth) / 2, behavior:reduce ? 'auto' : 'smooth' });
+      }
     });
     all('#panels .panel').forEach(function (p, n) {
       p.classList.toggle('on', n === i);
-      if (n === i) p.removeAttribute('aria-hidden'); else p.setAttribute('aria-hidden', 'true');
+      p.hidden = n !== i;
     });
+    loadFeature(i);
   }
   tabs.addEventListener('keydown', function (e) {
     var n = T.feats.length;
@@ -382,6 +486,12 @@
     if (e.key === 'Escape') { if (boxAt >= 0) closeBox(); else closePanels(); }
     else if (boxAt >= 0 && e.key === 'ArrowRight') stepBox(1);
     else if (boxAt >= 0 && e.key === 'ArrowLeft') stepBox(-1);
+    else if (boxAt >= 0 && e.key === 'Tab') {
+      var buttons = Array.prototype.slice.call(box.querySelectorAll('button'));
+      var first = buttons[0], last = buttons[buttons.length - 1];
+      if (e.shiftKey && doc.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && doc.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
   });
 
   /* ---------- Google Play: store buttons and the beta test ---------- */
