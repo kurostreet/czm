@@ -41,6 +41,10 @@ void CZM_DrawImage(const char*,int,int,int,int,unsigned=0xffffffff);void CZM_Dra
 bool CZM_OnlineReady();bool CZM_OnlineAccount();int CZM_OnlineIdentity();const char*CZM_OnlineKey();int CZM_OnlinePlayer();const char*CZM_OnlineUrl(const char*);const char*CZM_AvatarFor(const char*,int);
 int CZM_NetRequest(const char*,const char*,const char*,const char*);bool CZM_NetPoll(int,int*,CUtlString&);void CZM_NetNewKey(char*,size_t);
 void CZM_OpenSettings(int);void CZM_AccountShow(const char*,const char*);bool CZM_CopyText(const char*);void CZM_JoinAddress(const char*);void CZM_PlayClick();
+bool CZM_LobbyCanInvite();
+void CZM_LobbyInviteFriend(int);
+void CZM_OpenLobbyById(const char*);
+void CZM_DrawMapPreview(const char*,int,int,int,int,const char*);
 struct CzmServer{char address[64];char prot[8];char name[64];};int CZM_ServerCount();CzmServer *CZM_Server(int);void CZM_CleanName(const char*,char*,size_t);void CZM_DrawSliced(const char*,int,int,int,int,int,int,unsigned=0xffffffff);
 '''
 HARNESS = r'''
@@ -67,6 +71,10 @@ bool CZM_OnlineReady(){return true;}bool CZM_OnlineAccount(){return authenticate
 int CZM_NetRequest(const char*,const char*url,const char*,const char*body){requests.push_back({++ids,url,body});return ids;}
 bool CZM_NetPoll(int id,int*status,CUtlString&body){auto i=replies.find(id);if(i==replies.end())return false;*status=i->second.first;body.Set(i->second.second.c_str());replies.erase(i);return true;}
 void CZM_NetNewKey(char*out,size_t size){Q_strncpy(out,"0123456789abcdef0123456789abcdef",size);}int CZM_ServerCount(){return 0;}CzmServer *CZM_Server(int){return 0;}void CZM_CleanName(const char*in,char*out,size_t size){Q_strncpy(out,in,size);}void CZM_DrawSliced(const char*,int x,int y,int w,int h,int,int,unsigned c){UI_FillRect(x,y,w,h,c);}void CZM_OpenSettings(int){}void CZM_AccountShow(const char*,const char*){logins++;}bool CZM_CopyText(const char*){return true;}void CZM_JoinAddress(const char*){}void CZM_PlayClick(){}
+bool CZM_LobbyCanInvite(){return false;}
+void CZM_LobbyInviteFriend(int){}
+void CZM_OpenLobbyById(const char*){}
+void CZM_DrawMapPreview(const char*,int,int,int,int,const char*){}
 '''
 SCENARIOS = r'''
 int main(int argc,char**argv){
