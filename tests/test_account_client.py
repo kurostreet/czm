@@ -34,6 +34,21 @@ class AccountClientTests(unittest.TestCase):
                 "CzmDownloadService": "package ru.kurostreet.counterzombiemobile; public class CzmDownloadService {}",
                 "SystemClock": "package android.os; public class SystemClock { public static long elapsedRealtime(){return 1000;} }",
                 "BuildConfig": "package ru.kurostreet.counterzombiemobile; public class BuildConfig { public static final boolean IS_GOOGLE_PLAY_BUILD=false; }",
+                # The account-router unit test intentionally runs without the
+                # microphone, Android media stack or WebSocket dependency.
+                # CzmNet forwards to the voice service, so give it a minimal
+                # interface stub; Gradle compiles the real CzmLobbyVoice.java.
+                "CzmLobbyVoice": """package ru.kurostreet.counterzombiemobile;
+                    public final class CzmLobbyVoice {
+                        public static void start(String url,String key){}
+                        public static void stop(){}
+                        public static void setMic(boolean enabled){}
+                        public static boolean microphoneOn(){return false;}
+                        public static boolean speaking(int player){return false;}
+                        public static int state(){return 0;}
+                        public static void mutePlayer(int player,boolean enabled){}
+                        public static boolean locallyMuted(int player){return false;}
+                    }""",
             }
             for name, text in sources.items():
                 (tmp / (name + ".java")).write_text(text)
