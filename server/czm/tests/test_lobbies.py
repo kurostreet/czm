@@ -438,6 +438,21 @@ class LobbyTests(unittest.TestCase):
                       (db.now()-social.PRESENCE_TTL-10,self.ids[1]))
             self.assertEqual(lobbies._map_for_server(c,server),"")
 
+    def test_lobby_chat_messages_include_author_nick(self):
+        room=self.create().json()["lobby"]["id"]
+        posted=self.req("POST",f"/{room}/messages",json={
+            "text":"Hello team!","nonce":"author-nick-msg-001"})
+        self.assertEqual(posted.status_code,200,posted.text)
+        history=self.req("GET",f"/{room}/messages")
+        self.assertEqual(history.status_code,200,history.text)
+        message=history.json()["messages"][0]
+        self.assertEqual(message["sender"],self.ids[0])
+        self.assertEqual(message["text"],"Hello team!")
+        with db.db() as c:
+            expected=c.execute("SELECT nick FROM players WHERE id=?",
+                               (self.ids[0],)).fetchone()[0]
+        self.assertEqual(message["nick"],expected)
+
     def test_invalid_capacity_and_nonce(self):
         for n in [1,7,8]:
             r=self.create(capacity=n,nonce=f"invalid-capacity-{n}-nonce")
