@@ -137,6 +137,25 @@ def _membership(conn, room, player):
     return item
 
 
+
+def _map_for_server(conn, address):
+    """Optional map name from a *currently authenticated* player's live status.
+
+    Thumbnails themselves come from the existing shared VDS map-picture
+    system. A missing / unverified map is an empty string, not a guess.
+    """
+    from .social import PRESENCE_TTL
+    seen=now()
+    row=conn.execute(
+        "SELECT pr.map FROM social_presence pr JOIN account_sessions sess "
+        "ON sess.token_hash=pr.owner AND sess.player=pr.player "
+        "WHERE pr.server=? AND pr.map!='' AND pr.seen>? "
+        "AND sess.expires>? AND sess.seen>? "
+        "ORDER BY pr.seen DESC LIMIT 1",
+        (address,seen-PRESENCE_TTL,seen,seen-accounts.SESSION_IDLE)).fetchone()
+    return row["map"] if row else ""
+
+
 def _state(conn, room):
     people = conn.execute(
         "SELECT m.player, m.ready_revision, p.nick, p.avatar FROM lobby_members m "
@@ -144,7 +163,8 @@ def _state(conn, room):
         (room["id"],)).fetchall()
     return {"id": room["id"], "title": room["title"], "description": room["description"],
             "visibility": room["visibility"], "owner": room["owner"],
-            "capacity": room["capacity"], "server": room["server"], "proto": room["proto"],
+             "capacity": room["capacity"], "server": room["server"], "proto": room["proto"],
+            "map": _map_for_server(conn,room["server"]),
             "revision": room["revision"], "members": [
                 {"id": p["player"], "nick": p["nick"], "avatar": p["avatar"],
                  "ready": p["ready_revision"] == room["revision"]} for p in people]}
@@ -252,7 +272,8 @@ def catalog(conn, key, offset=0):
                         (now()-HOST_TTL,max(0,offset))).fetchall()
     return {"lobbies": [{"id": l["id"], "title": l["title"], "owner": l["owner"],
                         "capacity": l["capacity"], "count": l["count"],
-                        "server": l["server"], "proto": l["proto"]} for l in rows[:40]],
+                        "server": l["server"], "proto": l["proto"],
+                        "map": _map_for_server(conn,l["server"])} for l in rows[:40]],
             "next": max(0,offset)+40 if len(rows)>40 else -1}
 
 
@@ -346,8 +367,11 @@ def chat(conn, key, room_id, before=0):
     player = _actor(conn, key)
     _room(conn, room_id)
     _membership(conn, room_id, player)
-    rows = conn.execute("SELECT id,sender,text,created FROM lobby_messages WHERE lobby=? AND (?=0 OR id<?) "
-                        "ORDER BY id DESC LIMIT 50", (room_id, before, before)).fetchall()
+    rows = conn.execute(
+        "SELECT m.id,m.sender,p.nick,m.text,m.created FROM lobby_messages m "
+        "JOIN players p ON p.id=m.sender "
+        "WHERE m.lobby=? AND (?=0 OR m.id<?) ORDER BY m.id DESC LIMIT 50",
+        (room_id,before,before)).fetchall()
     return {"messages": [dict(r) for r in reversed(rows)]}
 
 
@@ -433,7 +457,8 @@ def invitations(conn, key):
         {"id": r["id"], "lobby": r["lobby"], "sender": r["sender"],
          "owner": r["owner"], "title": r["title"], "description": r["description"],
          "server": r["server"], "proto": r["proto"],
-         "capacity": r["capacity"], "expires": r["expires"]} for r in entries]}
+         "capacity": r["capacity"], "expires": r["expires"],
+         "map": _map_for_server(conn,r["server"])} for r in entries]}
 
 
 def answer_invitation(conn, key, invitation, accept):

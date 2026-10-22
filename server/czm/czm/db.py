@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS social_presence (
     map TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS social_presence_player ON social_presence(player, seen);
+CREATE INDEX IF NOT EXISTS social_presence_server ON social_presence(server, seen);
 CREATE TABLE IF NOT EXISTS social_follows (
     source INTEGER NOT NULL REFERENCES accounts(player),
     target INTEGER NOT NULL REFERENCES accounts(player),

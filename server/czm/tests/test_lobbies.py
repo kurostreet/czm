@@ -424,6 +424,20 @@ class LobbyTests(unittest.TestCase):
                              {"count":1,"capacity":4,"id":"","public":False})
         self.assertEqual(self.req("POST",f"/{room}/join",1).status_code,403)
 
+    def test_map_preview_from_authorized_active_server_presence(self):
+        room=self.create().json()["lobby"]["id"]
+        from czm import social
+        server="203.0.113.5:27015"
+        with db.db() as c:
+            self.assertEqual(lobbies._map_for_server(c,server),"")
+            social.heartbeat(c,self.keys[1],server,"ze_city")
+            result=lobbies.catalog(c,self.keys[0])
+            self.assertEqual(result["lobbies"][0]["map"],"ze_city")
+            self.assertEqual(lobbies.detail(c,self.keys[0],room)["lobby"]["map"],"ze_city")
+            c.execute("UPDATE social_presence SET seen=? WHERE player=?",
+                      (db.now()-social.PRESENCE_TTL-10,self.ids[1]))
+            self.assertEqual(lobbies._map_for_server(c,server),"")
+
     def test_invalid_capacity_and_nonce(self):
         for n in [1,7,8]:
             r=self.create(capacity=n,nonce=f"invalid-capacity-{n}-nonce")
