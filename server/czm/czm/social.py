@@ -77,12 +77,22 @@ def profile(conn, viewer, target, compact=False):
               "playing": online and bool(presence["server"]), "server": "", "map": ""}
     if online and rel in ("self", "friend"):
         result.update(server=presence["server"], map=presence["map"])
+        from . import lobbies
         if presence["server"]:
-            from . import lobbies
             group=lobbies.playing_together(conn,viewer["id"],target,
                                           presence["server"],PRESENCE_TTL)
             if group:
                 result["together"]=group
+        else:
+            # A room only exists while its owner is actively in the lobby.
+            # Private room IDs cannot be obtained from friend profile cards.
+            room=lobbies._current(conn,target)
+            if room:
+                people=conn.execute("SELECT COUNT(*) FROM lobby_members WHERE lobby=?",
+                                    (room["id"],)).fetchone()[0]
+                result["lobby"]={"count":people,"capacity":room["capacity"],
+                                 "id":room["id"] if room["visibility"]=="public" else "",
+                                 "public":room["visibility"]=="public"}
     if not compact:
         public = counts(conn, target)
         result["counts"] = {k: public[k] for k in ("friends", "followers", "following")}

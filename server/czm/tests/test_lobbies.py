@@ -394,6 +394,36 @@ class LobbyTests(unittest.TestCase):
         self.assertEqual(self.req("GET","/launches/pending",1).json()["launches"],[])
         self.assertEqual(len(self.req("GET","/launches/pending").json()["launches"]),1)
 
+    def test_friend_sees_lobby_and_party_size_before_launch(self):
+        self.link_friends()
+        room=self.create(capacity=6).json()["lobby"]["id"]
+        self.assertEqual(self.req("POST",f"/{room}/join",2).status_code,200)
+        from czm import social
+        with db.db() as c:
+            social.heartbeat(c,self.keys[0],"","")
+            social.heartbeat(c,self.keys[1],"","")
+            friend=social.profile(c,social.actor(c,self.keys[1]),self.ids[0])
+            self.assertEqual(friend["lobby"],
+                             {"count":2,"capacity":6,"id":room,"public":True})
+            outsider=social.profile(c,social.actor(c,self.keys[2]),self.ids[0])
+            self.assertNotIn("lobby",outsider)
+        self.req("POST",f"/{room}/leave")
+        with db.db() as c:
+            friend=social.profile(c,social.actor(c,self.keys[1]),self.ids[0])
+            self.assertNotIn("lobby",friend)
+
+    def test_private_lobby_presence_does_not_expose_room_id(self):
+        self.link_friends()
+        room=self.create(capacity=4,visibility="private").json()["lobby"]["id"]
+        from czm import social
+        with db.db() as c:
+            social.heartbeat(c,self.keys[0],"","")
+            social.heartbeat(c,self.keys[1],"","")
+            friend=social.profile(c,social.actor(c,self.keys[1]),self.ids[0])
+            self.assertEqual(friend["lobby"],
+                             {"count":1,"capacity":4,"id":"","public":False})
+        self.assertEqual(self.req("POST",f"/{room}/join",1).status_code,403)
+
     def test_invalid_capacity_and_nonce(self):
         for n in [1,7,8]:
             r=self.create(capacity=n,nonce=f"invalid-capacity-{n}-nonce")
