@@ -90,6 +90,7 @@ CREATE TABLE IF NOT EXISTS launch_members (
  last_seen INTEGER NOT NULL DEFAULT 0,
  departed_at INTEGER NOT NULL DEFAULT 0,
  ended INTEGER NOT NULL DEFAULT 0,
+ delivered_at INTEGER NOT NULL DEFAULT 0,
  PRIMARY KEY(launch,player)
 );
 CREATE INDEX IF NOT EXISTS launch_members_player ON launch_members(player,launch);
@@ -559,7 +560,7 @@ def pending_launch(conn, key):
     player = _actor(conn, key)
     rows=conn.execute("SELECT l.* FROM lobby_launches l "
                       "JOIN launch_members m ON m.launch=l.id "
-                      "WHERE m.player=? AND l.delivery_expires>? "
+                      "WHERE m.player=? AND m.delivered_at=0 AND l.delivery_expires>? "
                       "ORDER BY l.created DESC,l.id DESC LIMIT 5",
                       (player, now())).fetchall()
     return {"launches":[_launch_state(conn,r) for r in rows]}
@@ -680,3 +681,18 @@ def commit_launch_snapshot(conn,key,room_id,nonce,revision,snapshot):
             snapshot["server"],snapshot["proto"],snapshot["revision"],tuple(snapshot["members"])):
         raise accounts.AuthError("lobby_changed",409)
     return launch_internal(conn,key,room_id,nonce,revision)
+
+def acknowledge_launch(conn,key,launch_id):
+    """The authenticated client has safely queued the one-time join action."""
+    player=_actor(conn,key)
+    entry=conn.execute("SELECT l.* FROM lobby_launches l "
+                       "JOIN launch_members m ON m.launch=l.id "
+                       "WHERE l.id=? AND m.player=?",(launch_id,player)).fetchone()
+    if not entry:
+        raise accounts.AuthError("launch_not_found",404)
+    if entry["delivery_expires"]<=now():
+        raise accounts.AuthError("launch_expired",410)
+    conn.execute("UPDATE launch_members SET delivered_at=CASE "
+                 "WHEN delivered_at=0 THEN ? ELSE delivered_at END "
+                 "WHERE launch=? AND player=?",(now(),launch_id,player))
+    return {"ok":True,"id":launch_id}

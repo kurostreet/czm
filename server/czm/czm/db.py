@@ -250,7 +250,8 @@ COLUMNS = {
     "lobbies": {"last_seen": "INTEGER NOT NULL DEFAULT 0"},
     "launch_members": {"last_seen": "INTEGER NOT NULL DEFAULT 0",
                        "departed_at": "INTEGER NOT NULL DEFAULT 0",
-                       "ended": "INTEGER NOT NULL DEFAULT 0"},
+                       "ended": "INTEGER NOT NULL DEFAULT 0",
+                       "delivered_at": "INTEGER NOT NULL DEFAULT 0"},
 }
 
 _lock = threading.Lock()

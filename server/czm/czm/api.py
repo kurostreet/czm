@@ -685,3 +685,8 @@ async def lobby_launch_checked(room:str,body:LobbyLaunchIn,request:Request,
         return JSONResponse({"error":e.code},status_code=e.status,headers={"Cache-Control":"no-store"})
     except game_probe.ProbeError as e:
         return JSONResponse({"error":"server_unavailable"},status_code=503,headers={"Cache-Control":"no-store"})
+
+
+@router.post("/lobbies/launches/{launch}/ack")
+async def lobby_launch_ack(launch:str,request:Request,x_czm_key:str|None=Header(default=None)):
+    return await lobby_result(request,lambda c:lobbies.acknowledge_launch(c,x_czm_key or "",launch))

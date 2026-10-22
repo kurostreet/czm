@@ -379,6 +379,21 @@ class LobbyTests(unittest.TestCase):
         self.assertEqual(good.status_code,200,good.text)
         self.assertEqual(len(self.req("GET",f"/{room}/messages").json()["messages"]),1)
 
+    def test_launch_delivery_acks_are_authorized_and_idempotent(self):
+        self.create()
+        room=self.req("GET","/mine").json()["lobby"]["id"]
+        self.req("POST",f"/{room}/join",1)
+        self.req("POST",f"/{room}/ready",1,json={"revision":1,"ready":True})
+        with patch("czm.game_probe.probe",return_value={"players":8,"max_players":32}):
+            launch=self.req("POST",f"/{room}/launch",
+                            json={"nonce":"ack-launch-nonce-01","revision":1}).json()["launch"]["id"]
+        self.assertEqual(self.req("POST",f"/launches/{launch}/ack",2).status_code,404)
+        self.assertEqual(len(self.req("GET","/launches/pending",1).json()["launches"]),1)
+        self.assertEqual(self.req("POST",f"/launches/{launch}/ack",1).status_code,200)
+        self.assertEqual(self.req("POST",f"/launches/{launch}/ack",1).status_code,200)
+        self.assertEqual(self.req("GET","/launches/pending",1).json()["launches"],[])
+        self.assertEqual(len(self.req("GET","/launches/pending").json()["launches"]),1)
+
     def test_invalid_capacity_and_nonce(self):
         for n in [1,7,8]:
             r=self.create(capacity=n,nonce=f"invalid-capacity-{n}-nonce")
