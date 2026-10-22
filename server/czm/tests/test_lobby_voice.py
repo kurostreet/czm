@@ -19,6 +19,8 @@ class LobbyVoiceTests(unittest.TestCase):
                                   "CZM_PLAY_SERVICE_ACCOUNT_FILE":"/nonexistent"})
         env.start();self.addCleanup(env.stop)
         get_settings.cache_clear();self.addCleanup(get_settings.cache_clear)
+        # Each TestClient shares testclient IP; keep scenarios isolated.
+        api._lobby_limit.calls.clear()
         db.init()
         app=FastAPI();app.include_router(api.router)
         self.client=TestClient(app);self.addCleanup(self.client.close)
@@ -106,6 +108,19 @@ class LobbyVoiceTests(unittest.TestCase):
                 with self.assertRaises(WebSocketDisconnect) as err:
                     member.receive_json()
                 self.assertEqual(err.exception.code,4400)
+
+    def test_voice_controls_visible_in_lobby_state(self):
+        from czm import lobbies
+        self.assertEqual(self.mute(0,self.players[1],True).status_code,200)
+        self.assertEqual(self.mute(0,None,True).status_code,200)
+        with db.db() as c:
+            detail=lobbies.detail(c,self.keys[1],self.room)["lobby"]
+            self.assertEqual(detail["voice_mute_all"],True)
+            self.assertEqual(detail["voice_muted"],[self.players[1]])
+        self.assertEqual(self.mute(0,self.players[1],False).status_code,200)
+        with db.db() as c:
+            detail=lobbies.detail(c,self.keys[1],self.room)["lobby"]
+            self.assertEqual(detail["voice_muted"],[])
 
     def test_voice_data_removed_with_room(self):
         self.assertEqual(self.mute(0,self.players[1],True).status_code,200)

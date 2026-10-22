@@ -168,10 +168,15 @@ def _state(conn, room):
         "SELECT m.player, m.ready_revision, p.nick, p.avatar FROM lobby_members m "
         "JOIN players p ON p.id=m.player WHERE m.lobby=? ORDER BY m.joined,m.player",
         (room["id"],)).fetchall()
+    voice_muted=conn.execute(
+        "SELECT player FROM lobby_voice_mutes WHERE lobby=? AND host_muted=1",
+        (room["id"],)).fetchall()
     return {"id": room["id"], "title": room["title"], "description": room["description"],
             "visibility": room["visibility"], "owner": room["owner"],
              "capacity": room["capacity"], "server": room["server"], "proto": room["proto"],
             "map": _map_for_server(conn,room["server"]),
+            "voice_mute_all": bool(room["voice_mute_all"]),
+            "voice_muted": [r["player"] for r in voice_muted],
             "revision": room["revision"], "members": [
                 {"id": p["player"], "nick": p["nick"], "avatar": p["avatar"],
                  "ready": p["ready_revision"] == room["revision"]} for p in people]}
