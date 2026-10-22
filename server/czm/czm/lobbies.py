@@ -68,6 +68,9 @@ CREATE TABLE IF NOT EXISTS lobby_launches (
 CREATE TABLE IF NOT EXISTS launch_members (
  launch TEXT NOT NULL REFERENCES lobby_launches(id) ON DELETE CASCADE,
  player INTEGER NOT NULL REFERENCES accounts(player),
+ last_seen INTEGER NOT NULL DEFAULT 0,
+ departed_at INTEGER NOT NULL DEFAULT 0,
+ ended INTEGER NOT NULL DEFAULT 0,
  PRIMARY KEY(launch,player)
 );
 CREATE INDEX IF NOT EXISTS launch_members_player ON launch_members(player,launch);
@@ -476,3 +479,65 @@ def pending_launch(conn, key):
                       "ORDER BY l.created DESC,l.id DESC LIMIT 5",
                       (player, now())).fetchall()
     return {"launches":[_launch_state(conn,r) for r in rows]}
+
+# Players who missed several heartbeats or left for too long cannot make
+# an old "playing together" label reappear just by selecting the same server.
+LAUNCH_RECONNECT_GRACE = 120
+
+
+def record_launch_presence(conn, player, current_server):
+    t=now()
+    rows=conn.execute(
+        "SELECT m.launch,m.last_seen,m.departed_at,m.ended,l.server,"
+        "l.delivery_expires FROM launch_members m "
+        "JOIN lobby_launches l ON l.id=m.launch "
+        "WHERE m.player=? AND l.episode_expires>? AND m.ended=0",
+        (player,t)).fetchall()
+    for r in rows:
+        if current_server == r["server"]:
+            expired_initial = not r["last_seen"] and t>r["delivery_expires"]
+            expired_gap = bool(r["last_seen"] and t-r["last_seen"]>LAUNCH_RECONNECT_GRACE)
+            expired_departure = bool(r["departed_at"] and t-r["departed_at"]>LAUNCH_RECONNECT_GRACE)
+            if expired_initial or expired_gap or expired_departure:
+                conn.execute("UPDATE launch_members SET ended=1 WHERE launch=? AND player=?",
+                             (r["launch"],player))
+            else:
+                conn.execute("UPDATE launch_members SET last_seen=?,departed_at=0 "
+                             "WHERE launch=? AND player=?", (t,r["launch"],player))
+        elif current_server:
+            # Changing to a different game server ends participation permanently.
+            if r["last_seen"]:
+                conn.execute("UPDATE launch_members SET ended=1 WHERE launch=? AND player=?",
+                             (r["launch"],player))
+        elif r["last_seen"] and not r["departed_at"]:
+            # Connection lost: preserve a short manual reconnect window.
+            conn.execute("UPDATE launch_members SET departed_at=? WHERE launch=? AND player=?",
+                         (t,r["launch"],player))
+
+
+def playing_together(conn, viewer, target, server, presence_ttl):
+    """Return aggregate only; never expose member IDs to an outsider."""
+    if not server:
+        return None
+    t=now()
+    candidate=conn.execute(
+        "SELECT l.id,l.size FROM lobby_launches l JOIN launch_members m ON m.launch=l.id "
+        "WHERE m.player=? AND l.server=? AND l.episode_expires>? "
+        "AND m.ended=0 AND m.last_seen>? "
+        "ORDER BY l.created DESC LIMIT 1",
+        (target,server,t,t-presence_ttl)).fetchone()
+    if not candidate:
+        return None
+    total=conn.execute(
+        "SELECT COUNT(DISTINCT m.player) FROM launch_members m "
+        "JOIN social_presence pr ON pr.player=m.player AND pr.server=? AND pr.seen>? "
+        "JOIN account_sessions a ON a.player=m.player AND a.token_hash=pr.owner "
+        "AND a.expires>? AND a.seen>? "
+        "WHERE m.launch=? AND m.ended=0 AND m.last_seen>? "
+        "AND NOT EXISTS (SELECT 1 FROM social_blocks b WHERE "
+        "(b.source=? AND b.target=m.player) OR (b.target=? AND b.source=m.player))",
+        (server,t-presence_ttl,t,t-accounts.SESSION_IDLE,
+         candidate["id"],t-presence_ttl,viewer,viewer)).fetchone()[0]
+    if total<2:
+        return None
+    return {"count": total, "size": candidate["size"]}

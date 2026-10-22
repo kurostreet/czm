@@ -77,6 +77,12 @@ def profile(conn, viewer, target, compact=False):
               "playing": online and bool(presence["server"]), "server": "", "map": ""}
     if online and rel in ("self", "friend"):
         result.update(server=presence["server"], map=presence["map"])
+        if presence["server"]:
+            from . import lobbies
+            group=lobbies.playing_together(conn,viewer["id"],target,
+                                          presence["server"],PRESENCE_TTL)
+            if group:
+                result["together"]=group
     if not compact:
         public = counts(conn, target)
         result["counts"] = {k: public[k] for k in ("friends", "followers", "following")}
@@ -94,6 +100,9 @@ def heartbeat(conn, key, server="", map_name=""):
                  (service.hash_secret(key), player["id"], t, server, map_name if server else ""))
     conn.execute("INSERT INTO social_profiles(player,last_seen) VALUES(?,?) ON CONFLICT(player) DO UPDATE SET last_seen=excluded.last_seen", (player["id"], t))
     registered = bool(conn.execute("SELECT 1 FROM accounts WHERE player=?", (player["id"],)).fetchone())
+    if registered:
+        from . import lobbies
+        lobbies.record_launch_presence(conn,player["id"],server)
     return {"id": player["id"], "account": registered, "ttl": PRESENCE_TTL,
             "counts": counts(conn, player["id"]) if registered else {"friends": 0, "followers": 0, "following": 0, "requests": 0, "unread": 0}}
 

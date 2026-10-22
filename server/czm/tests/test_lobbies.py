@@ -227,6 +227,56 @@ class LobbyTests(unittest.TestCase):
             self.assertEqual(c.execute("SELECT COUNT(*) FROM lobby_launches").fetchone()[0],0)
             self.assertEqual(c.execute("SELECT COUNT(*) FROM launch_members").fetchone()[0],0)
 
+    def test_together_status_counts_only_original_connected_members(self):
+        self.link_friends()
+        self.create()
+        room=self.req("GET","/mine").json()["lobby"]["id"]
+        self.req("POST",f"/{room}/join",1)
+        self.req("POST",f"/{room}/ready",1,json={"revision":1,"ready":True})
+        with db.db() as c:
+            launch=lobbies.launch_internal(c,self.keys[0],room,"launch-cohort-nonce-01",1)
+            from czm import social
+            server=launch["launch"]["server"]
+            social.heartbeat(c,self.keys[0],server,"ze_first")
+            social.heartbeat(c,self.keys[1],server,"ze_first")
+            friend=social.profile(c,social.actor(c,self.keys[0]),self.ids[1])
+            self.assertEqual(friend["together"],{"count":2,"size":2})
+            social.heartbeat(c,self.keys[2],server,"ze_first")
+            friend=social.profile(c,social.actor(c,self.keys[0]),self.ids[1])
+            self.assertEqual(friend["together"],{"count":2,"size":2})
+            social.heartbeat(c,self.keys[1],server,"ze_second")
+            friend=social.profile(c,social.actor(c,self.keys[0]),self.ids[1])
+            self.assertEqual(friend["together"],{"count":2,"size":2})
+            social.heartbeat(c,self.keys[1],"","")
+            friend=social.profile(c,social.actor(c,self.keys[0]),self.ids[1])
+            self.assertNotIn("together",friend)
+            social.heartbeat(c,self.keys[1],server,"ze_second")
+            self.assertEqual(social.profile(c,social.actor(c,self.keys[0]),self.ids[1])
+                             ["together"],{"count":2,"size":2})
+            # The old party is not resurrected after a long absence.
+            with patch("czm.lobbies.now",return_value=db.now()+lobbies.LAUNCH_RECONNECT_GRACE+5):
+                lobbies.record_launch_presence(c,self.ids[1],server)
+            self.assertNotIn("together",social.profile(c,social.actor(c,self.keys[0]),self.ids[1]))
+
+    def test_together_marker_hidden_after_block(self):
+        self.link_friends()
+        self.create()
+        room=self.req("GET","/mine").json()["lobby"]["id"]
+        self.req("POST",f"/{room}/join",1)
+        self.req("POST",f"/{room}/ready",1,json={"revision":1,"ready":True})
+        from czm import social
+        with db.db() as c:
+            lobbies.launch_internal(c,self.keys[0],room,"launch-cohort-nonce-02",1)
+            social.heartbeat(c,self.keys[0],"203.0.113.5:27015","zm_one")
+            social.heartbeat(c,self.keys[1],"203.0.113.5:27015","zm_one")
+            self.assertIn("together",social.profile(c,social.actor(c,self.keys[0]),self.ids[1]))
+        self.client.post("/api/v1/social/action",headers={"X-CZM-Key":self.keys[0]},
+                         json={"target":self.ids[1],"action":"block"})
+        with db.db() as c:
+            profile=social.profile(c,social.actor(c,self.keys[0]),self.ids[1])
+            self.assertNotIn("together",profile)
+            self.assertFalse(profile["online"])
+
     def test_invalid_capacity_and_nonce(self):
         for n in [1,7,8]:
             r=self.create(capacity=n,nonce=f"invalid-capacity-{n}-nonce")

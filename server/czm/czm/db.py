@@ -247,6 +247,9 @@ CREATE TABLE IF NOT EXISTS development_invites (
 COLUMNS = {
     "releases": {"news_id": "INTEGER", "auto": "INTEGER NOT NULL DEFAULT 0", "channel": "TEXT NOT NULL DEFAULT 'legacy'"},
     "reports": {"private_message": "INTEGER"},
+    "launch_members": {"last_seen": "INTEGER NOT NULL DEFAULT 0",
+                       "departed_at": "INTEGER NOT NULL DEFAULT 0",
+                       "ended": "INTEGER NOT NULL DEFAULT 0"},
 }
 
 _lock = threading.Lock()
