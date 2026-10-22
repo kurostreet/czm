@@ -52,6 +52,25 @@ CREATE INDEX IF NOT EXISTS lobby_invites_target
  ON lobby_invites(target,status,expires);
 CREATE INDEX IF NOT EXISTS lobby_invites_lobby
  ON lobby_invites(lobby,status);
+CREATE TABLE IF NOT EXISTS lobby_launches (
+ id TEXT PRIMARY KEY,
+ lobby_id TEXT NOT NULL UNIQUE,
+ owner INTEGER NOT NULL REFERENCES accounts(player),
+ nonce TEXT NOT NULL,
+ server TEXT NOT NULL,
+ proto TEXT NOT NULL CHECK(proto IN ('gs','49')),
+ size INTEGER NOT NULL CHECK(size BETWEEN 2 AND 6),
+ created INTEGER NOT NULL,
+ delivery_expires INTEGER NOT NULL,
+ episode_expires INTEGER NOT NULL,
+ UNIQUE(owner,nonce)
+);
+CREATE TABLE IF NOT EXISTS launch_members (
+ launch TEXT NOT NULL REFERENCES lobby_launches(id) ON DELETE CASCADE,
+ player INTEGER NOT NULL REFERENCES accounts(player),
+ PRIMARY KEY(launch,player)
+);
+CREATE INDEX IF NOT EXISTS launch_members_player ON launch_members(player,launch);
 """
 
 TITLE_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
@@ -386,3 +405,74 @@ def edit(conn, key, room_id, title, description, visibility, capacity):
     conn.execute("UPDATE lobbies SET title=?,description=?,visibility=?,capacity=? WHERE id=?",
                  (title, description, visibility, capacity, room_id))
     return {"lobby": _state(conn, _room(conn, room_id))}
+
+# Internal launch transaction only. The HTTP entry point must independently
+# verify a fresh game-server response and sufficient free slots before calling.
+# Do not expose this in API until that preflight is implemented.
+LAUNCH_DELIVERY_TTL = 15 * 60
+LAUNCH_EPISODE_TTL = 6 * 3600
+
+
+def _launch_state(conn, entry):
+    members = conn.execute(
+        "SELECT player FROM launch_members WHERE launch=? ORDER BY player",
+        (entry["id"],)).fetchall()
+    return {"id": entry["id"], "server": entry["server"], "proto": entry["proto"],
+            "size": entry["size"], "created": entry["created"],
+            "delivery_expires": entry["delivery_expires"],
+            "members": [r["player"] for r in members]}
+
+
+def launch_internal(conn, key, room_id, nonce, revision):
+    """Atomically consume one room into an immutable, short-lived launch event.
+
+    INTERNAL ONLY: caller must first probe the actual game server. Never
+    accept client-submitted occupancy/capacity as proof of free slots.
+    """
+    player = _actor(conn, key)
+    _nonce(nonce)
+    previous = conn.execute("SELECT * FROM lobby_launches WHERE lobby_id=?",
+                            (room_id,)).fetchone()
+    if previous:
+        if player != previous["owner"]:
+            raise accounts.AuthError("not_owner", 403)
+        if previous["nonce"] != nonce:
+            raise accounts.AuthError("launch_already_started", 409)
+        return {"launch": _launch_state(conn, previous)}
+    if conn.execute("SELECT 1 FROM lobby_launches WHERE owner=? AND nonce=?",
+                    (player,nonce)).fetchone():
+        raise accounts.AuthError("nonce", 409)
+    room = _room(conn, room_id)
+    if player != room["owner"]:
+        raise accounts.AuthError("not_owner", 403)
+    if revision != room["revision"]:
+        raise accounts.AuthError("stale_revision", 409)
+    rows = conn.execute("SELECT player,ready_revision FROM lobby_members WHERE lobby=? "
+                        "ORDER BY player", (room_id,)).fetchall()
+    if len(rows)<2 or len(rows)>room["capacity"]:
+        raise accounts.AuthError("members_not_ready", 409)
+    if any(r["ready_revision"] != revision for r in rows if r["player"] != player):
+        raise accounts.AuthError("members_not_ready", 409)
+    launch_id = secrets.token_urlsafe(18)
+    t=now()
+    conn.execute("INSERT INTO lobby_launches(id,lobby_id,owner,nonce,server,proto,size,"
+                 "created,delivery_expires,episode_expires) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                 (launch_id,room_id,player,nonce,room["server"],room["proto"],
+                  len(rows),t,t+LAUNCH_DELIVERY_TTL,t+LAUNCH_EPISODE_TTL))
+    conn.executemany("INSERT INTO launch_members(launch,player) VALUES(?,?)",
+                     [(launch_id,r["player"]) for r in rows])
+    # Delete (cascade) the room, chat, pending invitations and ready flags.
+    conn.execute("DELETE FROM lobbies WHERE id=?", (room_id,))
+    return {"launch": _launch_state(
+        conn,conn.execute("SELECT * FROM lobby_launches WHERE id=?",(launch_id,)).fetchone())}
+
+
+def pending_launch(conn, key):
+    """Reconnect recovery for a member who missed the original launch event."""
+    player = _actor(conn, key)
+    rows=conn.execute("SELECT l.* FROM lobby_launches l "
+                      "JOIN launch_members m ON m.launch=l.id "
+                      "WHERE m.player=? AND l.delivery_expires>? "
+                      "ORDER BY l.created DESC,l.id DESC LIMIT 5",
+                      (player, now())).fetchall()
+    return {"launches":[_launch_state(conn,r) for r in rows]}

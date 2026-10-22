@@ -173,6 +173,60 @@ class LobbyTests(unittest.TestCase):
         self.assertEqual(self.req("POST",f"/invitations/{invited}/answer",1,
                                   json={"accept":True}).status_code,409)
 
+    def test_internal_launch_atomic_close_ready_and_idempotency(self):
+        self.create()
+        room=self.req("GET","/mine").json()["lobby"]["id"]
+        self.req("POST",f"/{room}/join",1)
+        with db.db() as conn:
+            with self.assertRaises(accounts.AuthError) as issue:
+                lobbies.launch_internal(conn,self.keys[0],room,"launch-request-0001",1)
+            self.assertEqual(issue.exception.code,"members_not_ready")
+        self.assertEqual(len(self.req("GET","").json()["lobbies"]),1)
+        self.req("POST",f"/{room}/ready",1,json={"revision":1,"ready":True})
+        with db.db() as conn:
+            with self.assertRaises(accounts.AuthError) as issue:
+                lobbies.launch_internal(conn,self.keys[1],room,"launch-request-0001",1)
+            self.assertEqual(issue.exception.code,"not_owner")
+            first=lobbies.launch_internal(conn,self.keys[0],room,"launch-request-0001",1)
+            again=lobbies.launch_internal(conn,self.keys[0],room,"launch-request-0001",1)
+            self.assertEqual(first,again)
+            self.assertEqual(first["launch"]["size"],2)
+            self.assertEqual(set(first["launch"]["members"]),set(self.ids[:2]))
+            self.assertEqual(lobbies.pending_launch(conn,self.keys[1])["launches"][0]["id"],
+                             first["launch"]["id"])
+            self.assertEqual(lobbies.pending_launch(conn,self.keys[2])["launches"],[])
+            with self.assertRaises(accounts.AuthError) as different:
+                lobbies.launch_internal(conn,self.keys[0],room,"launch-request-0002",1)
+            self.assertEqual(different.exception.code,"launch_already_started")
+        self.assertEqual(self.req("GET","").json()["lobbies"],[])
+        self.assertEqual(self.req("GET",f"/{room}/messages",1).status_code,404)
+
+    def test_internal_launch_stale_revision_preserves_room(self):
+        self.create()
+        room=self.req("GET","/mine").json()["lobby"]["id"]
+        self.req("POST",f"/{room}/join",1)
+        self.req("POST",f"/{room}/ready",1,json={"revision":1,"ready":True})
+        self.req("POST",f"/{room}/server",json={"server":"203.0.113.6:27015","proto":"49"})
+        with db.db() as conn:
+            with self.assertRaises(accounts.AuthError) as issue:
+                lobbies.launch_internal(conn,self.keys[0],room,"launch-request-0003",1)
+            self.assertEqual(issue.exception.code,"stale_revision")
+        self.assertEqual(len(self.req("GET","").json()["lobbies"]),1)
+
+    def test_expired_launch_records_are_physically_cleaned(self):
+        self.create()
+        room=self.req("GET","/mine").json()["lobby"]["id"]
+        self.req("POST",f"/{room}/join",1)
+        self.req("POST",f"/{room}/ready",1,json={"revision":1,"ready":True})
+        with db.db() as c:
+            item=lobbies.launch_internal(c,self.keys[0],room,"launch-cleanup-nonce-01",1)
+            c.execute("UPDATE lobby_launches SET delivery_expires=?,episode_expires=? "
+                      "WHERE id=?", (db.now()-100, db.now()-10,item["launch"]["id"]))
+            self.assertEqual(lobbies.pending_launch(c,self.keys[0])["launches"],[])
+            db.cleanup(c,30,100,[])
+            self.assertEqual(c.execute("SELECT COUNT(*) FROM lobby_launches").fetchone()[0],0)
+            self.assertEqual(c.execute("SELECT COUNT(*) FROM launch_members").fetchone()[0],0)
+
     def test_invalid_capacity_and_nonce(self):
         for n in [1,7,8]:
             r=self.create(capacity=n,nonce=f"invalid-capacity-{n}-nonce")

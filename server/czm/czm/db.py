@@ -304,8 +304,11 @@ def init() -> None:
 
 
 def cleanup(conn: sqlite3.Connection, keep_days: int, room_history: int, rooms: list[str]) -> None:
-    """Old messages go away: older than keep_days, or beyond the history of a room."""
+    """Delete expired social data without retaining former lobby content."""
     conn.execute("DELETE FROM messages WHERE created < ?", (now() - keep_days * 86400,))
+    conn.execute("DELETE FROM lobby_launches WHERE episode_expires <= ?", (now(),))
+    conn.execute("DELETE FROM lobby_creation_ops WHERE created < ?", (now() - 7*86400,))
+    conn.execute("DELETE FROM lobby_invites WHERE expires < ?", (now() - 86400,))
     for room in rooms:
         conn.execute(
             "DELETE FROM messages WHERE room = ? AND id NOT IN "
