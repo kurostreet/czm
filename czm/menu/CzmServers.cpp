@@ -521,6 +521,7 @@ private:
 };
 
 static CCzmServers *s_browser;
+static bool s_lobbyPicker=false;
 
 CCzmServers::CCzmServers() : CMenuFramework( "CzmServers" )
 {
@@ -951,10 +952,16 @@ void CCzmServers::AddHistory( const CzmEntry *e )
 void CCzmServers::Connect( CzmEntry *e, const char *password )
 {
 	if( !CZM_OnlinePlayAllowed() ) return;
-	if( !e )
-		return;
+    if( !e )
+        return;
+    if(s_lobbyPicker) {
+        if(!e->answered) { Toast(CZM_IsRussian()?"Дождитесь ответа сервера":"Waiting for server details"); return; }
+        CZM_LobbyPickedServer(e->address,e->gs?"gs":"49",e->name,e->map,e->players,e->maxPlayers);
+        Hide();
+        return;
+    }
 
-	// the server says it needs a password
+    // the server says it needs a password
 	if( e->password && !password )
 	{
 		Q_strncpy( m_szPending, e->address, sizeof( m_szPending ));
@@ -1287,8 +1294,9 @@ void CCzmServers::Hide()
 	m_szJoinAddress[0] = 0;
 	m_search.End();
 	m_field.End();
-	m_bReturnHere = false;
-	CMenuFramework::Hide();
+    m_bReturnHere = false;
+    s_lobbyPicker=false;
+    CMenuFramework::Hide();
 }
 
 void CCzmServers::Toast( const char *text )
@@ -2482,7 +2490,9 @@ void CCzmServers::DrawDetails( void )
 			CZM_DrawImage( fav ? UI_DIR "icon_star_on.png" : UI_DIR "icon_star.png", f.x + ( f.w - icon ) / 2, f.y + ( f.h - icon ) / 2, icon, icon,
 				fav ? PackRGBA( 250, 204, 21, 255 ) : CZM_White());
 
-		CZM_DrawButton( UI_DIR "button_primary.png", m_play, CZM_T( "srv_play" ), CZM_White(), IsPressed( HIT_PLAY ));
+        CZM_DrawButton( UI_DIR "button_primary.png", m_play,
+                        s_lobbyPicker?(CZM_IsRussian()?"ВЫБРАТЬ":"SELECT"):CZM_T("srv_play"),
+                        CZM_White(), IsPressed(HIT_PLAY));
 	}
 }
 
@@ -2686,4 +2696,11 @@ bool CZM_ServerListReturn( void )
 	s_browser->m_bReturnHere = false;
 	UI_CzmServers_Menu();
 	return true;
+}
+
+
+void CZM_LobbyServerPickerStart( void )
+{
+    s_lobbyPicker=true;
+    CZM_OpenServerList();
 }

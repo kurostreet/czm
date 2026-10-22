@@ -113,6 +113,8 @@ private:
 		HIT_UPDATE,
 		HIT_ABOUT_SOURCE,
 		HIT_QUICK,                  // quick play under the logo
+		HIT_LOBBY_CREATE,          // start a temporary team room
+		HIT_LOBBY_SEARCH,          // browse public rooms
 		HIT_NAV,                    // 5 navigation items
 		HIT_TILE = HIT_NAV + 5,     // one per server
 		HIT_RETIRE = HIT_TILE + CZM_MAX_TILES,
@@ -153,7 +155,7 @@ private:
 	CzmRect m_aboutLogo, m_aboutRows[CZM_ABOUT_ROWS];
 	CzmRect m_update, m_updateButton;
 	CzmRect m_setupLang, m_setupNick, m_setupGo, m_setupLogin, m_setupRegister;
-	CzmRect m_quick;
+	CzmRect m_quick, m_lobbyCreate, m_lobbySearch;
 	CzmRect m_retire[6];
 	char m_szQuickNote[160];   // why the search found nothing, shown for a few seconds
 	double m_flQuickNote;
@@ -273,6 +275,8 @@ void CCzmMainMenu::Layout( void )
 	{
 		int qw = Q_min( (int)( H * 0.66f ), ( m_iTiles > 0 ? m_tiles[0].x : W ) - m_iMargin - (int)( H * 0.06f ));
 		m_quick = CZM_Rect( m_iMargin, H * 0.335f, qw, H * 0.105f );
+		m_lobbyCreate = CZM_Rect( m_quick.x, H * 0.500f, m_quick.w, H * 0.087f );
+		m_lobbySearch = CZM_Rect( m_quick.x, H * 0.607f, m_quick.w, H * 0.087f );
 	}
 
 	// The visible cards are also their touch targets; the gaps stay empty.
@@ -400,6 +404,10 @@ int CCzmMainMenu::HitTest( void ) const
 
 	if( m_quick.Grown( grow ).HasCursor( ))
 		return HIT_QUICK;
+	if( m_lobbyCreate.Grown( grow ).HasCursor( ))
+		return HIT_LOBBY_CREATE;
+	if( m_lobbySearch.Grown( grow ).HasCursor( ))
+		return HIT_LOBBY_SEARCH;
 
 	for( int i = 0; i < m_iTiles; i++ )
 	{
@@ -476,6 +484,12 @@ void CCzmMainMenu::Activate( int hit )
 		break;
 	case HIT_SETUP_GO:
 		FinishSetup();
+		break;
+	case HIT_LOBBY_CREATE:
+		CZM_OpenLobbyCreate();
+		break;
+	case HIT_LOBBY_SEARCH:
+		CZM_OpenLobbySearch();
 		break;
 	case HIT_QUICK:
 		m_szQuickNote[0] = 0;
@@ -1436,6 +1450,22 @@ void CCzmMainMenu::Draw()
 
 	DrawTitle();
 	DrawQuick();
+	{
+		const CzmRect buttons[2] = { m_lobbyCreate, m_lobbySearch };
+		const char *ru[2] = { "СОЗДАТЬ ЛОББИ", "ПОИСК ЛОББИ" };
+		const char *en[2] = { "CREATE LOBBY", "FIND LOBBY" };
+		for( int i = 0; i < 2; i++ )
+		{
+			const CzmRect &r=buttons[i];
+			bool down=IsPressed( i ? HIT_LOBBY_SEARCH : HIT_LOBBY_CREATE );
+			CZM_DrawPill( UI_DIR "button_secondary.png",r.x,r.y,r.w,r.h,
+				down ? PackRGBA(190,190,190,255) : CZM_White() );
+			const char *title=CZM_IsRussian()?ru[i]:en[i];
+			HFont font=CZM_Font( CZMF_LANG );
+			CZM_DrawText( font,r.x+H*.035f,r.y+(r.h-CZM_FontHeight(font))/2,
+				r.w-H*.07f,title,CZM_White(),QM_CENTER );
+		}
+	}
 	for( int i = 0; i < m_iTiles; i++ )
 		DrawTile( i, m_tiles[i] );
 	DrawNav();

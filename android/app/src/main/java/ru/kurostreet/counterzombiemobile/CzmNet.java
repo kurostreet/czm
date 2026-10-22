@@ -42,6 +42,18 @@ public final class CzmNet {
 
     private CzmNet() {}
 
+    public static void lobbyVoiceStart(String url,String key){CzmLobbyVoice.start(url,key);}
+    public static void lobbyVoiceStop(){CzmLobbyVoice.stop();}
+    public static void lobbyVoiceMic(boolean enabled){CzmLobbyVoice.setMic(enabled);}
+    public static boolean lobbyVoiceMicOn(){return CzmLobbyVoice.microphoneOn();}
+    public static boolean lobbyVoiceSpeaking(int player){return CzmLobbyVoice.speaking(player);}
+    public static int lobbyVoiceState(){return CzmLobbyVoice.state();}
+    public static void lobbyVoiceLocalMute(int player,boolean enabled){
+        CzmLobbyVoice.mutePlayer(player,enabled);
+    }
+    public static boolean lobbyVoiceIsMuted(int player){return CzmLobbyVoice.locallyMuted(player);}
+
+
     public static void serverAuthShow(String address, String name, boolean russian) {
         CzmServerAuth.show(address, name, russian);
     }

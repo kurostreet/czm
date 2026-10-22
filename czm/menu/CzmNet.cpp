@@ -492,6 +492,47 @@ static void CZM_CallVoid( const char *name )
 	CZM_End( env );
 }
 
+void CZM_LobbyVoiceStart(const char *url,const char *key) {
+    JNIEnv *env; jclass cls;
+    if(!CZM_Begin(&env,&cls))return;
+    jmethodID m=CZM_Method(env,cls,"lobbyVoiceStart","(Ljava/lang/String;Ljava/lang/String;)V");
+    if(m)env->CallStaticVoidMethod(cls,m,env->NewStringUTF(url),env->NewStringUTF(key));
+    CZM_End(env);
+}
+void CZM_LobbyVoiceStop(void){CZM_CallVoid("lobbyVoiceStop");}
+void CZM_LobbyVoiceMic(bool enabled){
+    JNIEnv *env; jclass cls;
+    if(!CZM_Begin(&env,&cls))return;
+    jmethodID m=CZM_Method(env,cls,"lobbyVoiceMic","(Z)V");
+    if(m)env->CallStaticVoidMethod(cls,m,(jboolean)enabled);
+    CZM_End(env);
+}
+static bool CZM_VoiceBool(const char *method,int player,bool parameter){
+    JNIEnv *env; jclass cls;bool result=false;
+    if(!CZM_Begin(&env,&cls))return false;
+    jmethodID m=CZM_Method(env,cls,method,parameter?"(I)Z":"()Z");
+    if(m)result=parameter?env->CallStaticBooleanMethod(cls,m,(jint)player):
+                         env->CallStaticBooleanMethod(cls,m);
+    CZM_End(env);return result;
+}
+bool CZM_LobbyVoiceMicOn(void){return CZM_VoiceBool("lobbyVoiceMicOn",0,false);}
+bool CZM_LobbyVoiceSpeaking(int player){return CZM_VoiceBool("lobbyVoiceSpeaking",player,true);}
+bool CZM_LobbyVoiceIsMuted(int player){return CZM_VoiceBool("lobbyVoiceIsMuted",player,true);}
+void CZM_LobbyVoiceLocalMute(int player,bool muted){
+    JNIEnv *env; jclass cls;
+    if(!CZM_Begin(&env,&cls))return;
+    jmethodID m=CZM_Method(env,cls,"lobbyVoiceLocalMute","(IZ)V");
+    if(m)env->CallStaticVoidMethod(cls,m,(jint)player,(jboolean)muted);
+    CZM_End(env);
+}
+int CZM_LobbyVoiceStatus(void){
+    JNIEnv *env; jclass cls; int status=0;
+    if(!CZM_Begin(&env,&cls))return 0;
+    jmethodID m=CZM_Method(env,cls,"lobbyVoiceState","()I");
+    if(m)status=env->CallStaticIntMethod(cls,m);
+    CZM_End(env);return status;
+}
+
 void CZM_UpdateInstall( void ) { CZM_CallVoid( "updateInstall" ); }
 bool CZM_NetStoreUpdate( int *code, double *bytes )
 {
@@ -550,6 +591,14 @@ bool CZM_NetCanSelfUpdate( void ) { return false; }
 bool CZM_NetStoreUpdate( int *code, double *bytes ) { *code = 0; *bytes = 0; return false; }
 void CZM_NetStoreUpdateStart( void ) {}
 void CZM_UpdateStart( const CzmUpdateInfo & ) {}
+void CZM_LobbyVoiceStart(const char *,const char *) {}
+void CZM_LobbyVoiceStop(void) {}
+void CZM_LobbyVoiceMic(bool) {}
+bool CZM_LobbyVoiceMicOn(void) {return false;}
+bool CZM_LobbyVoiceSpeaking(int) {return false;}
+bool CZM_LobbyVoiceIsMuted(int) {return false;}
+void CZM_LobbyVoiceLocalMute(int,bool) {}
+int CZM_LobbyVoiceStatus(void) {return 0;}
 void CZM_UpdateInstall( void ) {}
 void CZM_UpdateCancel( void ) {}
 void CZM_UpdateCleanup( void ) {}

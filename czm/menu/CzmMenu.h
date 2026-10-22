@@ -381,6 +381,24 @@ void CZM_OpenChat( void );
 
 // Account profiles, friends and private dialogs (independent of game-server mods).
 void CZM_OpenFriends( void );
+void CZM_OpenLobbyCreate( void );
+void CZM_OpenLobbySearch( void );
+void CZM_OpenLobbyById( const char *id );
+void CZM_LobbyFrame( void );
+void CZM_LobbyVoiceStart(const char *url,const char *key);
+void CZM_LobbyVoiceStop(void);
+void CZM_LobbyVoiceMic(bool enabled);
+bool CZM_LobbyVoiceMicOn(void);
+bool CZM_LobbyVoiceSpeaking(int player);
+int CZM_LobbyVoiceStatus(void);
+void CZM_LobbyVoiceLocalMute(int player,bool muted);
+bool CZM_LobbyVoiceIsMuted(int player);
+
+void CZM_LobbyServerPickerStart( void );
+void CZM_LobbyPickedServer( const char *address,const char *proto,
+                            const char *name,const char *map,int players,int capacity );
+bool CZM_LobbyCanInvite( void );
+void CZM_LobbyInviteFriend( int player );
 void CZM_OpenProfile( int player, int chatMessage = 0 );
 void CZM_SocialFrame( void );
 int CZM_SocialUnread( void );

@@ -132,6 +132,8 @@ android {
 }
 
 dependencies {
+	// Compact, TLS-based pre-match voice transport; not used for in-game voice.
+	implementation "org.java-websocket:Java-WebSocket:1.6.0"
 	// Keep Play's transitive Kotlin runtime and its JDK shims on the same version.
 	googlePlayImplementation platform("org.jetbrains.kotlin:kotlin-bom:1.8.22")
 	// the bell asks Google Play about updates (Google Play build only, see src/googlePlay)
