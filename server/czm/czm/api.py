@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, FileResponse, HTML
 from PIL import Image
 from pydantic import BaseModel, Field
 
-from . import service, mappics, accounts, settings, tab, social, website, distribution, lobbies
+from . import service, mappics, accounts, settings, tab, social, website, distribution, lobbies, game_probe
 from .config import get_settings
 from .db import db
 
@@ -525,7 +525,12 @@ _lobby_limit = _Limiter(180, 60)
 async def lobby_result(request, action):
     _lobby_limit.check(client_ip(request))
     try:
-        return JSONResponse(await in_db(action), headers={"Cache-Control":"no-store"})
+        result=await in_db(action)
+        if isinstance(result,dict) and "_status" in result:
+            result=dict(result)
+            status=result.pop("_status")
+            return JSONResponse(result,status_code=status,headers={"Cache-Control":"no-store"})
+        return JSONResponse(result, headers={"Cache-Control":"no-store"})
     except accounts.AuthError as error:
         return JSONResponse({"error": error.code}, status_code=error.status,
                             headers={"Cache-Control":"no-store"})
@@ -592,6 +597,11 @@ async def lobby_invite_answer(invitation:str,body:LobbyInviteAnswerIn,request:Re
     return await lobby_result(request,lambda c:lobbies.answer_invitation(
         c,x_czm_key or "",invitation,body.accept))
 
+@router.get("/lobbies/launches/pending")
+async def lobby_pending_launches(request:Request,x_czm_key:str|None=Header(default=None)):
+    return await lobby_result(request,lambda c:lobbies.pending_launch(c,x_czm_key or ""))
+
+
 @router.get("/lobbies/{room}")
 async def lobby_detail(room:str,request:Request,x_czm_key:str|None=Header(default=None)):
     return await lobby_result(request,lambda c:lobbies.detail(c,x_czm_key or "",room))
@@ -645,3 +655,33 @@ async def lobby_edit(room:str,body:LobbyEditIn,request:Request,
                      x_czm_key:str|None=Header(default=None)):
     return await lobby_result(request,lambda c:lobbies.edit(
         c,x_czm_key or "",room,body.title,body.description,body.visibility,body.capacity))
+
+
+class LobbyLaunchIn(BaseModel):
+    nonce: str = Field(min_length=12,max_length=64)
+    revision: int = Field(ge=1)
+
+
+@router.post("/lobbies/{room}/heartbeat")
+async def lobby_heartbeat(room:str,request:Request,x_czm_key:str|None=Header(default=None)):
+    return await lobby_result(request,lambda c:lobbies.owner_heartbeat(c,x_czm_key or "",room))
+
+
+@router.post("/lobbies/{room}/launch")
+async def lobby_launch_checked(room:str,body:LobbyLaunchIn,request:Request,
+                               x_czm_key:str|None=Header(default=None)):
+    _lobby_limit.check(client_ip(request))
+    key=x_czm_key or ""
+    try:
+        snap=await in_db(lobbies.launch_snapshot,key,room,body.nonce,body.revision)
+        if snap["previous"]:
+            return JSONResponse({"launch":snap["previous"]},headers={"Cache-Control":"no-store"})
+        probe=await asyncio.to_thread(game_probe.probe,snap["server"])
+        if probe["max_players"]-probe["players"]<len(snap["members"]):
+            raise accounts.AuthError("server_full",409)
+        result=await in_db(lobbies.commit_launch_snapshot,key,room,body.nonce,body.revision,snap)
+        return JSONResponse(result,headers={"Cache-Control":"no-store"})
+    except accounts.AuthError as e:
+        return JSONResponse({"error":e.code},status_code=e.status,headers={"Cache-Control":"no-store"})
+    except game_probe.ProbeError as e:
+        return JSONResponse({"error":"server_unavailable"},status_code=503,headers={"Cache-Control":"no-store"})

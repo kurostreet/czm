@@ -277,6 +277,108 @@ class LobbyTests(unittest.TestCase):
             self.assertNotIn("together",profile)
             self.assertFalse(profile["online"])
 
+    def test_checked_launch_refuses_full_or_unavailable_server(self):
+        self.create()
+        room=self.req("GET","/mine").json()["lobby"]["id"]
+        self.req("POST",f"/{room}/join",1)
+        self.req("POST",f"/{room}/ready",1,json={"revision":1,"ready":True})
+        with patch("czm.game_probe.probe",return_value={"players":31,"max_players":32,"map":"zm_1"}):
+            r=self.req("POST",f"/{room}/launch",json={"nonce":"checked-launch-nonce-01","revision":1})
+            self.assertEqual(r.status_code,409,r.text)
+            self.assertEqual(r.json()["error"],"server_full")
+        from czm import game_probe
+        with patch("czm.game_probe.probe",side_effect=game_probe.ProbeError("timeout")):
+            r=self.req("POST",f"/{room}/launch",json={"nonce":"checked-launch-nonce-01","revision":1})
+            self.assertEqual(r.status_code,503,r.text)
+        self.assertEqual(len(self.req("GET","").json()["lobbies"]),1)
+        self.assertEqual(self.req("GET","/launches/pending",1).json()["launches"],[])
+
+    def test_checked_launch_closes_room_only_after_successful_probe(self):
+        self.create()
+        room=self.req("GET","/mine").json()["lobby"]["id"]
+        self.req("POST",f"/{room}/join",1)
+        self.req("POST",f"/{room}/ready",1,json={"revision":1,"ready":True})
+        with patch("czm.game_probe.probe",return_value={"players":12,"max_players":32,"map":"ze_1"}) as probe:
+            r=self.req("POST",f"/{room}/launch",json={"nonce":"checked-launch-nonce-02","revision":1})
+            self.assertEqual(r.status_code,200,r.text)
+            repeated=self.req("POST",f"/{room}/launch",json={"nonce":"checked-launch-nonce-02","revision":1})
+            self.assertEqual(repeated.json(),r.json())
+            self.assertEqual(probe.call_count,1)
+        self.assertEqual(self.req("GET","").json()["lobbies"],[])
+        self.assertEqual(self.req("GET",f"/{room}/messages",1).status_code,404)
+        self.assertEqual(self.req("GET","/launches/pending",1).json()["launches"][0]["id"],
+                         r.json()["launch"]["id"])
+        self.assertEqual(self.req("GET","/launches/pending",2).json()["launches"],[])
+
+    def test_probe_join_race_does_not_delete_room(self):
+        self.create(capacity=3)
+        room=self.req("GET","/mine").json()["lobby"]["id"]
+        self.req("POST",f"/{room}/join",1)
+        self.req("POST",f"/{room}/ready",1,json={"revision":1,"ready":True})
+        def add_member(_):
+            with db.db() as c:
+                c.execute("INSERT INTO lobby_members(player,lobby,joined) VALUES (?,?,?)",
+                          (self.ids[2],room,db.now()))
+            return {"players":10,"max_players":32}
+        with patch("czm.game_probe.probe",side_effect=add_member):
+            r=self.req("POST",f"/{room}/launch",json={"nonce":"checked-launch-nonce-03","revision":1})
+        self.assertEqual(r.status_code,409,r.text)
+        self.assertEqual(r.json()["error"],"lobby_changed")
+        self.assertEqual(len(self.req("GET","").json()["lobbies"]),1)
+
+    def test_owner_heartbeat_and_abandoned_room_eviction(self):
+        self.create()
+        room=self.req("GET","/mine").json()["lobby"]["id"]
+        r=self.req("POST",f"/{room}/heartbeat",1)
+        self.assertEqual(r.status_code,403,r.text)
+        self.assertEqual(self.req("POST",f"/{room}/heartbeat").status_code,200)
+        with db.db() as c:
+            c.execute("UPDATE lobbies SET last_seen=? WHERE id=?",
+                      (db.now()-lobbies.HOST_TTL-10,room))
+        self.assertEqual(self.req("GET","").json()["lobbies"],[])
+        self.assertEqual(self.req("GET","/mine").json()["lobby"],None)
+        self.assertEqual(self.req("POST",f"/{room}/join",1).status_code,404)
+        with db.db() as c:
+            db.cleanup(c,30,100,[])
+            self.assertEqual(c.execute("SELECT COUNT(*) FROM lobbies").fetchone()[0],0)
+
+    def test_lobby_profanity_three_warnings_then_graded_mute(self):
+        def bad(i):
+            return self.req("POST","",json={"title":"fuck bad title",
+                 "description":"","visibility":"public","capacity":2,
+                 "server":"203.0.113.5:27015","proto":"gs",
+                 "nonce":"profanity-request-%03d"%i})
+        for i in range(1,4):
+            warning=bad(i)
+            self.assertEqual(warning.status_code,422,warning.text)
+            self.assertEqual(warning.json()["warnings"],i)
+            self.assertEqual(bad(i).json(),warning.json())
+        punish=bad(4)
+        self.assertEqual(punish.status_code,429,punish.text)
+        self.assertEqual(punish.json()["level"],1)
+        self.assertEqual(self.req("GET","").json()["lobbies"],[])
+        self.assertEqual(self.create(nonce="valid-while-muted-01").status_code,429)
+        with db.db() as c:
+            t=c.execute("SELECT * FROM lobby_moderation WHERE player=?",
+                         (self.ids[0],)).fetchone()
+            self.assertEqual((t["warnings"],t["level"]),(0,1))
+        with patch("czm.lobbies.now",return_value=lobbies.now()+601):
+            self.assertEqual(self.create(nonce="valid-after-mute-001").status_code,200)
+
+    def test_lobby_chat_profanity_is_not_stored(self):
+        room=self.create().json()["lobby"]["id"]
+        r=self.req("POST",f"/{room}/messages",
+                  json={"text":"fuck","nonce":"bad-chat-nonce-001"})
+        self.assertEqual(r.status_code,422,r.text)
+        self.assertEqual(self.req("POST",f"/{room}/messages",
+                             json={"text":"fuck","nonce":"bad-chat-nonce-001"}).json(),
+                         r.json())
+        self.assertEqual(self.req("GET",f"/{room}/messages").json()["messages"],[])
+        good=self.req("POST",f"/{room}/messages",
+                      json={"text":"Hello team","nonce":"good-chat-nonce-002"})
+        self.assertEqual(good.status_code,200,good.text)
+        self.assertEqual(len(self.req("GET",f"/{room}/messages").json()["messages"]),1)
+
     def test_invalid_capacity_and_nonce(self):
         for n in [1,7,8]:
             r=self.create(capacity=n,nonce=f"invalid-capacity-{n}-nonce")

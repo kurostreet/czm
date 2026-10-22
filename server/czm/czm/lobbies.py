@@ -2,8 +2,10 @@
 import re
 import secrets
 import unicodedata
+import json
+import hashlib
 
-from . import accounts, service, social
+from . import accounts, service, social, links
 from .db import now
 
 LOBBY_SCHEMA = """
@@ -14,6 +16,7 @@ CREATE TABLE IF NOT EXISTS lobbies (
  capacity INTEGER NOT NULL CHECK(capacity BETWEEN 2 AND 6),
  server TEXT NOT NULL, proto TEXT NOT NULL CHECK(proto IN ('gs','49')),
  revision INTEGER NOT NULL DEFAULT 1, created INTEGER NOT NULL,
+ last_seen INTEGER NOT NULL,
  CHECK(length(title) BETWEEN 3 AND 160)
 );
 CREATE TABLE IF NOT EXISTS lobby_members (
@@ -23,6 +26,22 @@ CREATE TABLE IF NOT EXISTS lobby_members (
  joined INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS lobby_members_lobby ON lobby_members(lobby,joined);
+CREATE TABLE IF NOT EXISTS lobby_moderation (
+ player INTEGER PRIMARY KEY REFERENCES accounts(player),
+ warnings INTEGER NOT NULL DEFAULT 0,
+ level INTEGER NOT NULL DEFAULT 0,
+ mute_until INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS lobby_moderation_ops (
+ player INTEGER NOT NULL REFERENCES accounts(player),
+ kind TEXT NOT NULL,
+ nonce TEXT NOT NULL,
+ body_hash TEXT NOT NULL,
+ response_json TEXT NOT NULL,
+ created INTEGER NOT NULL,
+ PRIMARY KEY(player,kind,nonce)
+);
+
 CREATE TABLE IF NOT EXISTS lobby_messages (
  id INTEGER PRIMARY KEY, lobby TEXT NOT NULL REFERENCES lobbies(id) ON DELETE CASCADE,
  sender INTEGER NOT NULL REFERENCES accounts(player),
@@ -77,6 +96,8 @@ CREATE INDEX IF NOT EXISTS launch_members_player ON launch_members(player,launch
 """
 
 TITLE_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+HOST_TTL = 120  # owner heartbeat at least once per 30 seconds
+
 NONCE = re.compile(r"[A-Za-z0-9_-]{12,64}\Z")
 
 
@@ -103,7 +124,7 @@ def _nonce(value):
 
 def _room(conn, room):
     result = conn.execute("SELECT * FROM lobbies WHERE id=?", (room,)).fetchone()
-    if result is None:
+    if result is None or result["last_seen"] <= now()-HOST_TTL:
         raise accounts.AuthError("lobby_not_found", 404)
     return result
 
@@ -130,8 +151,54 @@ def _state(conn, room):
 
 def _current(conn, player):
     return conn.execute(
-        "SELECT l.* FROM lobbies l JOIN lobby_members m ON m.lobby=l.id WHERE m.player=?",
-        (player,)).fetchone()
+        "SELECT l.* FROM lobbies l JOIN lobby_members m ON m.lobby=l.id "
+        "WHERE m.player=? AND l.last_seen>?",
+        (player, now()-HOST_TTL)).fetchone()
+
+
+# Each cycle gives three warnings; the next violation escalates the mute.
+# Punishments apply only to lobby speech and titles, never to game-server voice.
+MUTE_DURATIONS = (600,3600,86400)
+
+
+def moderate(conn, player, body, nonce, kind):
+    _nonce(nonce)
+    digest=hashlib.sha256(body.encode("utf-8")).hexdigest()
+    prior=conn.execute("SELECT * FROM lobby_moderation_ops "
+                       "WHERE player=? AND kind=? AND nonce=?",
+                       (player,kind,nonce)).fetchone()
+    if prior:
+        if prior["body_hash"]!=digest:
+            raise accounts.AuthError("nonce",409)
+        return json.loads(prior["response_json"])
+    row=conn.execute("SELECT * FROM lobby_moderation WHERE player=?",(player,)).fetchone()
+    t=now()
+    response=None
+    if row and row["mute_until"]>t:
+        response={"error":"lobby_muted","mute_until":row["mute_until"],
+                  "level":row["level"],"_status":429}
+    elif service.profanity.clean(body)!=links.clean(body):
+        warnings=(row["warnings"] if row else 0)+1
+        level=row["level"] if row else 0
+        if warnings>3:
+            level=min(level+1,len(MUTE_DURATIONS))
+            until=t+MUTE_DURATIONS[level-1]
+            warnings=0
+            response={"error":"lobby_muted","mute_until":until,"level":level,"_status":429}
+        else:
+            until=0
+            response={"error":"language_warning","warnings":warnings,"_status":422}
+        conn.execute("INSERT INTO lobby_moderation(player,warnings,level,mute_until)"
+                     " VALUES(?,?,?,?) ON CONFLICT(player) DO UPDATE SET "
+                     "warnings=excluded.warnings,level=excluded.level,"
+                     "mute_until=excluded.mute_until",
+                     (player,warnings,level,until))
+    if response is not None:
+        conn.execute("INSERT INTO lobby_moderation_ops "
+                     "(player,kind,nonce,body_hash,response_json,created) "
+                     "VALUES(?,?,?,?,?,?)",
+                     (player,kind,nonce,digest,json.dumps(response),t))
+    return response
 
 
 def create(conn, key, title, description, visibility, capacity, server, proto, nonce):
@@ -141,6 +208,9 @@ def create(conn, key, title, description, visibility, capacity, server, proto, n
     description = unicodedata.normalize("NFKC", description).strip()
     if len(description) > 120 or TITLE_CONTROL.search(description):
         raise accounts.AuthError("description")
+    result=moderate(conn,player,title+"\n"+description,nonce,"create")
+    if result:
+        return result
     if visibility not in ("public", "private") or type(capacity) is not int or capacity not in range(2, 7):
         raise accounts.AuthError("settings")
     if not social._valid_server(server) or proto not in ("gs", "49"):
@@ -156,9 +226,10 @@ def create(conn, key, title, description, visibility, capacity, server, proto, n
         raise accounts.AuthError("already_in_lobby", 409)
     accounts.rate(conn, "lobby_create", str(player), 10, 3600)
     room_id = secrets.token_urlsafe(15)
-    conn.execute("INSERT INTO lobbies(id,owner,title,description,visibility,capacity,server,proto,created) "
-                 "VALUES (?,?,?,?,?,?,?,?,?)",
-                 (room_id, player, title, description, visibility, capacity, server, proto, now()))
+    t = now()
+    conn.execute("INSERT INTO lobbies(id,owner,title,description,visibility,capacity,server,proto,created,last_seen) "
+                 "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                 (room_id, player, title, description, visibility, capacity, server, proto, t,t))
     conn.execute("INSERT INTO lobby_members(player,lobby,joined) VALUES (?,?,?)",
                  (player, room_id, now()))
     conn.execute("INSERT INTO lobby_creation_ops(player,nonce,lobby,created) VALUES (?,?,?,?)",
@@ -175,8 +246,9 @@ def mine(conn, key):
 def catalog(conn, key, offset=0):
     _actor(conn, key)
     rows = conn.execute("SELECT l.*, (SELECT COUNT(*) FROM lobby_members m WHERE m.lobby=l.id) AS count "
-                        "FROM lobbies l WHERE l.visibility='public' "
-                        "ORDER BY l.created DESC,l.id DESC LIMIT 41 OFFSET ?", (max(0,offset),)).fetchall()
+                        "FROM lobbies l WHERE l.visibility='public' AND l.last_seen>? "
+                        "ORDER BY l.created DESC,l.id DESC LIMIT 41 OFFSET ?",
+                        (now()-HOST_TTL,max(0,offset))).fetchall()
     return {"lobbies": [{"id": l["id"], "title": l["title"], "owner": l["owner"],
                         "capacity": l["capacity"], "count": l["count"],
                         "server": l["server"], "proto": l["proto"]} for l in rows[:40]],
@@ -187,6 +259,8 @@ def detail(conn, key, room_id):
     player = _actor(conn, key)
     room = _room(conn, room_id)
     _membership(conn, room_id, player)
+    if player == room["owner"]:
+        conn.execute("UPDATE lobbies SET last_seen=? WHERE id=?", (now(),room_id))
     return {"lobby": _state(conn, room)}
 
 
@@ -253,7 +327,7 @@ def transfer(conn, key, room_id, target):
     # Previous invitations must not survive a transfer of room authority.
     conn.execute("UPDATE lobby_invites SET status='superseded' "
                  "WHERE lobby=? AND status='pending'", (room_id,))
-    conn.execute("UPDATE lobbies SET owner=? WHERE id=?", (target, room_id))
+    conn.execute("UPDATE lobbies SET owner=?,last_seen=? WHERE id=?", (target,now(),room_id))
     return {"lobby": _state(conn, _room(conn, room_id))}
 
 
@@ -272,7 +346,7 @@ def chat(conn, key, room_id, before=0):
     _room(conn, room_id)
     _membership(conn, room_id, player)
     rows = conn.execute("SELECT id,sender,text,created FROM lobby_messages WHERE lobby=? AND (?=0 OR id<?) "
-                        "ORDER BY id DESC LIMIT 50", (room_id, before)).fetchall()
+                        "ORDER BY id DESC LIMIT 50", (room_id, before, before)).fetchall()
     return {"messages": [dict(r) for r in reversed(rows)]}
 
 
@@ -281,9 +355,13 @@ def send(conn, key, room_id, text, nonce):
     _nonce(nonce)
     _room(conn, room_id)
     _membership(conn, room_id, player)
-    text = service.profanity.clean(service.clean_text(text, 400))
-    if not text:
+    raw=service.clean_text(text,400)
+    if not raw:
         raise accounts.AuthError("empty")
+    result=moderate(conn,player,raw,nonce,"message")
+    if result:
+        return result
+    text=service.profanity.clean(raw)
     old = conn.execute("SELECT * FROM lobby_messages WHERE sender=? AND nonce=?", (player, nonce)).fetchone()
     if old:
         if old["lobby"] != room_id or old["text"] != text:
@@ -400,6 +478,12 @@ def edit(conn, key, room_id, title, description, visibility, capacity):
     description = unicodedata.normalize("NFKC", description).strip()
     if len(description) > 120 or TITLE_CONTROL.search(description):
         raise accounts.AuthError("description")
+    # Edits lack an explicit nonce. Name-based digest avoids repeated warnings
+    # on retries, while separate changes remain distinct actions.
+    nonce="name-"+hashlib.sha256((room_id+title+description).encode()).hexdigest()[:32]
+    result=moderate(conn,player,title+"\n"+description,nonce,"edit")
+    if result:
+        return result
     if visibility not in ("public","private") or type(capacity) is not int or capacity not in range(2,7):
         raise accounts.AuthError("settings")
     used = conn.execute("SELECT COUNT(*) FROM lobby_members WHERE lobby=?", (room_id,)).fetchone()[0]
@@ -541,3 +625,58 @@ def playing_together(conn, viewer, target, server, presence_ttl):
     if total<2:
         return None
     return {"count": total, "size": candidate["size"]}
+
+
+def owner_heartbeat(conn, key, room_id):
+    player=_actor(conn,key)
+    room=_room(conn,room_id)
+    _membership(conn,room_id,player)
+    if room["owner"] != player:
+        raise accounts.AuthError("not_owner",403)
+    conn.execute("UPDATE lobbies SET last_seen=? WHERE id=?", (now(),room_id))
+    return {"id":room_id,"alive":True,"ttl":HOST_TTL}
+
+
+def launch_snapshot(conn,key,room_id,nonce,revision):
+    """Authorize and freeze a request to be checked outside the SQLite write lock."""
+    player=_actor(conn,key)
+    _nonce(nonce)
+    previous=conn.execute("SELECT * FROM lobby_launches WHERE lobby_id=?",
+                          (room_id,)).fetchone()
+    if previous:
+        if player!=previous["owner"]:
+            raise accounts.AuthError("not_owner",403)
+        if previous["nonce"]!=nonce:
+            raise accounts.AuthError("launch_already_started",409)
+        return {"previous":_launch_state(conn,previous)}
+    room=_room(conn,room_id)
+    if player!=room["owner"]:
+        raise accounts.AuthError("not_owner",403)
+    if revision!=room["revision"]:
+        raise accounts.AuthError("stale_revision",409)
+    members=conn.execute("SELECT player,ready_revision FROM lobby_members WHERE lobby=? "
+                         "ORDER BY player",(room_id,)).fetchall()
+    if len(members)<2 or len(members)>room["capacity"] or any(
+            m["ready_revision"]!=revision for m in members if m["player"]!=player):
+        raise accounts.AuthError("members_not_ready",409)
+    return {"previous":None,"server":room["server"],"proto":room["proto"],
+            "members":tuple(m["player"] for m in members),"revision":revision}
+
+
+def commit_launch_snapshot(conn,key,room_id,nonce,revision,snapshot):
+    if snapshot.get("previous"):
+        return {"launch":snapshot["previous"]}
+    player=_actor(conn,key)
+    # If the launch already committed while the probe was in-flight,
+    # the idempotent internal handler returns the same immutable event.
+    previous=conn.execute("SELECT * FROM lobby_launches WHERE lobby_id=?",
+                          (room_id,)).fetchone()
+    if previous:
+        return launch_internal(conn,key,room_id,nonce,revision)
+    room=_room(conn,room_id)
+    members=tuple(r[0] for r in conn.execute(
+        "SELECT player FROM lobby_members WHERE lobby=? ORDER BY player",(room_id,)))
+    if (room["server"],room["proto"],room["revision"],members)!=(
+            snapshot["server"],snapshot["proto"],snapshot["revision"],tuple(snapshot["members"])):
+        raise accounts.AuthError("lobby_changed",409)
+    return launch_internal(conn,key,room_id,nonce,revision)
