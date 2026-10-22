@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS lobbies (
  server TEXT NOT NULL, proto TEXT NOT NULL CHECK(proto IN ('gs','49')),
  revision INTEGER NOT NULL DEFAULT 1, created INTEGER NOT NULL,
  last_seen INTEGER NOT NULL,
+ voice_mute_all INTEGER NOT NULL DEFAULT 0,
  CHECK(length(title) BETWEEN 3 AND 160)
 );
 CREATE TABLE IF NOT EXISTS lobby_members (
@@ -26,6 +27,12 @@ CREATE TABLE IF NOT EXISTS lobby_members (
  joined INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS lobby_members_lobby ON lobby_members(lobby,joined);
+CREATE TABLE IF NOT EXISTS lobby_voice_mutes (
+ lobby TEXT NOT NULL REFERENCES lobbies(id) ON DELETE CASCADE,
+ player INTEGER NOT NULL REFERENCES accounts(player),
+ host_muted INTEGER NOT NULL DEFAULT 0,
+ PRIMARY KEY(lobby,player)
+);
 CREATE TABLE IF NOT EXISTS lobby_moderation (
  player INTEGER PRIMARY KEY REFERENCES accounts(player),
  warnings INTEGER NOT NULL DEFAULT 0,

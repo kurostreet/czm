@@ -6,12 +6,12 @@ import time
 from collections import defaultdict, deque
 from typing import Any, Callable
 
-from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request, WebSocket
 from fastapi.responses import JSONResponse, RedirectResponse, FileResponse, HTMLResponse
 from PIL import Image
 from pydantic import BaseModel, Field
 
-from . import service, mappics, accounts, settings, tab, social, website, distribution, lobbies, game_probe
+from . import service, mappics, accounts, settings, tab, social, website, distribution, lobbies, game_probe, voice_lobby
 from .config import get_settings
 from .db import db
 
@@ -690,3 +690,22 @@ async def lobby_launch_checked(room:str,body:LobbyLaunchIn,request:Request,
 @router.post("/lobbies/launches/{launch}/ack")
 async def lobby_launch_ack(launch:str,request:Request,x_czm_key:str|None=Header(default=None)):
     return await lobby_result(request,lambda c:lobbies.acknowledge_launch(c,x_czm_key or "",launch))
+
+
+# Ephemeral Opus audio relay. WS headers authenticate the user; no tokens in
+# URLs or in room broadcasts. No audio recording or persistent message history.
+@router.websocket("/lobbies/{room}/voice")
+async def lobby_voice_socket(room: str, websocket: WebSocket):
+    await voice_lobby.websocket_voice(websocket,room)
+
+
+class LobbyVoiceMuteIn(BaseModel):
+    target: int | None = Field(default=None,ge=1)
+    muted: bool
+
+
+@router.post("/lobbies/{room}/voice/mute")
+async def lobby_voice_mute(room:str,body:LobbyVoiceMuteIn,request:Request,
+                           x_czm_key:str|None=Header(default=None)):
+    return await lobby_result(request,lambda c:voice_lobby.set_host_mute(
+        c,x_czm_key or "",room,body.target,body.muted))
