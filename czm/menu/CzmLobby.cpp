@@ -64,7 +64,7 @@ public:
 private:
     enum { CREATE, SEARCH, ROOM };
     enum { NONE=0, BACK, REFRESH, MAKE, VISIBILITY, LESS, MORE, TITLE,
-           SELECT=100, MEMBER=200, READY=300, LAUNCH, LEAVE, SEND, CHAT, INVITE, SERVER_NEXT, NEXT, PREV, INVITE_LIST,
+           SELECT=100, MEMBER=200, READY=300, LAUNCH, LEAVE, SEND, CHAT, INVITE, SERVER_NEXT, NEXT, PREV, INVITE_LIST, PUBLIC_LIST,
            MODAL_PROFILE=500, MODAL_LOCAL_MUTE, MODAL_HOST_MUTE,
            MODAL_KICK, MODAL_TRANSFER, MODAL_CANCEL, VOICE_MIC, VOICE_ALL };
     enum { GET_LIST=1, GET_ROOM, GET_CHAT, POST_CREATE, POST_JOIN,
@@ -130,7 +130,16 @@ void CCzmLobby::Open(bool create){
         m_stage=create?CREATE:SEARCH; m_offset=0;m_request=0;
         Q_strncpy(m_title,"Zombie Team",sizeof(m_title));m_private=false;m_capacity=6;m_server=0;
         m_invitePage=false;m_serverAddress[0]=m_serverProto[0]=m_pickedName[0]=m_pickedMap[0]=0;
+        // Prefer a server with enough slots for the chosen lobby capacity.
+        // Fallback remains the user's first server if occupancy is stale.
         CzmServer *first=CZM_Server(0);
+        for(int i=0;i<CZM_ServerCount();i++){
+            CzmServer *candidate=CZM_Server(i);
+            if(candidate && SafeAddress(candidate->address) &&
+               candidate->maxplayers-candidate->players>=m_capacity){
+                first=candidate;m_server=i;break;
+            }
+        }
         if(first&&SafeAddress(first->address)){
             Q_strncpy(m_serverAddress,first->address,sizeof(m_serverAddress));
             Q_strncpy(m_serverProto,first->prot,sizeof(m_serverProto));
@@ -234,6 +243,8 @@ void CCzmLobby::Layout(){
         m_primary=CZM_Rect(left,top,inner,(int)(H*.067f));
     }else if(m_stage==SEARCH){
         m_titleRect=CZM_Rect(left,top,inner,(int)(H*.058f));
+        m_buttons[3]=CZM_Rect(left,top,(inner-gap)/2,m_titleRect.h);
+        m_buttons[4]=CZM_Rect(left+(inner+gap)/2,top,(inner-gap)/2,m_titleRect.h);
         top+=m_titleRect.h+gap;
         const int row=(int)(H*.061f);
         for(int i=0;i<CZM_LOBBY_LIST;i++)
@@ -280,8 +291,9 @@ int CCzmLobby::Hit() const{
         for(int i=0;i<3;i++)if(m_cardsRect[i].HasCursor())return SELECT+i;
         if(m_primary.HasCursor())return MAKE;
     }else if(m_stage==SEARCH){
-        if(m_cardCount==0&&m_buttons[2].HasCursor())return MAKE;
-        if(m_titleRect.HasCursor())return INVITE_LIST;
+        if(m_cardCount==0&&!m_invitePage&&m_buttons[2].HasCursor())return MAKE;
+        if(m_buttons[3].HasCursor())return PUBLIC_LIST;
+        if(m_buttons[4].HasCursor())return INVITE_LIST;
         for(int i=0;i<CZM_LOBBY_LIST;i++)if(m_cardsRect[i].HasCursor())return SELECT+i;
         if(m_buttons[0].HasCursor())return PREV;
         if(m_buttons[1].HasCursor())return NEXT;
@@ -619,7 +631,14 @@ void CCzmLobby::Action(int hit){
         }
     }else if(m_stage==SEARCH){
         if(hit==MAKE){Open(true);return;}
-        if(hit==INVITE_LIST){m_invitePage=!m_invitePage;m_offset=0;m_cardCount=0;m_next=-1;Refresh();return;}
+        if(hit==PUBLIC_LIST||hit==INVITE_LIST){
+            const bool chooseInvite=hit==INVITE_LIST;
+            if(m_invitePage!=chooseInvite){
+                m_invitePage=chooseInvite;m_offset=0;
+                m_cardCount=0;m_next=-1;Refresh();
+            }
+            return;
+        }
         if(hit==NEXT && m_next>=0){m_offset=m_next;Refresh();}
         if(hit==PREV && m_offset>0){m_offset=Q_max(0,m_offset-CZM_LOBBY_LIST);Refresh();}
         if(hit>=SELECT&&hit<SELECT+m_cardCount){
@@ -779,17 +798,26 @@ void CCzmLobby::Draw(){
         Caption(CZM_Rect(tx,rect.y+inset/2,width,rect.h/2),
                 m_pickedName[0]?m_pickedName:L("ВЫБЕРИТЕ СЕРВЕР","SELECT SERVER"),
                 CZMF_LANG);
+        char serverInfo[128];
+        Q_strncpy(serverInfo,m_serverAddress,sizeof(serverInfo));
+        for(int i=0;i<CZM_ServerCount();i++){
+            CzmServer *info=CZM_Server(i);
+            if(info&&m_serverAddress[0]&&!strcmp(info->address,m_serverAddress)){
+                snprintf(serverInfo,sizeof(serverInfo),"%s · %d/%d",
+                         m_serverAddress,info->players,info->maxplayers);
+                break;
+            }
+        }
         Caption(CZM_Rect(tx,rect.y+rect.h/2,width,rect.h/2-inset/2),
-                m_serverAddress[0]?m_serverAddress:
-                L("Нажмите для выбора","Tap to choose"),
+                serverInfo[0]?serverInfo:L("Нажмите для выбора","Tap to choose"),
                 CZMF_SMALL,CZM_Grey());
         Button(m_buttons[2],L("СМЕНИТЬ СЕРВЕР","CHANGE SERVER"),true);
         Button(m_primary,m_kind==POST_CREATE?L("СОЗДАЁМ...","CREATING..."):
                         L("СОЗДАТЬ ЛОББИ","CREATE LOBBY"),
                         SafeAddress(m_serverAddress)&&!m_request,true);
     }else if(m_stage==SEARCH){
-        Button(m_titleRect,m_invitePage?L("ПРИГЛАШЕНИЯ · ОТКРЫТЬ КАТАЛОГ","INVITATIONS · PUBLIC ROOMS"):
-                           L("ОТКРЫТЫЕ · ПРИГЛАШЕНИЯ","PUBLIC ROOMS · INVITATIONS"));
+        Button(m_buttons[3],L("ОТКРЫТЫЕ","PUBLIC"),true,!m_invitePage);
+        Button(m_buttons[4],L("ПРИГЛАШЕНИЯ","INVITES"),true,m_invitePage);
         if(m_cardCount==0){
             const CzmRect &area=m_cardsRect[1];
             Caption(CZM_Rect(area.x,area.y-H*.038f,area.w,H*.070f),
@@ -820,8 +848,11 @@ void CCzmLobby::Draw(){
             Caption(CZM_Rect(rect.x+rect.w-H*.14f,rect.y,H*.12f,rect.h),
                     summary,CZMF_LANG,PackRGBA(128,221,177,255));
         }
-        Button(m_buttons[0],L("← НАЗАД","← PREV"),m_offset>0&&!m_invitePage);
-        Button(m_buttons[1],L("ДАЛЬШЕ →","NEXT →"),m_next>=0&&!m_invitePage);
+        // No dead pagination controls on an empty catalog.
+        if(!m_invitePage&&(m_offset>0||m_next>=0)){
+            Button(m_buttons[0],L("← НАЗАД","← PREV"),m_offset>0);
+            Button(m_buttons[1],L("ДАЛЬШЕ →","NEXT →"),m_next>=0);
+        }
     }else if(m_stage==ROOM){
         for(int i=0;i<CZM_LOBBY_MEMBERS;i++){
             if(i>=m_capacity)continue;
