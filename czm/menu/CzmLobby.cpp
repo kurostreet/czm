@@ -353,8 +353,26 @@ void CCzmLobby::FinishRequest(int status,const char *body,int kind){
         else if(!strcmp(code,"server_full"))Notice(L("На сервере не хватает мест","Not enough server slots"));
         else if(!strcmp(code,"server_unavailable"))Notice(L("Сервер не отвечает","Game server unavailable"));
         else if(!strcmp(code,"lobby_full"))Notice(L("Комната заполнена","The room is full"));
-        else if(!strcmp(code,"language_warning"))Notice(L("Предупреждение за мат","Language warning"));
-        else if(!strcmp(code,"lobby_muted"))Notice(L("Мут за нарушения","Muted for violations"));
+        else if(!strcmp(code,"language_warning")){
+            const int warnings=j.Int(j.Get(0,"warnings"),0);
+            char notice[120];
+            if(warnings>=1&&warnings<=3){
+                snprintf(notice,sizeof(notice),
+                    L("Предупреждение %d из 3 · соблюдайте правила",
+                      "Warning %d of 3 · follow chat rules"),warnings);
+                Notice(notice);
+            }else Notice(L("Предупреждение за нарушение правил",
+                             "Warning for language violation"));
+        }else if(!strcmp(code,"lobby_muted")){
+            const int level=j.Int(j.Get(0,"level"),0);
+            if(level==1)Notice(L("Мут за нарушения · до 10 минут",
+                                  "Muted for violations · up to 10 min"));
+            else if(level==2)Notice(L("Мут за нарушения · до 1 часа",
+                                       "Muted for violations · up to 1 hour"));
+            else if(level>=3)Notice(L("Мут за нарушения · до 24 часов",
+                                       "Muted for violations · up to 24 hours"));
+            else Notice(L("Мут за нарушения правил","Muted for violations"));
+        }
         else if(!strcmp(code,"already_in_lobby"))Notice(L("Вы уже в другой комнате","You are already in a lobby"));
         else if(status==401||!strcmp(code,"account_required"))Notice(L("Требуется вход в аккаунт","Sign in required"));
         else Notice(L("Действие не удалось. Повторите","Request failed. Try again"));
