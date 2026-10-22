@@ -570,6 +570,28 @@ async def lobby_catalog(request:Request, offset:int=0,
 async def lobby_mine(request:Request,x_czm_key:str|None=Header(default=None)):
     return await lobby_result(request,lambda c:lobbies.mine(c,x_czm_key or ""))
 
+class LobbyInviteIn(BaseModel):
+    nonce: str = Field(min_length=12,max_length=64)
+
+class LobbyInviteAnswerIn(BaseModel):
+    accept: bool
+
+class LobbyEditIn(BaseModel):
+    title: str = Field(min_length=3,max_length=160)
+    description: str = Field(default="",max_length=400)
+    visibility: str = Field(pattern=r"^(public|private)$")
+    capacity: int = Field(ge=2,le=6)
+
+@router.get("/lobbies/invitations")
+async def lobby_invitations(request:Request,x_czm_key:str|None=Header(default=None)):
+    return await lobby_result(request,lambda c:lobbies.invitations(c,x_czm_key or ""))
+
+@router.post("/lobbies/invitations/{invitation}/answer")
+async def lobby_invite_answer(invitation:str,body:LobbyInviteAnswerIn,request:Request,
+                              x_czm_key:str|None=Header(default=None)):
+    return await lobby_result(request,lambda c:lobbies.answer_invitation(
+        c,x_czm_key or "",invitation,body.accept))
+
 @router.get("/lobbies/{room}")
 async def lobby_detail(room:str,request:Request,x_czm_key:str|None=Header(default=None)):
     return await lobby_result(request,lambda c:lobbies.detail(c,x_czm_key or "",room))
@@ -611,3 +633,15 @@ async def lobby_messages(room:str,request:Request,before:int=0,
 async def lobby_send(room:str,body:LobbyMessageIn,request:Request,
                      x_czm_key:str|None=Header(default=None)):
     return await lobby_result(request,lambda c:lobbies.send(c,x_czm_key or "",room,body.text,body.nonce))
+
+
+@router.post("/lobbies/{room}/invite/{target}")
+async def lobby_invite(room:str,target:int,body:LobbyInviteIn,request:Request,
+                       x_czm_key:str|None=Header(default=None)):
+    return await lobby_result(request,lambda c:lobbies.invite(c,x_czm_key or "",room,target,body.nonce))
+
+@router.post("/lobbies/{room}/edit")
+async def lobby_edit(room:str,body:LobbyEditIn,request:Request,
+                     x_czm_key:str|None=Header(default=None)):
+    return await lobby_result(request,lambda c:lobbies.edit(
+        c,x_czm_key or "",room,body.title,body.description,body.visibility,body.capacity))

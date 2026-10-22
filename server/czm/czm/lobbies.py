@@ -35,6 +35,23 @@ CREATE TABLE IF NOT EXISTS lobby_creation_ops (
  nonce TEXT NOT NULL, lobby TEXT NOT NULL,
  created INTEGER NOT NULL, PRIMARY KEY(player,nonce)
 );
+
+CREATE TABLE IF NOT EXISTS lobby_invites (
+ id TEXT PRIMARY KEY,
+ lobby TEXT NOT NULL REFERENCES lobbies(id) ON DELETE CASCADE,
+ sender INTEGER NOT NULL REFERENCES accounts(player),
+ target INTEGER NOT NULL REFERENCES accounts(player),
+ nonce TEXT NOT NULL,
+ created INTEGER NOT NULL,
+ expires INTEGER NOT NULL,
+ status TEXT NOT NULL DEFAULT 'pending'
+    CHECK(status IN ('pending','accepted','declined','superseded')),
+ UNIQUE(sender, nonce)
+);
+CREATE INDEX IF NOT EXISTS lobby_invites_target
+ ON lobby_invites(target,status,expires);
+CREATE INDEX IF NOT EXISTS lobby_invites_lobby
+ ON lobby_invites(lobby,status);
 """
 
 TITLE_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
@@ -211,6 +228,9 @@ def transfer(conn, key, room_id, target):
     if player != room["owner"]:
         raise accounts.AuthError("not_owner", 403)
     _membership(conn, room_id, target)
+    # Previous invitations must not survive a transfer of room authority.
+    conn.execute("UPDATE lobby_invites SET status='superseded' "
+                 "WHERE lobby=? AND status='pending'", (room_id,))
     conn.execute("UPDATE lobbies SET owner=? WHERE id=?", (target, room_id))
     return {"lobby": _state(conn, _room(conn, room_id))}
 
@@ -251,3 +271,118 @@ def send(conn, key, room_id, text, nonce):
     cur = conn.execute("INSERT INTO lobby_messages(lobby,sender,text,created,nonce) VALUES (?,?,?,?,?)",
                        (room_id, player, text, now(), nonce))
     return {"message": dict(conn.execute("SELECT * FROM lobby_messages WHERE id=?", (cur.lastrowid,)).fetchone())}
+
+
+INVITE_SECONDS = 15 * 60
+
+
+def _invite_row(row):
+    return {"id": row["id"], "lobby": row["lobby"], "sender": row["sender"],
+            "target": row["target"], "created": row["created"],
+            "expires": row["expires"], "status": row["status"]}
+
+
+def invite(conn, key, room_id, target, nonce):
+    """An owner invites a friend using a durable, recipient-bound, expiring card."""
+    player = _actor(conn, key)
+    _nonce(nonce)
+    room = _room(conn, room_id)
+    if player != room["owner"]:
+        raise accounts.AuthError("not_owner", 403)
+    social.account(conn, target)
+    if target == player:
+        raise accounts.AuthError("self")
+    if social.relation(conn, player, target) != "friend":
+        raise accounts.AuthError("not_friends", 403)
+    existing = conn.execute("SELECT * FROM lobby_invites WHERE sender=? AND nonce=?",
+                            (player, nonce)).fetchone()
+    if existing:
+        if existing["lobby"] != room_id or existing["target"] != target:
+            raise accounts.AuthError("nonce", 409)
+        return {"invite": _invite_row(existing)}
+    if _current(conn, target):
+        raise accounts.AuthError("already_in_lobby", 409)
+    pending = conn.execute("SELECT * FROM lobby_invites WHERE lobby=? AND target=? "
+                           "AND status='pending' AND expires>? ORDER BY created DESC LIMIT 1",
+                           (room_id, target, now())).fetchone()
+    if pending:
+        return {"invite": _invite_row(pending)}
+    accounts.rate(conn, "lobby_invite", str(player), 20, 3600)
+    invitation = secrets.token_urlsafe(18)
+    t = now()
+    conn.execute("UPDATE lobby_invites SET status='superseded' WHERE lobby=? AND target=? "
+                 "AND status='pending'", (room_id, target))
+    conn.execute("INSERT INTO lobby_invites(id,lobby,sender,target,nonce,created,expires) "
+                 "VALUES(?,?,?,?,?,?,?)", (invitation, room_id, player, target, nonce, t, t+INVITE_SECONDS))
+    return {"invite": _invite_row(conn.execute("SELECT * FROM lobby_invites WHERE id=?",
+                                              (invitation,)).fetchone())}
+
+
+def invitations(conn, key):
+    player = _actor(conn, key)
+    entries = conn.execute(
+        "SELECT i.*, l.title, l.description, l.owner, l.server, l.proto, l.capacity "
+        "FROM lobby_invites i JOIN lobbies l ON l.id=i.lobby "
+        "WHERE i.target=? AND i.status='pending' AND i.expires>? "
+        "AND NOT EXISTS (SELECT 1 FROM social_blocks b WHERE "
+        "(b.source=i.target AND (b.target=i.sender OR b.target=l.owner)) "
+        "OR (b.target=i.target AND (b.source=i.sender OR b.source=l.owner))) "
+        "ORDER BY i.created DESC LIMIT 40", (player, now())).fetchall()
+    return {"invites": [
+        {"id": r["id"], "lobby": r["lobby"], "sender": r["sender"],
+         "owner": r["owner"], "title": r["title"], "description": r["description"],
+         "server": r["server"], "proto": r["proto"],
+         "capacity": r["capacity"], "expires": r["expires"]} for r in entries]}
+
+
+def answer_invitation(conn, key, invitation, accept):
+    player = _actor(conn, key)
+    row = conn.execute("SELECT * FROM lobby_invites WHERE id=? AND target=?",
+                       (invitation, player)).fetchone()
+    if not row:
+        raise accounts.AuthError("invite_not_found", 404)
+    if row["status"] == "accepted" and accept:
+        room = conn.execute("SELECT * FROM lobbies WHERE id=?", (row["lobby"],)).fetchone()
+        if room and conn.execute("SELECT 1 FROM lobby_members WHERE player=? AND lobby=?",
+                                 (player, row["lobby"])).fetchone():
+            return {"accepted": True, "lobby": _state(conn, room)}
+        raise accounts.AuthError("invite_consumed", 409)
+    if row["status"] != "pending":
+        raise accounts.AuthError("invite_consumed", 409)
+    if row["expires"] <= now():
+        raise accounts.AuthError("invite_expired", 410)
+    if not accept:
+        conn.execute("UPDATE lobby_invites SET status='declined' WHERE id=?", (invitation,))
+        return {"accepted": False}
+    room = _room(conn, row["lobby"])
+    if social.relation(conn, player, room["owner"]) != "friend" or social.blocked(
+            conn, player, row["sender"]):
+        raise accounts.AuthError("unavailable", 403)
+    current = _current(conn, player)
+    if current:
+        raise accounts.AuthError("already_in_lobby", 409)
+    if conn.execute("SELECT COUNT(*) FROM lobby_members WHERE lobby=?", (row["lobby"],)).fetchone()[0] >= room["capacity"]:
+        raise accounts.AuthError("lobby_full", 409)
+    conn.execute("INSERT INTO lobby_members(player,lobby,joined) VALUES(?,?,?)",
+                 (player, row["lobby"], now()))
+    conn.execute("UPDATE lobby_invites SET status='accepted' WHERE id=?", (invitation,))
+    return {"accepted": True, "lobby": _state(conn, room)}
+
+
+def edit(conn, key, room_id, title, description, visibility, capacity):
+    player = _actor(conn, key)
+    room = _room(conn, room_id)
+    if room["owner"] != player:
+        raise accounts.AuthError("not_owner", 403)
+    title = _title(title)
+    description = unicodedata.normalize("NFKC", description).strip()
+    if len(description) > 120 or TITLE_CONTROL.search(description):
+        raise accounts.AuthError("description")
+    if visibility not in ("public","private") or type(capacity) is not int or capacity not in range(2,7):
+        raise accounts.AuthError("settings")
+    used = conn.execute("SELECT COUNT(*) FROM lobby_members WHERE lobby=?", (room_id,)).fetchone()[0]
+    if capacity < used:
+        raise accounts.AuthError("lobby_full", 409)
+    conn.execute("UPDATE lobbies SET title=?,description=?,visibility=?,capacity=? WHERE id=?",
+                 (title, description, visibility, capacity, room_id))
+    return {"lobby": _state(conn, _room(conn, room_id))}

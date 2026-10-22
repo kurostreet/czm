@@ -80,6 +80,99 @@ class LobbyTests(unittest.TestCase):
         self.assertEqual(self.req("POST",f"/{room}/leave",1).json(),{"closed":True})
         self.assertEqual(self.req("GET",f"/{room}/messages").status_code,404)
 
+    def link_friends(self,a=0,b=1):
+        for src,dst in ((a,b),(b,a)):
+            response=self.client.post("/api/v1/social/action",
+                headers={"X-CZM-Key":self.keys[src]},
+                json={"target":self.ids[dst],"action":"follow"})
+            self.assertEqual(response.status_code,200,response.text)
+
+    def invite(self,room,actor=0,target=1,nonce="invite-test-nonce-001"):
+        return self.req("POST",f"/{room}/invite/{self.ids[target]}",actor,json={"nonce":nonce})
+
+    def test_private_invites_are_recipient_bound_and_idempotent(self):
+        room=self.create(visibility="private").json()["lobby"]["id"]
+        self.assertEqual(self.invite(room).status_code,403)
+        self.link_friends()
+        invited=self.invite(room)
+        self.assertEqual(invited.status_code,200,invited.text)
+        self.assertEqual(self.invite(room).json(),invited.json())
+        invitation=invited.json()["invite"]["id"]
+        self.assertEqual(self.req("GET","/invitations",2).json()["invites"],[])
+        self.assertEqual(len(self.req("GET","/invitations",1).json()["invites"]),1)
+        self.assertEqual(self.req("POST",f"/invitations/{invitation}/answer",2,
+                                  json={"accept":True}).status_code,404)
+        accepted=self.req("POST",f"/invitations/{invitation}/answer",1,json={"accept":True})
+        self.assertEqual(accepted.status_code,200,accepted.text)
+        self.assertEqual(accepted.json(),self.req("POST",f"/invitations/{invitation}/answer",1,
+                                                 json={"accept":True}).json())
+        self.assertEqual(len(accepted.json()["lobby"]["members"]),2)
+
+    def test_invites_expire_and_close_with_room(self):
+        self.link_friends()
+        room=self.create(visibility="private").json()["lobby"]["id"]
+        invitation=self.invite(room).json()["invite"]["id"]
+        with patch("czm.lobbies.now",return_value=lobbies.now()+lobbies.INVITE_SECONDS+1):
+            self.assertEqual(self.req("GET","/invitations",1).json()["invites"],[])
+            expired=self.req("POST",f"/invitations/{invitation}/answer",1,json={"accept":True})
+            self.assertEqual(expired.status_code,410,expired.text)
+        self.assertEqual(self.req("POST",f"/{room}/leave").status_code,200)
+        self.assertEqual(self.req("POST",f"/invitations/{invitation}/answer",1,
+                                  json={"accept":True}).status_code,404)
+
+    def test_invite_block_and_decline_reinvite(self):
+        self.link_friends()
+        room=self.create().json()["lobby"]["id"]
+        self.req("POST",f"/{room}/join",2)
+        self.assertEqual(self.invite(room,actor=2).status_code,403)
+        a=self.invite(room).json()["invite"]["id"]
+        self.assertEqual(self.req("POST",f"/invitations/{a}/answer",1,
+                                  json={"accept":False}).status_code,200)
+        b=self.invite(room,nonce="invite-test-nonce-002").json()["invite"]["id"]
+        self.assertNotEqual(a,b)
+        self.client.post("/api/v1/social/action",
+            headers={"X-CZM-Key":self.keys[1]},
+            json={"target":self.ids[0],"action":"block"})
+        self.assertEqual(self.req("POST",f"/invitations/{b}/answer",1,
+                                  json={"accept":True}).status_code,403)
+
+    def test_edit_capacity_visibility_permissions(self):
+        room=self.create(capacity=3).json()["lobby"]["id"]
+        self.req("POST",f"/{room}/join",1)
+        self.assertEqual(self.req("POST",f"/{room}/edit",1,
+            json={"title":"New", "description":"", "visibility":"private","capacity":2}).status_code,403)
+        no=self.req("POST",f"/{room}/edit",json={"title":"New","description":"",
+                                                "visibility":"private","capacity":1})
+        self.assertIn(no.status_code,(400,422))
+        changed=self.req("POST",f"/{room}/edit",json={"title":"New Room","description":"Run",
+                                                   "visibility":"private","capacity":2})
+        self.assertEqual(changed.status_code,200,changed.text)
+        self.assertEqual(self.req("GET","",2).json()["lobbies"],[])
+        self.assertEqual(self.req("POST",f"/{room}/join",2).status_code,403)
+
+    def test_invite_not_exposed_after_block_and_transfer(self):
+        self.link_friends()
+        self.link_friends(0,2)
+        room=self.create().json()["lobby"]["id"]
+        invited=self.invite(room).json()["invite"]["id"]
+        self.client.post("/api/v1/social/action",
+            headers={"X-CZM-Key":self.keys[1]},
+            json={"target":self.ids[0],"action":"block"})
+        self.assertEqual(self.req("GET","/invitations",1).json()["invites"],[])
+        self.assertEqual(self.req("POST",f"/invitations/{invited}/answer",1,
+                                  json={"accept":True}).status_code,403)
+        self.req("POST",f"/{room}/join",2)
+        self.assertEqual(self.invite(room,actor=2,nonce="bad-invite-nonce-03").status_code,403)
+        self.client.post("/api/v1/social/action",
+            headers={"X-CZM-Key":self.keys[1]},
+            json={"target":self.ids[0],"action":"unblock"})
+        self.link_friends()
+        self.assertEqual(self.req("POST",f"/{room}/transfer",
+                                  json={"target":self.ids[2]}).status_code,200)
+        self.assertEqual(self.req("GET","/invitations",1).json()["invites"],[])
+        self.assertEqual(self.req("POST",f"/invitations/{invited}/answer",1,
+                                  json={"accept":True}).status_code,409)
+
     def test_invalid_capacity_and_nonce(self):
         for n in [1,7,8]:
             r=self.create(capacity=n,nonce=f"invalid-capacity-{n}-nonce")
