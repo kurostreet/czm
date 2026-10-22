@@ -77,7 +77,10 @@ static struct
 
 bool CZM_OnlinePlayAllowed( void )
 {
-	return !CZM_NetCanSelfUpdate() || s_online.development;
+    // The obsolete migration-only gate no longer belongs in the new
+    // private test APK. Existing retired builds stay retired on their own.
+    // Distribution and Google Play update restrictions remain server-side.
+    return true;
 }
 
 static struct

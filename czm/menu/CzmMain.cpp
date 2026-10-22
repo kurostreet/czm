@@ -275,8 +275,13 @@ void CCzmMainMenu::Layout( void )
 	{
 		int qw = Q_min( (int)( H * 0.66f ), ( m_iTiles > 0 ? m_tiles[0].x : W ) - m_iMargin - (int)( H * 0.06f ));
 		m_quick = CZM_Rect( m_iMargin, H * 0.335f, qw, H * 0.105f );
-		m_lobbyCreate = CZM_Rect( m_quick.x, H * 0.500f, m_quick.w, H * 0.087f );
-		m_lobbySearch = CZM_Rect( m_quick.x, H * 0.607f, m_quick.w, H * 0.087f );
+        // Two compact actions on one row, not two giant buttons.
+        // Keep sufficient separation for enlarged touch-hit rectangles.
+        const int lobbyGap=Q_max(14,(int)(H*.029f));
+        const int lobbyWidth=(m_quick.w-lobbyGap)/2;
+        m_lobbyCreate=CZM_Rect(m_quick.x,H*.520f,lobbyWidth,H*.072f);
+        m_lobbySearch=CZM_Rect(m_quick.x+lobbyWidth+lobbyGap,
+                               H*.520f,lobbyWidth,H*.072f);
 	}
 
 	// The visible cards are also their touch targets; the gaps stay empty.
@@ -1442,8 +1447,6 @@ void CCzmMainMenu::Draw()
 		CZM_StartupReady();
 		return;
 	}
-	if( CZM_NetCanSelfUpdate() )
-		CZM_DrawText( CZM_Font( CZMF_SMALL ), W * 0.35f, H * 0.025f, W * 0.3f, CZM_T( "retired_dev" ), PackRGBA( 250, 120, 120, 255 ), QM_CENTER );
 
 	// darker top edge so the header reads on any art
 	CZM_DrawImage( UI_DIR "fade_top.png", 0, 0, W, H * 0.22f, CZM_White( 200 ));
@@ -1461,9 +1464,13 @@ void CCzmMainMenu::Draw()
 			CZM_DrawPill( UI_DIR "button_secondary.png",r.x,r.y,r.w,r.h,
 				down ? PackRGBA(190,190,190,255) : CZM_White() );
 			const char *title=CZM_IsRussian()?ru[i]:en[i];
-			HFont font=CZM_Font( CZMF_LANG );
-			CZM_DrawText( font,r.x+H*.035f,r.y+(r.h-CZM_FontHeight(font))/2,
-				r.w-H*.07f,title,CZM_White(),QM_CENTER );
+            HFont font=CZM_Font(CZMF_TILE_STATUS);
+            CZM_DrawText(font,r.x+H*.008f,r.y+(r.h-CZM_FontHeight(font))/2,
+                r.w-H*.016f,title,CZM_White(),QM_CENTER);
+            // Thin accent links the pair visually to the quick-play action.
+            UI_FillRect(r.x+Q_max(5,(int)(H*.010f)),r.y+r.h-3,
+                r.w-2*Q_max(5,(int)(H*.010f)),2,
+                i==0?PackRGBA(224,52,63,230):PackRGBA(104,150,187,220));
 		}
 	}
 	for( int i = 0; i < m_iTiles; i++ )
