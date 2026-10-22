@@ -222,11 +222,12 @@ public final class CzmLobbyVoice {
             speaker=track;
         }
         Thread playback=new Thread(()->{
-            short[] mixed=new short[SAMPLES];
+            short[] output=new short[SAMPLES];
+            int[] accumulator=new int[SAMPLES];
             while(true){
                 synchronized(LOCK){
                     if(!alive||status!=2||speaker!=track)break;
-                    Arrays.fill(mixed,(short)0);
+                    Arrays.fill(accumulator,0);
                     int peers=0;
                     for(Map.Entry<Integer,ArrayDeque<byte[]>> e:received.entrySet()){
                         if(muted.contains(e.getKey()))continue;
@@ -234,18 +235,19 @@ public final class CzmLobbyVoice {
                         if(frame==null||frame.length!=SAMPLES)continue;
                         ++peers;
                         for(int i=0;i<SAMPLES;i++){
-                            int value=(mixed[i]&0xffff);
-                            if(value>=0x8000)value-=65536;
-                            value+=decodeMuLaw(frame[i]&255);
-                            mixed[i]=(short)Math.max(-32768,Math.min(32767,value));
+                            accumulator[i]+=decodeMuLaw(frame[i]&255);
                         }
                     }
-                    if(peers>1){
-                        for(int i=0;i<SAMPLES;i++)mixed[i]=(short)(mixed[i]/Math.sqrt(peers));
+                    // Scale once before clipping to prevent clipping distortion
+                    // when several friends speak simultaneously.
+                    double gain=peers>1?1.0/Math.sqrt(peers):1.0;
+                    for(int i=0;i<SAMPLES;i++){
+                        int value=(int)(accumulator[i]*gain);
+                        output[i]=(short)Math.max(-32768,Math.min(32767,value));
                     }
                 }
                 try {
-                    if(track.write(mixed,0,SAMPLES)<0)break;
+                    if(track.write(output,0,SAMPLES)<0)break;
                 }catch(Exception exception){break;}
             }
         },"CZM Lobby Playback");
@@ -277,13 +279,18 @@ public final class CzmLobbyVoice {
         }
         Thread worker=new Thread(()->{
             short[] samples=new short[SAMPLES];
+            int accumulated=0;
             try{
                 while(true){
                     synchronized(LOCK){
                         if(!microphone||!alive||status!=2||recorder!=capture)break;
                     }
-                    int n=capture.read(samples,0,SAMPLES);
-                    if(n!=SAMPLES)continue;
+                    int n=capture.read(samples,accumulated,SAMPLES-accumulated);
+                    if(n<0)break; // Android audio error, avoid a busy retry loop
+                    if(n==0)continue;
+                    accumulated+=n;
+                    if(accumulated<SAMPLES)continue;
+                    accumulated=0;
                     byte[] frame=new byte[FRAME];frame[0]='U';
                     for(int i=0;i<SAMPLES;i++)frame[i+1]=(byte)encodeMuLaw(samples[i]);
                     WebSocketClient target;

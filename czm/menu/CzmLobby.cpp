@@ -52,6 +52,7 @@ public:
     void Open(bool create);
     void JoinPublic(const char *room);
     void Frame();
+    void ResetSession();
     void PickedServer(const char *address,const char *proto,const char *name,
                       const char *map,int players,int slots);
     void InviteFriend(int target);
@@ -80,6 +81,7 @@ private:
     void Refresh();
     void SendMessage();
     void StopInput();
+    bool VoiceBlocked() const;
     void DrawField(const CzmRect &r,const char *placeholder);
     int m_stage,m_request,m_kind,m_pressed,m_capacity,m_server,m_offset,m_next;
     bool m_open,m_private,m_typing,m_ownReady,m_busy,m_invitePage,m_voiceAllMuted;
@@ -166,9 +168,26 @@ void CCzmLobby::JoinPublic(const char *room){
     char path[160];snprintf(path,sizeof(path),"/api/v1/lobbies/%s/join",room);
     Query(POST_JOIN,"POST",path,"{}");
 }
+void CCzmLobby::ResetSession(){
+    CZM_LobbyVoiceStop();
+    m_request=0;m_kind=0;m_busy=false;
+    m_room[0]=m_roomTitle[0]=m_text[0]=m_pickedMap[0]=0;
+    m_memberCount=m_chatCount=m_selectedMemberId=m_memberConfirm=0;
+    m_owner=0;m_stage=SEARCH;m_nextVoicePoll=0;m_nextHeartbeat=0;
+    if(m_open)Hide();
+}
 void CCzmLobby::Hide(){StopInput();m_open=false;m_pressed=0;m_selectedMemberId=0;m_memberConfirm=0;CMenuFramework::Hide();}
 void CCzmLobby::Notice(const char *p){Q_strncpy(m_notice,p?p:"",sizeof(m_notice));m_noticeUntil=EngFuncs::DoubleTime()+4;}
 void CCzmLobby::StopInput(){if(m_typing){UI_EnableTextInput(false);m_typing=false;}}
+bool CCzmLobby::VoiceBlocked() const{
+    const int me=CZM_OnlinePlayer();
+    if(!me)return true;
+    if(m_voiceAllMuted&&me!=m_owner)return true;
+    for(int i=0;i<m_memberCount;i++)
+        if(m_members[i].id==me)return m_hostMuted[i];
+    return true;
+}
+
 
 void CCzmLobby::Layout(){
     W=ScreenWidth;H=ScreenHeight;pad=Q_max(8,(int)(H*.024f));
@@ -283,7 +302,8 @@ void CCzmLobby::ReadRoom(const CzmJson &j,int n){
     Q_strncpy(m_serverAddress,newServer,sizeof(m_serverAddress));
     Q_strncpy(m_serverProto,j.String(j.Get(n,"proto")),sizeof(m_serverProto));
     const char *map=j.String(j.Get(n,"map"));
-    if(map&&*map)Q_strncpy(m_pickedMap,map,sizeof(m_pickedMap));
+    // Never keep displaying a thumbnail from a previous map on this server.
+    Q_strncpy(m_pickedMap,map?map:"",sizeof(m_pickedMap));
     m_owner=j.Int(j.Get(n,"owner"));m_revision=j.Int(j.Get(n,"revision"));
     m_capacity=j.Int(j.Get(n,"capacity"),6);
     m_memberCount=0;
@@ -300,6 +320,15 @@ void CCzmLobby::ReadRoom(const CzmJson &j,int n){
         m_hostMuted[i]=false;
         for(int k=0;k<j.Count(voiceMuted);k++)
             if(m_members[i].id==j.Int(j.At(voiceMuted,k)))m_hostMuted[i]=true;
+    }
+    // Server-side mute is authoritative. A forced-muted member must
+    // not continue capturing/transmitting audio in the background.
+    for(int i=0;i<m_memberCount;i++){
+        if(m_members[i].id==CZM_OnlinePlayer()&&
+           (m_hostMuted[i]||(m_voiceAllMuted&&m_owner!=CZM_OnlinePlayer()))){
+            if(CZM_LobbyVoiceMicOn())CZM_LobbyVoiceMic(false);
+            break;
+        }
     }
     m_ownReady=false;
     bool found=false;
@@ -452,6 +481,12 @@ void CCzmLobby::SendMessage(){
 }
 void CCzmLobby::Action(int hit){
     if(hit==VOICE_MIC){
+        if(VoiceBlocked()){
+            Notice(L("Микрофон выключен хозяином комнаты",
+                     "The host muted your microphone"));
+            CZM_LobbyVoiceMic(false);
+            return;
+        }
         CZM_LobbyVoiceMic(!CZM_LobbyVoiceMicOn());
         return;
     }
@@ -785,8 +820,19 @@ void CCzmLobby::Draw(){
         Caption(CZM_Rect(headerX,m_chatRect.y,
                 Q_max(1,m_micRect.x-inset-headerX),titleH),
                 server,CZMF_SMALL);
-        Button(m_micRect,CZM_LobbyVoiceMicOn()?L("МИК ВКЛ","MIC ON"):
-                          L("МИК ВЫКЛ","MIC OFF"),true,CZM_LobbyVoiceMicOn());
+        const bool micBlocked=VoiceBlocked();
+        Button(m_micRect,micBlocked?L("МИК МУТ","MIC MUTED"):
+                          (CZM_LobbyVoiceMicOn()?L("МИК ВКЛ","MIC ON"):
+                          L("МИК ВЫКЛ","MIC OFF")),
+               !micBlocked,CZM_LobbyVoiceMicOn()&&!micBlocked);
+        // Connection indicator: green = encrypted voice connected;
+        // amber = connecting; red = currently unavailable.
+        int voiceState=CZM_LobbyVoiceStatus();
+        int dot=Q_max(4,m_micRect.h/7);
+        unsigned int voiceColor=voiceState==2?PackRGBA(109,226,174,255):
+            (voiceState==1?PackRGBA(244,191,110,255):
+                            PackRGBA(236,96,109,255));
+        UI_FillRect(m_micRect.x+m_micRect.w-dot-2,m_micRect.y+2,dot,dot,voiceColor);
         if(m_owner==CZM_OnlinePlayer())
             Button(m_voiceAllRect,m_voiceAllMuted?L("ВСЕ МУТ","ALL MUTED"):
                 L("МУТ ВСЕХ","MUTE ALL"),true,m_voiceAllMuted);
@@ -865,6 +911,7 @@ static char s_launchId[70],s_launchServer[64],s_launchProto[8];
 void CZM_LobbyFrame(void){
     if(s_lobby)s_lobby->Frame();
     if(s_identity!=CZM_OnlineIdentity()){
+        if(s_identity!=-1&&s_lobby)s_lobby->ResetSession();
         s_identity=CZM_OnlineIdentity();s_deliveryNext=0;
         s_launchId[0]=s_launchServer[0]=s_launchProto[0]=0;
         s_delivery=0;s_ack=0;

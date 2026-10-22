@@ -122,6 +122,29 @@ class LobbyVoiceTests(unittest.TestCase):
             detail=lobbies.detail(c,self.keys[1],self.room)["lobby"]
             self.assertEqual(detail["voice_muted"],[])
 
+    def test_duplicate_socket_for_same_account_rejected(self):
+        # A stale or cloned client must not impersonate a second talker.
+        with self.conn(0) as first:
+            with self.assertRaises(WebSocketDisconnect) as error:
+                with self.conn(0) as second:
+                    second.receive_json()
+            self.assertEqual(error.exception.code,4409)
+
+    def test_invalid_audio_frames_do_not_reach_participants(self):
+        with self.conn(0) as host:
+            with self.conn(1) as participant:
+                host.receive_json()
+                participant.receive_json()
+                host.send_bytes(b"X"+bytes([88])*320)
+                host.send_bytes(b"U"+bytes([88])*321)
+                host.send_bytes(b"U"+bytes([27])*320)
+                event=participant.receive_json()
+                self.assertEqual(event,{"type":"talk","player":self.players[0],
+                                        "active":True})
+                packet=participant.receive_bytes()
+                self.assertEqual(packet[:1],b"U")
+                self.assertEqual(packet[5:],bytes([27])*320)
+
     def test_voice_data_removed_with_room(self):
         self.assertEqual(self.mute(0,self.players[1],True).status_code,200)
         r=self.client.post(f"/api/v1/lobbies/{self.room}/leave",
