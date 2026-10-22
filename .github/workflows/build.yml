@@ -160,11 +160,36 @@ jobs:
           sha256sum CounterZombieMobile-Core-test.apk > CounterZombieMobile-Core-test.apk.sha256
           mkdir -p tools
           cp "$ANDROID_HOME/build-tools/36.0.0/lib/apksigner.jar" tools/
-      - name: Upload core APK and local packaging tools
+      - name: Explain that the core APK cannot start the game
+        run: |
+          python3 - <<'PY'
+          from zipfile import ZipFile
+          with ZipFile("CounterZombieMobile-Core-test.apk") as apk:
+              # Full game-data is intentionally kept on the authorized
+              # packaging server, never pushed into GitHub artifacts.
+              assert "assets/bundled/game-data.zip" not in apk.namelist()
+              assert "assets/bundled/game-data.json" not in apk.namelist()
+          PY
+          cat > CORE-NOT-INSTALLABLE.txt <<'TEXT'
+          IMPORTANT: THIS IS NOT AN INSTALLABLE GAME!
+          CounterZombieMobile-Core-test.apk is a technical intermediate built
+          by CI. It intentionally does NOT contain bundled/game-data.zip and
+          bundled/game-data.json. Installing it shows the "missing game files"
+          error. Do not distribute this APK to players or testers.
+          A full CZM test APK must be assembled separately, using the private
+          existing game-data archive, then signed and verified.
+
+          ВНИМАНИЕ: ЭТО НЕ ПОЛНАЯ ИГРА!
+          Core-test.apk не содержит игровые файлы game-data.zip / .json.
+          Не устанавливайте и не распространяйте этот файл.
+          Используйте только полностью собранный, подписанный FULL APK.
+          TEXT
+      - name: Upload non-installable core only (for private full-APK assembly)
         uses: actions/upload-artifact@v4
         with:
-          name: CounterZombieMobile-Android-test
+          name: CZM-CORE-NOT-AN-INSTALLABLE-APK
           path: |
+            CORE-NOT-INSTALLABLE.txt
             CounterZombieMobile-Core-test.apk
             CounterZombieMobile-Core-test.apk.sha256
             apk-info.txt
