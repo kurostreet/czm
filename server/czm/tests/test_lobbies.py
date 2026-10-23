@@ -99,7 +99,13 @@ class LobbyTests(unittest.TestCase):
         self.assertEqual(self.invite(room).json(),invited.json())
         invitation=invited.json()["invite"]["id"]
         self.assertEqual(self.req("GET","/invitations",2).json()["invites"],[])
-        self.assertEqual(len(self.req("GET","/invitations",1).json()["invites"]),1)
+        incoming=self.req("GET","/invitations",1).json()["invites"]
+        self.assertEqual(len(incoming),1)
+        self.assertEqual(incoming[0]["sender"],self.ids[0])
+        self.assertEqual(incoming[0]["sender_name"],"Guest")
+        self.assertEqual(incoming[0]["count"],1)
+        self.assertEqual(incoming[0]["capacity"],3)
+        self.assertEqual(incoming[0]["title"],"Zombie Team")
         self.assertEqual(self.req("POST",f"/invitations/{invitation}/answer",2,
                                   json={"accept":True}).status_code,404)
         accepted=self.req("POST",f"/invitations/{invitation}/answer",1,json={"accept":True})

@@ -458,8 +458,11 @@ def invite(conn, key, room_id, target, nonce):
 def invitations(conn, key):
     player = _actor(conn, key)
     entries = conn.execute(
-        "SELECT i.*, l.title, l.description, l.owner, l.server, l.proto, l.capacity "
+        "SELECT i.*, l.title, l.description, l.owner, l.server, l.proto, l.capacity, "
+        "p.nick AS sender_name, p.avatar AS sender_avatar, "
+        "(SELECT COUNT(*) FROM lobby_members m WHERE m.lobby=i.lobby) AS count "
         "FROM lobby_invites i JOIN lobbies l ON l.id=i.lobby "
+        "JOIN players p ON p.id=i.sender "
         "WHERE i.target=? AND i.status='pending' AND i.expires>? "
         "AND NOT EXISTS (SELECT 1 FROM social_blocks b WHERE "
         "(b.source=i.target AND (b.target=i.sender OR b.target=l.owner)) "
@@ -467,6 +470,8 @@ def invitations(conn, key):
         "ORDER BY i.created DESC LIMIT 40", (player, now())).fetchall()
     return {"invites": [
         {"id": r["id"], "lobby": r["lobby"], "sender": r["sender"],
+         "sender_name": r["sender_name"], "sender_avatar": r["sender_avatar"],
+         "count": r["count"],
          "owner": r["owner"], "title": r["title"], "description": r["description"],
          "server": r["server"], "proto": r["proto"],
          "capacity": r["capacity"], "expires": r["expires"],

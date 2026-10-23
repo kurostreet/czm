@@ -35,7 +35,15 @@ void Caption(const CzmRect &r,const char *value,int font=CZMF_PANEL_TEXT,unsigne
 }
 void Button(const CzmRect &r,const char *label,bool active=true,bool accent=false) {
     CZM_DrawButton(accent?UI_DIR "button_primary.png":UI_DIR "button_secondary.png",
-                   r,label,active?CZM_White():CZM_Grey(),false,CZMF_LANG);
+                   r,label,active?CZM_White():CZM_Grey(),false,CZMF_TILE_STATUS);
+}
+void IconChip(const CzmRect &r,const char *icon,bool active=false,bool warning=false){
+    const unsigned tint=warning?PackRGBA(218,63,77,242):
+                        active?PackRGBA(31,105,78,242):
+                               PackRGBA(36,48,64,244);
+    CZM_DrawPill(UI_DIR "chip_round.png",r.x,r.y,r.w,r.h,tint);
+    const int side=Q_min(r.w,r.h)*2/3;
+    CZM_DrawImage(icon,r.x+(r.w-side)/2,r.y+(r.h-side)/2,side,side);
 }
 }
 
@@ -61,14 +69,15 @@ public:
         return m_stage==ROOM&&m_room[0]&&m_owner==CZM_OnlinePlayer();
     }
     bool IsOpened() const { return m_open; }
+    bool HasRoom() const { return m_room[0]!=0 && m_stage==ROOM; }
 private:
     enum { CREATE, SEARCH, ROOM };
     enum { NONE=0, BACK, REFRESH, MAKE, VISIBILITY, LESS, MORE, TITLE,
-           SELECT=100, MEMBER=200, READY=300, LAUNCH, LEAVE, SEND, CHAT, INVITE, SERVER_NEXT, NEXT, PREV, INVITE_LIST, PUBLIC_LIST,
+           SELECT=100, MEMBER=200, READY=300, LAUNCH, LEAVE, SEND, CHAT, INVITE, SERVER_NEXT, NEXT, PREV,
            MODAL_PROFILE=500, MODAL_LOCAL_MUTE, MODAL_HOST_MUTE,
            MODAL_KICK, MODAL_TRANSFER, MODAL_CANCEL, VOICE_MIC, VOICE_ALL };
     enum { GET_LIST=1, GET_ROOM, GET_CHAT, POST_CREATE, POST_JOIN,
-           POST_READY, POST_LAUNCH, POST_LEAVE, POST_CHAT, POST_SERVER, POST_INVITE, POST_ACCEPT, GET_INVITES, GET_MINE,
+           POST_READY, POST_LAUNCH, POST_LEAVE, POST_CHAT, POST_SERVER, POST_INVITE, GET_MINE,
            POST_KICK, POST_TRANSFER, POST_HEARTBEAT, POST_VOICE_MUTE };
     void Layout();
     int Hit() const;
@@ -84,7 +93,7 @@ private:
     bool VoiceBlocked() const;
     void DrawField(const CzmRect &r,const char *placeholder);
     int m_stage,m_request,m_kind,m_pressed,m_capacity,m_server,m_offset,m_next;
-    bool m_open,m_private,m_typing,m_ownReady,m_busy,m_invitePage,m_voiceAllMuted;
+    bool m_open,m_private,m_typing,m_ownReady,m_busy,m_voiceAllMuted;
     bool m_hostMuted[CZM_LOBBY_MEMBERS];
     double m_nextPoll,m_nextHeartbeat,m_nextVoicePoll,m_noticeUntil;
     char m_title[128],m_description[128],m_room[64],m_serverAddress[64],m_serverProto[8];
@@ -97,7 +106,7 @@ private:
     RoomCard m_cards[CZM_LOBBY_LIST];
     CzmRect m_panel,m_back,m_refresh,m_primary,m_secondary,m_extra,m_titleRect;
     CzmRect m_buttons[9],m_cardsRect[CZM_LOBBY_LIST],m_membersRect[CZM_LOBBY_MEMBERS],m_chatRect;
-    CzmRect m_textRect,m_sendRect,m_micRect,m_voiceAllRect,m_modal,m_modalButtons[6];
+    CzmRect m_textRect,m_sendRect,m_micRect,m_voiceAllRect,m_roomServerRect,m_modal,m_modalButtons[6];
     int W,H,pad;
 };
 
@@ -107,7 +116,7 @@ CCzmLobby::CCzmLobby():CMenuFramework("CzmLobby"){
     s_lobby=this; m_stage=CREATE; m_request=m_kind=m_pressed=0;m_capacity=6;
     m_server=m_offset=m_next=m_owner=m_revision=m_memberCount=m_chatCount=m_cardCount=0;
     m_selectedMemberId=m_memberConfirm=0;
-    m_open=m_private=m_typing=m_ownReady=m_busy=m_invitePage=m_voiceAllMuted=false;
+    m_open=m_private=m_typing=m_ownReady=m_busy=m_voiceAllMuted=false;
     memset(m_hostMuted,0,sizeof(m_hostMuted));m_nextPoll=m_nextHeartbeat=m_nextVoicePoll=m_noticeUntil=0;
     m_title[0]=m_description[0]=m_room[0]=m_serverAddress[0]=m_serverProto[0]=0;
     m_notice[0]=m_text[0]=m_lastText[0]=m_nonce[0]=m_ownerName[0]=m_roomTitle[0]=m_pickedName[0]=m_pickedMap[0]=0;
@@ -129,7 +138,7 @@ void CCzmLobby::Open(bool create){
         }
         m_stage=create?CREATE:SEARCH; m_offset=0;m_request=0;
         Q_strncpy(m_title,"Zombie Team",sizeof(m_title));m_private=false;m_capacity=6;m_server=0;
-        m_invitePage=false;m_serverAddress[0]=m_serverProto[0]=m_pickedName[0]=m_pickedMap[0]=0;
+        m_serverAddress[0]=m_serverProto[0]=m_pickedName[0]=m_pickedMap[0]=0;
         // Prefer a server with enough slots for the chosen lobby capacity.
         // Fallback remains the user's first server if occupancy is stale.
         CzmServer *first=CZM_Server(0);
@@ -207,7 +216,7 @@ void CCzmLobby::Layout(){
     const int bh=Q_max(29,(int)(H*.056f));
     const int pw=Q_min((int)(W*(m_stage==ROOM?.72f:.70f)),
                        (int)(H*(m_stage==ROOM?1.54f:1.50f)));
-    const int ph=(int)(H*(m_stage==ROOM?.69f:.59f));
+    const int ph=(int)(H*(m_stage==ROOM?.66f:m_stage==SEARCH?.47f:.49f));
     m_panel=CZM_Rect((W-pw)/2,(H-ph)/2,pw,ph);
     const int left=m_panel.x+pad,inner=pw-2*pad;
     int top=m_panel.y+pad;
@@ -219,7 +228,7 @@ void CCzmLobby::Layout(){
     for(int i=0;i<9;i++)m_buttons[i]=CZM_Rect(0,0,0,0);
     for(int i=0;i<CZM_LOBBY_LIST;i++)m_cardsRect[i]=CZM_Rect(0,0,0,0);
     for(int i=0;i<CZM_LOBBY_MEMBERS;i++)m_membersRect[i]=CZM_Rect(0,0,0,0);
-    m_chatRect=m_textRect=m_sendRect=m_micRect=m_voiceAllRect=CZM_Rect(0,0,0,0);
+    m_chatRect=m_textRect=m_sendRect=m_micRect=m_voiceAllRect=m_roomServerRect=CZM_Rect(0,0,0,0);
 
     const int modalW=Q_min((int)(W*.42f),(int)(H*.90f));
     const int modalH=(int)(H*.57f);
@@ -243,8 +252,6 @@ void CCzmLobby::Layout(){
         m_primary=CZM_Rect(left,top,inner,(int)(H*.067f));
     }else if(m_stage==SEARCH){
         m_titleRect=CZM_Rect(left,top,inner,(int)(H*.058f));
-        m_buttons[3]=CZM_Rect(left,top,(inner-gap)/2,m_titleRect.h);
-        m_buttons[4]=CZM_Rect(left+(inner+gap)/2,top,(inner-gap)/2,m_titleRect.h);
         top+=m_titleRect.h+gap;
         const int row=(int)(H*.061f);
         for(int i=0;i<CZM_LOBBY_LIST;i++)
@@ -256,23 +263,29 @@ void CCzmLobby::Layout(){
         m_buttons[2]=CZM_Rect(left+inner/5,top-H*.135f,
                                inner*3/5,(int)(H*.055f));
     }else{
-        const int col=(int)(inner*.49f),other=inner-col-gap;
-        const int row=(int)(H*.061f);
+        // Selected game server is one quiet strip above the party and chat.
+        m_roomServerRect=CZM_Rect(left,top,inner,(int)(H*.070f));
+        top+=m_roomServerRect.h+gap;
+        const int col=(int)(inner*.44f),other=inner-col-gap;
+        const int row=Q_max(27,(int)(H*.048f));
         for(int i=0;i<CZM_LOBBY_MEMBERS;i++)
             m_membersRect[i]=CZM_Rect(left,top+i*(row+gap/2),col,row);
-        m_chatRect=CZM_Rect(left+col+gap,top,other,5*(row+gap/2));
-        m_micRect=CZM_Rect(m_chatRect.x+m_chatRect.w-(int)(H*.135f),
-                           m_chatRect.y+gap/2,(int)(H*.130f),(int)(H*.047f));
-        m_voiceAllRect=CZM_Rect(m_micRect.x-(int)(H*.148f),
-                                 m_micRect.y,(int)(H*.143f),m_micRect.h);
+        m_chatRect=CZM_Rect(left+col+gap,top,other,6*(row+gap/2)-gap/2);
+        const int voiceSize=Q_max(29,(int)(H*.047f));
+        m_micRect=CZM_Rect(m_chatRect.x+m_chatRect.w-voiceSize-gap/2,
+                           m_chatRect.y+gap/2,voiceSize,voiceSize);
+        m_voiceAllRect=CZM_Rect(m_micRect.x-voiceSize-gap/2,
+                                 m_micRect.y,voiceSize,voiceSize);
+        const int sendW=Q_max(34,(int)(H*.053f));
         m_textRect=CZM_Rect(m_chatRect.x,m_chatRect.y+m_chatRect.h+gap/2,
-                             other-(int)(H*.110f)-gap/2,(int)(H*.055f));
-        m_sendRect=CZM_Rect(m_textRect.x+m_textRect.w+gap/2,m_textRect.y,
-                             (int)(H*.110f),m_textRect.h);
-        top+=6*(row+gap/2)+gap;
+                             other-sendW-gap/2,(int)(H*.051f));
+        m_sendRect=CZM_Rect(m_textRect.x+m_textRect.w+gap/2,
+                             m_textRect.y,sendW,m_textRect.h);
+        top+=6*(row+gap/2)+(int)(H*.056f)+gap;
         const int buttonW=(inner-gap*4)/5;
+        const int footerH=Q_max(31,(int)(H*.057f));
         for(int i=0;i<5;i++)
-            m_buttons[i]=CZM_Rect(left+i*(buttonW+gap),top,buttonW,bh);
+            m_buttons[i]=CZM_Rect(left+i*(buttonW+gap),top,buttonW,footerH);
     }
 }
 int CCzmLobby::Hit() const{
@@ -291,9 +304,7 @@ int CCzmLobby::Hit() const{
         for(int i=0;i<3;i++)if(m_cardsRect[i].HasCursor())return SELECT+i;
         if(m_primary.HasCursor())return MAKE;
     }else if(m_stage==SEARCH){
-        if(m_cardCount==0&&!m_invitePage&&m_buttons[2].HasCursor())return MAKE;
-        if(m_buttons[3].HasCursor())return PUBLIC_LIST;
-        if(m_buttons[4].HasCursor())return INVITE_LIST;
+        if(m_cardCount==0&&m_buttons[2].HasCursor())return MAKE;
         for(int i=0;i<CZM_LOBBY_LIST;i++)if(m_cardsRect[i].HasCursor())return SELECT+i;
         if(m_buttons[0].HasCursor())return PREV;
         if(m_buttons[1].HasCursor())return NEXT;
@@ -318,8 +329,8 @@ void CCzmLobby::Refresh(){
     if(m_request||(!m_open&&m_stage!=ROOM))return;
     char url[190];
     if(m_stage==SEARCH){
-        if(m_invitePage)Query(GET_INVITES,"GET","/api/v1/lobbies/invitations");
-        else {snprintf(url,sizeof(url),"/api/v1/lobbies?offset=%d",m_offset);Query(GET_LIST,"GET",url);}
+        snprintf(url,sizeof(url),"/api/v1/lobbies?offset=%d",m_offset);
+        Query(GET_LIST,"GET",url);
     }
     else if(m_stage==ROOM && m_room[0]){
         snprintf(url,sizeof(url),"/api/v1/lobbies/%s",m_room);Query(GET_ROOM,"GET",url);
@@ -330,7 +341,10 @@ void CCzmLobby::ReadRoom(const CzmJson &j,int n){
     Q_strncpy(m_room,j.String(j.Get(n,"id")),sizeof(m_room));
     Q_strncpy(m_roomTitle,j.String(j.Get(n,"title")),sizeof(m_roomTitle));
     const char *newServer=j.String(j.Get(n,"server"));
-    if(strcmp(m_serverAddress,newServer))m_pickedMap[0]=0;
+    if(strcmp(m_serverAddress,newServer)){
+        m_pickedMap[0]=0;
+        m_pickedName[0]=0; // never display another server's title
+    }
     Q_strncpy(m_serverAddress,newServer,sizeof(m_serverAddress));
     Q_strncpy(m_serverProto,j.String(j.Get(n,"proto")),sizeof(m_serverProto));
     const char *map=j.String(j.Get(n,"map"));
@@ -431,10 +445,13 @@ void CCzmLobby::FinishRequest(int status,const char *body,int kind){
             }
             if(m_stage==SEARCH)Refresh();
         }
-    }else if(kind==GET_LIST||kind==GET_INVITES){
+    }else if(kind==GET_LIST){
         m_cardCount=0;
-        int list=j.Get(0,kind==GET_INVITES?"invites":"lobbies");
-        m_next=kind==GET_INVITES?-1:(j.Count(list)>CZM_LOBBY_LIST?m_offset+CZM_LOBBY_LIST:-1);
+        int list=j.Get(0,"lobbies");
+        // The API offers up to forty rows; our compact screen shows four.
+        // Advance within that page, rather than jumping forty rooms.
+        m_next=j.Count(list)>CZM_LOBBY_LIST?
+               m_offset+CZM_LOBBY_LIST:-1;
         for(int i=0;i<j.Count(list)&&m_cardCount<CZM_LOBBY_LIST;i++){
             int item=j.At(list,i);RoomCard &r=m_cards[m_cardCount++];
             Q_strncpy(r.id,j.String(j.Get(item,"id")),sizeof(r.id));
@@ -442,11 +459,11 @@ void CCzmLobby::FinishRequest(int status,const char *body,int kind){
             Q_strncpy(r.address,j.String(j.Get(item,"server")),sizeof(r.address));
             Q_strncpy(r.proto,j.String(j.Get(item,"proto")),sizeof(r.proto));
             Q_strncpy(r.map,j.String(j.Get(item,"map")),sizeof(r.map));
-            r.count=kind==GET_INVITES?-1:j.Int(j.Get(item,"count"));
+            r.count=j.Int(j.Get(item,"count"));
             r.capacity=j.Int(j.Get(item,"capacity"));
         }
     }else if(kind==GET_ROOM || kind==POST_JOIN || kind==POST_CREATE ||
-             kind==POST_READY || kind==POST_SERVER || kind==POST_ACCEPT ||
+             kind==POST_READY || kind==POST_SERVER ||
              kind==POST_KICK || kind==POST_TRANSFER){
         if(j.Type(n)==CzmJson::T_OBJECT){
             if(kind==POST_KICK||kind==POST_TRANSFER){
@@ -631,25 +648,12 @@ void CCzmLobby::Action(int hit){
         }
     }else if(m_stage==SEARCH){
         if(hit==MAKE){Open(true);return;}
-        if(hit==PUBLIC_LIST||hit==INVITE_LIST){
-            const bool chooseInvite=hit==INVITE_LIST;
-            if(m_invitePage!=chooseInvite){
-                m_invitePage=chooseInvite;m_offset=0;
-                m_cardCount=0;m_next=-1;Refresh();
-            }
-            return;
-        }
         if(hit==NEXT && m_next>=0){m_offset=m_next;Refresh();}
         if(hit==PREV && m_offset>0){m_offset=Q_max(0,m_offset-CZM_LOBBY_LIST);Refresh();}
         if(hit>=SELECT&&hit<SELECT+m_cardCount){
             char url[170];
-            if(m_invitePage){
-                snprintf(url,sizeof(url),"/api/v1/lobbies/invitations/%s/answer",m_cards[hit-SELECT].id);
-                Query(POST_ACCEPT,"POST",url,"{\"accept\":true}");
-            }else{
-                snprintf(url,sizeof(url),"/api/v1/lobbies/%s/join",m_cards[hit-SELECT].id);
-                Query(POST_JOIN,"POST",url,"{}");
-            }
+            snprintf(url,sizeof(url),"/api/v1/lobbies/%s/join",m_cards[hit-SELECT].id);
+            Query(POST_JOIN,"POST",url,"{}");
         }
     }else if(m_stage==ROOM){
         if(hit>=MEMBER&&hit<MEMBER+m_memberCount){
@@ -816,25 +820,25 @@ void CCzmLobby::Draw(){
                         L("СОЗДАТЬ ЛОББИ","CREATE LOBBY"),
                         SafeAddress(m_serverAddress)&&!m_request,true);
     }else if(m_stage==SEARCH){
-        Button(m_buttons[3],L("ОТКРЫТЫЕ","PUBLIC"),true,!m_invitePage);
-        Button(m_buttons[4],L("ПРИГЛАШЕНИЯ","INVITES"),true,m_invitePage);
+        CZM_DrawImage(UI_DIR "icon_users.png",
+                      m_titleRect.x,m_titleRect.y+m_titleRect.h/5,
+                      m_titleRect.h*3/5,m_titleRect.h*3/5);
+        Caption(CZM_Rect(m_titleRect.x+m_titleRect.h,m_titleRect.y,
+                         m_titleRect.w-m_titleRect.h,m_titleRect.h),
+                L("ПУБЛИЧНЫЕ КОМНАТЫ","PUBLIC ROOMS"),CZMF_TILE_STATUS);
         if(m_cardCount==0){
             const CzmRect &area=m_cardsRect[1];
             Caption(CZM_Rect(area.x,area.y-H*.038f,area.w,H*.070f),
-                    m_invitePage?L("Приглашений пока нет","No invitations yet"):
-                    L("Комнат пока нет — создайте первую",
-                      "No rooms yet — create the first one"),
+                    L("Пока нет открытых комнат","No public rooms yet"),
                     CZMF_LANG,CZM_Grey());
-            if(!m_invitePage)Button(m_buttons[2],
-                L("+ СОЗДАТЬ ЛОББИ","+ CREATE LOBBY"),true,true);
+            Button(m_buttons[2],L("СОЗДАТЬ ЛОББИ","CREATE LOBBY"),true,true);
         }
         for(int i=0;i<m_cardCount&&i<CZM_LOBBY_LIST;i++){
             const RoomCard &room=m_cards[i];const CzmRect &rect=m_cardsRect[i];
             UI_FillRect(rect.x,rect.y,rect.w,rect.h,PackRGBA(21,31,44,242));
             UI_FillRect(rect.x,rect.y,3,rect.h,PackRGBA(225,56,78,255));
             char summary[132];
-            if(m_invitePage)snprintf(summary,sizeof(summary),"%s",L("ПРИНЯТЬ","ACCEPT"));
-            else snprintf(summary,sizeof(summary),"%d/%d",room.count,room.capacity);
+            snprintf(summary,sizeof(summary),"%d/%d",room.count,room.capacity);
             int media=rect.h*1.68f,tx=rect.x+pad;
             if(room.map[0]){
                 CZM_DrawMapPreview(room.map,rect.x+4,rect.y+3,media,rect.h-6,room.address);
@@ -849,11 +853,36 @@ void CCzmLobby::Draw(){
                     summary,CZMF_LANG,PackRGBA(128,221,177,255));
         }
         // No dead pagination controls on an empty catalog.
-        if(!m_invitePage&&(m_offset>0||m_next>=0)){
+        if(m_offset>0||m_next>=0){
             Button(m_buttons[0],L("← НАЗАД","← PREV"),m_offset>0);
             Button(m_buttons[1],L("ДАЛЬШЕ →","NEXT →"),m_next>=0);
         }
     }else if(m_stage==ROOM){
+        // Immutable room capacity and current server visible to every member.
+        UI_FillRect(m_roomServerRect.x,m_roomServerRect.y,
+                    m_roomServerRect.w,m_roomServerRect.h,PackRGBA(24,35,49,245));
+        const int inset=Q_max(7,pad/2);
+        int sx=m_roomServerRect.x+inset;
+        if(m_pickedMap[0]){
+            const int thumbW=(int)(m_roomServerRect.h*1.45f);
+            CZM_DrawMapPreview(m_pickedMap,sx,m_roomServerRect.y+2,
+                                thumbW,m_roomServerRect.h-4,m_serverAddress);
+            sx+=thumbW+pad;
+        }else{
+            CZM_DrawImage(UI_DIR "icon_globe.png",sx,
+                          m_roomServerRect.y+m_roomServerRect.h/4,
+                          m_roomServerRect.h/2,m_roomServerRect.h/2);
+            sx+=m_roomServerRect.h/2+pad;
+        }
+        Caption(CZM_Rect(sx,m_roomServerRect.y,m_roomServerRect.w-(sx-m_roomServerRect.x)-pad,
+                         m_roomServerRect.h/2),
+                m_pickedName[0]?m_pickedName:m_serverAddress,CZMF_TILE_STATUS);
+        char occupancy[130];
+        snprintf(occupancy,sizeof(occupancy),"%s  ·  %d/%d",
+                 m_serverAddress,m_memberCount,m_capacity);
+        Caption(CZM_Rect(sx,m_roomServerRect.y+m_roomServerRect.h/2,
+                         m_roomServerRect.w-(sx-m_roomServerRect.x)-pad,
+                         m_roomServerRect.h/2),occupancy,CZMF_SMALL,CZM_Grey());
         for(int i=0;i<CZM_LOBBY_MEMBERS;i++){
             if(i>=m_capacity)continue;
             CzmRect rect=m_membersRect[i];
@@ -868,49 +897,50 @@ void CCzmLobby::Draw(){
                 tx+=av+margin;
                 char name[110];snprintf(name,sizeof(name),"%s%s",member.nick,
                              member.id==m_owner?"  ★":"");
-                Caption(CZM_Rect(tx,rect.y+margin,rect.w-(tx-rect.x)-margin,
-                                 rect.h/2-margin),name,CZMF_LANG);
+                const int micSpace=Q_max(24,(int)(H*.036f));
+                Caption(CZM_Rect(tx,rect.y+margin,
+                                 Q_max(10,rect.w-(tx-rect.x)-margin-micSpace),
+                                 rect.h/2-margin),name,CZMF_TILE_STATUS);
                 Caption(CZM_Rect(tx,rect.y+rect.h/2,rect.w-(tx-rect.x)-margin,
                     rect.h/2-margin),member.ready?L("Готов","Ready"):L("Не готов","Not ready"),
                     CZMF_SMALL,member.ready?PackRGBA(112,220,161,255):PackRGBA(234,165,165,255));
-                if(CZM_LobbyVoiceSpeaking(member.id))
-                    Caption(CZM_Rect(rect.x+rect.w-H*.15f,rect.y+margin,H*.14f,rect.h/2),
-                            L("ГОВОРИТ","TALKING"),CZMF_SMALL,PackRGBA(119,224,187,255));
-                if(m_hostMuted[i]||CZM_LobbyVoiceIsMuted(member.id))
-                    Caption(CZM_Rect(rect.x+rect.w-H*.13f,rect.y+rect.h/2,H*.12f,rect.h/2),
-                            L("МУТ","MUTED"),CZMF_SMALL,PackRGBA(235,125,139,255));
+                const bool speaking=CZM_LobbyVoiceSpeaking(member.id);
+                const bool muted=m_hostMuted[i]||CZM_LobbyVoiceIsMuted(member.id);
+                if(speaking||muted){
+                    const int iconSize=Q_max(21,(int)(H*.034f));
+                    CZM_DrawImage(muted?UI_DIR "icon_lobby_mic_off.png":
+                                        UI_DIR "icon_lobby_mic.png",
+                                  rect.x+rect.w-iconSize-margin,
+                                  rect.y+(rect.h-iconSize)/2,iconSize,iconSize,
+                                  speaking?PackRGBA(99,229,162,255):
+                                           PackRGBA(228,111,127,255));
+                }
             }else Caption(CZM_Rect(tx+margin,rect.y,rect.w-3*margin,rect.h),
                          L("+ СВОБОДНО","OPEN SLOT"),CZMF_SMALL,CZM_Grey());
         }
-        UI_FillRect(m_chatRect.x,m_chatRect.y,m_chatRect.w,m_chatRect.h,PackRGBA(15,25,39,245));
-        int inset=pad/2,titleH=H*.060f;
-        const char *server=m_serverAddress[0]?m_serverAddress:"";
-        int headerX=m_chatRect.x+inset;
-        if(m_pickedMap[0]){
-            const int preview=titleH*1.63f;
-            CZM_DrawMapPreview(m_pickedMap,headerX,m_chatRect.y+2,preview,
-                               titleH-4,m_pickedName[0]?m_pickedName:server);
-            headerX+=preview+inset;
-        }
-        Caption(CZM_Rect(headerX,m_chatRect.y,
-                Q_max(1,m_micRect.x-inset-headerX),titleH),
-                server,CZMF_SMALL);
+        UI_FillRect(m_chatRect.x,m_chatRect.y,m_chatRect.w,m_chatRect.h,
+                    PackRGBA(15,25,39,245));
+        const int chatInset=Q_max(6,pad/2),titleH=Q_max(34,(int)(H*.052f));
+        CZM_DrawImage(UI_DIR "icon_chat.png",m_chatRect.x+chatInset,
+                      m_chatRect.y+titleH/4,titleH/2,titleH/2);
+        Caption(CZM_Rect(m_chatRect.x+chatInset+titleH/2+chatInset,m_chatRect.y,
+                Q_max(16,m_voiceAllRect.x-m_chatRect.x-3*chatInset-titleH/2),
+                titleH),L("ЧАТ КОМАНДЫ","PARTY CHAT"),CZMF_TILE_STATUS);
         const bool micBlocked=VoiceBlocked();
-        Button(m_micRect,micBlocked?L("МИК МУТ","MIC MUTED"):
-                          (CZM_LobbyVoiceMicOn()?L("МИК ВКЛ","MIC ON"):
-                          L("МИК ВЫКЛ","MIC OFF")),
-               !micBlocked,CZM_LobbyVoiceMicOn()&&!micBlocked);
-        // Connection indicator: green = encrypted voice connected;
-        // amber = connecting; red = currently unavailable.
-        int voiceState=CZM_LobbyVoiceStatus();
-        int dot=Q_max(4,m_micRect.h/7);
-        unsigned int voiceColor=voiceState==2?PackRGBA(109,226,174,255):
-            (voiceState==1?PackRGBA(244,191,110,255):
-                            PackRGBA(236,96,109,255));
-        UI_FillRect(m_micRect.x+m_micRect.w-dot-2,m_micRect.y+2,dot,dot,voiceColor);
+        const bool microphoneOn=CZM_LobbyVoiceMicOn()&&!micBlocked;
+        IconChip(m_micRect,microphoneOn?UI_DIR "icon_lobby_mic.png":
+                UI_DIR "icon_lobby_mic_off.png",microphoneOn,micBlocked);
+        // Tiny LED indicates voice transport state; no truncated words.
+        const int voiceState=CZM_LobbyVoiceStatus();
+        const int dot=Q_max(4,m_micRect.h/7);
+        const unsigned voiceColor=voiceState==2?PackRGBA(109,226,174,255):
+             voiceState==1?PackRGBA(244,191,110,255):
+                           PackRGBA(236,96,109,255);
+        UI_FillRect(m_micRect.x+m_micRect.w-dot-1,m_micRect.y+1,
+                    dot,dot,voiceColor);
         if(m_owner==CZM_OnlinePlayer())
-            Button(m_voiceAllRect,m_voiceAllMuted?L("ВСЕ МУТ","ALL MUTED"):
-                L("МУТ ВСЕХ","MUTE ALL"),true,m_voiceAllMuted);
+            IconChip(m_voiceAllRect,UI_DIR "icon_sound.png",
+                     !m_voiceAllMuted,m_voiceAllMuted);
         int top=m_chatRect.y+titleH;
         if(m_chatCount==0)Caption(CZM_Rect(m_chatRect.x+inset,top,
             m_chatRect.w-2*inset,H*.06f),L("Напишите команде","Message your team"),
@@ -927,12 +957,13 @@ void CCzmLobby::Draw(){
                     caption,CZMF_SMALL);
         }
         DrawField(m_textRect,m_text[0]?m_text:L("Сообщение…","Message…"));
-        Button(m_sendRect,L("➤","SEND"),true,true);
-        Button(m_buttons[0],m_ownReady?L("НЕ ГОТОВ","NOT READY"):L("ГОТОВ","READY"),true,!m_ownReady);
+        IconChip(m_sendRect,UI_DIR "icon_send.png",true);
+        Button(m_buttons[0],m_ownReady?L("СНЯТЬ ГОТОВ","UNREADY"):
+                            L("ГОТОВ","READY"),true,m_ownReady);
         bool canStart=m_owner==CZM_OnlinePlayer()&&m_memberCount>=2;
         for(int i=0;i<m_memberCount;i++)
             if(m_members[i].id!=m_owner&&!m_members[i].ready)canStart=false;
-        Button(m_buttons[1],L("В БОЙ","START"),canStart,true);
+        Button(m_buttons[1],L("В БОЙ","START"),canStart,canStart);
         Button(m_buttons[2],L("СЕРВЕР","SERVER"),m_owner==CZM_OnlinePlayer());
         Button(m_buttons[3],L("ДРУЗЬЯ","FRIENDS"));
         Button(m_buttons[4],L("ВЫЙТИ","LEAVE"));
@@ -964,8 +995,11 @@ void CCzmLobby::Draw(){
         Button(m_modalButtons[5],L("ОТМЕНА","CANCEL"));
     }
     if(m_notice[0]&&EngFuncs::DoubleTime()<m_noticeUntil){
-        CzmRect bar=CZM_Rect(m_panel.x+pad,m_panel.y+m_panel.h-H*.066f,
-                             m_panel.w-2*pad,H*.057f);
+        // Ephemeral notices float outside the compact dialog; never cover
+        // the READY / START / LEAVE controls or the chat input.
+        int toastY=Q_max(4,m_panel.y-(int)(H*.061f));
+        CzmRect bar=CZM_Rect(m_panel.x+pad,toastY,
+                             m_panel.w-2*pad,(int)(H*.052f));
         CZM_DrawPill(UI_DIR "button_secondary.png",bar.x,bar.y,bar.w,bar.h);
         Caption(CZM_Rect(bar.x+pad,bar.y,bar.w-2*pad,bar.h),m_notice,CZMF_SMALL);
     }
@@ -985,6 +1019,7 @@ static char s_launchId[70],s_launchServer[64],s_launchProto[8];
 
 void CZM_LobbyFrame(void){
     if(s_lobby)s_lobby->Frame();
+    CZM_LobbyInviteFrame();
     if(s_identity!=CZM_OnlineIdentity()){
         if(s_identity!=-1&&s_lobby)s_lobby->ResetSession();
         s_identity=CZM_OnlineIdentity();s_deliveryNext=0;
@@ -1043,3 +1078,5 @@ void CZM_LobbyPickedServer(const char *address,const char *proto,
 }
 bool CZM_LobbyCanInvite(void){return s_lobby&&s_lobby->CanInvite();}
 void CZM_LobbyInviteFriend(int player){if(s_lobby)s_lobby->InviteFriend(player);}
+bool CZM_LobbyHasRoom(void){return s_lobby&&s_lobby->HasRoom();}
+void CZM_LobbyOpenAccepted(void){if(s_lobby)s_lobby->Open(false);}
