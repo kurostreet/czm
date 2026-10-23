@@ -5,6 +5,7 @@
  */
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include "extdll_menu.h"
 #include "BaseMenu.h"
 #include "Framework.h"
@@ -48,21 +49,24 @@ private:
     void Act(HitId hit);
     void Stop(bool dismissed);
     void Answer(bool accept);
-    int m_request,m_kind,m_identity,m_sender,m_count,m_capacity;
+    bool WasDismissed(const char *id) const;
+    int m_request,m_kind,m_identity,m_sender,m_count,m_capacity,m_dismissedCount;
+    time_t m_expires;
     bool m_open,m_pending,m_answerAccept;
     HitId m_pressed;
     double m_pollAt;
-    char m_id[64],m_dismissed[64],m_senderName[100],m_senderAvatar[32],
+    char m_id[64],m_dismissed[8][64],m_senderName[100],m_senderAvatar[32],
          m_roomTitle[128],m_server[64],m_map[64];
     char m_error[128];
     CzmRect m_panel,m_close,m_accept,m_decline,m_avatar,m_summary,m_title;
     int W,H;
 };
 CCzmLobbyInviteNotice::CCzmLobbyInviteNotice():CMenuFramework("CzmLobbyInvite"){
-    m_request=m_kind=m_identity=0;m_sender=m_count=m_capacity=0;
+    m_request=m_kind=m_identity=0;m_sender=m_count=m_capacity=m_dismissedCount=0;
+    m_expires=0;
     m_open=m_pending=m_answerAccept=false;m_pressed=HIT_NONE;m_pollAt=0;
-    m_id[0]=m_dismissed[0]=m_senderName[0]=m_senderAvatar[0]=
-        m_roomTitle[0]=m_server[0]=m_map[0]=m_error[0]=0;
+    m_id[0]=m_senderName[0]=m_senderAvatar[0]=m_roomTitle[0]=m_server[0]=m_map[0]=m_error[0]=0;
+    memset(m_dismissed,0,sizeof(m_dismissed));
     W=H=0;
 }
 void CCzmLobbyInviteNotice::Show(){
@@ -97,9 +101,23 @@ CCzmLobbyInviteNotice::HitId CCzmLobbyInviteNotice::Hit() const{
     if(m_decline.HasCursor())return HIT_DECLINE;
     return HIT_NONE;
 }
+bool CCzmLobbyInviteNotice::WasDismissed(const char *id) const{
+    if(!id||!id[0])return true;
+    for(int i=0;i<m_dismissedCount;i++)
+        if(!strcmp(m_dismissed[i],id))return true;
+    return false;
+}
 void CCzmLobbyInviteNotice::Stop(bool dismissed){
-    if(dismissed&&m_id[0])Q_strncpy(m_dismissed,m_id,sizeof(m_dismissed));
-    m_id[0]=0;m_pending=false;
+    if(dismissed&&m_id[0]&&!WasDismissed(m_id)){
+        const int max=(int)(sizeof(m_dismissed)/sizeof(m_dismissed[0]));
+        if(m_dismissedCount==max){
+            memmove(m_dismissed[0],m_dismissed[1],
+                    (max-1)*sizeof(m_dismissed[0]));
+            m_dismissedCount--;
+        }
+        Q_strncpy(m_dismissed[m_dismissedCount++],m_id,sizeof(m_dismissed[0]));
+    }
+    m_id[0]=0;m_expires=0;m_pending=false;
     if(m_open)Hide();
 }
 void CCzmLobbyInviteNotice::Answer(bool accept){
@@ -179,9 +197,11 @@ void CCzmLobbyInviteNotice::Draw(){
 void CCzmLobbyInviteNotice::Frame(){
     if(m_identity!=CZM_OnlineIdentity()){
         m_identity=CZM_OnlineIdentity();m_request=0;m_kind=0;m_pollAt=0;
-        m_id[0]=m_dismissed[0]=m_error[0]=0;
+        m_id[0]=m_error[0]=0;m_expires=0;m_dismissedCount=0;
+        memset(m_dismissed,0,sizeof(m_dismissed));
         if(m_open)Hide();
     }
+    if(m_open&&m_expires&&time(NULL)>=m_expires)Stop(false);
     // Foreground only. Real Android background delivery is a separate task.
     if(!CZM_OnlineAccount()||!CZM_OnlineReady()||CL_IsActive()){
         if(m_open)Hide();
@@ -208,10 +228,14 @@ void CCzmLobbyInviteNotice::Frame(){
             return;
         }
         const int array=j.Get(0,"invites");
-        if(j.Count(array)>0&&!CZM_LobbyHasRoom()){
-            const int item=j.At(array,0);
-            const char *id=j.String(j.Get(item,"id"));
-            if(id&&id[0]&&strcmp(id,m_dismissed)){
+        bool selected=false;
+        if(!CZM_LobbyHasRoom()){
+            for(int i=0;i<j.Count(array);i++){
+                const int item=j.At(array,i);
+                const char *id=j.String(j.Get(item,"id"));
+                if(WasDismissed(id))continue;
+                const time_t expires=(time_t)j.Int(j.Get(item,"expires"));
+                if(expires<=time(NULL))continue;
                 Q_strncpy(m_id,id,sizeof(m_id));
                 Q_strncpy(m_senderName,j.String(j.Get(item,"sender_name")),
                           sizeof(m_senderName));
@@ -224,15 +248,19 @@ void CCzmLobbyInviteNotice::Frame(){
                 m_sender=j.Int(j.Get(item,"sender"));
                 m_count=j.Int(j.Get(item,"count"),1);
                 m_capacity=j.Int(j.Get(item,"capacity"),6);
+                m_expires=expires;
                 if(!m_senderName[0])snprintf(m_senderName,sizeof(m_senderName),
-                                            "Игрок #%d",m_sender);
-                m_pending=true;m_error[0]=0;
+                                             "Игрок #%d",m_sender);
+                m_pending=true;m_error[0]=0;selected=true;
                 if(!m_open)Show();
+                break;
             }
-        }else if(m_open)Stop(false);
+        }
+        if(!selected&&m_open)Stop(false);
         m_pollAt=EngFuncs::DoubleTime()+10;
     }
-    if(m_request||m_open||CZM_LobbyHasRoom()||EngFuncs::DoubleTime()<m_pollAt)return;
+    // Refresh active cards too: deleted or expired rooms disappear promptly.
+    if(m_request||CZM_LobbyHasRoom()||EngFuncs::DoubleTime()<m_pollAt)return;
     m_request=CZM_NetRequest("GET",CZM_OnlineUrl("/api/v1/lobbies/invitations"),
                              CZM_OnlineKey(),"");
     if(m_request)m_kind=1;
