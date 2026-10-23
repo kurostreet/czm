@@ -216,7 +216,22 @@ void CCzmLobby::Layout(){
     const int bh=Q_max(29,(int)(H*.056f));
     const int pw=Q_min((int)(W*(m_stage==ROOM?.72f:.70f)),
                        (int)(H*(m_stage==ROOM?1.54f:1.50f)));
-    const int ph=(int)(H*(m_stage==ROOM?.66f:m_stage==SEARCH?.47f:.49f));
+    // Fit actual content instead of allowing a compact overlay to clip its
+    // bottom actions on 360-480px landscape displays.
+    const int roomRow=Q_max(22,(int)(H*.041f));
+    const int chatFieldH=Q_max(25,(int)(H*.050f));
+    const int roomFooter=Q_max(31,(int)(H*.057f));
+    const int createMinimum=2*pad+bh+5*gap+
+        (int)(H*(.064f+.060f+.106f+.052f+.067f));
+    const int searchRow=Q_max(23,(int)(H*.061f));
+    const int searchMinimum=2*pad+2*bh+3*gap+(int)(H*.058f)+
+        CZM_LOBBY_LIST*(searchRow+gap/2);
+    const int roomMinimum=2*pad+bh+3*gap+(int)(H*.070f)+
+        CZM_LOBBY_MEMBERS*(roomRow+gap/2)+chatFieldH+roomFooter;
+    const int minimum=m_stage==ROOM?roomMinimum:
+                      m_stage==SEARCH?searchMinimum:createMinimum;
+    const int desired=(int)(H*(m_stage==ROOM?.66f:m_stage==SEARCH?.47f:.49f));
+    const int ph=Q_min(H-2*pad,Q_max(desired,minimum));
     m_panel=CZM_Rect((W-pw)/2,(H-ph)/2,pw,ph);
     const int left=m_panel.x+pad,inner=pw-2*pad;
     int top=m_panel.y+pad;
@@ -253,7 +268,7 @@ void CCzmLobby::Layout(){
     }else if(m_stage==SEARCH){
         m_titleRect=CZM_Rect(left,top,inner,(int)(H*.058f));
         top+=m_titleRect.h+gap;
-        const int row=(int)(H*.061f);
+        const int row=searchRow;
         for(int i=0;i<CZM_LOBBY_LIST;i++)
             m_cardsRect[i]=CZM_Rect(left,top+i*(row+gap/2),inner,row);
         top+=CZM_LOBBY_LIST*(row+gap/2)+gap;
@@ -267,7 +282,7 @@ void CCzmLobby::Layout(){
         m_roomServerRect=CZM_Rect(left,top,inner,(int)(H*.070f));
         top+=m_roomServerRect.h+gap;
         const int col=(int)(inner*.44f),other=inner-col-gap;
-        const int row=Q_max(27,(int)(H*.048f));
+        const int row=roomRow;
         for(int i=0;i<CZM_LOBBY_MEMBERS;i++)
             m_membersRect[i]=CZM_Rect(left,top+i*(row+gap/2),col,row);
         m_chatRect=CZM_Rect(left+col+gap,top,other,6*(row+gap/2)-gap/2);
@@ -278,12 +293,12 @@ void CCzmLobby::Layout(){
                                  m_micRect.y,voiceSize,voiceSize);
         const int sendW=Q_max(34,(int)(H*.053f));
         m_textRect=CZM_Rect(m_chatRect.x,m_chatRect.y+m_chatRect.h+gap/2,
-                             other-sendW-gap/2,(int)(H*.051f));
+                             other-sendW-gap/2,chatFieldH);
         m_sendRect=CZM_Rect(m_textRect.x+m_textRect.w+gap/2,
                              m_textRect.y,sendW,m_textRect.h);
-        top+=6*(row+gap/2)+(int)(H*.056f)+gap;
+        top+=6*(row+gap/2)+chatFieldH+gap;
         const int buttonW=(inner-gap*4)/5;
-        const int footerH=Q_max(31,(int)(H*.057f));
+        const int footerH=roomFooter;
         for(int i=0;i<5;i++)
             m_buttons[i]=CZM_Rect(left+i*(buttonW+gap),top,buttonW,footerH);
     }
@@ -945,9 +960,14 @@ void CCzmLobby::Draw(){
         if(m_chatCount==0)Caption(CZM_Rect(m_chatRect.x+inset,top,
             m_chatRect.w-2*inset,H*.06f),L("Напишите команде","Message your team"),
             CZMF_SMALL,CZM_Grey());
-        int lineH=Q_max(17,(m_chatRect.h-titleH)/CZM_LOBBY_MESSAGES);
-        for(int i=0;i<m_chatCount;i++){
-            int y=top+i*lineH;
+        const int available=Q_max(0,m_chatRect.h-titleH);
+        const int lineH=Q_max(15,available/CZM_LOBBY_MESSAGES);
+        // Draw only what fits in the chat box on small landscape screens;
+        // old lines remain on the server, never run into the input row.
+        const int visible=Q_min(m_chatCount,available/lineH);
+        const int first=m_chatCount-visible;
+        for(int i=first;i<m_chatCount;i++){
+            int y=top+(i-first)*lineH;
             ChatLine &msg=m_chat[i];
             char caption[490];
             const char *name=msg.nick[0]?msg.nick:L("Игрок","Player");
