@@ -66,6 +66,8 @@ jobs:
         run: |
           python3 -m unittest discover -s tests -p test_engine_patches.py -v
           python3 scripts/apply_engine_patches.py
+      - name: Check equal-height coloured home buttons and touch geometry
+        run: python3 -m unittest discover -s tests -p test_home_actions.py -v
       - name: Check shared map capture state and read-only protection
         run: |
           python3 -m unittest discover -s tests -p test_map_capture.py -v

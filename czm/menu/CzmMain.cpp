@@ -274,14 +274,17 @@ void CCzmMainMenu::Layout( void )
 	// quick play under the logo, left of the tiles
 	{
 		int qw = Q_min( (int)( H * 0.66f ), ( m_iTiles > 0 ? m_tiles[0].x : W ) - m_iMargin - (int)( H * 0.06f ));
-		m_quick = CZM_Rect( m_iMargin, H * 0.335f, qw, H * 0.105f );
-        // Two compact actions on one row, not two giant buttons.
-        // Keep sufficient separation for enlarged touch-hit rectangles.
-        const int lobbyGap=Q_max(14,(int)(H*.029f));
-        const int lobbyWidth=(m_quick.w-lobbyGap)/2;
-        m_lobbyCreate=CZM_Rect(m_quick.x,H*.520f,lobbyWidth,H*.072f);
-        m_lobbySearch=CZM_Rect(m_quick.x+lobbyWidth+lobbyGap,
-                               H*.520f,lobbyWidth,H*.072f);
+		// Three equal full-width actions, aligned to the same left edge.
+		// Same height/corner radius as Quick Play; different colours only.
+		const int actionHeight = Q_max(48,(int)(H * 0.105f));
+		// The touch rectangles grow by 1.5% of H on each side.
+		// Leave >3% between rows so adjacent hit regions never overlap.
+		const int actionGap = Q_max(12,(int)(H * 0.038f));
+		m_quick = CZM_Rect( m_iMargin, H * 0.335f, qw, actionHeight );
+		m_lobbyCreate = CZM_Rect(m_quick.x,m_quick.y+actionHeight+actionGap,
+		                         m_quick.w,actionHeight);
+		m_lobbySearch = CZM_Rect(m_quick.x,m_lobbyCreate.y+actionHeight+actionGap,
+		                         m_quick.w,actionHeight);
 	}
 
 	// The visible cards are also their touch targets; the gaps stay empty.
@@ -752,14 +755,13 @@ void CCzmMainMenu::DrawQuick( void )
 		CZM_DrawText( titleFont, tx, r.y + ( r.h - CZM_FontHeight( titleFont )) / 2, tw, text, CZM_White());
 	}
 
-	// under the button: what it does, or why it found nothing
-	{
-		bool note = m_szQuickNote[0] && now < m_flQuickNote;
-		const char *line = note ? m_szQuickNote : searching ? CZM_T( "quick_cancel" ) : CZM_T( "quick_hint" );
-
-		CZM_DrawText( small, r.x + r.h * 0.25f, r.y + r.h + H * 0.014f, r.w + H * 0.2f, line,
-			note ? PackRGBA( 252, 165, 165, 255 ) : PackRGBA( 200, 206, 216, 230 ));
-	}
+	// Quick Play errors are shown below all three buttons, never between
+	// the buttons or over their hit regions. Normal mode stays uncluttered.
+	if( m_szQuickNote[0] && now < m_flQuickNote )
+		CZM_DrawText( small, m_lobbySearch.x + m_lobbySearch.h * 0.20f,
+		              m_lobbySearch.y + m_lobbySearch.h + H * 0.010f,
+		              m_lobbySearch.w, m_szQuickNote,
+		              PackRGBA( 255, 193, 185, 255 ));
 }
 
 void CCzmMainMenu::DrawTitle( void )
@@ -1453,24 +1455,48 @@ void CCzmMainMenu::Draw()
 
 	DrawTitle();
 	DrawQuick();
+	// Matching pill graphics are colour variants of Quick Play's base
+	// asset, rather than narrow/flat secondary buttons.
 	{
 		const CzmRect buttons[2] = { m_lobbyCreate, m_lobbySearch };
 		const char *ru[2] = { "СОЗДАТЬ ЛОББИ", "ПОИСК ЛОББИ" };
 		const char *en[2] = { "CREATE LOBBY", "FIND LOBBY" };
-		for( int i = 0; i < 2; i++ )
+		const char *backgrounds[2] = {
+			UI_DIR "button_lobby_blue.png",
+			UI_DIR "button_lobby_yellow.png"
+		};
+		const char *icons[2] = {
+			UI_DIR "icon_users.png",
+			UI_DIR "icon_search.png"
+		};
+		const unsigned int badges[2] = {
+			PackRGBA( 17, 65, 141, 235 ),
+			PackRGBA( 114, 77, 12, 180 )
+		};
+		for( int i = 0; i < 2; ++i )
 		{
-			const CzmRect &r=buttons[i];
-			bool down=IsPressed( i ? HIT_LOBBY_SEARCH : HIT_LOBBY_CREATE );
-			CZM_DrawPill( UI_DIR "button_secondary.png",r.x,r.y,r.w,r.h,
-				down ? PackRGBA(190,190,190,255) : CZM_White() );
-			const char *title=CZM_IsRussian()?ru[i]:en[i];
-            HFont font=CZM_Font(CZMF_TILE_STATUS);
-            CZM_DrawText(font,r.x+H*.008f,r.y+(r.h-CZM_FontHeight(font))/2,
-                r.w-H*.016f,title,CZM_White(),QM_CENTER);
-            // Thin accent links the pair visually to the quick-play action.
-            UI_FillRect(r.x+Q_max(5,(int)(H*.010f)),r.y+r.h-3,
-                r.w-2*Q_max(5,(int)(H*.010f)),2,
-                i==0?PackRGBA(224,52,63,230):PackRGBA(104,150,187,220));
+			const CzmRect &r = buttons[i];
+			const bool pressed = IsPressed(i ? HIT_LOBBY_SEARCH : HIT_LOBBY_CREATE);
+			CZM_DrawPill(backgrounds[i],r.x,r.y,r.w,r.h,
+			             pressed ? PackRGBA( 195, 195, 195, 255 ) : CZM_White());
+			// Same circular icon placement as the red Quick Play action.
+			const int iconBox = (int)(r.h * .70f);
+			const int iconX = r.x + (int)(r.h * .15f);
+			const int iconY = r.y + (r.h-iconBox)/2;
+			CZM_DrawImage(UI_DIR "dot.png",iconX,iconY,
+			              iconBox,iconBox,badges[i]);
+			const int pict = (int)(iconBox * .46f);
+			const unsigned int ink = i
+			    ? PackRGBA( 49, 37, 14, 255 )
+			    : CZM_White();
+			CZM_DrawImage(icons[i],iconX+(iconBox-pict)/2,
+			              iconY+(iconBox-pict)/2,pict,pict,ink);
+			const int tx = r.x+(int)(r.h * 1.05f);
+			const int tw = r.x+r.w-(int)(r.h*.35f)-tx;
+			const char *label = CZM_IsRussian()?ru[i]:en[i];
+			const HFont font=CZM_Font(CZMF_TILE_NAME);
+			CZM_DrawText(font,tx,r.y+(r.h-CZM_FontHeight(font))/2,
+			              tw,label,ink);
 		}
 	}
 	for( int i = 0; i < m_iTiles; i++ )
