@@ -42,6 +42,19 @@ inline void Button(const CzmRect &r,const char *label,bool enabled=true,
     Text(CZM_Rect(r.x+r.h/4,r.y,r.w-r.h/2,r.h),label,font,
          enabled?(accent&&!primary?accent:Ink()):Muted(),QM_CENTER);
 }
+inline void TextLines(const CzmRect &r,const char *text,int font=CZMF_UI_LABEL,
+                      unsigned color=0) {
+    const HFont f=CZM_Font(font);
+    const int lineH=Q_max(1,CZM_FontHeight(f));
+    const int limit=Q_min(4,r.h/lineH);
+    if(r.w<=0||limit<=0||!text)return;
+    int starts[5];
+    const int count=CZM_WrapText(f,text,r.w,starts,limit);
+    for(int i=0;i<count;i++){
+        char line[256];CZM_WrapLine(text,starts,i,line,sizeof(line));
+        CZM_DrawText(f,r.x,r.y+i*lineH,r.w,line,color?color:Ink());
+    }
+}
 inline void Icon(const CzmRect &r,const char *path,unsigned color=0) {
     const int side=Q_min(r.w,r.h)/2;
     CZM_DrawImage(path,r.x+(r.w-side)/2,r.y+(r.h-side)/2,

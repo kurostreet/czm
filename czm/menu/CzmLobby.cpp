@@ -87,6 +87,7 @@ private:
     void Poll();
     void Refresh();
     void SendMessage();
+    void SetReady(bool ready);
     void StopInput();
     bool VoiceBlocked() const;
     bool CanStart() const;
@@ -96,6 +97,7 @@ private:
     int m_filterMode,m_pickedPlayers,m_pickedSlots;
     bool m_closePending;
     bool m_needMine;
+    bool m_readyQueued,m_readyTarget;
     int m_readEpoch,m_pendingEpoch;
     bool m_open,m_private,m_typing,m_ownReady,m_busy,m_voiceAllMuted;
     bool m_hostMuted[CZM_LOBBY_MEMBERS];
@@ -112,6 +114,7 @@ private:
     CzmRect m_buttons[9],m_cardsRect[CZM_LOBBY_LIST],m_membersRect[CZM_LOBBY_MEMBERS],m_chatRect;
     CzmRect m_textRect,m_sendRect,m_micRect,m_voiceAllRect,m_roomServerRect,m_modal,m_modalButtons[6];
     CzmRect m_visibilityRect,m_switchRect,m_capacityRect[5],m_filterRect[3],m_teamTitleRect,m_catalogRect;
+    CzmRect m_createMapRect,m_createInfoRect;
     int W,H,pad;
 };
 
@@ -124,6 +127,7 @@ CCzmLobby::CCzmLobby():CMenuFramework("CzmLobby"){
     m_selectedMemberId=m_memberConfirm=0;
     m_filterMode=0;m_next=-1;m_closePending=false;m_pickedPlayers=m_pickedSlots=-1;
     m_needMine=false;m_readEpoch=m_pendingEpoch=0;
+    m_readyQueued=m_readyTarget=false;
     m_open=m_private=m_typing=m_ownReady=m_busy=m_voiceAllMuted=false;
     memset(m_hostMuted,0,sizeof(m_hostMuted));m_nextPoll=m_nextHeartbeat=m_nextVoicePoll=m_noticeUntil=0;
     m_title[0]=m_description[0]=m_room[0]=m_serverAddress[0]=m_serverProto[0]=0;
@@ -204,6 +208,7 @@ void CCzmLobby::ResetSession(){
     m_request=0;m_kind=0;m_busy=false;
     m_closePending=false;
     m_needMine=false;++m_readEpoch;
+    m_readyQueued=false;
     m_room[0]=m_roomTitle[0]=m_text[0]=m_pickedMap[0]=0;
     m_memberCount=m_chatCount=m_selectedMemberId=m_memberConfirm=0;
     m_owner=0;m_stage=SEARCH;m_nextVoicePoll=0;m_nextHeartbeat=0;
@@ -250,6 +255,7 @@ void CCzmLobby::Layout(){
     for(int i=0;i<CZM_LOBBY_LIST;i++)m_cardsRect[i]=CZM_Rect(0,0,0,0);
     for(int i=0;i<CZM_LOBBY_MEMBERS;i++)m_membersRect[i]=CZM_Rect(0,0,0,0);
     m_visibilityRect=m_switchRect=m_catalogRect=CZM_Rect(0,0,0,0);
+    m_createMapRect=m_createInfoRect=CZM_Rect(0,0,0,0);
     for(int i=0;i<5;i++)m_capacityRect[i]=CZM_Rect(0,0,0,0);
     for(int i=0;i<3;i++)m_filterRect[i]=CZM_Rect(0,0,0,0);
     m_chatRect=m_textRect=m_sendRect=m_micRect=m_voiceAllRect=m_roomServerRect=m_teamTitleRect=CZM_Rect(0,0,0,0);
@@ -274,6 +280,10 @@ void CCzmLobby::Layout(){
         for(int i=0;i<5;i++)m_capacityRect[i]=CZM_Rect(left+i*(slot+gap),top+group*2+label,slot,bh);
         m_cardsRect[0]=CZM_Rect(left+col+gap,top,right,bodyH);
         m_buttons[2]=CZM_Rect(m_cardsRect[0].x+gap,m_cardsRect[0].y+bodyH-gap-bh,right-gap*2,bh);
+        const int photo=Q_min(bodyH-bh-gap*3,(right-gap*3)*2/5);
+        m_createMapRect=CZM_Rect(m_cardsRect[0].x+gap,top+gap,photo,photo);
+        m_createInfoRect=CZM_Rect(m_createMapRect.x+photo+gap,top+gap,
+            right-photo-gap*3,m_buttons[2].y-top-gap*2);
         m_primary=CZM_Rect(left+col+gap,footer,right,bh);
     }else if(m_stage==SEARCH){
         const int fw=(inner-gap*2)/3;
@@ -374,6 +384,7 @@ void CCzmLobby::ReadRoom(const CzmJson &j,int n){
     if(j.Type(n)!=CzmJson::T_OBJECT)return;
     const char *newRoom=j.String(j.Get(n,"id"));
     if(strcmp(m_room,newRoom)){
+        m_readyQueued=false;
         StopInput();m_text[0]=0;m_chatCount=0;
         m_nextVoicePoll=0;CZM_LobbyVoiceStop();
     }
@@ -575,6 +586,11 @@ void CCzmLobby::Frame(){
     }
     if(m_open&&m_needMine&&!m_request){Query(GET_MINE,"GET","/api/v1/lobbies/mine");return;}
     bool inRoom=m_stage==ROOM&&m_room[0];
+    if(!inRoom)m_readyQueued=false;
+    if(inRoom&&m_readyQueued&&!m_request){
+        m_readyQueued=false;
+        if(m_ownReady!=m_readyTarget){SetReady(m_readyTarget);return;}
+    }
     if(inRoom){
         if(now>=m_nextVoicePoll){
             char path[170];
@@ -612,6 +628,12 @@ void CCzmLobby::SendMessage(){
     CUtlString request;request.Append("{\"text\":");CZM_JsonQuote(request,m_text);
     request.Append(",\"nonce\":");CZM_JsonQuote(request,nonce);request.Append("}");
     Query(POST_CHAT,"POST",path,request.Get());
+}
+void CCzmLobby::SetReady(bool ready){
+    char url[140],body[100];
+    snprintf(url,sizeof(url),"/api/v1/lobbies/%s/ready",m_room);
+    snprintf(body,sizeof(body),"{\"revision\":%d,\"ready\":%s}",m_revision,ready?"true":"false");
+    Query(POST_READY,"POST",url,body);
 }
 void CCzmLobby::Action(int hit){
     if(hit==BACKDROP){
@@ -686,7 +708,15 @@ void CCzmLobby::Action(int hit){
         }else Hide();
         return;
     }
-    if(m_request)return;
+    if(m_request){
+        // Background reads must neither flash the button nor swallow a tap.
+        // Apply the requested state after the read, with its current revision.
+        if(hit==READY&&m_stage==ROOM&&m_room[0]&&!m_readyQueued&&
+           (m_kind==GET_ROOM||m_kind==GET_CHAT||m_kind==GET_MINE||m_kind==POST_HEARTBEAT)){
+            m_readyQueued=true;m_readyTarget=!m_ownReady;
+        }
+        return;
+    }
     if(hit==REFRESH){m_nextPoll=0;Refresh();return;}
     if(m_stage==CREATE){
         if(hit>=CAPACITY&&hit<CAPACITY+5){StopInput();m_capacity=hit-CAPACITY+2;return;}
@@ -751,10 +781,7 @@ void CCzmLobby::Action(int hit){
         }
         if(hit==SEND){SendMessage();return;}
         if(hit==READY){
-            char url[140],body[100];
-            snprintf(url,sizeof(url),"/api/v1/lobbies/%s/ready",m_room);
-            snprintf(body,sizeof(body),"{\"revision\":%d,\"ready\":%s}",m_revision,m_ownReady?"false":"true");
-            Query(POST_READY,"POST",url,body);return;
+            SetReady(!m_ownReady);return;
         }
         if(hit==LAUNCH){
             if(m_owner!=CZM_OnlinePlayer()){Notice(L("Стартует только хозяин","Host starts the match"));return;}
@@ -920,15 +947,15 @@ void CCzmLobby::Draw(){
 
         const CzmRect r=m_cardsRect[0];
         CzmStyle::Surface(r,PackRGBA(20,29,41,255));
-        const int ix=r.x+gap,iw=r.w-gap*2;
-        const int th=Q_max(12,(int)(H*.038f));
-        const int photoH=Q_max(25,r.h-m_buttons[2].h-gap*4-label-th*2);
+        const CzmRect info=m_createInfoRect;
+        const int th=CZM_FontHeight(CZM_Font(CZMF_UI_LABEL));
         char summary[160];ServerSummary(summary,sizeof(summary));
-        CzmStyle::MapPreview(CZM_Rect(ix,r.y+gap,iw,photoH),m_pickedMap,m_pickedName);
-        const int ty=r.y+gap+photoH+gap;
-        CzmStyle::Text(CZM_Rect(ix,ty,iw,label),L("ВЫБРАННЫЙ СЕРВЕР","SELECTED SERVER"),CZMF_UI_META,accent);
-        CzmStyle::Text(CZM_Rect(ix,ty+label,iw,th),m_pickedName[0]?m_pickedName:L("Выбери игровой сервер","Select a game server"),CZMF_UI_LABEL);
-        CzmStyle::Text(CZM_Rect(ix,ty+label+th,iw,th),summary,CZMF_UI_META,CzmStyle::Muted());
+        CzmStyle::MapPreview(m_createMapRect,m_pickedMap,m_pickedName);
+        CzmStyle::Text(CZM_Rect(info.x,info.y,info.w,label),L("ВЫБРАННЫЙ СЕРВЕР","SELECTED SERVER"),CZMF_UI_META,accent);
+        CzmStyle::TextLines(CZM_Rect(info.x,info.y+label,info.w,th*2),
+            m_pickedName[0]?m_pickedName:L("Выбери игровой сервер","Select a game server"),CZMF_UI_LABEL);
+        CzmStyle::Text(CZM_Rect(info.x,info.y+label+th*2+gap/2,info.w,label),summary,CZMF_UI_META,CzmStyle::Muted());
+        CzmStyle::Text(CZM_Rect(info.x,info.y+label*2+th*2+gap/2,info.w,label),m_pickedMap,CZMF_UI_META,CzmStyle::Muted());
         CzmStyle::Button(m_buttons[2],SafeAddress(m_serverAddress)?L("Изменить сервер","Change server"):L("Выбрать сервер","Select server"),true,false,m_pressed==SERVER_NEXT,accent);
         CzmStyle::Button(m_primary,m_kind==POST_CREATE?L("Создаём…","Creating…"):L("Создать лобби","Create lobby"),
             SafeAddress(m_serverAddress)&&!m_request,true,m_pressed==MAKE,0,CZMF_UI_ACTION);
@@ -959,7 +986,7 @@ void CCzmLobby::Draw(){
         for(int i=0;i<m_cardCount&&i<CZM_LOBBY_LIST;i++){
             const RoomCard &room=m_cards[i];const CzmRect r=m_cardsRect[i];
             CzmStyle::Surface(r,PackRGBA(22,31,43,255),m_pressed==SELECT+i?accent:0);
-            const int inset=Q_max(4,gap/2),media=(r.h-inset*2)*16/10;
+            const int inset=Q_max(4,gap/2),media=r.h-inset*2;
             CzmStyle::MapPreview(CZM_Rect(r.x+inset,r.y+inset,media,r.h-inset*2),room.map,room.address);
             const int tx=r.x+media+inset+gap;
             const int joinW=Q_max(64,(int)(H*.17f));
@@ -981,7 +1008,7 @@ void CCzmLobby::Draw(){
         char summary[160];ServerSummary(summary,sizeof(summary));
         const CzmRect sr=m_roomServerRect;
         CzmStyle::Surface(sr,PackRGBA(22,31,43,255));
-        const int media=(sr.h-gap)*16/10;
+        const int media=sr.h-gap;
         CzmStyle::MapPreview(CZM_Rect(sr.x+gap/2,sr.y+gap/2,media,sr.h-gap),m_pickedMap,m_pickedName);
         const int sx=sr.x+media+gap*2,sw=sr.w-(sx-sr.x)-gap;
         CzmStyle::Text(CZM_Rect(sx,sr.y,sw,sr.h/2),m_pickedName[0]?m_pickedName:m_serverAddress[0]?m_serverAddress:L("Выбранный игровой сервер","Selected game server"),CZMF_UI_LABEL);
@@ -1048,7 +1075,8 @@ void CCzmLobby::Draw(){
         DrawField(m_textRect,m_text[0]?m_text:L("Сообщение команде…","Message your team…"));
         CzmStyle::Button(m_sendRect,"",!m_request&&m_text[0],false,m_pressed==SEND,CzmStyle::AccentBlue());
         CzmStyle::Icon(m_sendRect,UI_DIR "icon_send.png",m_text[0]?CzmStyle::AccentBlue():CzmStyle::Muted());
-        CzmStyle::Button(m_buttons[0],m_ownReady?L("Готов ✓","Ready ✓"):L("Я готов","Ready up"),!m_request,false,m_ownReady,m_ownReady?CzmStyle::Success():CzmStyle::AccentBlue());
+        CzmStyle::Button(m_buttons[0],m_ownReady?L("Готов ✓","Ready ✓"):L("Я готов","Ready up"),
+            true,false,m_ownReady,m_ownReady?CzmStyle::Success():CzmStyle::AccentBlue());
         CzmStyle::Button(m_buttons[2],L("Сервер","Server"),m_owner==CZM_OnlinePlayer(),false,m_pressed==SERVER_NEXT);
         CzmStyle::Button(m_buttons[3],L("Друзья","Friends"),true,false,m_pressed==INVITE);
         CzmStyle::Button(m_buttons[4],L("Выйти","Leave"),true,false,m_pressed==LEAVE);
