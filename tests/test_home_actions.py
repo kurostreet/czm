@@ -71,28 +71,22 @@ class HomeActionVisualSafetyTests(unittest.TestCase):
             self.assertGreater(gap,2*grow)
 
     def test_previous_auxiliary_note_does_not_split_buttons(self):
-        self.assertIn("m_lobbySearch.y + m_lobbySearch.h",MAIN)
+        self.assertIn("m_lobbySearch.y+m_lobbySearch.h",MAIN.replace(" ",""))
         self.assertNotIn("r.y + r.h + H * 0.014f",MAIN)
 
-    def test_color_variants_preserve_exact_red_pill_alpha(self):
-        _,_,base=rgba(IMAGE_DIR/"button_primary.png")
-        for name in ("button_lobby_blue.png","button_lobby_yellow.png"):
-            w,h,colored=rgba(IMAGE_DIR/name)
-            self.assertEqual((w,h),(640,120))
-            self.assertEqual(colored[3::4],base[3::4])
-        b=rgba(IMAGE_DIR/"button_lobby_blue.png")[2]
-        y=rgba(IMAGE_DIR/"button_lobby_yellow.png")[2]
-        idx=60*640*4+320*4
-        self.assertGreater(b[idx+2],b[idx])
-        self.assertGreater(y[idx],y[idx+2])
-        self.assertGreater(y[idx+1],y[idx+2])
+    def test_shared_surface_has_transparent_corners_and_opaque_body(self):
+        w,h,pixels=rgba(IMAGE_DIR/"surface.png")
+        self.assertEqual((w,h),(64,64))
+        self.assertEqual(pixels[3],0)
+        self.assertEqual(pixels[(32*w+32)*4+3],255)
+        self.assertEqual(pixels[(32*w+0)*4+3],255)
 
     def test_distinct_buttons_keep_existing_handlers(self):
         self.assertIn("CZM_OpenLobbyCreate();",MAIN)
         self.assertIn("CZM_OpenLobbySearch();",MAIN)
         self.assertIn("HIT_QUICK",MAIN)
-        self.assertIn('"СОЗДАТЬ ЛОББИ"',MAIN)
-        self.assertIn('"ПОИСК ЛОББИ"',MAIN)
+        self.assertIn('"Создать лобби"',MAIN)
+        self.assertIn('"Поиск лобби"',MAIN)
 
 if __name__=="__main__":
     unittest.main()

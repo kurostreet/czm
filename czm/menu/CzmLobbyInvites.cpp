@@ -13,6 +13,7 @@
 #include "keydefs.h"
 #include "CzmMenu.h"
 #include "CzmJson.h"
+#include "CzmDesign.h"
 
 #define INV_UI "gfx/czm/ui/"
 
@@ -23,8 +24,7 @@ static void Label(const CzmRect &r,const char *s,int font,unsigned color){
     CZM_DrawText(f,r.x,r.y+(r.h-CZM_FontHeight(f))/2,r.w,s,color);
 }
 static void InviteButton(const CzmRect &r,const char *text,bool primary){
-    CZM_DrawButton(primary?INV_UI "button_primary.png":INV_UI "button_secondary.png",
-                   r,text,CZM_White(),false,CZMF_TILE_STATUS);
+    CzmStyle::Button(r,text,true,primary);
 }
 }
 
@@ -161,14 +161,14 @@ bool CCzmLobbyInviteNotice::KeyUp(int key){
 void CCzmLobbyInviteNotice::Draw(){
     Layout();
     UI_FillRect(0,0,W,H,PackRGBA(0,0,0,148));
-    CZM_DrawPanel(m_panel);
+    CzmStyle::Surface(m_panel,PackRGBA(17,25,36,255),CzmStyle::AccentBlue());
     const int pad=Q_max(10,(int)(H*.027f));
     CZM_DrawImage(INV_UI "icon_users.png",m_title.x,m_title.y,
                   m_title.h,m_title.h);
     Label(CZM_Rect(m_title.x+m_title.h+pad/2,m_title.y,
                    m_title.w-m_title.h-pad/2,m_title.h),
-          T("ПРИГЛАШЕНИЕ В ЛОББИ","LOBBY INVITATION"),
-          CZMF_PANEL_TITLE,CZM_White());
+          T("Приглашение в лобби","Lobby invitation"),
+          CZMF_UI_TITLE,CZM_White());
     CZM_DrawImage(INV_UI "icon_close.png",m_close.x,m_close.y,
                   m_close.w,m_close.h);
     CZM_DrawImage(CZM_AvatarFor(m_senderAvatar,m_sender),m_avatar.x,m_avatar.y,
@@ -188,8 +188,8 @@ void CCzmLobbyInviteNotice::Draw(){
              mode,m_count,m_capacity);
     Label(CZM_Rect(m_summary.x,m_summary.y+2*m_summary.h/3,
                    m_summary.w,m_summary.h/3),server,CZMF_SMALL,CZM_Grey());
-    InviteButton(m_decline,T("ОТКЛОНИТЬ","DECLINE"),false);
-    InviteButton(m_accept,T("ПРИНЯТЬ","ACCEPT"),true);
+    InviteButton(m_decline,T("Отклонить","Decline"),false);
+    InviteButton(m_accept,T("Принять","Accept"),true);
     if(m_error[0])Label(CZM_Rect(m_panel.x+pad,m_decline.y-H*.052f,
                 m_panel.w-2*pad,H*.048f),m_error,CZMF_SMALL,
                 PackRGBA(235,125,139,255));

@@ -568,6 +568,10 @@ void CZM_CreateFonts( float scale )
 		{ "CZM BlackItalic", 36, 900 }, // CZMF_MENU_TITLE
 		{ "CZM BlackItalic", 30, 900 }, // CZMF_TILE_NAME
 		{ "CZM Medium", 10, 500 },      // CZMF_TINY
+		{ "CZM Semibold", 32, 600 },    // CZMF_UI_TITLE
+		{ "CZM Semibold", 26, 600 },    // CZMF_UI_ACTION
+		{ "CZM Semibold", 20, 600 },    // CZMF_UI_LABEL
+		{ "CZM Medium", 15, 500 },      // CZMF_UI_META
 	};
 
 	for( int i = 0; i < CZMF_COUNT; i++ )
