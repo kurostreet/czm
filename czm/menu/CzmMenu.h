@@ -178,6 +178,8 @@ struct CzmRect
 };
 
 CzmRect CZM_Rect( int x, int y, int w, int h );
+int CZM_CountBadgeWidth( int count, int height );
+void CZM_DrawCountBadge( const CzmRect &rect, int count );
 unsigned int CZM_White( int alpha = 255 );
 unsigned int CZM_Grey( void );
 int CZM_LineWidth( void );
@@ -394,6 +396,8 @@ void CZM_LobbyOpenAccepted( void );
 bool CZM_LobbyHasRoom( void );
 void CZM_LobbyVoiceStart(const char *url,const char *key);
 void CZM_LobbyVoiceStop(void);
+void CZM_LobbyVoiceTest(void);
+bool CZM_LobbyVoiceMicEnabled(int player);
 void CZM_LobbyVoiceMic(bool enabled);
 bool CZM_LobbyVoiceMicOn(void);
 bool CZM_LobbyVoiceSpeaking(int player);
@@ -410,6 +414,9 @@ void CZM_OpenProfile( int player, int chatMessage = 0 );
 void CZM_SocialFrame( void );
 int CZM_SocialUnread( void );
 int CZM_SocialRequests( void );
+int CZM_SocialNotifications( void );
+int CZM_ChatUnread( int room = -1 );
+void CZM_ChatMarkRead( int room, int through );
 bool CZM_CopyText( const char *text );
 void CZM_JoinAddress( const char *address );
 

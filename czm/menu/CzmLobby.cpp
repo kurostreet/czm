@@ -636,6 +636,10 @@ void CCzmLobby::SetReady(bool ready){
     Query(POST_READY,"POST",url,body);
 }
 void CCzmLobby::Action(int hit){
+    if(m_stage==ROOM&&hit>=MEMBER&&hit<MEMBER+m_memberCount&&
+       m_members[hit-MEMBER].id==CZM_OnlinePlayer()){
+        StopInput();CZM_LobbyVoiceTest();return;
+    }
     if(hit==BACKDROP){
         if(m_stage==CREATE||m_stage==SEARCH){
             if(m_request&&(m_kind==POST_CREATE||m_kind==POST_JOIN))m_closePending=true;
@@ -1019,7 +1023,9 @@ void CCzmLobby::Draw(){
             const CzmRect r=m_membersRect[i];
             const bool occupied=i<m_memberCount;
             const Member &member=m_members[i];
-            const bool speaking=occupied&&CZM_LobbyVoiceSpeaking(member.id);
+            const bool muted=occupied&&(m_hostMuted[i]||CZM_LobbyVoiceIsMuted(member.id)||
+                (m_voiceAllMuted&&member.id!=m_owner)||!CZM_LobbyVoiceMicEnabled(member.id));
+            const bool speaking=occupied&&!muted&&CZM_LobbyVoiceSpeaking(member.id);
             const bool host=occupied&&member.id==m_owner;
             CzmStyle::Surface(r,occupied?PackRGBA(24,34,47,255):PackRGBA(16,24,35,255),
                 speaking?CzmStyle::Success():occupied&&member.id==CZM_OnlinePlayer()?PackRGBA(70,91,119,255):0);
@@ -1033,10 +1039,10 @@ void CCzmLobby::Draw(){
                 CzmStyle::Text(CZM_Rect(tx,r.y+r.h/2-label-2,tw,label+4),member.nick,CZMF_UI_LABEL);
                 const char *state=member.ready?L("Готов","Ready"):L("Не готов","Not ready");
                 CzmStyle::Text(CZM_Rect(tx,r.y+r.h/2+2,right-tx,label),state,CZMF_UI_META,member.ready?CzmStyle::Success():CzmStyle::Muted());
+                if(member.id==CZM_OnlinePlayer())CzmStyle::Text(
+                    CZM_Rect(tx,r.y+r.h-CZM_FontHeight(CZM_Font(CZMF_UI_META))-inset/2,tw,CZM_FontHeight(CZM_Font(CZMF_UI_META))),
+                    L("Проверить микрофон","Check microphone"),CZMF_UI_META,CzmStyle::AccentBlue());
                 if(host)CZM_DrawImage(UI_DIR "icon_crown.png",right-icon,r.y+inset/2,icon,icon,CzmStyle::AccentGold());
-                const bool muted=m_hostMuted[i]||CZM_LobbyVoiceIsMuted(member.id)||
-                    (m_voiceAllMuted&&member.id!=m_owner)||
-                    (member.id==CZM_OnlinePlayer()&&!CZM_LobbyVoiceMicOn());
                 CZM_DrawImage(muted?UI_DIR "icon_lobby_mic_off.png":UI_DIR "icon_lobby_mic.png",
                     right-icon,r.y+r.h-icon-inset/2,icon,icon,
                     speaking?CzmStyle::Success():muted?PackRGBA(153,122,137,255):CzmStyle::Muted());
@@ -1051,7 +1057,8 @@ void CCzmLobby::Draw(){
         CzmStyle::Text(CZM_Rect(m_chatRect.x+gap,m_chatRect.y,
             Q_max(10,m_voiceAllRect.x-m_chatRect.x-gap*2),chatHead),L("ЧАТ КОМАНДЫ","TEAM CHAT"),CZMF_UI_LABEL);
         const bool blocked=VoiceBlocked(),mic=CZM_LobbyVoiceMicOn()&&!blocked;
-        IconChip(m_micRect,mic?UI_DIR "icon_lobby_mic.png":UI_DIR "icon_lobby_mic_off.png",mic,blocked);
+        IconChip(m_micRect,mic?UI_DIR "icon_lobby_mic.png":UI_DIR "icon_lobby_mic_off.png",
+            mic&&CZM_LobbyVoiceSpeaking(CZM_OnlinePlayer()),blocked);
         if(m_owner==CZM_OnlinePlayer())IconChip(m_voiceAllRect,UI_DIR "icon_sound.png",!m_voiceAllMuted,m_voiceAllMuted);
         const int dot=Q_max(3,m_micRect.h/8),voiceState=CZM_LobbyVoiceStatus();
         CzmStyle::Round(CZM_Rect(m_micRect.x+m_micRect.w-dot,m_micRect.y,dot,dot),

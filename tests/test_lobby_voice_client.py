@@ -12,36 +12,36 @@ STUBS={
 'android/content/Context.java':'package android.content;public class Context{public static boolean granted=true;public int checkSelfPermission(String p){return granted?0:-1;}}',
 'android/app/Activity.java':'package android.app;public class Activity extends android.content.Context{public static int requests;public void runOnUiThread(Runnable r){r.run();}public void requestPermissions(String[] p,int id){requests++;}}',
 'android/os/Build.java':'package android.os;public class Build{public static class VERSION{public static int SDK_INT=35;}}',
-'android/os/SystemClock.java':'package android.os;public class SystemClock{public static long now=10000;public static long elapsedRealtime(){return now;}}',
+'android/os/SystemClock.java':'package android.os;public class SystemClock{public static volatile long now=10000;public static long elapsedRealtime(){return now;}}',
 'android/util/Log.java':'package android.util;public class Log{public static int w(String a,String b){return 0;}}',
 'android/widget/Toast.java':'package android.widget;public class Toast{public static final int LENGTH_LONG=1;public static Toast makeText(android.content.Context c,String s,int n){return new Toast();}public void show(){}}',
 'android/media/AudioFormat.java':'package android.media;public class AudioFormat{public static final int CHANNEL_OUT_MONO=4,CHANNEL_IN_MONO=16,ENCODING_PCM_16BIT=2;}',
 'android/media/AudioManager.java':'package android.media;public class AudioManager{public static final int STREAM_MUSIC=3;}',
 'android/media/MediaRecorder.java':'package android.media;public class MediaRecorder{public static class AudioSource{public static final int VOICE_COMMUNICATION=7;}}',
 'android/media/AudioRecord.java':'''package android.media;public class AudioRecord{
- public static final int STATE_INITIALIZED=1;private volatile boolean stopped;
+ public static final int STATE_INITIALIZED=1;private volatile boolean stopped;private boolean started;public static volatile boolean feed,fail;public static int active,maxActive;
  public AudioRecord(int a,int b,int c,int d,int e){}public static int getMinBufferSize(int a,int b,int c){return 4096;}
- public int getState(){return 1;}public void startRecording(){}public void stop(){stopped=true;}public void release(){stopped=true;}
- public int read(short[] a,int b,int c){try{Thread.sleep(2);}catch(Exception e){}return stopped?-1:0;}}
+ public int getState(){return fail?0:1;}public void startRecording(){synchronized(AudioRecord.class){started=true;active++;maxActive=Math.max(maxActive,active);}}public void stop(){synchronized(AudioRecord.class){if(!stopped){stopped=true;if(started)active--;}}}public void release(){stop();}
+ public int read(short[] a,int b,int c){try{Thread.sleep(2);}catch(Exception e){}if(stopped)return -1;if(!feed)return 0;for(int i=0;i<c;i++)a[b+i]=(short)(i%2==0?2000:-2000);android.os.SystemClock.now+=20;return c;}}
 ''',
 'android/media/AudioTrack.java':'''package android.media;public class AudioTrack{
- public static final int STATE_INITIALIZED=1,MODE_STREAM=1;
+ public static final int STATE_INITIALIZED=1,MODE_STREAM=1;public static volatile int nonZero;private int written;
  public AudioTrack(int a,int b,int c,int d,int e,int f){}public static int getMinBufferSize(int a,int b,int c){return 4096;}
  public int getState(){return 1;}public void play(){}public void pause(){}public void flush(){}public void release(){}
- public int write(short[] a,int b,int c){try{Thread.sleep(2);}catch(Exception e){}return c;}}
+ public int getPlaybackHeadPosition(){return written;}public int write(short[] a,int b,int c){for(int i=b;i<b+c;i++)if(a[i]!=0){nonZero++;break;}written+=c;try{Thread.sleep(2);}catch(Exception e){}return c;}}
 ''',
 'org/libsdl/app/SDLActivity.java':'package org.libsdl.app;public class SDLActivity{private static final android.app.Activity a=new android.app.Activity();public static android.content.Context getContext(){return a;}}',
-'org/json/JSONObject.java':'package org.json;public class JSONObject{public JSONObject(String s){}public String optString(String s){return "";}public int optInt(String s,int n){return n;}public boolean optBoolean(String s){return false;}}',
+'org/json/JSONObject.java':r'''package org.json;public class JSONObject{private final String raw;public JSONObject(String s){raw=s.replace(" ","");}public String optString(String k){java.util.regex.Matcher m=java.util.regex.Pattern.compile("\\\""+k+"\\\":\\\"([^\\\"]*)\\\"").matcher(raw);return m.find()?m.group(1):"";}public int optInt(String k,int n){java.util.regex.Matcher m=java.util.regex.Pattern.compile("\\\""+k+"\\\":([0-9]+)").matcher(raw);return m.find()?Integer.parseInt(m.group(1)):n;}public boolean optBoolean(String k){return raw.contains("\""+k+"\":true");}}''',
 'org/java_websocket/handshake/ServerHandshake.java':'package org.java_websocket.handshake;public interface ServerHandshake{}',
 'org/java_websocket/drafts/Draft_6455.java':'package org.java_websocket.drafts;public class Draft_6455{}',
 'org/java_websocket/client/WebSocketClient.java':'''package org.java_websocket.client;
 import java.util.*;import java.net.URI;import java.nio.ByteBuffer;import org.java_websocket.handshake.ServerHandshake;import org.java_websocket.drafts.Draft_6455;
 public abstract class WebSocketClient{
- public static final List<WebSocketClient> created=new ArrayList<>();public final Map<String,String> headers;private boolean open;
+ public static final List<WebSocketClient> created=new ArrayList<>();public final Map<String,String> headers;private boolean open;public final List<byte[]> sent=Collections.synchronizedList(new ArrayList<>());public final List<String> controls=Collections.synchronizedList(new ArrayList<>());
  public WebSocketClient(URI u,Draft_6455 d,Map<String,String> h,int timeout){headers=h;created.add(this);}
  public void setConnectionLostTimeout(int n){}public void connect(){}public boolean isOpen(){return open;}
  public void opened(){open=true;onOpen(null);}public void failed(int code){open=false;onClose(code,"test",true);}
- public void close(){open=false;onClose(1000,"closed",false);}public void send(byte[] b){}
+ public void close(){open=false;onClose(1000,"closed",false);}public void send(byte[] b){sent.add(b);}public void send(String s){controls.add(s);}
  public abstract void onOpen(ServerHandshake h);public abstract void onMessage(String s);public abstract void onMessage(ByteBuffer b);public abstract void onClose(int c,String r,boolean remote);public abstract void onError(Exception e);
 }''',
 'ru/kurostreet/counterzombiemobile/CzmAccount.java':'package ru.kurostreet.counterzombiemobile;public class CzmAccount{static String token="account-session";static boolean serviceUrl(String u){return u.contains("counter-zombie.ru/");}static String lobbyVoiceKey(String u){return serviceUrl(u)?token:"";}}',
@@ -92,7 +92,7 @@ class LobbyVoiceClientTests(unittest.TestCase):
             for name,source in STUBS.items():
                 file=root/name;file.parent.mkdir(parents=True,exist_ok=True);file.write_text(source)
             package=root/'ru/kurostreet/counterzombiemobile'
-            for name in ['CzmLobbyVoice.java','CzmLobbyMicState.java']:(package/name).write_text((JAVA/name).read_text())
+            for name in ['CzmLobbyVoice.java','CzmLobbyMicState.java','CzmLobbyAudio.java','CzmLobbyMicTest.java']:(package/name).write_text((JAVA/name).read_text())
             (package/'LobbyVoiceClientTest.java').write_text(HARNESS)
             subprocess.run(['javac','--release','11','-d',str(root/'classes'),*[str(p) for p in root.rglob('*.java')]],check=True)
             subprocess.run(['java','-cp',str(root/'classes'),'ru.kurostreet.counterzombiemobile.LobbyVoiceClientTest'],check=True,timeout=20)

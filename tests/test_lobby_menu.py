@@ -19,6 +19,7 @@ STUB += r'''
 bool CZM_OnlinePlayAllowed();bool CZM_QuickPlayActive();void CZM_LobbyInviteFrame();
 void CZM_LobbyVoiceStart(const char*,const char*);void CZM_LobbyVoiceStop();void CZM_LobbyVoiceMic(bool);
 bool CZM_LobbyVoiceMicOn();bool CZM_LobbyVoiceSpeaking(int);int CZM_LobbyVoiceStatus();
+void CZM_LobbyVoiceTest();bool CZM_LobbyVoiceMicEnabled(int);
 void CZM_LobbyVoiceLocalMute(int,bool);bool CZM_LobbyVoiceIsMuted(int);
 void CZM_ShowMessage(const char*);void CZM_LobbyServerPickerStart();void CZM_OpenFriends();void CZM_OpenProfile(int);
 HIMAGE CZM_MapPreview(const char*);HIMAGE CZM_Image(const char*);const char*CZM_MapModeArt(const char*,const char*);
@@ -62,6 +63,7 @@ int CZM_ServerCount(){return 0;}CzmServer*CZM_Server(int){return nullptr;}void C
 void CZM_LobbyVoiceStart(const char*,const char*){}void CZM_LobbyVoiceStop(){micOn=false;}void CZM_LobbyVoiceMic(bool v){micOn=v;}
 bool CZM_LobbyVoiceMicOn(){return micOn;}bool CZM_LobbyVoiceSpeaking(int id){return drawSpeaking&&id==8;}int CZM_LobbyVoiceStatus(){return 2;}
 void CZM_LobbyVoiceLocalMute(int id,bool v){if(v)muted.insert(id);else muted.erase(id);}bool CZM_LobbyVoiceIsMuted(int id){return muted.count(id);}
+static int micChecks;void CZM_LobbyVoiceTest(){micChecks++;}bool CZM_LobbyVoiceMicEnabled(int id){return id==player?micOn:true;}
 void CZM_ShowMessage(const char*){}
 void CZM_LobbyInviteFrame(){}void CZM_LobbyServerPickerStart(){}void CZM_OpenFriends(){}void CZM_OpenProfile(int){}
 void CZM_AccountShow(const char*,const char*){}void CZM_PlayClick(){}
@@ -115,6 +117,8 @@ int main(int argc,char**argv){
  populate(w);w.m_stage=w.ROOM;clear(w);w.m_private=false;w.Layout();assert(hit(w,w.m_membersRect[4])==w.INVITE);
  player=8;assert(hit(w,w.m_membersRect[4])==w.NONE);w.Action(w.MEMBER);assert(w.m_selectedMemberId==7);w.Action(w.MODAL_LOCAL_MUTE);assert(muted.count(7));
  player=7;clear(w);w.m_selectedMemberId=0;assert(!w.CanStart());w.m_members[2].ready=true;assert(w.CanStart());
+ int checks=micChecks;w.Action(w.MEMBER);assert(micChecks==checks+1&&w.m_selectedMemberId==0);
+ w.m_request=77;w.m_kind=w.GET_ROOM;w.Action(w.MEMBER);assert(micChecks==checks+2&&w.m_request==77);clear(w);
  w.Action(w.LAUNCH);assert(lastUrl.find("/launch")!=std::string::npos);clear(w);
  // A background poll keeps the Ready button's colour and preserves one tap.
  populate(w);w.m_ownReady=false;w.m_stage=w.ROOM;w.m_open=true;w.m_readyQueued=false;

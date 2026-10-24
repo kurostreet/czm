@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, FileResponse, HTML
 from PIL import Image
 from pydantic import BaseModel, Field
 
-from . import service, mappics, accounts, settings, tab, social, website, distribution, lobbies, game_probe, voice_lobby
+from . import service, mappics, accounts, settings, tab, social, website, distribution, lobbies, game_probe, voice_lobby, notifications
 from .config import get_settings
 from .db import db
 
@@ -279,6 +279,30 @@ class PrivateMessageIn(BaseModel):
 
 class PrivateReadIn(BaseModel):
     through: int = Field(ge=0, le=2147483647)
+
+
+class NoticeReadIn(BaseModel):
+    kind: str = Field(pattern=r"^(friends|followers|following)$")
+    ids: list[int] = Field(min_length=0, max_length=40)
+
+
+@router.post("/social/notifications/read")
+async def social_notice_read(body: NoticeReadIn, request: Request, x_czm_key: str | None = Header(default=None)):
+    def run(conn):
+        player = social.actor(conn, x_czm_key or "")["id"]
+        notifications.read_events(conn, player, body.kind, body.ids)
+        return {"counts": social.counts(conn, player)}
+    return await social_result(request, run)
+
+
+@router.post("/chat/{room}/read")
+async def chat_read(room: str, body: PrivateReadIn, request: Request, x_czm_key: str | None = Header(default=None)):
+    check_room(room)
+    def run(conn):
+        player = social.actor(conn, x_czm_key or "")["id"]
+        notifications.read_chat(conn, player, room, body.through)
+        return {"counts": social.counts(conn, player)}
+    return await social_result(request, run)
 
 
 @router.post("/social/presence")

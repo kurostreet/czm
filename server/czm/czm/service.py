@@ -162,7 +162,9 @@ def post_message(conn: sqlite3.Connection, player: sqlite3.Row, room: str, text:
     if last and last["text"] == text:
         raise ChatError("repeat", 429, wait=5)
 
-    cur = conn.execute("INSERT INTO messages (room, player, text, created) VALUES (?, ?, ?, ?)", (room, player["id"], text, t))
+    # Keep read cursors valid even after retention deletes the entire chat.
+    next_id = conn.execute("SELECT last_id+1 FROM chat_message_sequence WHERE id=1").fetchone()[0]
+    cur = conn.execute("INSERT INTO messages (id, room, player, text, created) VALUES (?, ?, ?, ?, ?)", (next_id, room, player["id"], text, t))
     conn.execute("UPDATE players SET last_message = ? WHERE id = ?", (t, player["id"]))
     return {"id": cur.lastrowid, "p": player["id"], "n": player["nick"], "a": avatar_ref(player), "t": text, "ts": t}
 

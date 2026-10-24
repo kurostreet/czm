@@ -42,7 +42,9 @@ public final class CzmNet {
 
     private CzmNet() {}
 
-    public static void lobbyVoiceStart(String url,String key){CzmLobbyVoice.start(url,key);}
+    public static void lobbyVoiceStart(String url,String key,int player){CzmLobbyVoiceDialog.loadPreferences();CzmLobbyVoice.start(url,key,player);}
+    public static void lobbyVoiceTest(){CzmLobbyVoiceDialog.show();}
+    public static boolean lobbyVoiceMicEnabled(int player){return CzmLobbyVoice.microphoneEnabled(player);}
     public static void lobbyVoiceStop(){CzmLobbyVoice.stop();}
     public static void lobbyVoiceMic(boolean enabled){CzmLobbyVoice.setMic(enabled);}
     public static boolean lobbyVoiceMicOn(){return CzmLobbyVoice.microphoneOn();}
