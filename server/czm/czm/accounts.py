@@ -160,7 +160,7 @@ def delete_account(conn, token, password, ip):
     """The player deletes the account from the game (Google Play requires it): the password confirms it.
 
     Gone: the account, its sessions and codes, email, cloud settings, friends, follows, blocks,
-    private dialogs, chat messages, status, the photo and the profile itself. Reports and bans stay:
+    private dialogs, chat messages, lobbies, notifications, status, the photo and the profile itself. Reports and bans stay:
     they protect other players, and a ban is kept by the device hash, not by the profile.
     """
     rate(conn, "delete-ip", ip, 6, 3600)
@@ -170,11 +170,23 @@ def delete_account(conn, token, password, ip):
     account = conn.execute("SELECT password_hash FROM accounts WHERE player=?", (pid,)).fetchone()
     if not account or not password_matches(password, account["password_hash"]):
         raise AuthError("credentials", 401)
+    # Close rooms owned by this account before removing its other memberships.
+    # Room/launch children cascade; somebody else's room and profile stay intact.
+    conn.execute("DELETE FROM lobbies WHERE owner=?", (pid,))
+    conn.execute("DELETE FROM lobby_launches WHERE owner=?", (pid,))
+    for sql in ("DELETE FROM lobby_invites WHERE sender=? OR target=?",
+                "DELETE FROM social_notices WHERE player=? OR peer=?"):
+        conn.execute(sql, (pid, pid))
     conn.execute("DELETE FROM private_messages WHERE dialog IN (SELECT id FROM private_dialogs WHERE low=? OR high=?)", (pid, pid))
     for sql in ("DELETE FROM private_dialogs WHERE low=? OR high=?",
                 "DELETE FROM social_follows WHERE source=? OR target=?",
                 "DELETE FROM social_blocks WHERE source=? OR target=?"):
         conn.execute(sql, (pid, pid))
+    for table, column in (("lobby_messages", "sender"), ("launch_members", "player"),
+                          ("lobby_members", "player"), ("lobby_voice_mutes", "player"),
+                          ("lobby_creation_ops", "player"), ("lobby_moderation_ops", "player"),
+                          ("lobby_moderation", "player"), ("chat_reads", "player")):
+        conn.execute(f"DELETE FROM {table} WHERE {column}=?", (pid,))
     for table in ("social_profiles", "social_presence", "player_settings", "settings_history", "auth_codes",
                   "account_sessions", "tab_bindings", "messages", "accounts"):
         conn.execute(f"DELETE FROM {table} WHERE player=?", (pid,))

@@ -309,7 +309,7 @@ void CZM_OnlineAvatarChanged( void )
 }
 
 // Google Play build: the game does not update itself, Google Play does. Java asks Play every
-// 30 minutes; the bell shows the update when Play offers one and opens Play's update screen.
+// 30 minutes; the bell shows the update when Play offers one and opens the game's store page.
 static void StoreUpdateFrame( double now )
 {
 	static int selfUpdate = -1;

@@ -10,16 +10,15 @@ import android.os.SystemClock;
 import com.google.android.play.core.appupdate.AppUpdateInfo;
 import com.google.android.play.core.appupdate.AppUpdateManager;
 import com.google.android.play.core.appupdate.AppUpdateManagerFactory;
-import com.google.android.play.core.appupdate.AppUpdateOptions;
-import com.google.android.play.core.install.model.AppUpdateType;
 import com.google.android.play.core.install.model.UpdateAvailability;
 
 /**
  * Google Play build: the game never installs APKs itself (Play rules). The bell asks Google Play
- * whether a newer version is out and starts Play's own update screen over the game.
+ * whether a newer version is offered to this account and opens the game's store listing.
  */
 final class StoreUpdates {
     private static final long RECHECK_MS = 30 * 60 * 1000L;
+    private static final long RETRY_MS = 60 * 1000L;
     private static volatile int available;      // version code offered by Play, 0: none
     private static volatile long bytes;
     private static volatile long checkedAt = -RECHECK_MS;
@@ -35,7 +34,13 @@ final class StoreUpdates {
     private static boolean offered(AppUpdateInfo info) {
         int state = info.updateAvailability();
         return state == UpdateAvailability.DEVELOPER_TRIGGERED_UPDATE_IN_PROGRESS
-            || (state == UpdateAvailability.UPDATE_AVAILABLE && info.isUpdateTypeAllowed(AppUpdateType.IMMEDIATE));
+            || state == UpdateAvailability.UPDATE_AVAILABLE;
+    }
+
+    private static void failed() {
+        available = 0;
+        bytes = 0;
+        checkedAt = SystemClock.elapsedRealtime() - RECHECK_MS + RETRY_MS;
     }
 
     /** "code bytes" of the version Play offers, or "" (a new check starts every 30 minutes). */
@@ -51,42 +56,32 @@ final class StoreUpdates {
                         bytes = ok ? Math.max(0, info.totalBytesToDownload()) : 0;
                         available = ok ? Math.max(1, info.availableVersionCode()) : 0;
                     })
-                    .addOnFailureListener(e -> available = 0);   // not installed from Play, offline
+                    .addOnFailureListener(e -> failed());   // retry after a short offline failure
             } catch (RuntimeException e) {
-                available = 0;
+                failed();
             }
         }
         return available > 0 ? available + " " + bytes : "";
     }
 
-    /** Play's own update screen; the store page when Play cannot show it. */
+    /** Explicit user action: open this game's listing, leaving installation to Play. */
     static void start(Context ctx) {
         if (!(ctx instanceof Activity)) return;
         Activity activity = (Activity) ctx;
-        activity.runOnUiThread(() -> {
-            try {
-                manager(activity).getAppUpdateInfo()
-                    .addOnSuccessListener(info -> {
-                        if (offered(info)) {
-                            manager(activity).startUpdateFlow(info, activity, AppUpdateOptions.defaultOptions(AppUpdateType.IMMEDIATE))
-                                .addOnFailureListener(e -> openStore(activity));
-                        } else {
-                            openStore(activity);
-                        }
-                    })
-                    .addOnFailureListener(e -> openStore(activity));
-            } catch (RuntimeException e) {
-                openStore(activity);
-            }
-        });
+        activity.runOnUiThread(() -> openStore(activity));
     }
 
     private static void openStore(Activity activity) {
         String id = activity.getPackageName();
         try {
-            activity.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=" + id)));
-        } catch (ActivityNotFoundException e) {
-            activity.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=" + id)));
+            activity.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=" + id))
+                .setPackage("com.android.vending"));
+        } catch (ActivityNotFoundException | SecurityException e) {
+            try {
+                activity.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=" + id)));
+            } catch (ActivityNotFoundException | SecurityException unavailable) {
+                // A missing store/browser must not crash the running game.
+            }
         }
     }
 }

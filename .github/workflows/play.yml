@@ -2,11 +2,16 @@ name: Counter Zombie Mobile for Google Play
 
 # Started explicitly after the private APK has been checked on a device.
 # Actions → this workflow → Run workflow. Builds the Android App Bundle of the open part of the
-# game; the game server adds the game data into the asset pack `gamedata`, signs the bundle with
-# the upload key, keeps it at https://counter-zombie.ru/dl/play/ and sends it to the Google Play
-# testing tracks (internal and closed test) for review.
+# game. Preparation is the default: keep the unsigned intermediate for private assembly,
+# validation and a deliberate testing-track release. Forwarding to the existing publishing
+# endpoint requires explicitly turning off prepare_only.
 on:
   workflow_dispatch:
+    inputs:
+      prepare_only:
+        description: 'Prepare only. If disabled, the server may publish to its configured testing tracks.'
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -42,6 +47,8 @@ jobs:
         run: sdkmanager --install 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
       - name: Apply engine patches
         run: python3 scripts/apply_engine_patches.py
+      - name: Check Play update availability and store navigation
+        run: python3 -m unittest discover -s tests -p test_store_updates.py -v
       - name: Build the bundle
         working-directory: android
         run: ./gradlew --no-daemon :app:checkGooglePlayReleaseDuplicateClasses :app:bundleGooglePlayRelease
@@ -60,7 +67,7 @@ jobs:
             echo "::error::the Google Play build must not install APKs itself"; exit 1
           fi
           python3 - "$AAB" <<'PY'
-          import sys, zipfile
+          import sys, zipfile, struct
           with zipfile.ZipFile(sys.argv[1]) as z:
               names = z.namelist()
               assert "gamedata/manifest/AndroidManifest.xml" in names, "no gamedata asset pack"
@@ -72,6 +79,18 @@ jobs:
                   assert cls not in dex, "the Google Play build must not carry the site build's installer: " + cls.decode()
               abis = {n.split("/")[2] for n in names if n.startswith("base/lib/")}
               assert abis == {"armeabi-v7a", "arm64-v8a"}, f"Google Play takes 32-bit code only next to 64-bit: {abis}"
+              arm64 = [n for n in names if n.startswith("base/lib/arm64-v8a/") and n.endswith(".so")]
+              assert arm64, "no ARM64 libraries"
+              for name in arm64:
+                  elf = z.read(name)
+                  assert elf[:6] == b"\x7fELF\x02\x01", name
+                  offset = struct.unpack_from("<Q", elf, 32)[0]
+                  size, count = struct.unpack_from("<HH", elf, 54)
+                  assert size >= 56 and count and offset + size * count <= len(elf), name
+                  loads = [struct.unpack_from("<IIQQQQQQ", elf, offset + i * size) for i in range(count)
+                           if struct.unpack_from("<I", elf, offset + i * size)[0] == 1]
+                  assert loads and all(p[7] >= 16384 and (p[3] - p[2]) % 16384 == 0 for p in loads), "16 KB ELF alignment: " + name
+              print(f"16 KB alignment verified for {len(arm64)} ARM64 libraries")
               base = sum(i.compress_size for i in z.infolist() if i.filename.startswith("base/"))
               print(f"base module {base // 1048576} MB compressed")
               assert base < 190 * 1048576, "the base module must stay under the 200 MB Play limit"
@@ -79,7 +98,21 @@ jobs:
           cp "$AAB" CounterZombieMobile-Play-unsigned.aab
           sha256sum CounterZombieMobile-Play-unsigned.aab > CounterZombieMobile-Play-unsigned.aab.sha256
           echo "$(cat package.txt) $(cat version.txt) ($(cat code.txt))"
+      - name: Save unsigned Play intermediate for private full-bundle assembly
+        uses: actions/upload-artifact@v4
+        with:
+          name: CZM-PLAY-UNSIGNED-INTERMEDIATE
+          path: |
+            CounterZombieMobile-Play-unsigned.aab
+            CounterZombieMobile-Play-unsigned.aab.sha256
+            package.txt
+            code.txt
+            version.txt
+            bundle-info.txt
+          retention-days: 14
+          if-no-files-found: error
       - name: Send the bundle to the game server
+        if: ${{ !inputs.prepare_only }}
         # the server adds the game data and signs it with the upload key
         run: |
           set -euo pipefail

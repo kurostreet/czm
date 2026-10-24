@@ -39,7 +39,7 @@ hr{border:0;border-top:2px solid var(--red);margin:40px 0 0;width:64px}
 <header><div class="wrap bar"><a href="/"><img src="/assets/logo-96.png" alt=""><span class="h-game">Counter <span style="color:var(--red)">Zombie</span> Mobile</span></a></div></header>
 <main class="wrap">
 <h1 class="h-game">Конфиденциальность</h1>
-<p class="muted">Действует с 18 октября 2026 года. Касается игры Counter Zombie Mobile для Android и сайта counter-zombie.ru.</p>
+<p class="muted">Редакция от 24 октября 2026 года. Касается игры Counter Zombie Mobile для Android и сайта counter-zombie.ru.</p>
 
 <p>Игре не нужны ваше имя, телефон или документы. Всё, что хранится, лежит на нашем сервере в России и нужно только для работы игры: чата, друзей, профиля и обновлений. Мы ничего не продаём и не показываем рекламу.</p>
 
@@ -50,9 +50,12 @@ hr{border:0;border-top:2px solid var(--red);margin:40px 0 0;width:64px}
 <li>Ник, выбранный аватар или ваше фото, язык игры, версия игры, время первого и последнего входа.</li>
 <li>Сообщения в общем чате (комнаты Global, RU, EN). Их видят все игроки и посетители сайта. Хранятся до 7 дней, не больше 300 последних в каждой комнате.</li>
 <li>Если вы заводите аккаунт: логин, хеш пароля и, по желанию, почта для входа по коду и восстановления пароля.</li>
-<li>Для аккаунта: друзья, подписки, блокировки, статус, личные сообщения, настройки игры (кнопки, HUD, звук) для восстановления после переустановки.</li>
+<li>Для аккаунта: друзья, подписки, блокировки, статус, личные сообщения, отметки о прочтении и новых событиях, настройки игры (кнопки, HUD, звук) для восстановления после переустановки.</li>
 <li>Пока игра открыта: в сети ли вы и на каком сервере и карте играете. Это видят ваши друзья.</li>
-<li>Голосовой чат: если вы разрешите микрофон и говорите в игре, звук идёт напрямую на игровой сервер и другим игрокам на нём. Наш сервер звук не получает и нигде не записывает. Микрофон можно не разрешать — играть это не мешает.</li>
+<li>Временные лобби: название комнаты, выбранный сервер, участники, готовность, приглашения и сообщения команды. Комнату и её переписку удаляем при закрытии, старте игры или истечении срока неактивности. Для совместного перехода на сервер некоторое время сохраняются сведения о составе группы и запуске. Для защиты от повторных запросов и спама сохраняются технические квитанции и ограничения.</li>
+<li>Голос в лобби: после вашего разрешения и включения микрофона наш сервер принимает звук и передаёт его участникам той же комнаты. Аудио обрабатывается в оперативной памяти для передачи в реальном времени; аудиозаписи на сервере не сохраняются. Голос лобби прекращается при выходе или старте игры.</li>
+<li>Проверка микрофона в лобби: запись до трёх секунд и её прослушивание выполняются только на вашем устройстве. Запись находится в оперативной памяти и удаляется при закрытии проверки, выходе из лобби или сворачивании игры. Команде и нашему серверу она не отправляется.</li>
+<li>Голос во время матча передаётся игровому серверу, к которому вы подключились, и игрокам на нём. Его владельцы определяют обработку данных на своём сервере. Микрофон можно не разрешать или выключить — играть это не мешает.</li>
 <li>Жалобы игроков и блокировки, если они были.</li>
 </ul>
 
@@ -72,7 +75,7 @@ hr{border:0;border-top:2px solid var(--red);margin:40px 0 0;width:64px}
 </ul>
 
 <h2 id="delete">Как удалить аккаунт и данные</h2>
-<p><b>В игре:</b> Настройки → Профиль → «Аккаунт и почта» → «Удалить аккаунт», затем пароль аккаунта. Сразу удаляются аккаунт, почта, друзья, подписки, личные сообщения, сообщения в чате, фото и настройки в облаке.</p>
+<p><b>В игре:</b> Настройки → Профиль → «Аккаунт и почта» → «Удалить аккаунт», затем пароль аккаунта. Удаляются аккаунт, почта, друзья, подписки, личные сообщения, сообщения в чате, фото, настройки в облаке, отметки о прочтении и данные участия в лобби. Лобби, которыми вы владеете, закрываются.</p>
 <p><b>Без игры:</b> напишите на <a href="mailto:kuro.street.inc@gmail.com">kuro.street.inc@gmail.com</a> или в <a href="https://t.me/counter_zombie_mobile" rel="noopener">группу в Telegram</a> и укажите ник для входа. Мы удалим те же данные в течение 30 дней.</p>
 <p>Жалобы и блокировки нарушителей сохраняются: они защищают других игроков.</p>
 
@@ -89,11 +92,14 @@ hr{border:0;border-top:2px solid var(--red);margin:40px 0 0;width:64px}
 <ul>
 <li>The game keeps a hash of a random player key, a hash of the device ID (for bans), nickname, avatar or your photo, language, game version and visit times.</li>
 <li>Public chat messages are visible to everyone, including site visitors, and are kept for up to 7 days.</li>
-<li>Voice chat: if you allow the microphone and talk in a match, the sound goes straight to the game server and the players on it. Our server never receives or records it. The microphone is optional.</li>
-<li>With an account: login, password hash, optional email for sign-in codes, friends, follows, blocks, private messages and game settings.</li>
+<li>Temporary lobbies keep the room name, selected server, membership, readiness, invitations and team messages. Rooms and their chat are deleted when closed, launched or expired. Temporary party-launch details and anti-spam/request receipts support joining together and protect the service.</li>
+<li>Lobby voice: after permission and microphone activation, our server relays audio to members of the same room. Audio is processed in memory for real-time delivery; no server audio recordings are saved. Lobby voice stops when leaving or starting the game.</li>
+<li>The lobby microphone check records up to three seconds locally in device memory. It is not sent to the team or our server, and is erased when the check closes, the lobby is left or the game enters the background.</li>
+<li>In-match voice goes to the selected game server and its players. Third-party server owners determine their own data handling. The microphone is optional and can be disabled.</li>
+<li>With an account: login, password hash, optional email for sign-in codes, friends, follows, blocks, private messages, read/unread markers and game settings.</li>
 <li>The site sets no cookies and has no analytics. To count downloads it keeps a salted hash of the IP address for two days. Server request logs are off.</li>
 <li>Sign-in codes are sent by the email services Resend and SMTP.BZ. Game servers are run by their owners and see your nickname and IP address when you join.</li>
-<li>To delete your account: in the game open Settings → Profile → “Account and email” → “Delete account” and enter the password; everything listed above is deleted at once. Without the game, write to <a href="mailto:kuro.street.inc@gmail.com">kuro.street.inc@gmail.com</a> with your login, and we delete it within 30 days. Reports and bans of rule breakers are kept to protect other players.</li>
+<li>To delete your account: in the game open Settings → Profile → “Account and email” → “Delete account” and enter the password. This deletes your account, email, social links, messages, photo, cloud settings, read markers and lobby participation data, and closes rooms you own. Without the game, write to <a href="mailto:kuro.street.inc@gmail.com">kuro.street.inc@gmail.com</a> with your login, and we delete the same data within 30 days. Reports and bans of rule breakers are kept to protect other players.</li>
 </ul>
 </div>
 <p class="muted" style="margin-top:30px"><a href="/">← counter-zombie.ru</a></p>

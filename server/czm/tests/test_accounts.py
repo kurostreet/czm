@@ -110,6 +110,77 @@ class AccountTests(unittest.TestCase):
         self.assertEqual(self.post("logout-all", second).status_code, 200)
         self.assertEqual(self.post("me", third).status_code, 401)
 
+    def lobby_deletion_fixture(self, owns_room):
+        """A previously launched party, a current room and unread social/chat state."""
+        token = self.register()
+        with db.db() as conn:
+            peers = []
+            for number in range(2):
+                legacy = "delete-fixture-peer-secret-%d" % number
+                player = service.hello(conn, legacy, "other-device-%d" % number, "Peer", "", "ru", "test")["id"]
+                accounts.register(conn, legacy, "ReviewPeer%d" % number, "Password123", "Password123", "other-ip-%d" % number)
+                peers.append(player)
+            friend, other = peers
+            pid = self.player
+            owner = pid if owns_room else friend
+            for room, host in (("delete-current", owner), ("unrelated-room", other)):
+                conn.execute("INSERT INTO lobbies(id,owner,title,visibility,capacity,server,proto,created,last_seen) "
+                             "VALUES(?,?,?,'public',3,'203.0.113.5:27015','gs',1,1)", (room, host, room))
+            for player, room in ((pid, "delete-current"), (friend, "delete-current"), (other, "unrelated-room")):
+                conn.execute("INSERT INTO lobby_members(player,lobby,joined) VALUES(?,?,1)", (player, room))
+                conn.execute("INSERT INTO lobby_messages(lobby,sender,text,created,nonce) VALUES(?,?,?,1,?)",
+                             (room, player, "private lobby text", "delete-message-%d" % player))
+            conn.execute("INSERT INTO lobby_voice_mutes(lobby,player,host_muted) VALUES('delete-current',?,1)", (pid,))
+            conn.execute("INSERT INTO lobby_creation_ops VALUES(?,'delete-create-nonce','delete-current',1)", (pid,))
+            conn.execute("INSERT INTO lobby_moderation VALUES(?,1,0,0)", (pid,))
+            conn.execute("INSERT INTO lobby_moderation_ops VALUES(?,'message','delete-message-op','hash','{}',1)", (pid,))
+            for ident, sender, target in (("sent-invite", pid, other), ("received-invite", friend, pid)):
+                conn.execute("INSERT INTO lobby_invites(id,lobby,sender,target,nonce,created,expires) "
+                             "VALUES(?,'delete-current',?,?,?,1,100)", (ident, sender, target, ident))
+            conn.execute("INSERT INTO lobby_launches(id,lobby_id,owner,nonce,server,proto,size,created,delivery_expires,episode_expires) "
+                         "VALUES('previous-launch','previous-room',?,'previous-launch-nonce','203.0.113.5:27015','gs',2,1,100,200)", (owner,))
+            for player in (pid, friend):
+                conn.execute("INSERT INTO launch_members(launch,player) VALUES('previous-launch',?)", (player,))
+                conn.execute("INSERT INTO chat_reads(player,room,through) VALUES(?,'global',0)", (player,))
+            from czm import notifications
+            notifications.add(conn, pid, friend, 'followers')
+            notifications.add(conn, friend, pid, 'friends')
+            notifications.add(conn, friend, other, 'following')
+            service.ban(conn, pid, "week", "security retention")
+        return token, friend, other
+
+    def check_lobby_deletion(self, owns_room):
+        token, friend, other = self.lobby_deletion_fixture(owns_room)
+        self.assertEqual(self.post("delete-account", token, password="WrongPassword1").status_code, 401)
+        with db.db() as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM lobby_members WHERE lobby='delete-current'").fetchone()[0], 2)
+        response = self.post("delete-account", token, password="Password123")
+        self.assertEqual(response.status_code, 200, response.text)
+        with db.db() as conn:
+            self.assertEqual(list(conn.execute("PRAGMA foreign_key_check")), [])
+            self.assertIsNone(conn.execute("SELECT 1 FROM accounts WHERE player=?", (self.player,)).fetchone())
+            self.assertIsNone(conn.execute("SELECT 1 FROM social_notices WHERE player=? OR peer=?", (self.player, self.player)).fetchone())
+            self.assertIsNone(conn.execute("SELECT 1 FROM chat_reads WHERE player=?", (self.player,)).fetchone())
+            for table, column in (("lobby_members", "player"), ("lobby_messages", "sender"), ("lobby_voice_mutes", "player"),
+                                  ("lobby_invites", "sender"), ("lobby_invites", "target"), ("launch_members", "player"),
+                                  ("lobby_creation_ops", "player"), ("lobby_moderation_ops", "player"), ("lobby_moderation", "player")):
+                self.assertIsNone(conn.execute(f"SELECT 1 FROM {table} WHERE {column}=?", (self.player,)).fetchone(), table)
+            self.assertEqual(bool(conn.execute("SELECT 1 FROM lobbies WHERE id='delete-current'").fetchone()), not owns_room)
+            self.assertEqual(bool(conn.execute("SELECT 1 FROM lobby_launches WHERE id='previous-launch'").fetchone()), not owns_room)
+            self.assertIsNotNone(conn.execute("SELECT 1 FROM accounts WHERE player=?", (friend,)).fetchone())
+            self.assertIsNotNone(conn.execute("SELECT 1 FROM lobbies WHERE id='unrelated-room' AND owner=?", (other,)).fetchone())
+            self.assertIsNotNone(conn.execute("SELECT 1 FROM lobby_messages WHERE sender=?", (other,)).fetchone())
+            self.assertIsNotNone(conn.execute("SELECT 1 FROM chat_reads WHERE player=?", (friend,)).fetchone())
+            self.assertIsNotNone(conn.execute("SELECT 1 FROM social_notices WHERE player=? AND peer=?", (friend, other)).fetchone())
+            self.assertIsNotNone(conn.execute("SELECT 1 FROM bans WHERE player=?", (self.player,)).fetchone())
+        self.assertEqual(self.post("me", token).status_code, 401)
+
+    def test_owner_can_delete_account_after_lobbies_and_unread_notifications(self):
+        self.check_lobby_deletion(True)
+
+    def test_member_deletion_preserves_other_players_rooms_and_notices(self):
+        self.check_lobby_deletion(False)
+
     def test_guest_with_same_nick_cannot_claim_or_change_account(self):
         token = self.register()
         other = "different-secret-key-123456789"
