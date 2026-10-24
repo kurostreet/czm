@@ -7,9 +7,9 @@ creation action and solid blue/yellow home pills in the 23 October UX notes.
 - Three equal home actions remain vertical. Quick Play is deep red; Create Lobby
   and Find Lobby use blue and gold accents on graphite surfaces. Straight Inter
   fonts, measured hints, small corner radii and shared hit geometry.
-- Creation uses labelled name, explicit visibility, five capacity choices (2–6,
-  including the owner), explicit RU/EN team language and one selected server card.
-- Public search has functional mode/language filters, map previews, capacity and
+- Creation uses labelled name, a Settings-style public/invite-only switch (public by default), five capacity
+  choices (2–6, including the owner) and one selected server card. No language controls.
+- Public search has functional mode filters, map previews, capacity and
   entry controls. No Create Lobby action, invitations tab or empty pagination.
 - Room: chosen server above two-column participant cards and the temporary chat.
   Group size is separate from server occupancy. Never invent unknown occupancy.
@@ -19,6 +19,8 @@ creation action and solid blue/yellow home pills in the 23 October UX notes.
 - Existing VDS map-preview loading is reused. Missing photos get a quiet fallback.
 - Invitations use the same native surfaces and straight headings. Background
   Android push remains a separate task; this change does not implement it.
+
+Latest corrections and voice root causes: `CZM_LOBBY_FIXES_2026-10-24.md`.
 
 ## Compatibility and verification
 

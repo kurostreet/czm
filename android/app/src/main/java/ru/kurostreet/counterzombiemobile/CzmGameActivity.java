@@ -64,6 +64,7 @@ public final class CzmGameActivity extends XashActivity implements AudioManager.
         super.onResume();
         if(!backgroundIntent)CzmDownloads.foreground(this);
         foreground = true;
+        CzmLobbyVoice.resume();
         focus = audio == null || audio.requestAudioFocus(this, AudioManager.STREAM_MUSIC,
                 AudioManager.AUDIOFOCUS_GAIN) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED;
         updateAudio();
@@ -72,7 +73,7 @@ public final class CzmGameActivity extends XashActivity implements AudioManager.
 
     @Override protected void onPause() {
         CzmAccount.pause(this);
-        CzmLobbyVoice.stop(); // do not capture a microphone in the background
+        CzmLobbyVoice.pause(); // also handles the system microphone permission dialog
         foreground = false;
         updateAudio();
         if (audio != null) audio.abandonAudioFocus(this);
@@ -103,7 +104,7 @@ public final class CzmGameActivity extends XashActivity implements AudioManager.
         }
         if(request==1519){if(grants.length>0&&grants[0]==android.content.pm.PackageManager.PERMISSION_GRANTED)CzmDownloads.start(this);else{backgroundIntent=false;CzmDownloads.declined();}}
     }
-    @Override protected void onStop(){backgroundIntent=false;super.onStop();}
+    @Override protected void onStop(){CzmLobbyVoice.stop();backgroundIntent=false;super.onStop();}
 
     @Override public void onDestroy() {
         CzmLobbyVoice.stop();

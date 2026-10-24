@@ -1,6 +1,7 @@
 /* Shared native CZM surfaces. Geometry is also used by the touch controls. */
 #pragma once
 #include "CzmMenu.h"
+#include "Scissor.h"
 
 namespace CzmStyle {
 inline unsigned Ink() { return PackRGBA(239,243,248,255); }
@@ -46,12 +47,24 @@ inline void Icon(const CzmRect &r,const char *path,unsigned color=0) {
     CZM_DrawImage(path,r.x+(r.w-side)/2,r.y+(r.h-side)/2,
                   side,side,color?color:Ink());
 }
+inline void Switch(const CzmRect &r,bool on,bool dim=false) {
+    // Match the existing Settings switch, including its assets and thumb inset.
+    const int inset=r.h*12/100,knob=r.h-inset*2;
+    CZM_DrawPill(on?"gfx/czm/ui/pill_lang_on.png":"gfx/czm/ui/chip_lang.png",
+        r.x,r.y,r.w,r.h,PackRGBA(255,255,255,dim?90:255));
+    CZM_DrawImage("gfx/czm/ui/dot.png",on?r.x+r.w-inset-knob:r.x+inset,
+        r.y+inset,knob,knob,dim?PackRGBA(150,150,150,120):Ink());
+}
 inline void MapPreview(const CzmRect &r,const char *map,const char *server="") {
     const HIMAGE photo=CZM_MapPreview(map);
-    if(photo){CZM_DrawCover(photo,r.x,r.y,r.w,r.h);return;}
+    // Cover scales an image beyond the destination on one axis. Clip it so a
+    // wide thumbnail cannot paint over the room title or neighbouring controls.
+    UI::Scissor::PushScissor(r.x,r.y,r.w,r.h);
+    if(photo){CZM_DrawCover(photo,r.x,r.y,r.w,r.h);UI::Scissor::PopScissor();return;}
     const HIMAGE art=CZM_Image(CZM_MapModeArt(map,server));
     if(art)CZM_DrawCover(art,r.x,r.y,r.w,r.h);
     UI_FillRect(r.x,r.y,r.w,r.h,PackRGBA(10,18,29,art?175:255));
+    UI::Scissor::PopScissor();
     const int side=Q_min(r.w,r.h)*32/100;
     CZM_DrawImage("gfx/czm/ui/icon_globe.png",r.x+(r.w-side)/2,
                   r.y+(r.h-side)/2-side/4,side,side,Muted());

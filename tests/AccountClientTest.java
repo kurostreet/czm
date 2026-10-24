@@ -51,6 +51,8 @@ public class AccountClientTest {
             check(!CzmAccount.serviceUrl(bad), "reject credential origin " + bad);
         String session = "czms1_" + "a".repeat(43);
         set("loaded", true); set("token", session); set("synced", false); set("generation", 1); set("event", "");
+        check(CzmAccount.lobbyVoiceKey("https://counter-zombie.ru/api/v1/lobbies/test/voice").equals(session), "voice uses the account session without JNI exposure");
+        check(CzmAccount.lobbyVoiceKey("https://example.com/voice").isEmpty(), "voice credential is origin restricted");
         byte[] hello = "{\"key\":\"legacy-secret\",\"nick\":\"StaleLocal\",\"avatar\":\"1\"}".getBytes(StandardCharsets.UTF_8);
         String url = "https://counter-zombie.ru/api/v1/hello";
         check(CzmAccount.call(1, "POST", url, "", hello, "application/json").startsWith("409\n"), "restore before hello");

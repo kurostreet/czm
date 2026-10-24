@@ -19,7 +19,7 @@ bool CZM_OnlinePlayAllowed();bool CZM_QuickPlayActive();void CZM_LobbyInviteFram
 void CZM_LobbyVoiceStart(const char*,const char*);void CZM_LobbyVoiceStop();void CZM_LobbyVoiceMic(bool);
 bool CZM_LobbyVoiceMicOn();bool CZM_LobbyVoiceSpeaking(int);int CZM_LobbyVoiceStatus();
 void CZM_LobbyVoiceLocalMute(int,bool);bool CZM_LobbyVoiceIsMuted(int);
-void CZM_LobbyServerPickerStart();void CZM_OpenFriends();void CZM_OpenProfile(int);
+void CZM_ShowMessage(const char*);void CZM_LobbyServerPickerStart();void CZM_OpenFriends();void CZM_OpenProfile(int);
 HIMAGE CZM_MapPreview(const char*);HIMAGE CZM_Image(const char*);const char*CZM_MapModeArt(const char*,const char*);
 void CZM_DrawCover(HIMAGE,int,int,int,int);
 '''
@@ -44,7 +44,7 @@ void CZM_DrawImage(const char*p,int x,int y,int w,int h,unsigned c){assert(w>=0&
 void CZM_DrawCover(HIMAGE,int x,int y,int w,int h){if(trace)printf("M\t%d\t%d\t%d\t%d\n",x,y,w,h);}
 HIMAGE CZM_MapPreview(const char*){return 0;}HIMAGE CZM_Image(const char*){return 1;}
 const char*CZM_MapModeArt(const char*,const char*){return "gfx/czm/maps/_zombie.png";}
-void CZM_DrawPill(const char*,int x,int y,int w,int h,unsigned c){UI_FillRect(x,y,w,h,c);}
+void CZM_DrawPill(const char*p,int x,int y,int w,int h,unsigned c){assert(w>=0&&h>=0);if(trace)printf("P\t%d\t%d\t%d\t%d\t%u\t%s\n",x,y,w,h,c,p);}
 void CZM_DrawPanel(const CzmRect&r){UI_FillRect(r.x,r.y,r.w,r.h,0xffffffff);}
 void CZM_DrawButton(const char*,const CzmRect&r,const char*,unsigned,bool,int){UI_FillRect(r.x,r.y,r.w,r.h,0xffffffff);}
 void CZM_Init(){}bool CZM_IsRussian(){return russian;}unsigned CZM_White(){return 0xffffffff;}unsigned CZM_Grey(){return PackRGBA(155,166,184,255);}
@@ -60,6 +60,7 @@ int CZM_ServerCount(){return 0;}CzmServer*CZM_Server(int){return nullptr;}void C
 void CZM_LobbyVoiceStart(const char*,const char*){}void CZM_LobbyVoiceStop(){micOn=false;}void CZM_LobbyVoiceMic(bool v){micOn=v;}
 bool CZM_LobbyVoiceMicOn(){return micOn;}bool CZM_LobbyVoiceSpeaking(int id){return drawSpeaking&&id==8;}int CZM_LobbyVoiceStatus(){return 2;}
 void CZM_LobbyVoiceLocalMute(int id,bool v){if(v)muted.insert(id);else muted.erase(id);}bool CZM_LobbyVoiceIsMuted(int id){return muted.count(id);}
+void CZM_ShowMessage(const char*){}
 void CZM_LobbyInviteFrame(){}void CZM_LobbyServerPickerStart(){}void CZM_OpenFriends(){}void CZM_OpenProfile(int){}
 void CZM_AccountShow(const char*,const char*){}void CZM_PlayClick(){}
 '''
@@ -85,11 +86,13 @@ int main(int argc,char**argv){
     assert(inside(w.m_titleRect,w.m_panel)&&inside(w.m_primary,w.m_panel));
     assert(inside(w.m_buttons[2],w.m_cardsRect[0]));
     for(int i=0;i<5;i++){assert(inside(w.m_capacityRect[i],w.m_panel));assert(hit(w,w.m_capacityRect[i])==w.CAPACITY+i);if(i)assert(!overlap(w.m_capacityRect[i-1],w.m_capacityRect[i]));}
-    for(int i=0;i<2;i++){assert(hit(w,w.m_visibilityRect[i])==w.PUBLIC_ACCESS+i);assert(hit(w,w.m_languageRect[i])==w.LANGUAGE+i);}
+    assert(hit(w,w.m_visibilityRect)==w.VISIBILITY);assert(inside(w.m_switchRect,w.m_visibilityRect));
+    assert(w.m_panel.h<ScreenHeight*.76f);
    }else if(stage==w.SEARCH){
-    for(int i=0;i<6;i++){assert(inside(w.m_filterRect[i],w.m_panel));assert(hit(w,w.m_filterRect[i])==(i<3?w.FILTER_MODE+i:w.FILTER_LANGUAGE+i-3));if(i)assert(!overlap(w.m_filterRect[i-1],w.m_filterRect[i]));}
-    for(int i=0;i<4;i++)assert(hit(w,w.m_cardsRect[i])==w.NONE);
-    assert(w.m_buttons[2].w==0);assert(hit(w,w.m_buttons[0])==w.NONE);
+    for(int i=0;i<3;i++){assert(inside(w.m_filterRect[i],w.m_panel));assert(hit(w,w.m_filterRect[i])==w.FILTER_MODE+i);if(i)assert(!overlap(w.m_filterRect[i-1],w.m_filterRect[i]));}
+    assert(w.m_panel.h<ScreenHeight*.64f);
+    assert(hit(w,w.m_catalogRect)==w.NONE);
+    assert(w.m_buttons[2].w==0);assert(w.m_buttons[0].w==0);
    }else{
     for(int i=0;i<capacity;i++){assert(inside(w.m_membersRect[i],w.m_panel));assert(w.m_membersRect[i].h>=20);for(int j=0;j<i;j++)assert(!overlap(w.m_membersRect[i],w.m_membersRect[j]));assert(!overlap(w.m_membersRect[i],w.m_chatRect));}
     assert(inside(w.m_textRect,w.m_chatRect)&&inside(w.m_sendRect,w.m_chatRect));
@@ -99,22 +102,52 @@ int main(int argc,char**argv){
    w.Draw();
   }
  }
- ScreenWidth=1536;ScreenHeight=716;russian=true;clear(w);w.m_stage=w.CREATE;w.Action(w.CAPACITY+2);assert(w.m_capacity==4);w.Action(w.LANGUAGE+1);assert(w.m_language==1);w.Action(w.PRIVATE_ACCESS);assert(w.m_private);
- w.Action(w.MAKE);assert(lastBody.find("\"capacity\":4")!=std::string::npos&&lastBody.find("\"language\":\"en\"")!=std::string::npos&&lastBody.find("\"visibility\":\"private\"")!=std::string::npos);
+ ScreenWidth=1536;ScreenHeight=716;russian=true;clear(w);w.m_stage=w.CREATE;w.Action(w.CAPACITY+2);assert(w.m_capacity==4);w.m_private=false;w.Action(w.VISIBILITY);assert(w.m_private);w.Action(w.VISIBILITY);assert(!w.m_private);w.Action(w.VISIBILITY);
+ w.Action(w.MAKE);assert(lastBody.find("\"capacity\":4")!=std::string::npos&&lastBody.find("language")==std::string::npos&&lastBody.find("\"visibility\":\"private\"")!=std::string::npos);
  clear(w);w.m_open=true;w.m_stage=w.SEARCH;w.m_offset=8;w.Action(w.FILTER_MODE+1);assert(w.m_offset==0&&lastUrl.find("mode=ze")!=std::string::npos);
- clear(w);w.Action(w.FILTER_LANGUAGE+2);assert(lastUrl.find("language=en")!=std::string::npos);
+ assert(lastUrl.find("language")==std::string::npos);
  populate(w);w.m_stage=w.ROOM;clear(w);w.m_private=false;w.Layout();assert(hit(w,w.m_membersRect[4])==w.INVITE);
  player=8;assert(hit(w,w.m_membersRect[4])==w.NONE);w.Action(w.MEMBER);assert(w.m_selectedMemberId==7);w.Action(w.MODAL_LOCAL_MUTE);assert(muted.count(7));
  player=7;clear(w);w.m_selectedMemberId=0;assert(!w.CanStart());w.m_members[2].ready=true;assert(w.CanStart());
  w.Action(w.LAUNCH);assert(lastUrl.find("/launch")!=std::string::npos);clear(w);
+ // A full page remains inside the compact catalog, with real non-overlapping rows.
+ w.m_stage=w.SEARCH;w.m_cardCount=4;w.m_offset=4;w.m_next=8;w.Layout();
+ for(int i=0;i<4;i++){assert(inside(w.m_cardsRect[i],w.m_catalogRect));assert(hit(w,w.m_cardsRect[i])==w.SELECT+i);if(i)assert(!overlap(w.m_cardsRect[i-1],w.m_cardsRect[i]));}
+ assert(hit(w,w.m_buttons[0])==w.PREV&&hit(w,w.m_buttons[1])==w.NEXT);
+ w.m_cardCount=0;w.m_next=-1;w.m_offset=0;
+ // Backdrop taps close only on a matching press/release; dragging out does not.
+ clear(w);w.m_room[0]=0;w.m_open=true;w.m_stage=w.CREATE;w.Layout();
+ cursorX=w.m_panel.x-3;cursorY=w.m_panel.y+3;assert(w.Hit()==w.BACKDROP);
+ w.KeyDown(1);w.KeyUp(1);assert(!w.m_open);
+ w.m_open=true;w.m_stage=w.SEARCH;w.m_cardCount=0;w.Layout();
+ cursorX=w.m_panel.x+2;cursorY=w.m_panel.y+2;w.KeyDown(1);
+ cursorX=w.m_panel.x-3;w.KeyUp(1);assert(w.m_open);
+ w.KeyDown(1);w.KeyUp(1);assert(!w.m_open);
+ // A delayed catalog reply cannot populate a newly opened creation form.
+ clear(w);w.m_open=true;w.m_stage=w.SEARCH;w.Refresh();int oldList=w.m_request;
+ w.Action(w.BACKDROP);w.Open(true);replies[oldList]={200,"{\"lobbies\":[{\"id\":\"stale\",\"title\":\"stale\"}]}"};w.Frame();
+ assert(w.m_stage==w.CREATE&&w.m_cardCount==0&&w.m_kind==w.GET_MINE);
+ clear(w);populate(w);w.m_room[0]=0;
+ // Closing while create/join is in flight reconciles and leaves that room.
+ w.m_stage=w.CREATE;w.m_open=true;clear(w);w.m_private=false;strcpy(w.m_title,"Test team");
+ w.Action(w.MAKE);int pending=w.m_request;assert(pending);
+ w.Action(w.BACKDROP);assert(!w.m_open&&w.m_closePending);
+ replies[pending]={200,"{\"lobby\":{\"id\":\"created-late\",\"title\":\"Test team\",\"owner\":7,\"server\":\"203.0.113.5:27015\",\"proto\":\"gs\",\"capacity\":4,\"members\":[{\"id\":7,\"nick\":\"Kuro\"}]}}"};
+ w.Poll();assert(w.m_kind==w.POST_LEAVE&&lastUrl.find("created-late/leave")!=std::string::npos);
+ replies[w.m_request]={200,"{\"closed\":true}"};w.Poll();assert(!w.m_closePending&&!w.HasRoom());
+ // Creation validates Unicode character count and trimmed names.
+ clear(w);w.m_stage=w.CREATE;strcpy(w.m_title,"ЯЯ");int requests=nextRequest;w.Action(w.MAKE);assert(nextRequest==requests);
+ strcpy(w.m_title,"   ");w.Action(w.MAKE);assert(nextRequest==requests);
+ strcpy(w.m_title,"  Team  ");w.Action(w.MAKE);assert(lastBody.find("\"title\":\"Team\"")!=std::string::npos);
+ clear(w);
  // Account changes clear the former room and voice state.
  micOn=true;w.ResetSession();assert(!w.HasRoom()&&!micOn);
  if(argc>1){
-  std::string view=argv[1];populate(w);strcpy(w.m_title,"Zombie Team");w.m_private=false;w.m_cardCount=0;w.m_chatCount=0;w.m_filterMode=w.m_filterLanguage=0;w.m_next=-1;w.m_offset=0;w.m_stage=w.ROOM;w.m_selectedMemberId=0;w.m_notice[0]=0;trace=true;drawSpeaking=true;
+  std::string view=argv[1];populate(w);strcpy(w.m_title,"Zombie Team");w.m_private=false;w.m_cardCount=0;w.m_chatCount=0;w.m_filterMode=0;w.m_next=-1;w.m_offset=0;w.m_stage=w.ROOM;w.m_selectedMemberId=0;w.m_notice[0]=0;trace=true;drawSpeaking=true;
   if(view=="create")w.m_stage=w.CREATE;
   if(view=="search"||view=="catalog")w.m_stage=w.SEARCH;
   if(view=="catalog"){
-   w.m_cardCount=3;for(int i=0;i<3;i++){auto&r=w.m_cards[i];strcpy(r.title,i==0?"Ночной отряд":i==1?"Escape together":"Команда Kuro");strcpy(r.id,"test-room");strcpy(r.address,"203.0.113.5:27015");strcpy(r.language,i==1?"en":"ru");strcpy(r.map,i==2?"zm_alpha":"ze_atix_panic_v1_fix");r.count=i+2;r.capacity=6;}
+   w.m_cardCount=3;for(int i=0;i<3;i++){auto&r=w.m_cards[i];strcpy(r.title,i==0?"Ночной отряд":i==1?"Escape together":"Команда Kuro");strcpy(r.id,"test-room");strcpy(r.address,"203.0.113.5:27015");strcpy(r.map,i==2?"zm_alpha":"ze_atix_panic_v1_fix");r.count=i+2;r.capacity=6;}
   }
   if(view=="member")w.m_selectedMemberId=8;
   if(view=="solo")w.m_memberCount=1;
@@ -131,7 +164,7 @@ class LobbyNativeTests(unittest.TestCase):
             (p/'utlvector.h').write_text(VECTOR)
             (p/'utlstring.h').write_text(STRING)
             (p/'stub.h').write_text(STUB)
-            for name in ['extdll_menu.h','BaseMenu.h','Utils.h','Framework.h','keydefs.h','CzmMenu.h']:
+            for name in ['extdll_menu.h','BaseMenu.h','Utils.h','Framework.h','keydefs.h','CzmMenu.h','Scissor.h']:
                 (p/name).write_text('#include "stub.h"\n')
             for name in ['CzmJson.h','CzmDesign.h']:
                 (p/name).write_text((ROOT/'czm/menu'/name).read_text())
