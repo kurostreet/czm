@@ -40,14 +40,20 @@ class AccountClientTests(unittest.TestCase):
                 # interface stub; Gradle compiles the real CzmLobbyVoice.java.
                 "CzmLobbyVoice": """package ru.kurostreet.counterzombiemobile;
                     public final class CzmLobbyVoice {
-                        public static void start(String url,String key){}
+                        public static void start(String url,String key,int player){}
                         public static void stop(){}
                         public static void setMic(boolean enabled){}
                         public static boolean microphoneOn(){return false;}
+                        public static boolean microphoneEnabled(int player){return false;}
                         public static boolean speaking(int player){return false;}
                         public static int state(){return 0;}
                         public static void mutePlayer(int player,boolean enabled){}
                         public static boolean locallyMuted(int player){return false;}
+                    }""",
+                "CzmLobbyVoiceDialog": """package ru.kurostreet.counterzombiemobile;
+                    public final class CzmLobbyVoiceDialog {
+                        public static void loadPreferences(){}
+                        public static void show(){}
                     }""",
             }
             for name, text in sources.items():
