@@ -66,6 +66,14 @@ jobs:
         run: |
           python3 -m unittest discover -s tests -p test_engine_patches.py -v
           python3 scripts/apply_engine_patches.py
+          python3 -m unittest discover -s tests -p test_goldsrc_entities.py -v
+      - name: Check native home and lobby geometry, actions and role controls
+        run: |
+          python3 -m unittest discover -s tests -p test_home_actions.py -v
+          python3 -m unittest discover -s tests -p test_lobby_menu.py -v
+          python3 -m unittest discover -s tests -p test_server_browser.py -v
+          python3 -m unittest discover -s tests -p test_lobby_voice_client.py -v
+          python3 -m unittest discover -s tests -p test_lobby_audio.py -v
       - name: Check shared map capture state and read-only protection
         run: |
           python3 -m unittest discover -s tests -p test_map_capture.py -v
@@ -113,7 +121,7 @@ jobs:
                            "gfx/czm/shop/wheel1.png", "gfx/czm/shop/wheel6.png", "gfx/czm/shop/wheel8_7.png", "gfx/czm/ui/editor_bg.png", "touch_presets/czm_scheme1.cfg",
                            "touch_presets/czm_scheme2.cfg", "touch_presets/czm_scheme3.cfg",
                            "userconfig.d/czm_touch.cfg", "gfx/czm/ui/icon_globe.png", "gfx/czm/ui/icon_star_on.png",
-                           "gfx/czm/ui/white.png", "gfx/czm/maps/_zombie.png", "gfx/czm/maps/_classic.png",
+                           "gfx/czm/ui/white.png", "gfx/czm/ui/surface.png", "gfx/czm/ui/icon_crown.png", "gfx/czm/maps/_zombie.png", "gfx/czm/maps/_classic.png",
                            "gfx/czm/maps/zm_3rooms.png", "gfx/czm/avatars/avatar_01.png", "gfx/czm/avatars/avatar_10.png",
                            "gfx/czm/radar/radar_classic.png", "gfx/czm/radar/radar_tactical.png", "gfx/czm/radar/mark_dot.png"]:
                   assert apk.read("assets/" + name) == Path("3rdparty/cs16client-extras", name).read_bytes(), name
@@ -160,11 +168,36 @@ jobs:
           sha256sum CounterZombieMobile-Core-test.apk > CounterZombieMobile-Core-test.apk.sha256
           mkdir -p tools
           cp "$ANDROID_HOME/build-tools/36.0.0/lib/apksigner.jar" tools/
-      - name: Upload core APK and local packaging tools
+      - name: Explain that the core APK cannot start the game
+        run: |
+          python3 - <<'PY'
+          from zipfile import ZipFile
+          with ZipFile("CounterZombieMobile-Core-test.apk") as apk:
+              # Full game-data is intentionally kept on the authorized
+              # packaging server, never pushed into GitHub artifacts.
+              assert "assets/bundled/game-data.zip" not in apk.namelist()
+              assert "assets/bundled/game-data.json" not in apk.namelist()
+          PY
+          cat > CORE-NOT-INSTALLABLE.txt <<'TEXT'
+          IMPORTANT: THIS IS NOT AN INSTALLABLE GAME!
+          CounterZombieMobile-Core-test.apk is a technical intermediate built
+          by CI. It intentionally does NOT contain bundled/game-data.zip and
+          bundled/game-data.json. Installing it shows the "missing game files"
+          error. Do not distribute this APK to players or testers.
+          A full CZM test APK must be assembled separately, using the private
+          existing game-data archive, then signed and verified.
+
+          ВНИМАНИЕ: ЭТО НЕ ПОЛНАЯ ИГРА!
+          Core-test.apk не содержит игровые файлы game-data.zip / .json.
+          Не устанавливайте и не распространяйте этот файл.
+          Используйте только полностью собранный, подписанный FULL APK.
+          TEXT
+      - name: Upload non-installable core only (for private full-APK assembly)
         uses: actions/upload-artifact@v4
         with:
-          name: CounterZombieMobile-Android-test
+          name: CZM-CORE-NOT-AN-INSTALLABLE-APK
           path: |
+            CORE-NOT-INSTALLABLE.txt
             CounterZombieMobile-Core-test.apk
             CounterZombieMobile-Core-test.apk.sha256
             apk-info.txt

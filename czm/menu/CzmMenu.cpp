@@ -568,6 +568,10 @@ void CZM_CreateFonts( float scale )
 		{ "CZM BlackItalic", 36, 900 }, // CZMF_MENU_TITLE
 		{ "CZM BlackItalic", 30, 900 }, // CZMF_TILE_NAME
 		{ "CZM Medium", 10, 500 },      // CZMF_TINY
+		{ "CZM Semibold", 32, 600 },    // CZMF_UI_TITLE
+		{ "CZM Semibold", 26, 600 },    // CZMF_UI_ACTION
+		{ "CZM Semibold", 20, 600 },    // CZMF_UI_LABEL
+		{ "CZM Medium", 15, 500 },      // CZMF_UI_META
 	};
 
 	for( int i = 0; i < CZMF_COUNT; i++ )
@@ -742,6 +746,22 @@ void CZM_DrawCover( HIMAGE image, int x, int y, int w, int h )
 
 	EngFuncs::PIC_Set( image, 255, 255, 255, 255 );
 	EngFuncs::PIC_Draw( x + ( w - dw ) / 2, y + ( h - dh ) / 2, dw, dh );
+}
+
+int CZM_CountBadgeWidth( int count, int height )
+{
+	if( count <= 0 ) return 0;
+	char text[16];snprintf( text, sizeof( text ), count > 99 ? "99+" : "%d", count );
+	return Q_max( height, CZM_TextWidth( CZM_Font( CZMF_SMALL ), text ) + height * 3 / 5 );
+}
+
+void CZM_DrawCountBadge( const CzmRect &r, int count )
+{
+	if( count <= 0 || r.w <= 0 || r.h <= 0 ) return;
+	char text[16];snprintf( text, sizeof( text ), count > 99 ? "99+" : "%d", count );
+	CZM_DrawPill( "gfx/czm/ui/pill_lang_on.png", r.x, r.y, r.w, r.h, PackRGBA( 255, 255, 255, 255 ) );
+	CZM_DrawText( CZM_Font( CZMF_SMALL ), r.x, r.y + ( r.h - CZM_FontHeight( CZM_Font( CZMF_SMALL ) ) ) / 2,
+		r.w, text, CZM_White(), QM_CENTER );
 }
 
 unsigned int CZM_PingColor( int ping )

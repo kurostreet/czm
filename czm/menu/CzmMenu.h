@@ -48,6 +48,10 @@ enum CzmFontId
 	CZMF_MENU_TITLE,
 	CZMF_TILE_NAME,   // server name on a main-screen tile, two lines
 	CZMF_TINY,        // words in the small match previews of the settings
+	CZMF_UI_TITLE,    // straight, compact headings for the lobby interface
+	CZMF_UI_ACTION,
+	CZMF_UI_LABEL,
+	CZMF_UI_META,
 	CZMF_COUNT
 };
 
@@ -174,6 +178,8 @@ struct CzmRect
 };
 
 CzmRect CZM_Rect( int x, int y, int w, int h );
+int CZM_CountBadgeWidth( int count, int height );
+void CZM_DrawCountBadge( const CzmRect &rect, int count );
 unsigned int CZM_White( int alpha = 255 );
 unsigned int CZM_Grey( void );
 int CZM_LineWidth( void );
@@ -381,10 +387,36 @@ void CZM_OpenChat( void );
 
 // Account profiles, friends and private dialogs (independent of game-server mods).
 void CZM_OpenFriends( void );
+void CZM_OpenLobbyCreate( void );
+void CZM_OpenLobbySearch( void );
+void CZM_OpenLobbyById( const char *id );
+void CZM_LobbyFrame( void );
+void CZM_LobbyInviteFrame( void );
+void CZM_LobbyOpenAccepted( void );
+bool CZM_LobbyHasRoom( void );
+void CZM_LobbyVoiceStart(const char *url,const char *key);
+void CZM_LobbyVoiceStop(void);
+void CZM_LobbyVoiceTest(void);
+bool CZM_LobbyVoiceMicEnabled(int player);
+void CZM_LobbyVoiceMic(bool enabled);
+bool CZM_LobbyVoiceMicOn(void);
+bool CZM_LobbyVoiceSpeaking(int player);
+int CZM_LobbyVoiceStatus(void);
+void CZM_LobbyVoiceLocalMute(int player,bool muted);
+bool CZM_LobbyVoiceIsMuted(int player);
+
+void CZM_LobbyServerPickerStart( void );
+void CZM_LobbyPickedServer( const char *address,const char *proto,
+                            const char *name,const char *map,int players,int capacity );
+bool CZM_LobbyCanInvite( void );
+void CZM_LobbyInviteFriend( int player );
 void CZM_OpenProfile( int player, int chatMessage = 0 );
 void CZM_SocialFrame( void );
 int CZM_SocialUnread( void );
 int CZM_SocialRequests( void );
+int CZM_SocialNotifications( void );
+int CZM_ChatUnread( int room = -1 );
+void CZM_ChatMarkRead( int room, int through );
 bool CZM_CopyText( const char *text );
 void CZM_JoinAddress( const char *address );
 

@@ -44,6 +44,12 @@ final class CzmAccount {
         loaded = true;
     }
 
+    /** Java-only credential for the authenticated lobby socket; never sent to JNI. */
+    static synchronized String lobbyVoiceKey(String url) {
+        if(!serviceUrl(url))return "";
+        load();return token;
+    }
+
     static synchronized int generation() { load(); return generation; }
 
     private static JSONObject object(String response) throws Exception {

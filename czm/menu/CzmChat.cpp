@@ -312,6 +312,8 @@ void CCzmChat::Poll( void )
 	CzmChatRoom &room = m_rooms[m_iRoom];
 	int status;
 	CUtlString body;
+	if(CZM_OnlineAccount()&&m_pStack->Current()==this&&m_flScroll<=1.0f&&room.loaded)
+		CZM_ChatMarkRead(m_iRoom,room.lastId);
 
 	for( int i = 0; i < ROOMS; i++ )
 	{
@@ -1017,6 +1019,9 @@ void CCzmChat::Draw()
 				CZM_DrawPill( UI_DIR "pill_lang_on.png", r.x + inset, r.y + inset, r.w - inset * 2, r.h - inset * 2 );
 			CZM_DrawText( tabFont, r.x, r.y + ( r.h - CZM_FontHeight( tabFont )) / 2, r.w, s_roomNames[i],
 				active || IsPressed( HIT_ROOM + i ) ? CZM_White() : PackRGBA( 170, 176, 186, 255 ), QM_CENTER );
+			const int n=CZM_ChatUnread(i);
+			if(n>0){const int bh=Q_max(16,r.h/2),bw=CZM_CountBadgeWidth(n,bh);
+				CZM_DrawCountBadge(CZM_Rect(r.x+r.w-bw/2,r.y-bh/3,bw,bh),n);}
 		}
 
 		// Keep rules on their own line, including narrow screens.

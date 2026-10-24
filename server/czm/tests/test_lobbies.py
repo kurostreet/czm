@@ -99,7 +99,13 @@ class LobbyTests(unittest.TestCase):
         self.assertEqual(self.invite(room).json(),invited.json())
         invitation=invited.json()["invite"]["id"]
         self.assertEqual(self.req("GET","/invitations",2).json()["invites"],[])
-        self.assertEqual(len(self.req("GET","/invitations",1).json()["invites"]),1)
+        incoming=self.req("GET","/invitations",1).json()["invites"]
+        self.assertEqual(len(incoming),1)
+        self.assertEqual(incoming[0]["sender"],self.ids[0])
+        self.assertEqual(incoming[0]["sender_name"],"Guest")
+        self.assertEqual(incoming[0]["count"],1)
+        self.assertEqual(incoming[0]["capacity"],3)
+        self.assertEqual(incoming[0]["title"],"Zombie Team")
         self.assertEqual(self.req("POST",f"/invitations/{invitation}/answer",2,
                                   json={"accept":True}).status_code,404)
         accepted=self.req("POST",f"/invitations/{invitation}/answer",1,json={"accept":True})
@@ -437,6 +443,41 @@ class LobbyTests(unittest.TestCase):
             c.execute("UPDATE social_presence SET seen=? WHERE player=?",
                       (db.now()-social.PRESENCE_TTL-10,self.ids[1]))
             self.assertEqual(lobbies._map_for_server(c,server),"")
+
+    def test_catalog_filters_language_and_live_map_before_pagination(self):
+        from czm import social
+        rooms=[]
+        with db.db() as c:
+            for i,language in enumerate(("ru","en","")):
+                result=lobbies.create(c,self.keys[i],"Team number "+str(i),"","public",6,
+                    "203.0.113.%d:27015"%(10+i),"gs","filter-native-nonce-%d"%i,language)
+                rooms.append(result["lobby"]["id"])
+            social.heartbeat(c,self.keys[0],"203.0.113.10:27015","ze_city")
+            social.heartbeat(c,self.keys[1],"203.0.113.11:27015","zm_alpha")
+            self.assertEqual([r["id"] for r in lobbies.catalog(c,self.keys[2],language="ru")["lobbies"]],[rooms[0]])
+            self.assertEqual([r["id"] for r in lobbies.catalog(c,self.keys[2],mode="zs",language="en")["lobbies"]],[rooms[1]])
+            self.assertEqual(lobbies.catalog(c,self.keys[2],mode="ze",language="en")["lobbies"],[])
+            self.assertEqual(lobbies.catalog(c,self.keys[2],offset=1,mode="ze")["lobbies"],[])
+            self.assertEqual(len(lobbies.catalog(c,self.keys[2])["lobbies"]),3)
+            c.execute("UPDATE social_presence SET seen=? WHERE player=?",(db.now()-social.PRESENCE_TTL-1,self.ids[0]))
+            self.assertEqual(lobbies.catalog(c,self.keys[2],mode="ze")["lobbies"],[])
+        filtered=self.req("GET","?language=en&mode=zs",2)
+        self.assertEqual(filtered.status_code,200,filtered.text)
+        self.assertEqual(filtered.json()["lobbies"][0]["language"],"en")
+        self.assertEqual(self.req("GET","?mode=unsupported",2).status_code,400)
+
+    def test_explicit_language_create_idempotency_and_legacy_unknown(self):
+        payload={"title":"Team English","visibility":"public","capacity":4,
+                 "server":"203.0.113.5:27015","proto":"gs","nonce":"language-create-nonce-01","language":"en"}
+        first=self.req("POST","",json=payload)
+        self.assertEqual(first.status_code,200,first.text)
+        self.assertEqual(first.json()["lobby"]["language"],"en")
+        self.assertEqual(first.json(),self.req("POST","",json=payload).json())
+        payload["language"]="ru"
+        self.assertEqual(self.req("POST","",json=payload).status_code,409)
+        legacy=self.create(1,nonce="legacy-language-nonce-01")
+        self.assertEqual(legacy.json()["lobby"]["language"],"")
+        self.assertEqual(len(self.req("GET","?language=ru").json()["lobbies"]),0)
 
     def test_lobby_chat_messages_include_author_nick(self):
         room=self.create().json()["lobby"]["id"]
