@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS lobbies (
  revision INTEGER NOT NULL DEFAULT 1, created INTEGER NOT NULL,
  last_seen INTEGER NOT NULL,
  voice_mute_all INTEGER NOT NULL DEFAULT 0,
+ language TEXT NOT NULL DEFAULT '' CHECK(language IN ('','ru','en')),
  CHECK(length(title) BETWEEN 3 AND 160)
 );
 CREATE TABLE IF NOT EXISTS lobby_members (
@@ -173,6 +174,7 @@ def _state(conn, room):
         (room["id"],)).fetchall()
     return {"id": room["id"], "title": room["title"], "description": room["description"],
             "visibility": room["visibility"], "owner": room["owner"],
+            "language": room["language"],
              "capacity": room["capacity"], "server": room["server"], "proto": room["proto"],
             "map": _map_for_server(conn,room["server"]),
             "voice_mute_all": bool(room["voice_mute_all"]),
@@ -234,7 +236,7 @@ def moderate(conn, player, body, nonce, kind):
     return response
 
 
-def create(conn, key, title, description, visibility, capacity, server, proto, nonce):
+def create(conn, key, title, description, visibility, capacity, server, proto, nonce, language=""):
     player = _actor(conn, key)
     _nonce(nonce)
     title = _title(title)
@@ -248,11 +250,13 @@ def create(conn, key, title, description, visibility, capacity, server, proto, n
         raise accounts.AuthError("settings")
     if not social._valid_server(server) or proto not in ("gs", "49"):
         raise accounts.AuthError("server")
+    if language not in ("", "ru", "en"):
+        raise accounts.AuthError("language")
     old = conn.execute("SELECT * FROM lobby_creation_ops WHERE player=? AND nonce=?", (player, nonce)).fetchone()
     if old:
         room = conn.execute("SELECT * FROM lobbies WHERE id=?", (old["lobby"],)).fetchone()
         if room and (room["title"], room["description"], room["visibility"], room["capacity"],
-                     room["server"], room["proto"]) == (title, description, visibility, capacity, server, proto):
+                     room["server"], room["proto"], room["language"]) == (title, description, visibility, capacity, server, proto, language):
             return {"lobby": _state(conn, room)}
         raise accounts.AuthError("nonce", 409)
     if _current(conn, player):
@@ -260,9 +264,9 @@ def create(conn, key, title, description, visibility, capacity, server, proto, n
     accounts.rate(conn, "lobby_create", str(player), 10, 3600)
     room_id = secrets.token_urlsafe(15)
     t = now()
-    conn.execute("INSERT INTO lobbies(id,owner,title,description,visibility,capacity,server,proto,created,last_seen) "
-                 "VALUES (?,?,?,?,?,?,?,?,?,?)",
-                 (room_id, player, title, description, visibility, capacity, server, proto, t,t))
+    conn.execute("INSERT INTO lobbies(id,owner,title,description,visibility,capacity,server,proto,created,last_seen,language) "
+                 "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                 (room_id, player, title, description, visibility, capacity, server, proto, t,t,language))
     conn.execute("INSERT INTO lobby_members(player,lobby,joined) VALUES (?,?,?)",
                  (player, room_id, now()))
     conn.execute("INSERT INTO lobby_creation_ops(player,nonce,lobby,created) VALUES (?,?,?,?)",
@@ -276,16 +280,35 @@ def mine(conn, key):
     return {"lobby": _state(conn, room) if room else None}
 
 
-def catalog(conn, key, offset=0):
+def catalog(conn, key, offset=0, mode="", language=""):
     _actor(conn, key)
-    rows = conn.execute("SELECT l.*, (SELECT COUNT(*) FROM lobby_members m WHERE m.lobby=l.id) AS count "
-                        "FROM lobbies l WHERE l.visibility='public' AND l.last_seen>? "
-                        "ORDER BY l.created DESC,l.id DESC LIMIT 41 OFFSET ?",
-                        (now()-HOST_TTL,max(0,offset))).fetchall()
+    if mode not in ("", "ze", "zs") or language not in ("", "ru", "en"):
+        raise accounts.AuthError("filter")
+    # Filter before pagination. Unknown legacy language/map is deliberately
+    # excluded from a specific filter rather than guessed from a title.
+    from .social import PRESENCE_TTL
+    t = now()
+    rows = conn.execute("""
+        WITH rooms AS (
+          SELECT l.*, (SELECT COUNT(*) FROM lobby_members m WHERE m.lobby=l.id) AS count,
+            COALESCE((SELECT pr.map FROM social_presence pr
+              JOIN account_sessions sess ON sess.token_hash=pr.owner AND sess.player=pr.player
+              WHERE pr.server=l.server AND pr.map!='' AND pr.seen>?
+                AND sess.expires>? AND sess.seen>?
+              ORDER BY pr.seen DESC,pr.player LIMIT 1),'') AS map
+          FROM lobbies l WHERE l.visibility='public' AND l.last_seen>?
+            AND (?='' OR l.language=?)
+        )
+        SELECT * FROM rooms
+        WHERE ?='' OR (?='ze' AND substr(lower(map),1,3)='ze_')
+                   OR (?='zs' AND substr(lower(map),1,3)='zm_')
+        ORDER BY created DESC,id DESC LIMIT 41 OFFSET ?
+        """, (t-PRESENCE_TTL,t,t-accounts.SESSION_IDLE,t-HOST_TTL,
+                language,language,mode,mode,mode,max(0,offset))).fetchall()
     return {"lobbies": [{"id": l["id"], "title": l["title"], "owner": l["owner"],
                         "capacity": l["capacity"], "count": l["count"],
                         "server": l["server"], "proto": l["proto"],
-                        "map": _map_for_server(conn,l["server"])} for l in rows[:40]],
+                        "map": l["map"], "language": l["language"]} for l in rows[:40]],
             "next": max(0,offset)+40 if len(rows)>40 else -1}
 
 

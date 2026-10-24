@@ -48,6 +48,10 @@ enum CzmFontId
 	CZMF_MENU_TITLE,
 	CZMF_TILE_NAME,   // server name on a main-screen tile, two lines
 	CZMF_TINY,        // words in the small match previews of the settings
+	CZMF_UI_TITLE,    // straight, compact headings for the lobby interface
+	CZMF_UI_ACTION,
+	CZMF_UI_LABEL,
+	CZMF_UI_META,
 	CZMF_COUNT
 };
 

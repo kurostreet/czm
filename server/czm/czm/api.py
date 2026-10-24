@@ -543,6 +543,7 @@ class LobbyCreateIn(BaseModel):
     server: str = Field(min_length=7, max_length=64)
     proto: str = Field(pattern=r"^(gs|49)$")
     nonce: str = Field(min_length=12, max_length=64)
+    language: str = Field(default="", pattern=r"^(ru|en)?$")
 
 class LobbyReadyIn(BaseModel):
     revision: int = Field(ge=1)
@@ -564,12 +565,12 @@ async def lobby_create(body:LobbyCreateIn, request:Request,
                        x_czm_key:str|None=Header(default=None)):
     return await lobby_result(request,lambda c:lobbies.create(
         c,x_czm_key or "",body.title,body.description,body.visibility,
-        body.capacity,body.server,body.proto,body.nonce))
+        body.capacity,body.server,body.proto,body.nonce,body.language))
 
 @router.get("/lobbies")
-async def lobby_catalog(request:Request, offset:int=0,
+async def lobby_catalog(request:Request, offset:int=0, mode:str="", language:str="",
                         x_czm_key:str|None=Header(default=None)):
-    return await lobby_result(request,lambda c:lobbies.catalog(c,x_czm_key or "",max(0,min(offset,1000000))))
+    return await lobby_result(request,lambda c:lobbies.catalog(c,x_czm_key or "",max(0,min(offset,1000000)),mode,language))
 
 @router.get("/lobbies/mine")
 async def lobby_mine(request:Request,x_czm_key:str|None=Header(default=None)):
