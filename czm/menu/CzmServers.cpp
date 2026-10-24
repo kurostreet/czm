@@ -28,6 +28,7 @@ GNU General Public License for more details.
 #include "utlvector.h"
 #include "utlstring.h"
 #include "CzmMenu.h"
+#include "CzmDesign.h"
 
 /*
 The game's own server list, the one CS16Client has (menus/ServerBrowser.cpp), drawn
@@ -392,6 +393,8 @@ private:
 		HIT_ADMIN,
 		HIT_FAVORITE,
 		HIT_DETAILS,
+		HIT_DETAILS_CLOSE,
+		HIT_DETAILS_BACKDROP,
 		HIT_DIALOG_FIELD,
 		HIT_DIALOG_PASTE,
 		HIT_DIALOG_OK,
@@ -487,6 +490,7 @@ private:
 	char m_szQuery[64];      // folded search text
 
 	int m_iDialog;
+	bool m_bDetailsOpen;
 	CzmTextEdit m_field;
 	char m_szDialogError[128];
 	char m_szPending[64];    // server waiting for its password
@@ -506,8 +510,6 @@ private:
 	int m_iLastMoveY;
 	double m_flLastMoveTime;
 	double m_flLastDraw;
-	double m_flLastTap;
-	int m_iLastTapRow;
 
 	// layout
 	int W, H, m_iMargin;
@@ -515,6 +517,7 @@ private:
 	CzmRect m_tabs[TAB_COUNT], m_filters[FILTER_COUNT];
 	CzmRect m_listHead, m_sort, m_clip, m_details, m_emptyButton;
 	CzmRect m_play, m_fav, m_admin;
+	CzmRect m_detailsClose, m_detailsMap, m_detailsInfo;
 	CzmRect m_dlgPanel, m_dlgField, m_dlgPaste, m_dlgOk, m_dlgCancel;
 	int m_iRowH, m_iRowStep;
 	bool m_bThumbs;
@@ -545,6 +548,7 @@ CCzmServers::CCzmServers() : CMenuFramework( "CzmServers" )
 	memset( &m_search, 0, sizeof( m_search ));
 	m_szQuery[0] = 0;
 	m_iDialog = DLG_NONE;
+	m_bDetailsOpen = false;
 	memset( &m_field, 0, sizeof( m_field ));
 	m_szDialogError[0] = 0;
 	m_szPending[0] = 0;
@@ -556,8 +560,7 @@ CCzmServers::CCzmServers() : CMenuFramework( "CzmServers" )
 	m_iDownY = 0;
 	m_flScrollAtDown = m_flScroll = m_flVelocity = 0.0f;
 	m_iLastMoveY = 0;
-	m_flLastMoveTime = m_flLastDraw = m_flLastTap = 0.0;
-	m_iLastTapRow = -1;
+	m_flLastMoveTime = m_flLastDraw = 0.0;
 	W = H = m_iMargin = 0;
 	m_iRowH = m_iRowStep = 1;
 	m_bThumbs = true;
@@ -1278,19 +1281,18 @@ void CCzmServers::Show()
 	m_bMaybeScroll = m_bScrolling = false;
 	m_flVelocity = 0.0f;
 	m_iDialog = DLG_NONE;
+	m_bDetailsOpen = false;
 	m_field.End();
 	m_bReturnHere = false;
 
 	CMenuFramework::Show();
 	Refresh( false );
 
-	// the selected server gets fresh players
-	if( Selected( ))
-		RequestDetails( Selected( ));
 }
 
 void CCzmServers::Hide()
 {
+	m_bDetailsOpen = false;
 	m_szJoinAddress[0] = 0;
 	m_search.End();
 	m_field.End();
@@ -1413,7 +1415,7 @@ void CCzmServers::Layout( void )
 {
 	HFont titleFont = CZM_Font( CZMF_PANEL_TITLE );
 	HFont chipFont = CZM_Font( CZMF_TILE_STATUS );
-	int top, hb, x, rowY, rowH, gap, contentY, bottom, dw, listW, chipPad;
+	int top, hb, x, rowY, rowH, gap, contentY, bottom, listW, chipPad;
 	static const char *filterKeys[FILTER_COUNT] = { "srv_f_notempty", "srv_f_notfull", "srv_f_nopass", "srv_f_zombie" };
 	static const char *tabKeys[TAB_COUNT] = { "srv_tab_all", "srv_tab_fav", "srv_tab_hist" };
 
@@ -1481,12 +1483,10 @@ void CCzmServers::Layout( void )
 		}
 	}
 
-	// list on the left, details on the right
+	// One full-width list. A tapped server opens a separate details card.
 	contentY = rowY + rowH + H * 0.03f;
 	bottom = H - H * 0.035f;
-	dw = bound( (int)( H * 0.52f ), (int)( W * 0.31f ), (int)( H * 0.74f ));
-	m_details = CZM_Rect( W - m_iMargin - dw, contentY, dw, bottom - contentY );
-	listW = m_details.x - H * 0.03f - m_iMargin;
+	listW = W - m_iMargin * 2;
 
 	m_listHead = CZM_Rect( m_iMargin, contentY, listW, H * 0.05f );
 	{
@@ -1510,14 +1510,24 @@ void CCzmServers::Layout( void )
 		m_emptyButton = CZM_Rect( m_clip.x + ( m_clip.w - bw ) / 2, m_clip.y + m_clip.h * 0.56f, bw, bh );
 	}
 
-	// details buttons
+	// The details card keeps its square photo independent of title length.
 	{
-		int pad = H * 0.03f, bh = H * 0.085f, inner = m_details.w - pad * 2;
-		int fw = Q_max( bh, (int)( inner * 0.36f ));
-
-		m_fav = CZM_Rect( m_details.x + pad, m_details.y + m_details.h - pad - bh, fw, bh );
-		m_play = CZM_Rect( m_fav.x + fw + H * 0.02f, m_fav.y, inner - fw - H * 0.02f, bh );
-		m_admin = CZM_Rect( m_fav.x, m_fav.y - H * 0.065f - H * 0.012f, inner, H * 0.065f );
+		const int pad = Q_max( 8, (int)( H * 0.028f )), gap = Q_max( 5, (int)( H * 0.018f ));
+		const int dw = Q_min( W - m_iMargin * 2, (int)( H * 1.42f ));
+		const int dh = Q_min( H - pad * 2, (int)( H * 0.73f ));
+		const int bh = Q_max( 30, (int)( H * 0.068f )), head = Q_max( 28, (int)( H * 0.06f ));
+		m_details = CZM_Rect( ( W - dw ) / 2, ( H - dh ) / 2, dw, dh );
+		const int inner = dw - pad * 2, left = m_details.x + pad;
+		const int footer = m_details.y + dh - pad - bh, bodyY = m_details.y + pad + head + gap;
+		const int bodyH = footer - gap - bodyY;
+		const int side = Q_min( bodyH - CZM_FontHeight( CZM_Font( CZMF_UI_META )) - gap, inner * 38 / 100 );
+		m_detailsClose = CZM_Rect( m_details.x + dw - pad - head, m_details.y + pad, head, head );
+		m_detailsMap = CZM_Rect( left, bodyY, side, side );
+		m_detailsInfo = CZM_Rect( left + side + gap * 2, bodyY, inner - side - gap * 2, bodyH );
+		const int fw = inner * 26 / 100, aw = inner * 25 / 100;
+		m_fav = CZM_Rect( left, footer, fw, bh );
+		m_admin = CZM_Rect( left + fw + gap, footer, aw, bh );
+		m_play = CZM_Rect( m_admin.x + aw + gap, footer, inner - fw - aw - gap * 2, bh );
 	}
 
 	// dialogs
@@ -1552,6 +1562,15 @@ int CCzmServers::HitTest( void ) const
 			return HIT_DIALOG_CANCEL;
 		return m_dlgPanel.HasCursor() ? HIT_DIALOG_PANEL : HIT_BACKDROP;
 	}
+	if( m_bDetailsOpen )
+	{
+		if( !m_details.HasCursor() ) return HIT_DETAILS_BACKDROP;
+		if( m_detailsClose.HasCursor() ) return HIT_DETAILS_CLOSE;
+		if( m_admin.HasCursor() ) return HIT_ADMIN;
+		if( m_play.HasCursor() ) return HIT_PLAY;
+		if( m_fav.HasCursor() ) return HIT_FAVORITE;
+		return HIT_DETAILS;
+	}
 
 	if( m_back.Grown( grow ).HasCursor( ))
 		return HIT_BACK;
@@ -1578,17 +1597,6 @@ int CCzmServers::HitTest( void ) const
 
 	if( m_iTab != TAB_HISTORY && m_sort.Grown( grow ).HasCursor( ))
 		return HIT_SORT;
-
-	if( m_details.HasCursor( ))
-	{
-		if( m_szSelected[0] && m_admin.HasCursor( ))
-			return HIT_ADMIN;
-		if( m_play.HasCursor( ))
-			return HIT_PLAY;
-		if( m_fav.HasCursor( ))
-			return HIT_FAVORITE;
-		return HIT_DETAILS;
-	}
 
 	if( m_clip.HasCursor( ))
 	{
@@ -1628,7 +1636,12 @@ void CCzmServers::Activate( int hit )
 	switch( hit )
 	{
 	case HIT_BACK:
-		Hide();
+		if( m_bDetailsOpen ) m_bDetailsOpen = false;
+		else Hide();
+		return;
+	case HIT_DETAILS_CLOSE:
+	case HIT_DETAILS_BACKDROP:
+		m_bDetailsOpen = false;
 		return;
 	case HIT_SEARCH:
 		m_search.Begin( m_search.text, m_searchBox );
@@ -1775,18 +1788,9 @@ void CCzmServers::Activate( int hit )
 			return;
 		}
 
-		// a second tap on the same server joins it
-		if( index == m_iLastTapRow && EngFuncs::DoubleTime() - m_flLastTap < 0.4 && !strcmp( m_szSelected, e->address ))
-		{
-			m_iLastTapRow = -1;
-			CZM_PlayClick();
-			Connect( e, NULL );
-			return;
-		}
-
-		m_iLastTapRow = index;
-		m_flLastTap = EngFuncs::DoubleTime();
 		Select( e );
+		m_bDetailsOpen = true;
+		m_flVelocity = 0.0f;
 	}
 }
 
@@ -1821,12 +1825,13 @@ bool CCzmServers::KeyDown( int key )
 		m_flScrollAtDown = m_flScroll;
 		m_flVelocity = 0.0f;
 		m_bScrolling = false;
-		m_bMaybeScroll = m_iDialog == DLG_NONE && m_clip.HasCursor();
+		m_bMaybeScroll = m_iDialog == DLG_NONE && !m_bDetailsOpen && m_clip.HasCursor();
 		return true;
 	}
 
 	if( key == K_MWHEELDOWN || key == K_MWHEELUP )
 	{
+		if( m_bDetailsOpen || m_iDialog != DLG_NONE ) return true;
 		m_flScroll += ( key == K_MWHEELDOWN ? 1 : -1 ) * m_iRowStep;
 		ClampScroll();
 		return true;
@@ -1836,6 +1841,8 @@ bool CCzmServers::KeyDown( int key )
 	{
 		if( m_iDialog != DLG_NONE )
 			CloseDialog();
+		else if( m_bDetailsOpen )
+			m_bDetailsOpen = false;
 		else if( m_search.active )
 			m_search.End();
 		else
@@ -2073,7 +2080,7 @@ void CCzmServers::DrawRow( int index, const CzmRect &r )
 	x = r.x + pad;
 	if( m_bThumbs )
 	{
-		int th = r.h - pad * 2, tw = th * 2;
+		int th = r.h - pad * 2, tw = th;
 
 		DrawMapPicture( &e, x, r.y + pad, tw, th );
 		if( e.badge[0] )
@@ -2308,193 +2315,119 @@ void CCzmServers::DrawList( void )
 void CCzmServers::DrawDetails( void )
 {
 	CzmEntry *e = Selected();
-	const CzmRect &d = m_details;
-	int pad = H * 0.03f, x = d.x + pad, w = d.w - pad * 2, y;
-	HFont nameFont = CZM_Font( CZMF_NICK );
-	HFont statFont = CZM_Font( CZMF_TILE_STATUS );
-	HFont smallFont = CZM_Font( CZMF_SMALL );
-	HFont textFont = CZM_Font( CZMF_TILE_TEXT );
-	HFont badgeFont = CZM_Font( CZMF_SHOP_PRICE );
-	const unsigned int dim = PackRGBA( 154, 163, 175, 255 );
+	if( !e ) { m_bDetailsOpen = false; return; }
+	const CzmRect &d = m_details, &photo = m_detailsMap, &info = m_detailsInfo;
+	const int gap = Q_max( 5, (int)( H * 0.018f ));
+	const int pad = Q_max( 8, (int)( H * 0.028f ));
+	const int x = info.x, w = info.w;
+	const HFont nameFont = CZM_Font( CZMF_UI_ACTION );
+	const HFont statFont = CZM_Font( CZMF_UI_LABEL );
+	const HFont smallFont = CZM_Font( CZMF_UI_META );
+	const HFont textFont = CZM_Font( CZMF_SMALL );
+	const HFont badgeFont = CZM_Font( CZMF_SHOP_PRICE );
+	const unsigned dim = CzmStyle::Muted();
 	char text[160];
+	UI_FillRect( 0, 0, W, H, PackRGBA( 3, 7, 13, 205 ));
+	CzmStyle::Surface( d, PackRGBA( 14, 20, 29, 255 ) );
+	CzmStyle::Text( CZM_Rect( d.x + pad, d.y + pad, d.w - pad * 3 - m_detailsClose.w, m_detailsClose.h ),
+		s_lobbyPicker ? ( CZM_IsRussian() ? "Выбор сервера" : "Select a server" ) :
+		( CZM_IsRussian() ? "Сервер" : "Server" ), CZMF_UI_ACTION );
+	CzmStyle::Button( m_detailsClose, "", true, false, IsPressed( HIT_DETAILS_CLOSE ) );
+	CzmStyle::Icon( m_detailsClose, UI_DIR "icon_close.png" );
 
-	CZM_DrawPanel( d );
-
-	if( !e )
+	DrawMapPicture( e, photo.x, photo.y, photo.w, photo.h );
+	if( e->badge[0] )
 	{
-		int iconSize = H * 0.10f;
+		const int bh = Q_max( 14, (int)( H * 0.035f ));
+		const int bw = Q_min( photo.w - gap, CZM_TextWidth( badgeFont, e->badge ) + bh );
+		CzmStyle::Round( CZM_Rect( photo.x + gap / 2, photo.y + gap / 2, bw, bh ), ModeColor( e->mode ) );
+		CZM_DrawText( badgeFont, photo.x + gap / 2, photo.y + gap / 2 + ( bh - CZM_FontHeight( badgeFont ) ) / 2,
+			bw, e->badge, CZM_White(), QM_CENTER );
+	}
+	CzmStyle::Text( CZM_Rect( photo.x, photo.y + photo.h + gap / 2, photo.w, CZM_FontHeight( smallFont ) ),
+		e->map[0] ? e->map : ( CZM_IsRussian() ? "Карта уточняется" : "Checking map" ), CZMF_UI_META, dim );
 
-		y = d.y + d.h * 0.36f;
-		CZM_DrawImage( UI_DIR "icon_globe.png", d.x + ( d.w - iconSize ) / 2, y, iconSize, iconSize, CZM_White( 60 ));
-		CZM_DrawText( CZM_Font( CZMF_PANEL_TEXT ), d.x + pad, y + iconSize + H * 0.03f, w, CZM_T( "srv_pick" ), PackRGBA( 165, 172, 182, 255 ), QM_CENTER );
-		return;
+	const int nameH = CZM_FontHeight( nameFont ) * 2;
+	CzmStyle::TextLines( CZM_Rect( x, info.y, w, nameH ), e->answered ? e->name : e->address, CZMF_UI_ACTION );
+	int y = info.y + nameH + gap;
+	const int icon = CZM_FontHeight( statFont );
+	if( e->answered )
+	{
+		CZM_DrawImage( UI_DIR "icon_users.png", x, y, icon, icon, dim );
+		int sx = x + icon + gap / 2;
+		snprintf( text, sizeof( text ), "%d/%d", e->players, e->maxPlayers );
+		CZM_DrawText( statFont, sx, y, x + w - sx, text, CzmStyle::Ink() );
+		sx += CZM_TextWidth( statFont, text ) + gap * 2;
+		if( e->ping >= 0 )
+		{
+			const int dot = Q_max( 3, icon / 2 );
+			CZM_DrawImage( UI_DIR "dot.png", sx, y + ( icon - dot ) / 2, dot, dot, CZM_PingColor( e->ping ) );
+			sx += dot + gap / 2;
+			snprintf( text, sizeof( text ), "%d %s", e->ping, CZM_T( "ms" ) );
+			CZM_DrawText( statFont, sx, y, Q_max( 0, x + w - sx ), text, CZM_PingColor( e->ping ) );
+		}
+	}
+	else
+		CZM_DrawText( statFont, x, y, w, CZM_T( IsStale( *e ) ? "offline" : "querying" ), dim );
+	y += icon + gap / 2;
+	snprintf( text, sizeof( text ), "IP  %s", e->address );
+	CZM_DrawText( smallFont, x, y, w, text, dim );
+	y += CZM_FontHeight( smallFont ) + gap / 2;
+	if( e->password )
+	{
+		CZM_DrawText( smallFont, x, y, w, CZM_T( "srv_password" ), CzmStyle::AccentGold() );
+		y += CZM_FontHeight( smallFont ) + gap / 2;
 	}
 
-	// map picture, the badge and the map name over its lower edge
+	const int bottom = info.y + info.h;
+	const int lineH = CZM_FontHeight( textFont ) + gap / 2;
+	if( y + CZM_FontHeight( smallFont ) + lineH + gap <= bottom )
 	{
-		int ih = Q_min( (int)( w * 0.38f ), (int)( H * 0.21f ));
-
-		DrawMapPicture( e, x, d.y + pad, w, ih );
-		CZM_DrawImage( "gfx/czm/fade_bottom.png", x, d.y + pad + ih / 3, w, ih - ih / 3, CZM_White( 230 ));
-
-		if( e->badge[0] )
-		{
-			int bh = H * 0.04f, bw = CZM_TextWidth( badgeFont, e->badge ) + bh * 0.8f;
-
-			CZM_DrawPill( UI_DIR "pill_lang_on.png", x + H * 0.015f, d.y + pad + H * 0.015f, bw, bh, ModeColor( e->mode ));
-			CZM_DrawText( badgeFont, x + H * 0.015f, d.y + pad + H * 0.015f + ( bh - CZM_FontHeight( badgeFont )) / 2, bw, e->badge, CZM_White(), QM_CENTER );
-		}
-
-		if( e->map[0] )
-			CZM_DrawText( statFont, x + H * 0.02f, d.y + pad + ih - CZM_FontHeight( statFont ) - H * 0.012f, w - H * 0.04f, e->map, CZM_White());
-
-		y = d.y + pad + ih + H * 0.022f;
-	}
-
-	// name in up to two lines
-	{
-		char line[128];
-		const char *rest = FitWords( nameFont, e->answered ? e->name : e->address, w, line, sizeof( line ));
-
-		CZM_DrawText( nameFont, x, y, w, line, CZM_White());
-		y += CZM_FontHeight( nameFont );
-		if( *rest )
-		{
-			CZM_DrawText( nameFont, x, y, w, rest, CZM_White());
-			y += CZM_FontHeight( nameFont );
-		}
-		y += H * 0.012f;
-	}
-
-	// players, ping, password
-	{
-		int icon = CZM_FontHeight( statFont ), sx = x;
-
-		if( e->answered )
-		{
-			CZM_DrawImage( UI_DIR "icon_users.png", sx, y, icon, icon, PackRGBA( 200, 205, 215, 255 ));
-			sx += icon + H * 0.01f;
-			snprintf( text, sizeof( text ), "%d/%d", e->players, e->maxPlayers );
-			CZM_DrawText( statFont, sx, y, w, text, CZM_White());
-			sx += CZM_TextWidth( statFont, text ) + H * 0.035f;
-
-			if( e->ping >= 0 )
-			{
-				int dot = icon * 0.5f;
-
-				CZM_DrawImage( UI_DIR "dot.png", sx, y + ( icon - dot ) / 2, dot, dot, CZM_PingColor( e->ping ));
-				sx += dot + H * 0.01f;
-				snprintf( text, sizeof( text ), "%d %s", e->ping, CZM_T( "ms" ));
-				CZM_DrawText( statFont, sx, y, w, text, CZM_PingColor( e->ping ));
-				sx += CZM_TextWidth( statFont, text ) + H * 0.035f;
-			}
-
-			if( e->password && sx < x + w )
-			{
-				CZM_DrawImage( UI_DIR "icon_lock.png", sx, y, icon, icon, PackRGBA( 250, 204, 21, 255 ));
-				sx += icon + H * 0.01f;
-				CZM_DrawText( statFont, sx, y, x + w - sx, CZM_T( "srv_password" ), PackRGBA( 250, 204, 21, 255 ));
-			}
-		}
-		else
-		{
-			bool stale = IsStale( *e );
-			CZM_DrawText( statFont, x, y, w, CZM_T( stale ? "offline" : "querying" ), stale ? PackRGBA( 248, 113, 113, 255 ) : dim );
-		}
-		y += icon + H * 0.01f;
-
-		snprintf( text, sizeof( text ), "IP  %s", e->address );
+		UI_FillRect( x, y, w, CZM_LineWidth(), CzmStyle::Border() );
+		y += gap / 2;
+		const bool playersHere = m_iPlayersState == 2 && !strcmp( m_szPlayersFor, e->address );
+		if( playersHere && m_iNumPlayers > 0 )
+			snprintf( text, sizeof( text ), "%s  ·  %d", CZM_T( "srv_players" ), m_iNumPlayers );
+		else Q_strncpy( text, CZM_T( "srv_players" ), sizeof( text ) );
 		CZM_DrawText( smallFont, x, y, w, text, dim );
-		y += CZM_FontHeight( smallFont ) + H * 0.02f;
-	}
-
-	// players on the server
-	{
-		int bottom = m_admin.y - H * 0.02f;
-		int lineH = CZM_FontHeight( textFont ) + H * 0.01f;
-		int fragsW = H * 0.06f;
-
-		if( y + CZM_FontHeight( smallFont ) + lineH <= bottom )
+		y += CZM_FontHeight( smallFont ) + gap / 2;
+		if( !playersHere || m_iNumPlayers == 0 )
 		{
-			UI_FillRect( x, y, w, CZM_LineWidth(), CZM_White( 30 ));
-			y += H * 0.015f;
-
-			if( m_iPlayersState == 2 && m_iNumPlayers > 0 )
-				snprintf( text, sizeof( text ), "%s  ·  %d", CZM_T( "srv_players" ), m_iNumPlayers );
-			else
-				Q_strncpy( text, CZM_T( "srv_players" ), sizeof( text ));
-			CZM_DrawText( smallFont, x, y, w - fragsW, text, dim );
-			if( m_iPlayersState == 2 && m_iNumPlayers > 0 && w < H * 0.6f )
-				CZM_DrawText( smallFont, x + w - fragsW, y, fragsW, CZM_T( "srv_frags" ), dim, QM_RIGHT );
-			y += CZM_FontHeight( smallFont ) + H * 0.01f;
-
-			if( m_iPlayersState != 2 || m_iNumPlayers == 0 || strcmp( m_szPlayersFor, e->address ))
-			{
-				const char *key = !e->answered ? "" : ( m_iPlayersState <= 1 || strcmp( m_szPlayersFor, e->address )) ? "srv_players_wait"
-					: e->players > 0 ? "srv_players_hidden" : "srv_players_none";
-
-				if( key[0] )
-					CZM_DrawText( textFont, x, y, w, CZM_T( key ), PackRGBA( 120, 126, 136, 255 ));
-			}
-			else
-			{
-				// two columns on a wide panel, best players first, top to bottom
-				int columns = w >= H * 0.6f ? 2 : 1;
-				int colGap = H * 0.035f, colW = ( w - colGap * ( columns - 1 )) / columns;
-				int rows = Q_max( 1, ( bottom - y ) / lineH );
-				int fit = rows * columns;
-				int shown = m_iNumPlayers > fit ? fit - 1 : m_iNumPlayers;
-
-				for( int i = 0; i < shown; i++ )
-				{
-					int cx = x + ( i / rows ) * ( colW + colGap ), cy = y + ( i % rows ) * lineH;
-
-					snprintf( text, sizeof( text ), "%d", m_players[i].frags );
-					CZM_DrawText( textFont, cx, cy, colW - fragsW - H * 0.015f, m_players[i].name, CZM_White());
-					CZM_DrawText( textFont, cx + colW - fragsW, cy, fragsW, text, PackRGBA( 200, 205, 215, 255 ), QM_RIGHT );
-				}
-
-				if( shown < m_iNumPlayers )
-				{
-					char more[64];
-					int i = shown;
-
-					snprintf( more, sizeof( more ), CZM_T( "srv_more" ), m_iNumPlayers - shown );
-					CZM_DrawText( textFont, x + ( i / rows ) * ( colW + colGap ), y + ( i % rows ) * lineH, colW, more, PackRGBA( 120, 126, 136, 255 ));
-				}
-			}
-		}
-	}
-
-	CZM_DrawButton( UI_DIR "button_secondary.png", m_admin, CZM_IsRussian() ? "Админка/VIP" : "Admin/VIP", CZM_White(), IsPressed( HIT_ADMIN ));
-
-	// favorite and play
-	{
-		bool fav = ( e->sources & SRC_FAVORITE ) != 0;
-		HFont font = CZM_Font( CZMF_BUTTON );
-		const CzmRect &f = m_fav;
-		int icon = f.h * 0.42f;
-		const char *label = CZM_T( fav ? "srv_fav_in" : "srv_fav_add" );
-		int textW = CZM_TextWidth( font, label );
-
-		CZM_DrawPill( UI_DIR "button_secondary.png", f.x, f.y, f.w, f.h, IsPressed( HIT_FAVORITE ) ? PackRGBA( 185, 185, 185, 255 ) : CZM_White());
-		if( f.w >= icon + textW + f.h * 0.9f )
-		{
-			int sx = f.x + ( f.w - icon - textW - H * 0.012f ) / 2;
-
-			CZM_DrawImage( fav ? UI_DIR "icon_star_on.png" : UI_DIR "icon_star.png", sx, f.y + ( f.h - icon ) / 2, icon, icon,
-				fav ? PackRGBA( 250, 204, 21, 255 ) : CZM_White());
-			CZM_DrawText( font, sx + icon + H * 0.012f, f.y + ( f.h - CZM_FontHeight( font )) / 2, textW + 2, label, CZM_White());
+			const char *key = !e->answered ? "" : !playersHere ? "srv_players_wait" :
+				e->players > 0 ? "srv_players_hidden" : "srv_players_none";
+			if( key[0] ) CZM_DrawText( textFont, x, y, w, CZM_T( key ), dim );
 		}
 		else
-			CZM_DrawImage( fav ? UI_DIR "icon_star_on.png" : UI_DIR "icon_star.png", f.x + ( f.w - icon ) / 2, f.y + ( f.h - icon ) / 2, icon, icon,
-				fav ? PackRGBA( 250, 204, 21, 255 ) : CZM_White());
-
-        CZM_DrawButton( UI_DIR "button_primary.png", m_play,
-                        s_lobbyPicker?(CZM_IsRussian()?"ВЫБРАТЬ":"SELECT"):CZM_T("srv_play"),
-                        CZM_White(), IsPressed(HIT_PLAY));
+		{
+			const int columns = w >= H * 0.6f ? 2 : 1;
+			const int colGap = gap * 2, colW = ( w - colGap * ( columns - 1 ) ) / columns;
+			const int fragsW = Q_max( CZM_TextWidth( textFont, "-999" ), (int)( H * 0.06f ) );
+			const int rows = Q_max( 1, ( bottom - y ) / lineH );
+			const int fit = rows * columns;
+			const int shown = m_iNumPlayers > fit ? fit - 1 : m_iNumPlayers;
+			for( int i = 0; i < shown; i++ )
+			{
+				const int cx = x + ( i / rows ) * ( colW + colGap ), cy = y + ( i % rows ) * lineH;
+				CZM_DrawText( textFont, cx, cy, colW - fragsW - gap / 2, m_players[i].name, CzmStyle::Ink() );
+				snprintf( text, sizeof( text ), "%d", m_players[i].frags );
+				CZM_DrawText( textFont, cx + colW - fragsW, cy, fragsW, text, dim, QM_RIGHT );
+			}
+			if( shown < m_iNumPlayers )
+			{
+				snprintf( text, sizeof( text ), CZM_T( "srv_more" ), m_iNumPlayers - shown );
+				CZM_DrawText( textFont, x + ( shown / rows ) * ( colW + colGap ),
+					y + ( shown % rows ) * lineH, colW, text, dim );
+			}
+		}
 	}
+	const bool fav = ( e->sources & SRC_FAVORITE ) != 0;
+	CzmStyle::Button( m_fav, CZM_T( fav ? "srv_fav_in" : "srv_fav_add" ), true, false,
+		IsPressed( HIT_FAVORITE ), fav ? CzmStyle::AccentGold() : 0 );
+	CzmStyle::Button( m_admin, CZM_IsRussian() ? "Админка/VIP" : "Admin/VIP", true, false, IsPressed( HIT_ADMIN ) );
+	CzmStyle::Button( m_play, s_lobbyPicker ? ( CZM_IsRussian() ? "Выбрать сервер" : "Select server" ) :
+		( CZM_IsRussian() ? "Играть" : "Play" ), true, true, IsPressed( HIT_PLAY ), 0, CZMF_UI_ACTION );
 }
+
 
 void CCzmServers::DrawDialog( void )
 {
@@ -2587,7 +2520,7 @@ void CCzmServers::Draw()
 	ClampScroll();
 
 	// the selected server stays fresh
-	if( Selected() && now - m_flDetailsTime > DETAILS_PERIOD && m_iDialog == DLG_NONE )
+	if( m_bDetailsOpen && Selected() && now - m_flDetailsTime > DETAILS_PERIOD && m_iDialog == DLG_NONE )
 		RequestDetails( Selected( ));
 
 	// calm the art down so the list reads well
@@ -2597,7 +2530,7 @@ void CCzmServers::Draw()
 	DrawHeader();
 	DrawFilters();
 	DrawList();
-	DrawDetails();
+	if( m_bDetailsOpen ) DrawDetails();
 
 	if( m_szToast[0] && now - m_flToastTime < 2.0 )
 	{

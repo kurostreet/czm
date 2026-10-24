@@ -2,6 +2,7 @@
 #include "extdll_menu.h"
 #include "BaseMenu.h"
 #include "CzmMenu.h"
+#include "Scissor.h"
 #include <map>
 #include <string>
 #include <stdio.h>
@@ -93,6 +94,9 @@ void CZM_DrawMapPreview( const char *map, int x, int y, int w, int h, const char
 
 	if( w <= 0 || h <= 0 )
 		return;
+	// Cover preserves aspect ratio by drawing past an edge. Bound both photos
+	// and placeholders, including when this is nested in the scrolling list.
+	UI::Scissor::PushScissor( x, y, w, h );
 
 	if( image )
 		CZM_DrawCover( image, x, y, w, h );
@@ -124,6 +128,7 @@ void CZM_DrawMapPreview( const char *map, int x, int y, int w, int h, const char
 			Fill( x, y + h - bh, w, bh, PackRGBA( 6, 10, 17, 200 ));
 			CZM_DrawText( small, x + 4, y + h - bh + 4, w - 8, CZM_T( "map_not_loaded" ), PackRGBA( 200, 206, 216, 255 ), QM_CENTER );
 		}
+		UI::Scissor::PopScissor();
 		return;
 	}
 
@@ -133,6 +138,7 @@ void CZM_DrawMapPreview( const char *map, int x, int y, int w, int h, const char
 		Fill( x, y + h - bh, w, bh, PackRGBA( 6, 10, 17, 205 ));
 		CZM_DrawText( small, x + 3, y + h - bh + 3, w - 6, CZM_T( "map_not_downloaded" ), CZM_White(), QM_CENTER );
 	}
+	UI::Scissor::PopScissor();
 }
 
 void CZM_MapPicturesFrame( void )

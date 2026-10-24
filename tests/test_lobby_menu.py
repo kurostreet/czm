@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from test_social_menu import STUB as SOCIAL_STUB
 from test_tab_avatars import VECTOR, STRING
+from test_loading_errors import function
 
 ROOT = Path(__file__).resolve().parents[1]
 STUB = SOCIAL_STUB.replace(
@@ -30,6 +31,7 @@ HARNESS = r'''
 #include <cassert>
 int ScreenWidth=1536,ScreenHeight=716,cursorX,cursorY;Cursor uiStatic;Stack stack;
 static bool russian=true,micOn=false,trace=false,drawSpeaking=false;
+static unsigned readyDrawColor;
 static int player=7,identity=1,nextRequest=0;static double now=100;
 static std::set<int> muted;static std::string lastUrl,lastBody;
 static std::map<std::string,std::string> vars;
@@ -37,7 +39,7 @@ static std::map<int,std::pair<int,std::string>> replies;
 HFont CZM_Font(int id){return id;}
 int CZM_FontHeight(HFont f){int h=f==CZMF_UI_TITLE?32:f==CZMF_UI_ACTION?26:f==CZMF_UI_LABEL?20:f==CZMF_UI_META?15:f==CZMF_SMALL?17:21;return std::max(1,h*ScreenHeight/768);}
 int CZM_TextWidth(HFont f,const char*s){int n=0;for(;*s;s++)if((*s&0xc0)!=0x80)n++;return n*CZM_FontHeight(f)*56/100;}
-void CZM_DrawText(HFont f,int x,int y,int w,const char*s,unsigned c,unsigned just){if(trace)printf("T\t%d\t%d\t%d\t%d\t%u\t%u\t%s\n",x,y,w,f,c,just,s);}
+void CZM_DrawText(HFont f,int x,int y,int w,const char*s,unsigned c,unsigned just){if(!strcmp(s,"Я готов")||!strcmp(s,"Готов ✓"))readyDrawColor=c;if(trace)printf("T\t%d\t%d\t%d\t%d\t%u\t%u\t%s\n",x,y,w,f,c,just,s);}
 void UI_FillRect(int x,int y,int w,int h,unsigned c){assert(w>=0&&h>=0);if(trace)printf("R\t%d\t%d\t%d\t%d\t%u\n",x,y,w,h,c);}
 void CZM_DrawSliced(const char*p,int x,int y,int w,int h,int border,int radius,unsigned c){assert(w>=0&&h>=0);if(trace)printf("S\t%d\t%d\t%d\t%d\t%u\t%d\n",x,y,w,h,c,radius);}
 void CZM_DrawImage(const char*p,int x,int y,int w,int h,unsigned c){assert(w>=0&&h>=0);if(trace)printf("I\t%d\t%d\t%d\t%d\t%u\t%s\n",x,y,w,h,c,p);}
@@ -85,6 +87,10 @@ int main(int argc,char**argv){
    if(stage==w.CREATE){
     assert(inside(w.m_titleRect,w.m_panel)&&inside(w.m_primary,w.m_panel));
     assert(inside(w.m_buttons[2],w.m_cardsRect[0]));
+    assert(inside(w.m_createMapRect,w.m_cardsRect[0]));
+    assert(w.m_createMapRect.w==w.m_createMapRect.h);
+    assert(!overlap(w.m_createMapRect,w.m_createInfoRect));
+    assert(!overlap(w.m_createMapRect,w.m_buttons[2]));
     for(int i=0;i<5;i++){assert(inside(w.m_capacityRect[i],w.m_panel));assert(hit(w,w.m_capacityRect[i])==w.CAPACITY+i);if(i)assert(!overlap(w.m_capacityRect[i-1],w.m_capacityRect[i]));}
     assert(hit(w,w.m_visibilityRect)==w.VISIBILITY);assert(inside(w.m_switchRect,w.m_visibilityRect));
     assert(w.m_panel.h<ScreenHeight*.76f);
@@ -110,6 +116,22 @@ int main(int argc,char**argv){
  player=8;assert(hit(w,w.m_membersRect[4])==w.NONE);w.Action(w.MEMBER);assert(w.m_selectedMemberId==7);w.Action(w.MODAL_LOCAL_MUTE);assert(muted.count(7));
  player=7;clear(w);w.m_selectedMemberId=0;assert(!w.CanStart());w.m_members[2].ready=true;assert(w.CanStart());
  w.Action(w.LAUNCH);assert(lastUrl.find("/launch")!=std::string::npos);clear(w);
+ // A background poll keeps the Ready button's colour and preserves one tap.
+ populate(w);w.m_ownReady=false;w.m_stage=w.ROOM;w.m_open=true;w.m_readyQueued=false;
+ w.Draw();unsigned readyIdle=readyDrawColor;assert(readyIdle==CzmStyle::AccentBlue());
+ w.Query(w.GET_ROOM,"GET","/api/v1/lobbies/native-test-room");int background=w.m_request;
+ w.Draw();assert(readyDrawColor==readyIdle);
+ int beforeReady=nextRequest;w.Action(w.READY);assert(w.m_readyQueued&&nextRequest==beforeReady);
+ w.Action(w.READY);assert(nextRequest==beforeReady); // no duplicate write
+ replies[background]={200,"{\"lobby\":{\"id\":\"native-test-room\",\"title\":\"Zombie Team\",\"revision\":12,\"owner\":7,\"capacity\":6,\"members\":[{\"id\":7,\"ready\":false}]}}"};
+ w.Frame();assert(w.m_kind==w.POST_READY&&!w.m_readyQueued);
+ assert(lastBody=="{\"revision\":12,\"ready\":true}");
+ replies[w.m_request]={200,"{\"lobby\":{\"id\":\"native-test-room\",\"owner\":7,\"members\":[{\"id\":7,\"ready\":true}]}}"};
+ w.Poll();w.Draw();assert(w.m_ownReady&&readyDrawColor==CzmStyle::Success());
+ // Closing/expiring a room must never replay a queued tap into a new room.
+ clear(w);w.m_readyQueued=true;w.m_readyTarget=true;
+ CzmJson replacement;assert(replacement.Parse("{\"id\":\"another-room\",\"owner\":7,\"members\":[{\"id\":7}]}"));
+ w.ReadRoom(replacement,0);assert(!w.m_readyQueued);clear(w);
  // A full page remains inside the compact catalog, with real non-overlapping rows.
  w.m_stage=w.SEARCH;w.m_cardCount=4;w.m_offset=4;w.m_next=8;w.Layout();
  for(int i=0;i<4;i++){assert(inside(w.m_cardsRect[i],w.m_catalogRect));assert(hit(w,w.m_cardsRect[i])==w.SELECT+i);if(i)assert(!overlap(w.m_cardsRect[i-1],w.m_cardsRect[i]));}
@@ -169,7 +191,10 @@ class LobbyNativeTests(unittest.TestCase):
             for name in ['CzmJson.h','CzmDesign.h']:
                 (p/name).write_text((ROOT/'czm/menu'/name).read_text())
             source=(ROOT/'czm/menu/CzmLobby.cpp').read_text().replace('private:\n    enum','public:\n    enum')
-            (p/'main.cpp').write_text(HARNESS+source+SCENARIOS)
+            helpers=(ROOT/'czm/menu/CzmMenu.cpp').read_text()
+            wrapping='\n'.join(function(helpers,signature) for signature in
+                ['static bool CZM_IsLineBreak(', 'int CZM_WrapText(', 'void CZM_WrapLine('])
+            (p/'main.cpp').write_text(HARNESS+wrapping+source+SCENARIOS)
             exe=p/'lobby'
             subprocess.run(['g++','-std=c++11','-Wall','-I'+folder,str(p/'main.cpp'),str(ROOT/'czm/menu/CzmJson.cpp'),'-o',str(exe)],check=True)
             subprocess.run([str(exe)],check=True)

@@ -896,7 +896,7 @@ void CCzmMainMenu::DrawTile( int index, CzmRect r )
 
 	// the map picture as a thumbnail on the right, well inside the rounded corners
 	{
-		int coverW = r.w * 0.40f, coverH = r.h - rad * 2;
+		int coverH = r.h - rad * 2, coverW = coverH;
 		int coverX = r.x + r.w - coverW - rad, coverY = r.y + rad;
 		CzmStyle::MapPreview(CZM_Rect(coverX,coverY,coverW,coverH),server->map,server->name);
 
