@@ -13,6 +13,35 @@ from czm.config import get_settings
 
 
 class LobbyVoiceTests(unittest.TestCase):
+    def test_silent_packets_are_not_speech(self):
+        self.assertFalse(voice_lobby.has_sound(bytes([255])*320))
+        self.assertTrue(voice_lobby.has_sound(bytes([0xAA])*320))
+        with self.conn(0) as host:
+            with self.conn(1) as member:
+                host.receive_json();member.receive_json()
+                host.send_bytes(b'U'+bytes([255])*320)
+                # Silence is still forwarded for legacy continuous audio, but
+                # must not be preceded by a false "talk active" announcement.
+                packet=member.receive_bytes()
+                self.assertEqual(packet[5:],bytes([255])*320)
+
+    def test_mic_controls_are_self_scoped_and_host_mute_remains_authoritative(self):
+        with self.conn(0) as host:
+            with self.conn(1) as member:
+                host.receive_json();member.receive_json()
+                member.send_json({'type':'mic','enabled':True,'sensitivity':75})
+                event=host.receive_json()
+                self.assertEqual(event,{'type':'mic','player':self.players[1],'enabled':True,'sensitivity':75})
+                self.assertEqual(self.mute(0,self.players[1],True).status_code,200)
+                member.send_json({'type':'mic','enabled':True})
+                event=host.receive_json();self.assertFalse(event['enabled'])
+                self.assertEqual(self.mute(0,self.players[1],False).status_code,200)
+                member.send_json({'type':'mic','enabled':True})
+                event=host.receive_json();self.assertTrue(event['enabled'])
+                member.send_json({'type':'mic','enabled':True,'player':self.players[0]})
+                with self.assertRaises(WebSocketDisconnect) as error:member.receive_json()
+                self.assertEqual(error.exception.code,4400)
+
     def setUp(self):
         folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
         env=patch.dict(os.environ,{"CZM_DATA_DIR":folder.name,

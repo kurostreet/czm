@@ -1057,13 +1057,12 @@ void CCzmMainMenu::DrawNav( void )
 			CZM_DrawImage( icons[i], r.x + ( r.w - compactIcon ) / 2, iconY, compactIcon, compactIcon, textColor );
 			CZM_DrawText( compactFont, r.x + pad, iconY + compactIcon + edge * 4, r.w - pad * 2, CZM_T( labels[i] ), textColor, QM_CENTER );
 		}
-		if( i == 1 && CZM_SocialUnread() + CZM_SocialRequests() > 0 )
+		const int notices=i==0?CZM_ChatUnread():i==1?CZM_SocialNotifications():0;
+		if( notices > 0 )
 		{
-			char count[16]; int n = CZM_SocialUnread() + CZM_SocialRequests();
-			snprintf( count, sizeof( count ), n > 99 ? "99+" : "%d", n );
-			int bw = H * 0.06f, bh = H * 0.029f;
-			CZM_DrawPill( UI_DIR "button_primary.png", r.x + r.w - bw - pad, r.y + edge * 2, bw, bh );
-			CZM_DrawText( small, r.x + r.w - bw - pad, r.y + edge * 2, bw, count, CZM_White(), QM_CENTER );
+			const int bh=Q_max(CZM_FontHeight(small)+4,(int)(H*.033f));
+			const int bw=CZM_CountBadgeWidth(notices,bh);
+			CZM_DrawCountBadge(CZM_Rect(r.x+r.w-bw-pad,r.y+edge*2,bw,bh),notices);
 		}
 	}
 }

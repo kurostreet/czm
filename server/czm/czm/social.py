@@ -1,7 +1,8 @@
 """Account friendships and private messages. No game scores are inferred here."""
 import re
 
-from . import accounts, service
+from . import accounts, service, notifications
+from .config import get_settings
 from .db import now
 from .tab import server_address
 
@@ -52,7 +53,9 @@ def counts(conn, player):
         "SELECT COUNT(*) FROM private_messages m JOIN private_dialogs d ON d.id=m.dialog WHERE "
         "(d.low=? OR d.high=?) AND m.sender!=? AND m.deleted=0 AND m.id>CASE WHEN d.low=? THEN d.read_low ELSE d.read_high END",
         (player, player, player, player)).fetchone()[0]
-    return {"friends": friends, "followers": followers, "following": following, "requests": requests, "unread": unread}
+    result = {"friends": friends, "followers": followers, "following": following, "requests": requests, "unread": unread}
+    result.update(notifications.counts(conn, player, get_settings().room_list))
+    return result
 
 
 def profile(conn, viewer, target, compact=False):
@@ -111,6 +114,7 @@ def heartbeat(conn, key, server="", map_name=""):
     conn.execute("INSERT INTO social_profiles(player,last_seen) VALUES(?,?) ON CONFLICT(player) DO UPDATE SET last_seen=excluded.last_seen", (player["id"], t))
     registered = bool(conn.execute("SELECT 1 FROM accounts WHERE player=?", (player["id"],)).fetchone())
     if registered:
+        notifications.baseline(conn, player["id"], get_settings().room_list)
         from . import lobbies
         lobbies.record_launch_presence(conn,player["id"],server)
     return {"id": player["id"], "account": registered, "ttl": PRESENCE_TTL,
@@ -136,6 +140,7 @@ def action(conn, key, target, action):
     a = player["id"]
     if action == "seen":
         conn.execute("UPDATE social_follows SET seen=1 WHERE target=?", (a,))
+        conn.execute("UPDATE social_notices SET seen=1 WHERE player=? AND kind='followers' AND seen=0", (a,))
         return {"counts": counts(conn, a)}
     account(conn, target)
     if a == target:
@@ -149,13 +154,24 @@ def action(conn, key, target, action):
             if conn.execute("SELECT COUNT(*) FROM social_follows WHERE source=?", (a,)).fetchone()[0] >= 1000:
                 raise accounts.AuthError("limit", 409)
             accounts.rate(conn, "social_follow", str(a), 30, 3600)
+            previous = relation(conn, a, target)
             conn.execute("INSERT INTO social_follows(source,target,created) VALUES(?,?,?)", (a, target, now()))
+            notifications.clear_pair(conn, a, target)
+            if previous == "follower":
+                conn.execute("UPDATE social_follows SET seen=1 WHERE (source=? AND target=?) OR (source=? AND target=?)", (a,target,target,a))
+                notifications.add(conn, target, a, "friends")
+            else:
+                notifications.add(conn, target, a, "followers")
     elif action == "unfollow":
+        previous = relation(conn, a, target)
         # Deleting A->B leaves B->A intact: the former friend becomes A's follower.
         conn.execute("DELETE FROM social_follows WHERE source=? AND target=?", (a, target))
+        notifications.clear_pair(conn, a, target)
+        if previous == "friend": notifications.add(conn, target, a, "following")
     elif action == "block":
         conn.execute("INSERT OR IGNORE INTO social_blocks VALUES(?,?)", (a, target))
         conn.execute("DELETE FROM social_follows WHERE (source=? AND target=?) OR (source=? AND target=?)", (a, target, target, a))
+        notifications.clear_pair(conn, a, target)
     elif action == "unblock":
         conn.execute("DELETE FROM social_blocks WHERE source=? AND target=?", (a, target))
     else:
@@ -179,7 +195,12 @@ def people(conn, key, kind, offset=0):
         else:
             raise accounts.AuthError("kind")
     rows = conn.execute(query + " LIMIT ? OFFSET ?", (a, PAGE_SIZE+1, offset)).fetchall()
-    return {"people": [profile(conn, player, r["target"], True) for r in rows[:PAGE_SIZE]],
+    people = []
+    for r in rows[:PAGE_SIZE]:
+        item = profile(conn, player, r["target"], True)
+        item["notice"] = notifications.event_id(conn, a, r["target"], kind)
+        people.append(item)
+    return {"people": people,
             "next": offset+PAGE_SIZE if len(rows)>PAGE_SIZE else -1, "counts": counts(conn, a)}
 
 

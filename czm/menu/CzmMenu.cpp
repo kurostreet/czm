@@ -748,6 +748,22 @@ void CZM_DrawCover( HIMAGE image, int x, int y, int w, int h )
 	EngFuncs::PIC_Draw( x + ( w - dw ) / 2, y + ( h - dh ) / 2, dw, dh );
 }
 
+int CZM_CountBadgeWidth( int count, int height )
+{
+	if( count <= 0 ) return 0;
+	char text[16];snprintf( text, sizeof( text ), count > 99 ? "99+" : "%d", count );
+	return Q_max( height, CZM_TextWidth( CZM_Font( CZMF_SMALL ), text ) + height * 3 / 5 );
+}
+
+void CZM_DrawCountBadge( const CzmRect &r, int count )
+{
+	if( count <= 0 || r.w <= 0 || r.h <= 0 ) return;
+	char text[16];snprintf( text, sizeof( text ), count > 99 ? "99+" : "%d", count );
+	CZM_DrawPill( "gfx/czm/ui/pill_lang_on.png", r.x, r.y, r.w, r.h, PackRGBA( 255, 255, 255, 255 ) );
+	CZM_DrawText( CZM_Font( CZMF_SMALL ), r.x, r.y + ( r.h - CZM_FontHeight( CZM_Font( CZMF_SMALL ) ) ) / 2,
+		r.w, text, CZM_White(), QM_CENTER );
+}
+
 unsigned int CZM_PingColor( int ping )
 {
 	if( ping < 80 )

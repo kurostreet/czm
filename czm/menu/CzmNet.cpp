@@ -495,11 +495,12 @@ static void CZM_CallVoid( const char *name )
 void CZM_LobbyVoiceStart(const char *url,const char *key) {
     JNIEnv *env; jclass cls;
     if(!CZM_Begin(&env,&cls))return;
-    jmethodID m=CZM_Method(env,cls,"lobbyVoiceStart","(Ljava/lang/String;Ljava/lang/String;)V");
-    if(m)env->CallStaticVoidMethod(cls,m,env->NewStringUTF(url),env->NewStringUTF(key));
+    jmethodID m=CZM_Method(env,cls,"lobbyVoiceStart","(Ljava/lang/String;Ljava/lang/String;I)V");
+    if(m)env->CallStaticVoidMethod(cls,m,env->NewStringUTF(url),env->NewStringUTF(key),(jint)CZM_OnlinePlayer());
     CZM_End(env);
 }
 void CZM_LobbyVoiceStop(void){CZM_CallVoid("lobbyVoiceStop");}
+void CZM_LobbyVoiceTest(void){CZM_CallVoid("lobbyVoiceTest");}
 void CZM_LobbyVoiceMic(bool enabled){
     JNIEnv *env; jclass cls;
     if(!CZM_Begin(&env,&cls))return;
@@ -518,6 +519,7 @@ static bool CZM_VoiceBool(const char *method,int player,bool parameter){
 bool CZM_LobbyVoiceMicOn(void){return CZM_VoiceBool("lobbyVoiceMicOn",0,false);}
 bool CZM_LobbyVoiceSpeaking(int player){return CZM_VoiceBool("lobbyVoiceSpeaking",player,true);}
 bool CZM_LobbyVoiceIsMuted(int player){return CZM_VoiceBool("lobbyVoiceIsMuted",player,true);}
+bool CZM_LobbyVoiceMicEnabled(int player){return CZM_VoiceBool("lobbyVoiceMicEnabled",player,true);}
 void CZM_LobbyVoiceLocalMute(int player,bool muted){
     JNIEnv *env; jclass cls;
     if(!CZM_Begin(&env,&cls))return;
@@ -594,6 +596,8 @@ void CZM_UpdateStart( const CzmUpdateInfo & ) {}
 void CZM_LobbyVoiceStart(const char *,const char *) {}
 void CZM_LobbyVoiceStop(void) {}
 void CZM_LobbyVoiceMic(bool) {}
+void CZM_LobbyVoiceTest(void) {}
+bool CZM_LobbyVoiceMicEnabled(int) {return false;}
 bool CZM_LobbyVoiceMicOn(void) {return false;}
 bool CZM_LobbyVoiceSpeaking(int) {return false;}
 bool CZM_LobbyVoiceIsMuted(int) {return false;}

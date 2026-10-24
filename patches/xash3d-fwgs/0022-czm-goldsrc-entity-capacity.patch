@@ -1,0 +1,17 @@
+diff --git a/engine/client/parse/cl_parse.c b/engine/client/parse/cl_parse.c
+--- a/engine/client/parse/cl_parse.c
++++ b/engine/client/parse/cl_parse.c
+@@ -838,8 +838,11 @@
+ 			Con_Printf( "Uh, server says it's VAC2 secured.\n" );
+ 
+ 		background = false;
+-		clgame.maxEntities = GI->max_edicts + (( cl.maxclients - 1 ) * 15 );
+-		clgame.maxEntities = Q_min( clgame.maxEntities, MAX_GOLDSRC_EDICTS );
++		// GoldSrc does not advertise its edict limit in serverinfo. Modified
++		// servers can use the full protocol range regardless of the local
++		// gameinfo's historical limit. Reserve before CL_InitEdicts; keep the
++		// parser's normal bounds checks for invalid entity numbers.
++		clgame.maxEntities = MAX_GOLDSRC_EDICTS;
+ 		clgame.maxModels = 512; // ???
+ 		Q_strncpy( clgame.maptitle, clgame.mapname, sizeof( clgame.maptitle ));
+ 

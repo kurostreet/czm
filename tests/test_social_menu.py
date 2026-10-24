@@ -38,6 +38,8 @@ void UI_EnableTextInput(bool);void CZM_Init();bool CZM_IsRussian();unsigned CZM_
 HFont CZM_Font(int);int CZM_FontHeight(HFont);int CZM_TextWidth(HFont,const char*);int CZM_WrapText(HFont,const char*,int,int*,int);void CZM_WrapLine(const char*,const int*,int,char*,size_t);
 void CZM_DrawText(HFont,int,int,int,const char*,unsigned,unsigned=0);void UI_FillRect(int,int,int,int,unsigned);
 void CZM_DrawImage(const char*,int,int,int,int,unsigned=0xffffffff);void CZM_DrawPill(const char*,int,int,int,int,unsigned=0xffffffff);void CZM_DrawButton(const char*,const CzmRect&,const char*,unsigned,bool,int);void CZM_DrawPanel(const CzmRect&);
+int CZM_CountBadgeWidth(int,int);void CZM_DrawCountBadge(const CzmRect&,int);
+int CZM_ChatUnread(int room=-1);int CZM_SocialNotifications();void CZM_ChatMarkRead(int,int);
 bool CZM_OnlineReady();bool CZM_OnlineAccount();int CZM_OnlineIdentity();const char*CZM_OnlineKey();int CZM_OnlinePlayer();const char*CZM_OnlineUrl(const char*);const char*CZM_AvatarFor(const char*,int);
 int CZM_NetRequest(const char*,const char*,const char*,const char*);bool CZM_NetPoll(int,int*,CUtlString&);void CZM_NetNewKey(char*,size_t);
 void CZM_OpenSettings(int);void CZM_AccountShow(const char*,const char*);bool CZM_CopyText(const char*);void CZM_JoinAddress(const char*);void CZM_PlayClick();
@@ -143,6 +145,17 @@ int main(int argc,char**argv){
  w.OpenProfile(10,true);w.Read(j,w.READ_PROFILE);w.Activate(w.REPORT);assert(!strcmp(w.m_confirm,"profile_report")&&w.m_chatMessage==0);w.Activate(w.CANCEL);
  // Guest cards explain the unavailable friendship instead of hiding the action.
  w.m_profile.account=false;w.Layout();auto count=requests.size();assert(w.m_primary.w&&w.m_report.w&&!w.m_block.w);w.Activate(w.PRIMARY);assert(requests.size()==count&&*w.m_notice);
+ // Counts distinguish totals from unread events and reject older responses.
+ CzmJson notices;assert(notices.Parse("{\"counts\":{\"revision\":100,\"friends\":11,\"unread\":3,\"requests\":1,\"new_friends\":2,\"following_updates\":4,\"chat_global\":5,\"chat_ru\":1}}"));Counts(notices);
+ assert(CZM_SocialNotifications()==10&&CZM_ChatUnread()==6&&s_friends==11);
+ CzmJson stale;assert(stale.Parse("{\"counts\":{\"revision\":99,\"unread\":99}}"));Counts(stale);assert(s_unread==3);
+ w.m_tab=0;w.m_mode=w.LIST;w.m_ack=0;
+ CzmJson listNotices;assert(listNotices.Parse("{\"people\":[{\"id\":8,\"notice\":41},{\"id\":9,\"notice\":42}],\"counts\":{\"revision\":101,\"new_friends\":2}}"));
+ w.Read(listNotices,w.READ_LIST);assert(w.m_ack&&requests.back().url=="/api/v1/social/notifications/read"&&requests.back().body=="{\"kind\":\"friends\",\"ids\":[41,42]}");
+ // An acknowledgement does not optimistically clear counters before success.
+ assert(s_newFriends==2);replies[w.m_ack]={200,"{\"counts\":{\"revision\":102,\"new_friends\":0}}"};w.Frame();assert(s_newFriends==0);
+ Counts(notices);assert(s_newFriends==0); // an older heartbeat cannot resurrect the badge
+ identity++;CZM_SocialFrame();assert(CZM_SocialNotifications()==0&&CZM_ChatUnread()==0);
  ScreenWidth=1536;ScreenHeight=716;
  if(argc>1){drawTrace=true;if(strcmp(argv[1],"dialog")){
   w.OpenProfile(8,false);w.Read(j,w.READ_PROFILE);
@@ -167,7 +180,10 @@ class SocialMenuTests(unittest.TestCase):
                 (p / name).write_text('#include "stub.h"\n')
             (p / "CzmJson.h").write_text((ROOT / "czm/menu/CzmJson.h").read_text())
             source = (ROOT / "czm/menu/CzmSocial.cpp").read_text().replace('#include "../../common/czm_tab.h"', '#include "czm_tab.h"').replace("private:\n\tenum", "public:\n\tenum")
-            (p / "main.cpp").write_text(HARNESS + source + SCENARIOS)
+            from test_loading_errors import function
+            shared=(ROOT/'czm/menu/CzmMenu.cpp').read_text()
+            badges=function(shared,'int CZM_CountBadgeWidth(')+'\n'+function(shared,'void CZM_DrawCountBadge(')
+            (p / "main.cpp").write_text(HARNESS + badges + source + SCENARIOS)
             exe = p / "social"
             subprocess.run(["g++", "-std=c++11", "-w", "-I"+folder, "-I"+str(ROOT/"common"), str(p/"main.cpp"), str(ROOT/"czm/menu/CzmJson.cpp"), "-o", str(exe)], check=True)
             subprocess.run([str(exe)], check=True)
