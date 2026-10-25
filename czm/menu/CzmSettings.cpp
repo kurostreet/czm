@@ -518,6 +518,15 @@ void FormatValue( const CzmRow &row, float value, char *buf, size_t size )
 CCzmSettings
 =================
 */
+// the photo card once the community rules are accepted
+static void ChoosePhoto( void )
+{
+	if( CZM_AvatarPhoto()[0] && CZM_CurrentAvatar() != CZM_AVATAR_PHOTO )
+		CZM_SetAvatar( CZM_AVATAR_PHOTO );
+	else
+		CZM_PickAvatarPhoto();
+}
+
 class CCzmSettings : public CMenuFramework
 {
 public:
@@ -1086,6 +1095,9 @@ void CCzmSettings::Activate( int hit )
 			CZM_OnlineAvatarChanged();
 			if( part == 0 )
 			{
+				// other players see the photo: the community rules come first
+				if( !CZM_RulesAllow( ChoosePhoto ))
+					break;
 				if( CZM_AvatarPhoto()[0] && CZM_CurrentAvatar() != CZM_AVATAR_PHOTO )
 					CZM_SetAvatar( CZM_AVATAR_PHOTO );
 				else

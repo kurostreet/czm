@@ -47,6 +47,7 @@ bool CZM_LobbyCanInvite();
 void CZM_LobbyInviteFriend(int);
 void CZM_OpenLobbyById(const char*);
 void CZM_DrawMapPreview(const char*,int,int,int,int,const char*);
+bool CZM_RulesAllow(void(*)()=nullptr);void CZM_RulesRefused(int,void(*)()=nullptr);void CZM_ChatHidePlayer(int);
 struct CzmServer{char address[64];char prot[8];char name[64];};int CZM_ServerCount();CzmServer *CZM_Server(int);void CZM_CleanName(const char*,char*,size_t);void CZM_DrawSliced(const char*,int,int,int,int,int,int,unsigned=0xffffffff);
 '''
 HARNESS = r'''
@@ -77,6 +78,10 @@ bool CZM_LobbyCanInvite(){return false;}
 void CZM_LobbyInviteFriend(int){}
 void CZM_OpenLobbyById(const char*){}
 void CZM_DrawMapPreview(const char*,int,int,int,int,const char*){}
+static bool rulesOk=true;static void(*rulesThen)()=nullptr;static int hiddenPlayer;
+bool CZM_RulesAllow(void(*then)()){if(rulesOk)return true;rulesThen=then;return false;}
+void CZM_RulesRefused(int,void(*then)()){rulesOk=false;rulesThen=then;}
+void CZM_ChatHidePlayer(int id){hiddenPlayer=id;}
 '''
 SCENARIOS = r'''
 int main(int argc,char**argv){
@@ -86,6 +91,13 @@ int main(int argc,char**argv){
  w.m_target=8;w.Navigate(w.DIALOG);w.Read(j,w.READ_DIALOG);assert(w.m_canSend&&w.m_messages.Count()==1);
  strcpy(w.m_input,"Hello friend");w.Send();int send=w.m_write;auto payload=requests.back().body;replies[send]={0,""};w.Frame();assert(!w.m_write&&!strcmp(w.m_input,"Hello friend"));
  w.Send();assert(requests.back().body==payload);replies[w.m_write]={200,"{\"message\":{\"id\":2}}"};w.Frame();assert(!*w.m_input);
+ // The rules come first; the typed message waits and goes after acceptance.
+ strcpy(w.m_input,"After rules");rulesOk=false;size_t before=requests.size();w.Activate(w.SEND);assert(requests.size()==before&&rulesThen);
+ rulesOk=true;rulesThen();rulesThen=nullptr;assert(requests.size()==before+1&&requests.back().body.find("After rules")!=std::string::npos);
+ replies[w.m_write]={403,"{\"error\":\"rules\",\"version\":1}"};w.Frame();assert(!rulesOk&&rulesThen&&w.m_canSend&&!strcmp(w.m_input,"After rules"));
+ rulesOk=true;rulesThen=nullptr;w.m_input[0]=0;
+ // Blocking someone removes his messages from the public chat at once.
+ w.m_target=8;w.Follow("block");replies[w.m_write]={200,"{\"profile\":{\"id\":8}}"};w.Frame();assert(hiddenPlayer==8);
  // A read follower list must not start a mark-seen/refetch request loop.
  w.m_tab=2;w.Navigate(w.LIST);CzmJson followers;assert(followers.Parse("{\"people\":[],\"counts\":{\"requests\":0},\"next\":-1}"));
  w.Read(followers,w.READ_LIST);assert(w.m_write==0);

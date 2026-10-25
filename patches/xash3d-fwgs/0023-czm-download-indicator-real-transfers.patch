@@ -1,0 +1,130 @@
+diff --git a/engine/client/czm_loading.c b/engine/client/czm_loading.c
+--- a/engine/client/czm_loading.c
++++ b/engine/client/czm_loading.c
+@@ -590,24 +590,57 @@ static void CZM_Update( void )
+ 	Cvar_SetValue( "scr_loading", (int)czm.percent );
+ }
+ 
+-// HTTP completion may leave scr_download at the last displayed value. Retire only a
+-// completed in-match transfer with no resources left; a queued or new transfer cancels it.
++// The download indicator follows real transfers only: a game file in the HTTP queue or
++// a file arriving over the game connection. Engine counters can keep an old value (a spray
++// that never arrives keeps host.downloadcount above zero, a finished file leaves 100%), so
++// a transfer that ended or stopped moving is retired after a moment and noted once.
++#define CZM_DOWNLOAD_IDLE  1.5  // seconds without a transfer: between two files of a queue
++#define CZM_DOWNLOAD_STALL 20.0 // seconds without progress while a transfer still waits
++
+ static void CZM_DownloadProgress( void )
+ {
+-	static double finished = -1.0;
++	static double idleSince = -1.0, changedAt = 0.0;
++	static float shown = -1.0f, retired = -2.0f;
++	const double now = Platform_DoubleTime();
++	const float value = scr_download.value;
++	const qboolean moving = HTTP_FileDownloads( ) > 0
++		|| ( cls.state >= ca_connected && cls.netchan.incomingbufs[FRAG_FILE_STREAM] != NULL );
++	const char *why = NULL;
++
++	// a value set again in the same frame means the transfer that stopped is still there;
++	// a frame that shows none means it is gone and the next value is news
++	if( value < 0.0f )
++		retired = -2.0f;
++	if( value != shown || now < changedAt )
++	{
++		shown = value;
++		changedAt = now;
++	}
++	if( moving || value < 0.0f || now < idleSince )
++		idleSince = -1.0;
++	else if( idleSince < 0.0 )
++		idleSince = now;
+ 
+-	if( !czm.active && cls.state == ca_active && host.downloadcount == 0 && scr_download.value >= 99.5f )
++	// the loading screen keeps its own progress; in the menu and in a match only the truth is shown
++	if( !czm.active && value >= 0.0f && ( cls.state == ca_active || cls.state == ca_disconnected ))
+ 	{
+-		double now = Platform_DoubleTime();
+-		if( finished < 0.0 || now < finished )
+-			finished = now;
+-		else if( now - finished >= 2.0 )
+-		{
+-			Cvar_SetValue( "scr_download", -1.0f );
+-			finished = -1.0;
+-		}
++		if( value == retired )
++			why = ""; // a stopped transfer sets the same value again: it stays hidden
++		else if( idleSince >= 0.0 && now - idleSince >= CZM_DOWNLOAD_IDLE )
++			why = "no transfer";
++		else if( moving && now - changedAt >= CZM_DOWNLOAD_STALL )
++			why = "no progress";
++	}
++
++	if( why )
++	{
++		if( why[0] )
++			Con_Reportf( "download indicator hidden: %s (%d files left, %s, %.0f%%)\n", why,
++				host.downloadcount, host.downloadfile[0] ? host.downloadfile : "-", value );
++		retired = value;
++		idleSince = -1.0;
++		Cvar_SetValue( "scr_download", -1.0f );
+ 	}
+-	else finished = -1.0;
+ 
+ 	CZM_SetValue( &czm_download_files, scr_download.value >= 0.0f ? host.downloadcount : 0 );
+ }
+diff --git a/engine/common/http/net_http_xash.c b/engine/common/http/net_http_xash.c
+--- a/engine/common/http/net_http_xash.c
++++ b/engine/common/http/net_http_xash.c
+@@ -1183,8 +1183,12 @@ static int HTTP_FileProcessStream( httpfile_t *curfile )
+ 
+ 	if( curfile->size > 0 )
+ 	{
+-		http.progress += (float)curfile->downloaded / curfile->size;
+-		http.progress_count++;
++		// the download bar belongs to game files; lists read into memory do not move it
++		if( !curfile->to_memory )
++		{
++			http.progress += (float)curfile->downloaded / curfile->size;
++			http.progress_count++;
++		}
+ 
+ 		if( curfile->downloaded >= curfile->size )
+ 		{
+@@ -1279,6 +1283,26 @@ void HTTP_Run( void )
+ 	HTTP_AutoClean();
+ }
+ 
++/*
++==============
++HTTP_FileDownloads
++
++Game files in the queue; requests read into memory (server lists) are not counted
++==============
++*/
++int HTTP_FileDownloads( void )
++{
++	int count = 0;
++
++	for( httpfile_t *curfile = http.first_file; curfile; curfile = curfile->next )
++	{
++		if( !curfile->to_memory )
++			count++;
++	}
++
++	return count;
++}
++
+ /*
+ ===================
+ HTTP_AddDownload
+diff --git a/engine/common/net_ws.h b/engine/common/net_ws.h
+--- a/engine/common/net_ws.h
++++ b/engine/common/net_ws.h
+@@ -99,6 +99,7 @@ void HTTP_Shutdown( void );
+ void HTTP_ResetProcessState( void );
+ void HTTP_Init( void );
+ void HTTP_Run( void );
++int HTTP_FileDownloads( void );
+ 
+ typedef void ( *http_memory_cb_t )( const char *url, qboolean success, const byte *data, size_t size, void *userdata );
+ qboolean HTTP_GetToMemory( const char *url, http_memory_cb_t cb, void *userdata );

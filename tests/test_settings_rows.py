@@ -62,6 +62,7 @@ void CZM_AccountShow(const char*,const char*){}void CZM_SetSpray(int){}void CZM_
 void CZM_OnlineAvatarChanged(){}const char*CZM_AvatarPhoto(){return "";}int CZM_CurrentAvatar(){return 0;}void CZM_PickAvatarPhoto(){}
 void CZM_CleanName(const char*in,char*out,size_t n){snprintf(out,n,"%s",in);}bool CZM_NickIsValid(const char*){return true;}
 void CZM_ColorPickerShow(int,int,int){}
+bool CZM_RulesAllow(void(*)()){return true;}void ChoosePhoto(){}
 unsigned PackRGBA(int,int,int,int){return 0;}unsigned CZM_White(int=255){return 0;}unsigned CZM_Grey(){return 0;}
 HFont CZM_Font(int n){return n;}int CZM_FontHeight(HFont){return ScreenHeight*.026f;}
 int CZM_TextWidth(HFont,const char*s){return strlen(s)*ScreenHeight*.014f;}

@@ -11,55 +11,92 @@ ENGINE = ROOT / "3rdparty/xash3d-fwgs/engine/client"
 
 
 class BackgroundDownloadsTests(unittest.TestCase):
-    def test_finished_in_match_indicator_expires_and_new_download_restarts_it(self):
+    def test_indicator_follows_real_transfers_and_retires_stale_values(self):
         loading = (ENGINE / "czm_loading.c").read_text()
         self.assertIn("CZM_DownloadProgress();", function(loading, "void CZM_Loading_Frame("))
+        defines = "\n".join(re.findall(r"^#define CZM_DOWNLOAD_\w+ .+$", loading, re.M))
         harness = r'''
 #include <assert.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <string.h>
-enum { ca_disconnected, ca_validate, ca_active };
+typedef bool qboolean;
+enum { ca_disconnected, ca_connecting, ca_connected, ca_validate, ca_active };
+#define FRAG_FILE_STREAM 1
 struct { bool active; } czm;
-struct { int state; } cls;
-struct { int downloadcount; } host;
+struct { int state; struct { void *incomingbufs[2]; } netchan; } cls;
+struct { int downloadcount; char downloadfile[64]; } host;
 typedef struct { float value; } cvar_t;
 cvar_t scr_download, czm_download_files;
-static double clock_now;
+static double clock_now; static int files, notes; static char note[256];
 static double Platform_DoubleTime(void) { return clock_now; }
+static int HTTP_FileDownloads(void) { return files; }
 static void CZM_SetValue(cvar_t *v, float value) { v->value = value; }
 static void Cvar_SetValue(const char *name, float value) { assert(!strcmp(name,"scr_download")); scr_download.value = value; }
-''' + function(loading, "static void CZM_DownloadProgress(") + r'''
+#define Con_Reportf(...) (notes++, snprintf(note, sizeof(note), __VA_ARGS__))
+''' + defines + "\n" + function(loading, "static void CZM_DownloadProgress(") + r'''
 static void Tick(double now) { clock_now = now; CZM_DownloadProgress(); }
 int main(void) {
- cls.state=ca_active; scr_download.value=-1; Tick(0); assert(czm_download_files.value==0);
- host.downloadcount=1; scr_download.value=45; Tick(1); Tick(20);
- assert(scr_download.value==45 && czm_download_files.value==1);
- // Completion in a match: leave 100% briefly, then clear the source cvar, not just the drawing.
- host.downloadcount=0; scr_download.value=100; Tick(21); Tick(22.999);
- assert(scr_download.value==100); Tick(23); assert(scr_download.value==-1); Tick(30); assert(scr_download.value==-1);
- // A full current file is not the end of a queue with more files.
- host.downloadcount=2; scr_download.value=100; Tick(40); Tick(100);
- assert(scr_download.value==100 && czm_download_files.value==2);
- host.downloadcount=0; Tick(101); Tick(102);
- // A fresh transfer cancels the old completion timer.
- host.downloadcount=1; scr_download.value=25; Tick(102.5);
- host.downloadcount=0; scr_download.value=100; Tick(103); Tick(104.9);
- assert(scr_download.value==100); Tick(105); assert(scr_download.value==-1);
- // Never retire progress on the connection/loading screen.
- czm.active=true; scr_download.value=100; Tick(110); Tick(150); assert(scr_download.value==100);
- czm.active=false; cls.state=ca_validate; Tick(151); Tick(190); assert(scr_download.value==100);
- cls.state=ca_active; Tick(191); Tick(193); assert(scr_download.value==-1);
- // The painter rounds 99.5 and above to 100%.
- scr_download.value=99.6f; Tick(200); Tick(202); assert(scr_download.value==-1);
- scr_download.value=99.4f; Tick(210); Tick(220); assert(scr_download.value==99.4f);
- // Disconnects and backwards time start a fresh grace period.
- scr_download.value=100; Tick(230); cls.state=ca_disconnected; Tick(231);
- cls.state=ca_active; Tick(240); Tick(239); Tick(240.9); assert(scr_download.value==100);
- Tick(241); assert(scr_download.value==-1);
+ static int stream;
+ cls.state=ca_active; scr_download.value=-1; Tick(0); assert(czm_download_files.value==0&&notes==0);
+ // A file in the HTTP queue keeps the indicator while it moves.
+ files=1; host.downloadcount=1; scr_download.value=45; Tick(1); scr_download.value=60; Tick(15); Tick(30);
+ assert(scr_download.value==60 && czm_download_files.value==1);
+ // Finished: the queue is empty, 100% stays a moment and goes; one line in the log.
+ files=0; host.downloadcount=0; scr_download.value=100; Tick(31); Tick(32.4); assert(scr_download.value==100);
+ Tick(32.6); assert(scr_download.value==-1&&notes==1&&strstr(note,"no transfer")); Tick(40); assert(notes==1);
+ // A spray that never arrives keeps the counter up; the stale value still goes.
+ host.downloadcount=2; strcpy(host.downloadfile,"!MD5abc"); scr_download.value=100; Tick(50); Tick(51.6);
+ assert(scr_download.value==-1&&czm_download_files.value==0&&notes==2&&strstr(note,"2 files left"));
+ // Between two files of a queue the bar does not blink.
+ host.downloadcount=3; files=1; scr_download.value=10; Tick(60); files=0; Tick(61); files=1; scr_download.value=20; Tick(61.4);
+ files=0; Tick(62); assert(scr_download.value==20); files=1; Tick(62.5); assert(scr_download.value==20);
+ // A transfer over the game connection counts as moving too.
+ files=0; cls.netchan.incomingbufs[FRAG_FILE_STREAM]=&stream; scr_download.value=30; Tick(70); scr_download.value=31; Tick(80);
+ assert(scr_download.value==31);
+ // Stopped in place: hidden after a while and kept hidden when the same value comes back.
+ Tick(99.9); assert(scr_download.value==31); Tick(100.1); assert(scr_download.value==-1&&strstr(note,"no progress"));
+ int was=notes; scr_download.value=31; Tick(101.2); assert(scr_download.value==-1&&notes==was);
+ scr_download.value=32; Tick(101.3); assert(scr_download.value==32); // it moved again
+ cls.netchan.incomingbufs[FRAG_FILE_STREAM]=0;
+ // The loading screen keeps its own progress, and so does the connection.
+ czm.active=true; scr_download.value=55; Tick(110); Tick(150); assert(scr_download.value==55);
+ czm.active=false; cls.state=ca_validate; Tick(151); Tick(190); assert(scr_download.value==55);
+ // In the menu an old value from a match goes as well.
+ cls.state=ca_disconnected; Tick(191); Tick(192.6); assert(scr_download.value==-1);
+ // Time going backwards starts a fresh grace period.
+ cls.state=ca_active; scr_download.value=70; Tick(200); Tick(199); Tick(200.4); Tick(201.8); assert(scr_download.value==70);
+ Tick(202); assert(scr_download.value==-1);
  return 0;
 }
 '''
         with tempfile.TemporaryDirectory(prefix="czm-download-finish-") as temporary:
+            folder = Path(temporary)
+            (folder / "check.c").write_text(harness)
+            exe = folder / "check"
+            subprocess.run(["gcc", "-std=c11", "-Wall", "-Wextra", "-Werror", str(folder / "check.c"), "-o", str(exe)], check=True)
+            subprocess.run([str(exe)], check=True)
+
+    def test_server_lists_read_into_memory_never_move_the_download_bar(self):
+        http = (ROOT / "3rdparty/xash3d-fwgs/engine/common/http/net_http_xash.c").read_text()
+        self.assertRegex(http, r"if\( !curfile->to_memory \)\n\t\t\{\n\t\t\thttp\.progress \+=")
+        harness = r'''
+#include <assert.h>
+#include <stdbool.h>
+#include <stddef.h>
+typedef bool qboolean;
+typedef struct httpfile_s { qboolean to_memory; struct httpfile_s *next; } httpfile_t;
+static struct { httpfile_t *first_file; } http;
+''' + function(http, "int HTTP_FileDownloads(") + r'''
+int main(void) {
+ httpfile_t list = { true, NULL }, map = { false, NULL }, sound = { false, NULL };
+ assert(HTTP_FileDownloads() == 0);
+ http.first_file = &list; assert(HTTP_FileDownloads() == 0);
+ list.next = &map; map.next = &sound; assert(HTTP_FileDownloads() == 2);
+ return 0;
+}
+'''
+        with tempfile.TemporaryDirectory(prefix="czm-http-files-") as temporary:
             folder = Path(temporary)
             (folder / "check.c").write_text(harness)
             exe = folder / "check"

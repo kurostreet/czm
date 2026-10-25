@@ -24,6 +24,7 @@ void CZM_LobbyVoiceLocalMute(int,bool);bool CZM_LobbyVoiceIsMuted(int);
 void CZM_ShowMessage(const char*);void CZM_LobbyServerPickerStart();void CZM_OpenFriends();void CZM_OpenProfile(int);
 HIMAGE CZM_MapPreview(const char*);HIMAGE CZM_Image(const char*);const char*CZM_MapModeArt(const char*,const char*);
 void CZM_DrawCover(HIMAGE,int,int,int,int);
+void CZM_RulesShow();
 '''
 HARNESS = r'''
 #include "stub.h"
@@ -67,6 +68,10 @@ static int micChecks;void CZM_LobbyVoiceTest(){micChecks++;}bool CZM_LobbyVoiceM
 void CZM_ShowMessage(const char*){}
 void CZM_LobbyInviteFrame(){}void CZM_LobbyServerPickerStart(){}void CZM_OpenFriends(){}void CZM_OpenProfile(int){}
 void CZM_AccountShow(const char*,const char*){}void CZM_PlayClick(){}
+static bool rulesOk=true;static void(*rulesThen)()=nullptr;static int rulesShown,rulesVersion;
+bool CZM_RulesAllow(void(*then)()){if(rulesOk)return true;rulesThen=then;return false;}
+void CZM_RulesRefused(int version,void(*then)()){rulesOk=false;rulesVersion=version;rulesThen=then;}
+void CZM_RulesShow(){rulesShown++;}
 '''
 SCENARIOS = r'''
 static void clear(CCzmLobby&w){w.m_request=0;w.m_kind=0;w.m_busy=false;}
@@ -166,6 +171,41 @@ int main(int argc,char**argv){
  strcpy(w.m_title,"   ");w.Action(w.MAKE);assert(nextRequest==requests);
  strcpy(w.m_title,"  Team  ");w.Action(w.MAKE);assert(lastBody.find("\"title\":\"Team\"")!=std::string::npos);
  clear(w);
+ // Community rules: posting waits for acceptance, then continues as asked.
+ populate(w);w.m_stage=w.ROOM;w.m_open=true;clear(w);rulesOk=false;strcpy(w.m_text,"plan B");requests=nextRequest;
+ w.Action(w.SEND);assert(nextRequest==requests&&rulesThen&&!strcmp(w.m_text,"plan B"));
+ rulesOk=true;rulesThen();rulesThen=nullptr;assert(lastUrl.find("/messages")!=std::string::npos&&lastBody.find("plan B")!=std::string::npos);
+ clear(w);micOn=false;rulesOk=false;w.Action(w.VOICE_MIC);assert(!micOn&&rulesThen);rulesOk=true;rulesThen();rulesThen=nullptr;assert(micOn);
+ w.Action(w.VOICE_MIC);assert(!micOn); // turning the microphone off never asks
+ clear(w);replies[w.m_request=++nextRequest]={403,"{\"error\":\"rules\",\"version\":2}"};w.m_kind=w.POST_CHAT;w.Poll();
+ assert(!rulesOk&&rulesVersion==2&&rulesThen);rulesOk=true;rulesThen=nullptr;clear(w);
+ w.m_stage=w.CREATE;strcpy(w.m_title,"Rules team");strcpy(w.m_serverAddress,"203.0.113.5:27015");rulesOk=false;requests=nextRequest;
+ w.Action(w.MAKE);assert(nextRequest==requests&&rulesThen);rulesOk=true;rulesThen();rulesThen=nullptr;assert(lastUrl=="/api/v1/lobbies");clear(w);
+ // Reports: a message, a member and the room's name; never one's own.
+ populate(w);w.m_stage=w.ROOM;w.m_open=true;clear(w);w.m_chatCount=2;
+ w.m_chat[0]={41,8,"Hunter","bad words"};w.m_chat[1]={42,7,"Kuro","mine"};
+ for(auto resolution:{std::pair<int,int>{1536,716},{960,540},{800,360},{2960,1440},{640,320}}){
+  ScreenWidth=resolution.first;ScreenHeight=resolution.second;w.Layout();
+  assert(inside(w.m_infoRect,w.m_panel)&&!overlap(w.m_infoRect,w.m_refresh)&&!overlap(w.m_infoRect,w.m_back));
+  assert(hit(w,w.m_infoRect)==w.INFO);
+  for(int i=0;i<w.m_chatVisible;i++){assert(inside(w.m_chatLines[i],w.m_chatRect));assert(!overlap(w.m_chatLines[i],w.m_textRect)&&!overlap(w.m_chatLines[i],w.m_micRect));}
+  assert(w.m_chatVisible==2&&hit(w,w.m_chatLines[0])==w.MESSAGE&&hit(w,w.m_chatLines[1])==w.NONE);
+  for(int i=0;i<w.MODAL_ROWS;i++){assert(inside(w.m_modalButtons[i],w.m_modal));assert(w.m_modalButtons[i].h>=18);if(i)assert(!overlap(w.m_modalButtons[i-1],w.m_modalButtons[i]));}
+  for(int i=0;i<w.SHEET_ROWS;i++){assert(inside(w.m_sheetButtons[i],w.m_sheetRect));if(i)assert(!overlap(w.m_sheetButtons[i-1],w.m_sheetButtons[i]));}
+  w.m_sheet=w.SHEET_MESSAGE;w.Draw();w.m_sheet=w.SHEET_ROOM;w.Draw();w.m_sheet=0;
+ }
+ ScreenWidth=1536;ScreenHeight=716;w.Layout();
+ w.Action(w.MESSAGE);assert(w.m_sheet==w.SHEET_MESSAGE&&w.m_sheetMessage==41&&w.m_sheetSender==8);
+ assert(hit(w,w.m_sheetButtons[0])==w.SHEET);w.Action(w.SHEET);assert(!w.m_sheet&&lastUrl=="/api/v1/report"&&lastBody=="{\"lobby_message\":41}");
+ int report=w.m_reportRequest;assert(report);w.Action(w.INFO);w.Action(w.SHEET);assert(w.m_reportRequest==report); // one report at a time
+ replies[report]={200,"{\"ok\":true}"};w.Frame();assert(!w.m_reportRequest&&strstr(w.m_notice,"Жалоба отправлена"));
+ player=8;w.Action(w.INFO);assert(w.m_sheet==w.SHEET_ROOM);w.Action(w.SHEET);assert(lastBody=="{\"lobby\":\"native-test-room\"}");replies[w.m_reportRequest]={200,"{}"};w.Frame();
+ player=7;w.Layout();w.Action(w.INFO);assert(hit(w,w.m_sheetButtons[0])==w.NONE);requests=nextRequest;w.Action(w.SHEET);assert(nextRequest==requests);
+ w.Action(w.INFO);w.Action(w.SHEET+1);assert(rulesShown==1);
+ w.m_selectedMemberId=8;w.Layout();assert(hit(w,w.m_modalButtons[2])==w.MODAL_REPORT);w.Action(w.MODAL_REPORT);
+ assert(!w.m_selectedMemberId&&lastBody=="{\"player\":8,\"lobby\":\"native-test-room\"}");replies[w.m_reportRequest]={429,"{}"};w.Frame();
+ player=8;w.m_selectedMemberId=9;w.Layout();assert(hit(w,w.m_modalButtons[3])==w.NONE&&hit(w,w.m_modalButtons[6])==w.MODAL_CANCEL);player=7;w.m_selectedMemberId=0;
+ clear(w);w.m_chatCount=0;
  // Account changes clear the former room and voice state.
  micOn=true;w.ResetSession();assert(!w.HasRoom()&&!micOn);
  if(argc>1){
@@ -176,6 +216,8 @@ int main(int argc,char**argv){
    w.m_cardCount=3;for(int i=0;i<3;i++){auto&r=w.m_cards[i];strcpy(r.title,i==0?"Ночной отряд":i==1?"Escape together":"Команда Kuro");strcpy(r.id,"test-room");strcpy(r.address,"203.0.113.5:27015");strcpy(r.map,i==2?"zm_alpha":"ze_atix_panic_v1_fix");r.count=i+2;r.capacity=6;}
   }
   if(view=="member")w.m_selectedMemberId=8;
+  if(view=="message"||view=="roominfo"){w.m_chatCount=2;w.m_chat[0]={41,8,"Hunter","кто со мной на ze_atix?"};w.m_chat[1]={42,7,"Kuro","Заходите, ждём"};w.Layout();
+   if(view=="message"){w.Action(w.MESSAGE);}else{player=8;w.Action(w.INFO);}}
   if(view=="solo")w.m_memberCount=1;
   w.Draw();
  }
@@ -205,7 +247,7 @@ class LobbyNativeTests(unittest.TestCase):
             out=os.environ.get('CZM_LOBBY_PREVIEW_DIR')
             if out:
                 dest=Path(out);dest.mkdir(parents=True,exist_ok=True)
-                for view in ['create','search','catalog','room','solo','member']:
+                for view in ['create','search','catalog','room','solo','member','message','roominfo']:
                     r=subprocess.run([str(exe),view],capture_output=True,text=True,check=True)
                     (dest/(view+'.tsv')).write_text(r.stdout)
 

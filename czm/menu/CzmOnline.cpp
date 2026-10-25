@@ -203,6 +203,7 @@ static void SendHello( void )
 	body.Append( ",\"version\":" ); CZM_JsonQuote( body, CZM_Version( ));
 	body.Append( ",\"code\":" ); body.Append( code );
 	if( s_online.preserveAvatar ) body.Append( ",\"keep_avatar\":true" );
+	body.Append( ",\"rules\":1" ); // this game shows the community rules before posting
 	body.Append( "}" );
 
 	Q_strncpy( s_online.sentNick, nick, sizeof( s_online.sentNick ));
@@ -240,6 +241,13 @@ static void OnHello( int status, const char *body )
 	s_online.player = j.Int( j.Get( 0, "id" ));
 	Q_strncpy( s_online.myAvatar, j.String( j.Get( 0, "avatar" )), sizeof( s_online.myAvatar ));
 	ReadBan( j, j.Get( 0, "ban" ));
+	{
+		int rules = j.Get( 0, "rules" );
+		if( j.Type( rules ) == CzmJson::T_OBJECT )
+			CZM_RulesSetState( j.Int( j.Get( rules, "version" )), j.Bool( j.Get( rules, "accepted" )), j.String( j.Get( rules, "url" )));
+		else
+			CZM_RulesSetState( 0, false, "" );
+	}
 	s_online.newsLast = j.Int( j.Get( 0, "news" ));
 	s_online.nextHello = EngFuncs::DoubleTime() + HELLO_EVERY;
 	if( s_online.refreshDistribution ) { s_online.refreshDistribution = false; s_online.nextHello = 0; }
@@ -280,7 +288,8 @@ static void SyncPhoto( void )
 {
 	const char *photo = CZM_AvatarPhoto();
 
-	if( s_online.preserveAvatar || s_online.uploadId || !photo[0] || CZM_CurrentAvatar() != CZM_AVATAR_PHOTO )
+	// a photo is shown to everyone: it waits for the community rules
+	if( s_online.preserveAvatar || s_online.uploadId || !photo[0] || CZM_CurrentAvatar() != CZM_AVATAR_PHOTO || !CZM_RulesAccepted( ))
 		return;
 	if( !strcmp( photo, EngFuncs::GetCvarString( "czm_avatar_sent" )))
 		return;
@@ -341,6 +350,7 @@ static void StoreUpdateFrame( double now )
 void CZM_OnlineFrame( void )
 {
 	CZM_SprayFrame();
+	CZM_RulesFrame();
 	double now = EngFuncs::DoubleTime();
 	int status;
 	CUtlString body;
@@ -499,9 +509,15 @@ void CZM_OnlineFrame( void )
 		else if( status == 403 )
 		{
 			CzmJson j;
-			if( j.Parse( body.Get( )))
-				ReadBan( j, j.Get( 0, "ban" ));
-			EngFuncs::CvarSetString( "czm_avatar_sent", s_online.uploading ); // no retries while banned
+			bool parsed = j.Parse( body.Get( ));
+			if( parsed && !strcmp( j.String( j.Get( 0, "error" )), "rules" ))
+				CZM_RulesSetState( Q_max( 1, j.Int( j.Get( 0, "version" ))), false, "" ); // uploads again once accepted
+			else
+			{
+				if( parsed )
+					ReadBan( j, j.Get( 0, "ban" ));
+				EngFuncs::CvarSetString( "czm_avatar_sent", s_online.uploading ); // no retries while banned
+			}
 		}
 	}
 

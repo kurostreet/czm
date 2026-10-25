@@ -24,7 +24,7 @@ namespace {
 const char *L( const char *ru, const char *en ) { return CZM_IsRussian() ? ru : en; }
 struct RoomCard { char id[64], title[128], address[64], proto[8], map[64]; int count,capacity; };
 struct Member { int id; bool ready; char nick[100],avatar[32]; };
-struct ChatLine { int sender; char nick[52],text[440]; };
+struct ChatLine { int id,sender; char nick[52],text[440]; };
 bool SafeAddress(const char *p) {
     if(!p || !*p || strlen(p)>=64 || !strchr(p,':')) return false;
     for(;*p;p++) if(!((*p>='0'&&*p<='9')||*p=='.'||*p==':')) return false;
@@ -73,7 +73,10 @@ private:
            SELECT=100, MEMBER=200, READY=300, LAUNCH, LEAVE, SEND, CHAT, INVITE, SERVER_NEXT, NEXT, PREV,
            MODAL_PROFILE=500, MODAL_LOCAL_MUTE, MODAL_HOST_MUTE,
            MODAL_KICK, MODAL_TRANSFER, MODAL_CANCEL, VOICE_MIC, VOICE_ALL,
-           CAPACITY=610, FILTER_MODE=630, BACKDROP=650 };
+           CAPACITY=610, FILTER_MODE=630, BACKDROP=650, MODAL_REPORT=660,
+           INFO=670, SHEET=680, MESSAGE=700 };
+    enum { SHEET_NONE, SHEET_MESSAGE, SHEET_ROOM };
+    enum { MODAL_ROWS=7, SHEET_ROWS=3 };
     enum { GET_LIST=1, GET_ROOM, GET_CHAT, POST_CREATE, POST_JOIN,
            POST_READY, POST_LAUNCH, POST_LEAVE, POST_CHAT, POST_SERVER, POST_INVITE, GET_MINE,
            POST_KICK, POST_TRANSFER, POST_HEARTBEAT, POST_VOICE_MUTE };
@@ -93,6 +96,9 @@ private:
     bool CanStart() const;
     void ServerSummary(char *out,size_t size);
     void DrawField(const CzmRect &r,const char *placeholder);
+    void Report(const char *body);
+    void DrawSheet();
+    static void AfterRules(); // the room, the message or the microphone waits for the rules
     int m_stage,m_request,m_kind,m_pressed,m_capacity,m_server,m_offset,m_next;
     int m_filterMode,m_pickedPlayers,m_pickedSlots;
     bool m_closePending;
@@ -107,12 +113,16 @@ private:
     char m_ownerName[100],m_roomTitle[128],m_pickedName[100],m_pickedMap[64];
     int m_owner,m_revision,m_memberCount,m_chatCount,m_cardCount;
     int m_selectedMemberId,m_memberConfirm;
+    int m_sheet,m_sheetMessage,m_sheetSender,m_reportRequest,m_afterRules;
+    char m_sheetNick[52],m_sheetText[440];
+    int m_chatFirst,m_chatVisible;
+    CzmRect m_chatLines[CZM_LOBBY_MESSAGES],m_infoRect,m_sheetRect,m_sheetButtons[SHEET_ROWS];
     Member m_members[CZM_LOBBY_MEMBERS];
     ChatLine m_chat[CZM_LOBBY_MESSAGES];
     RoomCard m_cards[CZM_LOBBY_LIST];
     CzmRect m_panel,m_back,m_refresh,m_primary,m_secondary,m_extra,m_titleRect;
     CzmRect m_buttons[9],m_cardsRect[CZM_LOBBY_LIST],m_membersRect[CZM_LOBBY_MEMBERS],m_chatRect;
-    CzmRect m_textRect,m_sendRect,m_micRect,m_voiceAllRect,m_roomServerRect,m_modal,m_modalButtons[6];
+    CzmRect m_textRect,m_sendRect,m_micRect,m_voiceAllRect,m_roomServerRect,m_modal,m_modalButtons[MODAL_ROWS];
     CzmRect m_visibilityRect,m_switchRect,m_capacityRect[5],m_filterRect[3],m_teamTitleRect,m_catalogRect;
     CzmRect m_createMapRect,m_createInfoRect;
     int W,H,pad;
@@ -125,6 +135,8 @@ CCzmLobby::CCzmLobby():CMenuFramework("CzmLobby"){
     s_lobby=this; m_stage=CREATE; m_request=m_kind=m_pressed=0;m_capacity=6;
     m_server=m_offset=m_next=m_owner=m_revision=m_memberCount=m_chatCount=m_cardCount=0;
     m_selectedMemberId=m_memberConfirm=0;
+    m_sheet=m_sheetMessage=m_sheetSender=m_reportRequest=m_afterRules=0;m_sheetNick[0]=m_sheetText[0]=0;
+    m_chatFirst=m_chatVisible=0;
     m_filterMode=0;m_next=-1;m_closePending=false;m_pickedPlayers=m_pickedSlots=-1;
     m_needMine=false;m_readEpoch=m_pendingEpoch=0;
     m_readyQueued=m_readyTarget=false;
@@ -210,11 +222,11 @@ void CCzmLobby::ResetSession(){
     m_needMine=false;++m_readEpoch;
     m_readyQueued=false;
     m_room[0]=m_roomTitle[0]=m_text[0]=m_pickedMap[0]=0;
-    m_memberCount=m_chatCount=m_selectedMemberId=m_memberConfirm=0;
+    m_memberCount=m_chatCount=m_selectedMemberId=m_memberConfirm=m_sheet=0;
     m_owner=0;m_stage=SEARCH;m_nextVoicePoll=0;m_nextHeartbeat=0;
     if(m_open)Hide();
 }
-void CCzmLobby::Hide(){StopInput();m_open=false;m_pressed=0;m_selectedMemberId=0;m_memberConfirm=0;++m_readEpoch;CMenuFramework::Hide();}
+void CCzmLobby::Hide(){StopInput();m_open=false;m_pressed=0;m_selectedMemberId=0;m_memberConfirm=0;m_sheet=0;++m_readEpoch;CMenuFramework::Hide();}
 void CCzmLobby::Notice(const char *p){Q_strncpy(m_notice,p?p:"",sizeof(m_notice));m_noticeUntil=EngFuncs::DoubleTime()+4;}
 void CCzmLobby::StopInput(){if(m_typing){UI_EnableTextInput(false);m_typing=false;}}
 bool CCzmLobby::VoiceBlocked() const{
@@ -249,6 +261,8 @@ void CCzmLobby::Layout(){
     int top=m_panel.y+pad;
     m_back=CZM_Rect(left,top,header,header);
     m_refresh=CZM_Rect(left+inner-header,top,header,header);
+    // the room's own actions: report its name, read the community rules
+    m_infoRect=m_stage==ROOM?CZM_Rect(m_refresh.x-header-gap/2,top,header,header):CZM_Rect(0,0,0,0);
     top+=header+gap;
     m_titleRect=m_primary=m_secondary=m_extra=CZM_Rect(0,0,0,0);
     for(int i=0;i<9;i++)m_buttons[i]=CZM_Rect(0,0,0,0);
@@ -264,9 +278,19 @@ void CCzmLobby::Layout(){
     const int modalH=Q_min(H-pad*2,(int)(H*.76f));
     m_modal=CZM_Rect((W-modalW)/2,(H-modalH)/2,modalW,modalH);
     const int modalGap=Q_max(4,gap/2);
-    const int mh=(modalH-pad*2-header-modalGap*6)/6;
-    for(int i=0;i<6;i++)m_modalButtons[i]=CZM_Rect(m_modal.x+pad,
+    const int mh=(modalH-pad*2-header-modalGap*MODAL_ROWS)/MODAL_ROWS;
+    for(int i=0;i<MODAL_ROWS;i++)m_modalButtons[i]=CZM_Rect(m_modal.x+pad,
         m_modal.y+pad+header+modalGap+i*(mh+modalGap),modalW-pad*2,mh);
+    // message and room sheets: a title, one line of context and three actions
+    {
+        const int sh=Q_max(30,(int)(H*.075f)),context=Q_max(14,CZM_FontHeight(CZM_Font(CZMF_SMALL))+gap);
+        const int sheetH=Q_min(H-pad*2,pad*2+header+context+modalGap+SHEET_ROWS*(sh+modalGap));
+        m_sheetRect=CZM_Rect((W-modalW)/2,(H-sheetH)/2,modalW,sheetH);
+        for(int i=0;i<SHEET_ROWS;i++)m_sheetButtons[i]=CZM_Rect(m_sheetRect.x+pad,
+            m_sheetRect.y+pad+header+context+modalGap*2+i*(sh+modalGap),modalW-pad*2,sh);
+    }
+    for(int i=0;i<CZM_LOBBY_MESSAGES;i++)m_chatLines[i]=CZM_Rect(0,0,0,0);
+    m_chatFirst=m_chatVisible=0;
 
     if(m_stage==CREATE){
         const int col=(inner-gap)*53/100,right=inner-col-gap;
@@ -318,6 +342,13 @@ void CCzmLobby::Layout(){
         m_voiceAllRect=CZM_Rect(m_micRect.x-voice-gap/2,top,voice,voice);
         m_sendRect=CZM_Rect(m_chatRect.x+other-gap-bh,bottom-gap-bh,bh,bh);
         m_textRect=CZM_Rect(m_chatRect.x+gap,bottom-gap-bh,other-gap*3-bh,bh);
+        // the newest messages that fit; a tap on someone else's opens its actions
+        const int msgTop=m_chatRect.y+voice+gap+gap/2,msgBottom=m_textRect.y-gap;
+        const int lineH=Q_max(CZM_FontHeight(CZM_Font(CZMF_SMALL))+gap/2,1);
+        m_chatVisible=Q_min(m_chatCount,Q_max(0,(msgBottom-msgTop)/lineH));
+        m_chatFirst=m_chatCount-m_chatVisible;
+        for(int i=0;i<m_chatVisible;i++)
+            m_chatLines[i]=CZM_Rect(m_chatRect.x+gap,msgTop+i*lineH,m_chatRect.w-gap*2,lineH);
         const int startW=inner*22/100,readyW=inner*19/100;
         const int utility=(inner-startW-readyW-gap*4)/3;
         m_buttons[0]=CZM_Rect(left,footer,readyW,bh);
@@ -326,11 +357,20 @@ void CCzmLobby::Layout(){
     }
 }
 int CCzmLobby::Hit() const{
+    if(m_sheet){
+        for(int i=0;i<SHEET_ROWS;i++)if(m_sheetButtons[i].HasCursor()){
+            if(i==0&&m_sheet==SHEET_ROOM&&m_owner==CZM_OnlinePlayer())return NONE;
+            return SHEET+i;
+        }
+        return SHEET+SHEET_ROWS-1; // outside: close
+    }
     if(m_selectedMemberId){
-        for(int i=0;i<6;i++)
+        static const int hits[MODAL_ROWS]={MODAL_PROFILE,MODAL_LOCAL_MUTE,MODAL_REPORT,
+            MODAL_HOST_MUTE,MODAL_KICK,MODAL_TRANSFER,MODAL_CANCEL};
+        for(int i=0;i<MODAL_ROWS;i++)
             if(m_modalButtons[i].HasCursor()){
-                if(i>=2&&i<=4&&m_owner!=CZM_OnlinePlayer())return NONE;
-                return MODAL_PROFILE+i;
+                if(i>=3&&i<=5&&m_owner!=CZM_OnlinePlayer())return NONE;
+                return hits[i];
             }
         return MODAL_CANCEL; // tapping outside closes the action sheet
     }
@@ -350,6 +390,9 @@ int CCzmLobby::Hit() const{
         if(m_offset>0&&m_buttons[0].HasCursor())return PREV;
         if(m_next>=0&&m_buttons[1].HasCursor())return NEXT;
     }else {
+        if(m_infoRect.HasCursor())return INFO;
+        for(int i=0;i<m_chatVisible;i++)if(m_chatLines[i].HasCursor())
+            return m_chat[m_chatFirst+i].sender!=CZM_OnlinePlayer()?MESSAGE+i:NONE;
         if(m_micRect.HasCursor())return VOICE_MIC;
         if(m_owner==CZM_OnlinePlayer()&&m_voiceAllRect.HasCursor())return VOICE_ALL;
         if(m_textRect.HasCursor())return CHAT;
@@ -481,6 +524,10 @@ void CCzmLobby::FinishRequest(int status,const char *body,int kind){
                                        "Muted for violations · up to 24 hours"));
             else Notice(L("Мут за нарушения правил","Muted for violations"));
         }
+        else if(!strcmp(code,"rules")){
+            m_afterRules=kind==POST_CREATE?MAKE:SEND;
+            CZM_RulesRefused(j.Int(j.Get(0,"version")),AfterRules);
+        }
         else if(!strcmp(code,"already_in_lobby"))Notice(L("Вы уже в другой комнате","You are already in a lobby"));
         else if(status==401||!strcmp(code,"account_required"))
             Notice(L("Войдите в CZM-аккаунт","Sign in to CZM"));
@@ -545,6 +592,7 @@ void CCzmLobby::FinishRequest(int status,const char *body,int kind){
         for(int i=start;i<count;i++){
             int item=j.At(array,i);
             ChatLine &msg=m_chat[m_chatCount++];
+            msg.id=j.Int(j.Get(item,"id"));
             msg.sender=j.Int(j.Get(item,"sender"));
             Q_strncpy(msg.nick,j.String(j.Get(item,"nick")),sizeof(msg.nick));
             Q_strncpy(msg.text,j.String(j.Get(item,"text")),sizeof(msg.text));
@@ -575,6 +623,15 @@ void CCzmLobby::Poll(){
 }
 void CCzmLobby::Frame(){
     Poll();
+    if(m_reportRequest){
+        int code=0;CUtlString response;
+        if(CZM_NetPoll(m_reportRequest,&code,response)){
+            m_reportRequest=0;
+            Notice(code==200?L("Жалоба отправлена. Спасибо","Report sent. Thank you"):
+                   code==429?L("Слишком много жалоб. Попробуйте позже","Too many reports. Try later"):
+                             L("Не удалось отправить жалобу","Could not send the report"));
+        }
+    }
     if(!CZM_OnlineAccount()||CL_IsActive()){
         if(CZM_LobbyVoiceStatus()!=0)CZM_LobbyVoiceStop();
         return;
@@ -623,6 +680,7 @@ void CCzmLobby::Frame(){
 }
 void CCzmLobby::SendMessage(){
     if(m_request||!m_text[0]||!m_room[0])return;
+    if(!CZM_RulesAllow(AfterRules)){m_afterRules=SEND;StopInput();return;}
     char path[140],nonce[80];CZM_NetNewKey(nonce,sizeof(nonce));
     snprintf(path,sizeof(path),"/api/v1/lobbies/%s/messages",m_room);
     CUtlString request;request.Append("{\"text\":");CZM_JsonQuote(request,m_text);
@@ -635,7 +693,31 @@ void CCzmLobby::SetReady(bool ready){
     snprintf(body,sizeof(body),"{\"revision\":%d,\"ready\":%s}",m_revision,ready?"true":"false");
     Query(POST_READY,"POST",url,body);
 }
+void CCzmLobby::Report(const char *body){
+    if(m_reportRequest){Notice(L("Жалоба уже отправляется","A report is already on its way"));return;}
+    m_reportRequest=CZM_NetRequest("POST",CZM_OnlineUrl("/api/v1/report"),CZM_OnlineKey(),body);
+    if(!m_reportRequest)Notice(L("Нет соединения","Connection unavailable"));
+}
 void CCzmLobby::Action(int hit){
+    if(m_sheet){
+        const int sheet=m_sheet;m_sheet=0;
+        if(hit==SHEET&&sheet==SHEET_MESSAGE){
+            char body[64];snprintf(body,sizeof(body),"{\"lobby_message\":%d}",m_sheetMessage);Report(body);
+        }else if(hit==SHEET+1&&sheet==SHEET_MESSAGE)CZM_OpenProfile(m_sheetSender);
+        else if(hit==SHEET&&sheet==SHEET_ROOM&&m_room[0]&&m_owner!=CZM_OnlinePlayer()){
+            CUtlString body;body.Append("{\"lobby\":");CZM_JsonQuote(body,m_room);body.Append("}");Report(body.Get());
+        }else if(hit==SHEET+1&&sheet==SHEET_ROOM)CZM_RulesShow();
+        return;
+    }
+    if(m_stage==ROOM&&hit==INFO){StopInput();m_sheet=SHEET_ROOM;return;}
+    if(m_stage==ROOM&&hit>=MESSAGE&&hit<MESSAGE+m_chatVisible){
+        const ChatLine &line=m_chat[m_chatFirst+hit-MESSAGE];
+        if(line.sender==CZM_OnlinePlayer()||line.id<=0)return;
+        StopInput();m_sheet=SHEET_MESSAGE;m_sheetMessage=line.id;m_sheetSender=line.sender;
+        Q_strncpy(m_sheetNick,line.nick[0]?line.nick:L("Игрок","Player"),sizeof(m_sheetNick));
+        Q_strncpy(m_sheetText,line.text,sizeof(m_sheetText));
+        return;
+    }
     if(m_stage==ROOM&&hit>=MEMBER&&hit<MEMBER+m_memberCount&&
        m_members[hit-MEMBER].id==CZM_OnlinePlayer()){
         StopInput();CZM_LobbyVoiceTest();return;
@@ -654,6 +736,7 @@ void CCzmLobby::Action(int hit){
             CZM_LobbyVoiceMic(false);
             return;
         }
+        if(!CZM_LobbyVoiceMicOn()&&!CZM_RulesAllow(AfterRules)){m_afterRules=VOICE_MIC;return;}
         CZM_LobbyVoiceMic(!CZM_LobbyVoiceMicOn());
         return;
     }
@@ -675,6 +758,12 @@ void CCzmLobby::Action(int hit){
             int id=m_selectedMemberId;
             CZM_LobbyVoiceLocalMute(id,!CZM_LobbyVoiceIsMuted(id));
             m_selectedMemberId=m_memberConfirm=0;return;
+        }
+        if(hit==MODAL_REPORT){
+            // the member's voice or behaviour in this room; the service checks both are here
+            CUtlString body;char target[32];snprintf(target,sizeof(target),"{\"player\":%d,\"lobby\":",m_selectedMemberId);
+            body.Append(target);CZM_JsonQuote(body,m_room);body.Append("}");
+            m_selectedMemberId=m_memberConfirm=0;Report(body.Get());return;
         }
         if(m_request)return;
         if(hit==MODAL_HOST_MUTE){
@@ -745,6 +834,7 @@ void CCzmLobby::Action(int hit){
             if(LobbyUtf8Chars(title)<3||LobbyUtf8Chars(title)>40){
                 Notice(L("Название — от 3 до 40 символов","Use 3 to 40 characters for the name"));return;
             }
+            if(!CZM_RulesAllow(AfterRules)){m_afterRules=MAKE;StopInput();return;}
             CZM_NetNewKey(m_nonce,sizeof(m_nonce));
             CUtlString body;body.Append("{\"title\":");CZM_JsonQuote(body,title);
             body.Append(",\"description\":\"\",\"visibility\":");
@@ -917,8 +1007,12 @@ void CCzmLobby::Draw(){
     }
     const char *heading=m_stage==CREATE?L("Создать лобби","Create lobby"):
                         m_stage==SEARCH?L("Поиск лобби","Find lobby"):m_roomTitle;
+    if(m_infoRect.w){
+        CzmStyle::Button(m_infoRect,"",true,false,m_pressed==INFO,accent);
+        CzmStyle::Icon(m_infoRect,UI_DIR "icon_info.png");
+    }
     const int headX=m_back.x+m_back.w+gap;
-    const int headW=m_refresh.x-headX-gap;
+    const int headW=(m_infoRect.w?m_infoRect.x:m_refresh.x)-headX-gap;
     CzmStyle::Text(CZM_Rect(headX,m_back.y-2,headW,m_back.h*62/100),heading,CZMF_UI_TITLE);
     const char *sub=m_stage==CREATE?L("Собери команду перед игрой","Bring your team together"):
                     m_stage==SEARCH?L("Публичные комнаты · Выбери свою команду","Public rooms · Find your team"):
@@ -1064,20 +1158,19 @@ void CCzmLobby::Draw(){
         CzmStyle::Round(CZM_Rect(m_micRect.x+m_micRect.w-dot,m_micRect.y,dot,dot),
             voiceState==2?CzmStyle::Success():voiceState==1?CzmStyle::AccentGold():CzmStyle::Muted(),dot/2);
         const int msgTop=m_chatRect.y+chatHead+gap/2;
-        const int msgBottom=m_textRect.y-gap;
-        const int lineH=Q_max(CZM_FontHeight(CZM_Font(CZMF_SMALL))+gap/2,1);
-        const int visible=Q_min(m_chatCount,Q_max(0,(msgBottom-msgTop)/lineH));
         if(!m_chatCount){
             CzmStyle::Text(CZM_Rect(m_chatRect.x+gap,msgTop,m_chatRect.w-gap*2,H*.05f),
                 L("Обсуди план с командой","Make a plan with your team"),CZMF_SMALL,CzmStyle::Muted());
             CzmStyle::Text(CZM_Rect(m_chatRect.x+gap,msgTop+H*.05f,m_chatRect.w-gap*2,H*.04f),
                 L("Чат и голос доступны до старта игры","Chat and voice stay here until the match starts"),CZMF_UI_META,CzmStyle::Muted());
         }
-        for(int i=0;i<visible;i++){
-            const ChatLine &msg=m_chat[m_chatCount-visible+i];
+        for(int i=0;i<m_chatVisible;i++){
+            const ChatLine &msg=m_chat[m_chatFirst+i];
+            const CzmRect &line=m_chatLines[i];
             char text[540];snprintf(text,sizeof(text),"%s: %s",msg.nick[0]?msg.nick:L("Игрок","Player"),msg.text);
-            CzmStyle::Text(CZM_Rect(m_chatRect.x+gap,msgTop+i*lineH,m_chatRect.w-gap*2,lineH),
-                text,CZMF_SMALL,msg.sender==CZM_OnlinePlayer()?PackRGBA(178,205,244,255):CzmStyle::Ink());
+            if(m_pressed==MESSAGE+i||(m_sheet==SHEET_MESSAGE&&m_sheetMessage==msg.id))
+                CzmStyle::Round(CZM_Rect(line.x-gap/2,line.y,line.w+gap,line.h),PackRGBA(36,50,68,255));
+            CzmStyle::Text(line,text,CZMF_SMALL,msg.sender==CZM_OnlinePlayer()?PackRGBA(178,205,244,255):CzmStyle::Ink());
         }
         DrawField(m_textRect,m_text[0]?m_text:L("Сообщение команде…","Message your team…"));
         CzmStyle::Button(m_sendRect,"",!m_request&&m_text[0],false,m_pressed==SEND,CzmStyle::AccentBlue());
@@ -1102,14 +1195,17 @@ void CCzmLobby::Draw(){
         bool muted=false;
         for(int i=0;i<m_memberCount;i++)if(m_members[i].id==m_selectedMemberId){nick=m_members[i].nick;muted=m_hostMuted[i];break;}
         CzmStyle::Text(CZM_Rect(m_modal.x+pad,m_modal.y+pad,m_modal.w-pad*2,m_back.h),nick,CZMF_UI_TITLE);
-        const char *labels[]={L("Открыть профиль","Open profile"),
+        const char *labels[MODAL_ROWS]={L("Открыть профиль","Open profile"),
             CZM_LobbyVoiceIsMuted(m_selectedMemberId)?L("Включить звук у себя","Unmute for me"):L("Выключить звук у себя","Mute for me"),
+            L("Пожаловаться на игрока","Report player"),
             muted?L("Разрешить микрофон","Allow microphone"):L("Выключить микрофон игроку","Mute player for everyone"),
             m_memberConfirm==1?L("Подтвердить исключение","Confirm kick"):L("Исключить из лобби","Kick from lobby"),
             m_memberConfirm==2?L("Подтвердить передачу","Confirm transfer"):L("Передать права хозяина","Transfer host"),L("Закрыть","Close")};
-        for(int i=0;i<6;i++)CzmStyle::Button(m_modalButtons[i],labels[i],
-            !(i>=2&&i<=4)||m_owner==CZM_OnlinePlayer(),i==3&&m_memberConfirm==1,false,i==3?CzmStyle::AccentRed():0);
+        for(int i=0;i<MODAL_ROWS;i++)CzmStyle::Button(m_modalButtons[i],labels[i],
+            !(i>=3&&i<=5)||m_owner==CZM_OnlinePlayer(),i==4&&m_memberConfirm==1,i==2&&m_pressed==MODAL_REPORT,
+            i==4||i==2?CzmStyle::AccentRed():0);
     }
+    if(m_sheet)DrawSheet();
     if(m_notice[0]&&EngFuncs::DoubleTime()<m_noticeUntil){
         const int height=Q_max(22,(int)(H*.048f));
         const int width=Q_min(m_panel.w-pad*2,CZM_TextWidth(CZM_Font(CZMF_UI_META),m_notice)+pad*2);
@@ -1118,7 +1214,33 @@ void CCzmLobby::Draw(){
         CzmStyle::Text(CZM_Rect(toast.x+pad/2,toast.y,toast.w-pad,toast.h),m_notice,CZMF_UI_META,CzmStyle::Ink(),QM_CENTER);
     }
 }
+void CCzmLobby::DrawSheet(){
+    UI_FillRect(0,0,W,H,PackRGBA(2,6,12,205));
+    CzmStyle::Surface(m_sheetRect,PackRGBA(18,26,38,255));
+    const int gap=Q_max(5,(int)(H*.016f)),header=Q_max(32,(int)(H*.070f));
+    const int contextH=Q_max(14,CZM_FontHeight(CZM_Font(CZMF_SMALL))+gap);
+    const CzmRect text=CZM_Rect(m_sheetRect.x+pad,m_sheetRect.y+pad,m_sheetRect.w-pad*2,header);
+    const CzmRect context=CZM_Rect(text.x,text.y+text.h,text.w,contextH);
+    const bool room=m_sheet==SHEET_ROOM,own=m_owner==CZM_OnlinePlayer();
+    CzmStyle::Text(text,room?m_roomTitle:m_sheetNick,CZMF_UI_TITLE);
+    char quote[460];
+    if(room)Q_strncpy(quote,own?L("Ваше лобби","Your lobby"):L("Название и описание видят все игроки","Everyone sees the name and description"),sizeof(quote));
+    else snprintf(quote,sizeof(quote),"«%s»",m_sheetText);
+    CzmStyle::Text(context,quote,CZMF_SMALL,CzmStyle::Muted());
+    const char *labels[SHEET_ROWS]={
+        room?L("Пожаловаться на лобби","Report lobby"):L("Пожаловаться на сообщение","Report message"),
+        room?L("Правила сообщества","Community rules"):L("Открыть профиль","Open profile"),
+        L("Закрыть","Close")};
+    for(int i=0;i<SHEET_ROWS;i++)
+        CzmStyle::Button(m_sheetButtons[i],labels[i],!(i==0&&room&&own),false,m_pressed==SHEET+i,
+            i==0?CzmStyle::AccentRed():0);
+}
 ADD_MENU3(menu_czmlobby,CCzmLobby,UI_CzmLobby_Menu);
+void CCzmLobby::AfterRules(){
+    if(!s_lobby||!s_lobby->m_open||!s_lobby->m_afterRules)return;
+    const int hit=s_lobby->m_afterRules;s_lobby->m_afterRules=0;
+    s_lobby->Action(hit);
+}
 void UI_CzmLobby_Menu(void){menu_czmlobby->Open(false);}
 void CZM_OpenLobbyCreate(void){menu_czmlobby->Open(true);}
 void CZM_OpenLobbySearch(void){menu_czmlobby->Open(false);}

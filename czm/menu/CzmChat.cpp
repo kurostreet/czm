@@ -124,6 +124,8 @@ private:
 	void Poll( void );
 	void ReadMessages( CzmChatRoom &room, const char *body );
 	void Send( void );
+	static void AfterRules( void ); // the message waits in the field while the rules are read
+	friend void CZM_ChatHidePlayer( int player );
 	void Report( bool avatar );
 	void Toast( const char *text );
 
@@ -367,6 +369,8 @@ void CCzmChat::Poll( void )
 				Toast( CZM_T( "chat_repeat" ));
 			else if( !strcmp( error, "banned" ))
 				CZM_OnlineReadBan( j, j.Get( 0, "ban" ));
+			else if( !strcmp( error, "rules" ))
+				CZM_RulesRefused( j.Int( j.Get( 0, "version" )), AfterRules );
 			else if( strcmp( error, "empty" ))
 				Toast( CZM_T( "chat_offline" ));
 		}
@@ -395,6 +399,8 @@ void CCzmChat::Send( void )
 		Toast( CZM_T( "chat_offline" ));
 		return;
 	}
+	if( !CZM_RulesAllow( AfterRules ))
+		return;
 
 	body.Append( "{\"text\":" );
 	CZM_JsonQuote( body, p );
@@ -1051,6 +1057,12 @@ void CCzmChat::Draw()
 
 ADD_MENU3( menu_czmchat, CCzmChat, UI_CzmChat_Menu );
 
+void CCzmChat::AfterRules( void )
+{
+	if( menu_czmchat && menu_czmchat->m_szInput[0] )
+		menu_czmchat->Send();
+}
+
 void UI_CzmChat_Menu( void )
 {
 	menu_czmchat->Show();
@@ -1059,4 +1071,19 @@ void UI_CzmChat_Menu( void )
 void CZM_OpenChat( void )
 {
 	UI_CzmChat_Menu();
+}
+
+// a blocked player disappears at once; the service leaves him out of the next answers
+void CZM_ChatHidePlayer( int player )
+{
+	if( !menu_czmchat || player <= 0 )
+		return;
+	for( int r = 0; r < ROOMS; r++ )
+	{
+		CUtlVector<CzmChatMessage> &messages = menu_czmchat->m_rooms[r].messages;
+		for( int i = messages.Count() - 1; i >= 0; i-- )
+			if( messages[i].player == player )
+				messages.Remove( i );
+	}
+	menu_czmchat->m_iPopup = -1;
 }

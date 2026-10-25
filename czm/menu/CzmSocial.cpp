@@ -180,10 +180,11 @@ private:
 	void DrawList(); void DrawProfile(); void DrawDialog(); void Field( const char *placeholder );
 	int MessageHeight( const Message &m );
 	void BuildPicks(); void SendInvite( int index ); void DrawPicker();
+	static void AfterRules(); // the message or the status waits in the field while the rules are read
 	bool Pressed( int hit ) { return m_pressed == hit && Hit() == hit; }
 	int m_mode, m_tab, m_target, m_returnMode, m_view, m_epoch, m_pressed, m_chatMessage;
 	int m_read, m_readView, m_readKind, m_write, m_writeView, m_writeKind, m_ack;
-	int m_offset, m_nextOffset, m_before, m_nextBefore;
+	int m_offset, m_nextOffset, m_before, m_nextBefore, m_blocking;
 	bool m_open, m_typing, m_loaded, m_canSend, m_editStatus, m_outside, m_joinPending;
 	bool m_drag, m_moved; int m_downY; float m_downScroll, m_scroll;
 	char m_input[1604], m_sent[1604], m_nonce[80], m_nonceText[1604], m_notice[220], m_confirm[24];
@@ -204,7 +205,7 @@ CCzmSocial::CCzmSocial() : CMenuFramework( "CzmSocial" )
 {
 	s_window=this; m_mode=LIST; m_tab=m_target=m_view=m_epoch=m_pressed=m_returnMode=m_chatMessage=0;
 	m_read=m_readView=m_readKind=m_write=m_writeView=m_writeKind=m_ack=0;
-	m_offset=m_before=m_nextBefore=0; m_nextOffset=-1;
+	m_offset=m_before=m_nextBefore=m_blocking=0; m_nextOffset=-1;
 	m_open=m_typing=m_loaded=m_canSend=m_editStatus=m_outside=m_joinPending=m_drag=m_moved=false;
 	m_pickOpen=false; m_pickCount=0;
 	m_scroll=m_downScroll=0; m_downY=0; m_nextFetch=m_noticeUntil=0; W=H=pad=0;
@@ -278,6 +279,7 @@ void CCzmSocial::Follow( const char *action )
 {
 	if( !Account() ) { CZM_AccountShow(CZM_OnlineKey(),EngFuncs::GetCvarString("name")); return; }
 	char body[128]; snprintf(body,sizeof(body),"{\"target\":%d,\"action\":\"%s\"}",m_target,action);
+	m_blocking=!strcmp(action,"block")?m_target:0;
 	Write(WRITE_ACTION,"/api/v1/social/action",body);
 }
 void CCzmSocial::Send()
@@ -338,13 +340,17 @@ void CCzmSocial::Frame()
 	if(m_write && CZM_NetPoll(m_write,&status,body)){
 		m_write=0;CzmJson j;bool parsed=j.Parse(body.Get());
 		if(status==200&&parsed){Counts(j);s_nextPresence=0;
+			if(m_writeKind==WRITE_ACTION&&m_blocking)CZM_ChatHidePlayer(m_blocking);
+			m_blocking=0;
 			if(m_open&&m_writeView==m_view){
 				if(m_writeKind==WRITE_MESSAGE){if(!strcmp(m_input,m_sent))m_input[0]=0;m_nonce[0]=0;m_before=0;m_scroll=0;}
 				if(m_writeKind==WRITE_STATUS){m_editStatus=false;EndInput();m_input[0]=0;}
 				if(m_writeKind==WRITE_REPORT)Notice(T("Жалоба отправлена","Report sent"));
 				m_nextFetch=0;
 			}
-		}else if(m_open&&m_writeView==m_view){Notice(SocialError(parsed?j.String(j.Get(0,"error")):""));if(status==403&&m_mode==DIALOG)m_canSend=false;}
+		}else if(m_open&&m_writeView==m_view&&parsed&&!strcmp(j.String(j.Get(0,"error")),"rules")){m_blocking=0;CZM_RulesRefused(j.Int(j.Get(0,"version")),AfterRules);
+		}else if(m_open&&m_writeView==m_view){m_blocking=0;Notice(SocialError(parsed?j.String(j.Get(0,"error")):""));if(status==403&&m_mode==DIALOG)m_canSend=false;}
+		else m_blocking=0;
 	}
 	if(m_ack&&CZM_NetPoll(m_ack,&status,body)){m_ack=0;CzmJson j;if(status==200&&j.Parse(body.Get()))Counts(j);}
 	if(m_open && m_pStack->Current()==this && !m_write && EngFuncs::DoubleTime()>=m_nextFetch)Fetch();
@@ -536,6 +542,7 @@ void CCzmSocial::Activate( int hit )
 	}
 	if(hit==EDIT){if(!Account()){CZM_AccountShow(CZM_OnlineKey(),EngFuncs::GetCvarString("name"));return;}m_editStatus=true;Layout();Input(m_profile.status);return;}
 	if(hit==SETTINGS){CZM_OpenSettings(CZM_TAB_PROFILE);return;}
+	if(hit==SEND&&(m_editStatus?m_input[0]!=0:m_input[0]&&m_canSend)&&!m_write&&!CZM_RulesAllow(AfterRules))return;
 	if(hit==SEND){if(m_editStatus){CUtlString body;body.Append("{\"text\":");CZM_JsonQuote(body,m_input);body.Append("}");Write(WRITE_STATUS,"/api/v1/social/status",body.Get());}else Send();return;}
 	if(hit==PRIMARY){
 		if(!m_profile.account){Notice(T("Игроку нужно зарегистрироваться, чтобы добавить его в друзья","This player needs to register before you can add them"));return;}
@@ -802,6 +809,11 @@ void CCzmSocial::Draw()
 }
 
 ADD_MENU3( menu_czmsocial, CCzmSocial, UI_CzmSocial_Menu );
+
+void CCzmSocial::AfterRules()
+{
+	if(s_window&&s_window->m_open)s_window->Activate(SEND);
+}
 void UI_CzmSocial_Menu( void )
 {
 	int player=atoi(EngFuncs::GetCvarString("czm_open_profile"));

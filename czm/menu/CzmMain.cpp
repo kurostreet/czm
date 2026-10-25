@@ -29,7 +29,7 @@ GNU General Public License for more details.
 
 #define UI_DIR "gfx/czm/ui/"
 #define CZM_MAX_TILES 8
-#define CZM_ABOUT_ROWS 7
+#define CZM_ABOUT_ROWS 8
 
 #define CZM_CONTACT_URL "mailto:kuro.street.inc@gmail.com"
 #define CZM_GROUP_URL "https://t.me/counter_zombie_mobile"
@@ -113,6 +113,7 @@ private:
 		HIT_ABOUT_SITE,
 		HIT_UPDATE,
 		HIT_ABOUT_SOURCE,
+		HIT_ABOUT_RULES,
 		HIT_QUICK,                  // quick play under the logo
 		HIT_LOBBY_CREATE,          // start a temporary team room
 		HIT_LOBBY_SEARCH,          // browse public rooms
@@ -325,7 +326,7 @@ void CCzmMainMenu::Layout( void )
 	{
 		bool about = m_overlay == OV_ABOUT, bell = m_overlay == OV_BELL;
 		int pw = about || bell ? Q_min( (int)( H * 1.16f ), (int)( W * 0.80f )) : Q_min( (int)( H * 1.0f ), (int)( W * 0.62f ));
-		int ph = H * ( about ? 0.74f : bell ? ( CZM_NewsCount() ? 0.72f : CZM_Update() ? 0.48f : 0.38f ) : 0.62f );
+		int ph = H * ( about ? 0.80f : bell ? ( CZM_NewsCount() ? 0.72f : CZM_Update() ? 0.48f : 0.38f ) : 0.62f );
 		int pad = H * 0.03f;
 		int closeSize = H * 0.075f;
 		int rowH = H * 0.062f, y;
@@ -339,7 +340,7 @@ void CCzmMainMenu::Layout( void )
 		y = m_aboutLogo.y + m_aboutLogo.h + H * 0.015f;
 		for( int i = 0; i < CZM_ABOUT_ROWS; i++ )
 			m_aboutRows[i] = CZM_Rect( m_panel.x + pad, y + i * rowH, pw - pad * 2, rowH );
-		m_version = m_aboutRows[4];
+		m_version = m_aboutRows[5];
 
 		// bell: the update card on top, the news under it
 		m_update = CZM_Rect( m_panel.x + pad, m_iPanelLineY + H * 0.025f, pw - pad * 2, CZM_Update() ? (int)( H * 0.25f ) : 0 );
@@ -396,6 +397,8 @@ int CCzmMainMenu::HitTest( void ) const
 			if( m_overlay == OV_ABOUT && m_aboutRows[2].HasCursor( ))
 				return HIT_ABOUT_SITE;
 			if( m_overlay == OV_ABOUT && m_aboutRows[3].HasCursor( ))
+				return HIT_ABOUT_RULES;
+			if( m_overlay == OV_ABOUT && m_aboutRows[4].HasCursor( ))
 				return HIT_ABOUT_SOURCE;
 			if( m_overlay == OV_BELL && CZM_Update() && m_updateButton.Grown( grow ).HasCursor( ))
 				return HIT_UPDATE;
@@ -483,6 +486,9 @@ void CCzmMainMenu::Activate( int hit )
 		break;
 	case HIT_ABOUT_SOURCE:
 		EngFuncs::ShellExecute( CZM_SOURCE_URL, NULL, false );
+		break;
+	case HIT_ABOUT_RULES:
+		CZM_RulesShow();
 		break;
 	case HIT_SETUP_RU:
 	case HIT_SETUP_EN:
@@ -1069,9 +1075,9 @@ void CCzmMainMenu::DrawNav( void )
 
 void CCzmMainMenu::DrawAbout( void )
 {
-	static const char *icons[CZM_ABOUT_ROWS] = { UI_DIR "icon_send.png", UI_DIR "icon_users.png", UI_DIR "icon_globe.png", UI_DIR "icon_code.png",
-		UI_DIR "icon_tag.png", UI_DIR "icon_calendar.png", UI_DIR "icon_gear.png" };
-	static const char *labels[CZM_ABOUT_ROWS] = { "about_tg", "about_group", "about_site", "about_source", "about_version", "about_updated", "about_engine" };
+	static const char *icons[CZM_ABOUT_ROWS] = { UI_DIR "icon_send.png", UI_DIR "icon_users.png", UI_DIR "icon_globe.png", UI_DIR "icon_info.png",
+		UI_DIR "icon_code.png", UI_DIR "icon_tag.png", UI_DIR "icon_calendar.png", UI_DIR "icon_gear.png" };
+	static const char *labels[CZM_ABOUT_ROWS] = { "about_tg", "about_group", "about_site", "about_rules", "about_source", "about_version", "about_updated", "about_engine" };
 	HFont labelFont = CZM_Font( CZMF_PANEL_TEXT );
 	HFont valueFont = CZM_Font( CZMF_TILE_STATUS );
 	const CzmRect &logoRow = m_aboutLogo;
@@ -1088,9 +1094,10 @@ void CCzmMainMenu::DrawAbout( void )
 	for( int i = 0; i < CZM_ABOUT_ROWS; i++ )
 	{
 		const CzmRect &r = m_aboutRows[i];
-		bool link = i <= 3;
+		bool link = i <= 4;
 		bool pressed = ( i == 0 && IsPressed( HIT_ABOUT_TELEGRAM )) || ( i == 1 && IsPressed( HIT_ABOUT_GROUP ))
-			|| ( i == 2 && IsPressed( HIT_ABOUT_SITE )) || ( i == 3 && IsPressed( HIT_ABOUT_SOURCE ));
+			|| ( i == 2 && IsPressed( HIT_ABOUT_SITE )) || ( i == 3 && IsPressed( HIT_ABOUT_RULES ))
+			|| ( i == 4 && IsPressed( HIT_ABOUT_SOURCE ));
 		int chip = r.h * 0.62f, icon = chip * 0.52f, chevron = r.h * 0.30f;
 		int labelX = r.x + chip + H * 0.022f, valueRight = r.x + r.w - ( link ? chevron + H * 0.012f : 0 );
 		const char *value;
@@ -1102,9 +1109,13 @@ void CCzmMainMenu::DrawAbout( void )
 		case 0: value = "kuro.street.inc@gmail.com"; valueColor = PackRGBA( 125, 196, 255, 255 ); break;
 		case 1: value = "t.me/counter_zombie_mobile"; valueColor = PackRGBA( 125, 196, 255, 255 ); break;
 		case 2: value = "counter-zombie.ru"; valueColor = PackRGBA( 125, 196, 255, 255 ); break;
-		case 3: value = "github.com/kurostreet/czm"; valueColor = PackRGBA( 125, 196, 255, 255 ); break;
-		case 4: value = CZM_Version(); break;
-		case 5: value = date; break;
+		case 3:
+			value = CZM_RulesConfirmed() ? CZM_T( "about_rules_ok" ) : CZM_T( "about_rules_read" );
+			valueColor = CZM_RulesConfirmed() ? PackRGBA( 107, 218, 167, 255 ) : PackRGBA( 125, 196, 255, 255 );
+			break;
+		case 4: value = "github.com/kurostreet/czm"; valueColor = PackRGBA( 125, 196, 255, 255 ); break;
+		case 5: value = CZM_Version(); break;
+		case 6: value = date; break;
 		default: value = "Xash3D FWGS (GPL)"; break;
 		}
 

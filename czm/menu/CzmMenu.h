@@ -224,6 +224,15 @@ bool CZM_DiagnosticsRequired( const char *reason );
 void CZM_ShowNotice( const char *title, const char *text, const char *details = "", bool diagnostics = false );
 void CZM_ShowMessage( const char *text );
 
+// community rules: accepted once before writing, talking or showing a photo to others
+void CZM_RulesSetState( int version, bool accepted, const char *url ); // from hello; version 0: not asked
+bool CZM_RulesAccepted( void );  // true also when the service does not ask for them
+bool CZM_RulesConfirmed( void ); // the service knows this player accepted them
+bool CZM_RulesAllow( void ( *then )( void ) = NULL ); // false: the rules window opened, then() runs once accepted
+void CZM_RulesRefused( int version, void ( *then )( void ) = NULL ); // the service answered 403 "rules"
+void CZM_RulesShow( void );  // read them again
+void CZM_RulesFrame( void ); // every frame
+
 bool CZM_NickIsValid( const char *nick );
 void CZM_SetNick( const char *nick );
 
@@ -384,6 +393,7 @@ const char *CZM_AvatarFor( const char *ref, int player );
 
 // chat window (czm/menu/CzmChat.cpp)
 void CZM_OpenChat( void );
+void CZM_ChatHidePlayer( int player ); // after a block: his messages go at once
 
 // Account profiles, friends and private dialogs (independent of game-server mods).
 void CZM_OpenFriends( void );
