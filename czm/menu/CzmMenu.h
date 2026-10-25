@@ -214,10 +214,16 @@ enum
 	CZM_TAB_GAME,
 	CZM_TAB_HUD,
 	CZM_TAB_PROFILE,
+	CZM_TAB_ABOUT,      // the project, contacts, rules, version (moved from the bottom bar)
 	CZM_TAB_COUNT
 };
 
 void CZM_OpenSettings( int tab );
+#define CZM_CONTACT_URL "mailto:kuro.street.inc@gmail.com"
+#define CZM_GROUP_URL "https://t.me/counter_zombie_mobile"
+#define CZM_SITE_URL "https://counter-zombie.ru"
+#define CZM_SOURCE_URL "https://github.com/kurostreet/czm"
+void CZM_BuildDate( char *out, size_t size ); // when this build was made, for "About"
 int CZM_DiagnosticsMode( void );
 void CZM_SetDiagnosticsMode( int mode );
 bool CZM_DiagnosticsRequired( const char *reason );
@@ -386,6 +392,13 @@ bool CZM_OnlineSupport( void );
 int CZM_SupportTagWidth( int h );
 int CZM_DrawSupportTag( int x, int y, int h ); // returns its width
 bool CZM_OnlineLimited( int kind, char *text = NULL, size_t size = 0 ); // text: what to tell the player
+// the Top 100 by time on game servers (czm/menu/CzmTop.cpp): 1-3 own crowns, gold to 10, silver to 50, bronze to 100
+void CZM_OpenTop( void );
+unsigned int CZM_TopColor( int place );
+const char *CZM_TopCrown( int place );
+int CZM_TopTagWidth( int place, int h );              // 0 outside the hundred
+int CZM_DrawTopTag( int x, int y, int h, int place ); // returns its width
+void CZM_FormatPlaytime( int seconds, char *out, size_t size ); // "125 ч 34 мин"
 void CZM_OnlineSetLimit( int kind, const CzmJson &j, int node );         // from a refused post
 void CZM_OnlineReadBan( const CzmJson &j, int ban );
 int CZM_NewsUnread( void );

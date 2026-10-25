@@ -38,7 +38,13 @@ class SettingsRowsTests(unittest.TestCase):
 #include <vector>
 #define UI_DIR "gfx/czm/ui/"
 using HFont=int;
-enum {CZM_TAB_CONTROLS,CZM_TAB_GRAPHICS,CZM_TAB_SOUND,CZM_TAB_GAME,CZM_TAB_HUD,CZM_TAB_PROFILE,CZM_TAB_COUNT};
+enum {CZM_TAB_CONTROLS,CZM_TAB_GRAPHICS,CZM_TAB_SOUND,CZM_TAB_GAME,CZM_TAB_HUD,CZM_TAB_PROFILE,CZM_TAB_ABOUT,CZM_TAB_COUNT};
+#define CZM_CONTACT_URL "mailto:x"
+#define CZM_GROUP_URL "https://t.me/x"
+#define CZM_SITE_URL "https://x"
+#define CZM_SOURCE_URL "https://github.com/x"
+static int opened,rulesShown,consoles;
+void CZM_RulesShow(){rulesShown++;}void CZM_OpenConsole(){consoles++;}
 enum {CZMF_TILE_STATUS,CZMF_PANEL_TITLE,CZMF_SMALL,QM_CENTER=1,QM_TOP=2,ETF_NO_WRAP=4,ETF_FORCECOL=8};
 const int CZM_XHAIR_COLORS=5,CZM_AVATAR_PHOTO=10,CZM_AVATAR_LOGO=11;
 int ScreenWidth=1536,ScreenHeight=716,mode=1,changes=0,saves=0;
@@ -52,6 +58,7 @@ struct CzmRect{int x=0,y=0,w=0,h=0;
 CzmRect CZM_Rect(int x,int y,int w,int h){CzmRect r;r.x=x;r.y=y;r.w=w;r.h=h;return r;}
 CzmRect CzmRect::Grown(int d)const{return CZM_Rect(x-d,y-d,w+2*d,h+2*d);}
 struct EngFuncs{static float GetCvarFloat(const char*){return 0;}static const char*GetCvarString(const char*){return "test";}
+ static void ShellExecute(const char*,const char*,bool){opened++;}static double DoubleTime(){return 100;}
  static void CvarSetString(const char*,const char*){}static void ClientCmd(bool,const char*){saves++;}};
 int CZM_DiagnosticsMode(){return mode;}void CZM_SetDiagnosticsMode(int v){mode=v;changes++;saves++;}
 bool CZM_ColorPickerEvent(int&,int&,int&){return false;}bool CL_IsActive(){return false;}
@@ -80,7 +87,7 @@ struct Edit{void End(){}void Begin(const char*,const CzmRect&){};} ;
 ''' + bindings + rows + r'''
 class CCzmSettings{public:
 ''' + hit_enum + row_layout + r'''
- int m_iTab=CZM_TAB_GAME,m_iScroll=0,m_iMaxScroll=0,m_iPressed=0,m_iMicPing=0;
+ int m_iTab=CZM_TAB_GAME,m_iScroll=0,m_iMaxScroll=0,m_iPressed=0,m_iMicPing=0,m_iVersionTaps=0;double m_flVersionTap=0;
  bool m_bConfirm=false,m_bMicTest=false,m_bMicHeard=false;
  int W=0,H=0;CzmRect m_back,m_tabs[CZM_TAB_COUNT],m_panel,m_clip,m_confirmPanel,m_confirmNo,m_confirmYes;
  RowLayout m_rows[MAX_ROWS];Edit m_nick;std::vector<int> drawn;
@@ -118,6 +125,19 @@ int main(){
    int before=changes,priorSaves=saves;w.Activate(hit);
    assert(mode==choice&&changes==before+1&&saves==priorSaves+1);
   }
+ }
+ // About: links open, the rules show, five taps on the version open the console, the rest is text
+ {
+  ScreenWidth=1536;ScreenHeight=716;CCzmSettings w;w.OpenTab(CZM_TAB_ABOUT);w.Layout();assert(w.RowCount()==8);
+  for(int i=0;i<w.RowCount();i++){
+   const auto&r=w.m_rows[i];assert(r.rect.h>0&&r.rect.y>=w.m_clip.y&&r.rect.y+r.rect.h<=w.m_clip.y+w.m_clip.h);
+   uiStatic.cursorX=r.rect.x+r.rect.w/2;uiStatic.cursorY=r.rect.y+r.rect.h/2;
+   const int hit=w.HitTest();
+   if(i>5){assert(hit==w.HIT_NONE);continue;}
+   assert(hit==w.HIT_ROW+i*20);
+   for(int tap=0;tap<(i==5?5:1);tap++)w.Activate(hit);
+  }
+  assert(opened==4&&rulesShown==1&&consoles==1);
  }
  puts("SETTINGS_LAST_ROW_VISIBLE_AND_SELECTABLE_OK");
 }

@@ -82,6 +82,15 @@ def profile(conn, viewer, target, compact=False):
     staff = moderation.role(conn, target)
     if staff:
         result["role"] = staff
+    from . import playtime
+    if not compact:
+        standing = playtime.standing(conn, target)
+        if standing and not hidden:
+            result["top"] = standing          # the exact place and the time on servers
+    else:
+        place = playtime.places(conn).get(target)
+        if place and not hidden:
+            result["top"] = {"place": place, "tier": playtime.tier(place)}
     if online and rel in ("self", "friend"):
         result.update(server=presence["server"], map=presence["map"])
         from . import lobbies
@@ -116,6 +125,8 @@ def heartbeat(conn, key, server="", map_name=""):
     conn.execute("INSERT INTO social_presence VALUES(?,?,?,?,?) ON CONFLICT(owner) DO UPDATE SET player=excluded.player,seen=excluded.seen,server=excluded.server,map=excluded.map",
                  (service.hash_secret(key), player["id"], t, server, map_name if server else ""))
     conn.execute("INSERT INTO social_profiles(player,last_seen) VALUES(?,?) ON CONFLICT(player) DO UPDATE SET last_seen=excluded.last_seen", (player["id"], t))
+    from . import playtime
+    playtime.accrue(conn, player["id"], service.hash_secret(key), bool(server), t)  # only time connected to a game server
     registered = bool(conn.execute("SELECT 1 FROM accounts WHERE player=?", (player["id"],)).fetchone())
     if registered:
         notifications.baseline(conn, player["id"], get_settings().room_list)

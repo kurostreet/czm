@@ -77,6 +77,7 @@ struct Person
 	int togetherCount, togetherSize, lobbyCount, lobbyCapacity;
     char lobbyId[64];
 	bool account, online, playing, support;
+	int topPlace, topSeconds; // the Top 100: the exact place and the time on servers (0: no time yet)
 	char nick[100], avatar[32], status[404], relation[24], server[64], map[65], last[1604];
 };
 struct Message { int id, player, time; bool deleted; char text[1604]; };
@@ -105,6 +106,8 @@ void ReadPerson( Person &p, const CzmJson &j, int item )
 	memset( &p, 0, sizeof( p ));
 	p.id = j.Int( j.Get( item, "id" )); p.created = j.Int( j.Get( item, "created" )); p.lastSeen = j.Int( j.Get( item, "last_seen" ));
 	p.support = !strcmp( j.String( j.Get( item, "role" )), "support" );
+	p.topPlace = j.Int( j.Get( j.Get( item, "top" ), "place" ));
+	p.topSeconds = j.Int( j.Get( j.Get( item, "top" ), "seconds" ));
 	p.account = j.Bool( j.Get( item, "account" )); p.online = j.Bool( j.Get( item, "online" )); p.playing = j.Bool( j.Get( item, "playing" ));
 	p.unread = j.Int( j.Get( item, "unread" ));
 	int together = j.Get( item, "together" );
@@ -771,10 +774,15 @@ void CCzmSocial::DrawProfile()
 	CZM_DrawImage(UI_DIR "icon_ring.png",ax-ring,ay-ring,av+ring*2,av+ring*2,PackRGBA(236,72,86,(int)(150+70*wave)));
 	const int tx=m_copy.x,tw=m_hero.x+m_hero.w-gap*2-tx;
 	{
-		const int nh=CZM_FontHeight(nickFont),tagH=nh*82/100,tagW=p.support?CZM_SupportTagWidth(tagH)+gap:0;
-		const int nw=Q_min(CZM_TextWidth(nickFont,p.nick)+2,tw-tagW);
+		// the nick, then the official role and the current Top 100 rank: both, independent
+		const int nh=CZM_FontHeight(nickFont),tagH=nh*82/100;
+		const int supportW=p.support?CZM_SupportTagWidth(tagH)+gap:0,topW=CZM_TopTagWidth(p.topPlace,tagH);
+		const int tagW=supportW+(topW?topW+gap:0);
+		const int nw=Q_max(0,Q_min(CZM_TextWidth(nickFont,p.nick)+2,tw-tagW));
 		CZM_DrawText(nickFont,tx,m_hero.y+gap,nw,p.nick,Ink());
-		if(p.support)CZM_DrawSupportTag(tx+nw+gap,m_hero.y+gap+(nh-tagH)/2,tagH);
+		int x=tx+nw+gap;
+		if(p.support)x+=CZM_DrawSupportTag(x,m_hero.y+gap+(nh-tagH)/2,tagH)+gap;
+		if(topW)CZM_DrawTopTag(x,m_hero.y+gap+(nh-tagH)/2,tagH,p.topPlace);
 	}
 	// the ID with a copy sign: the ID of this very player
 	{
@@ -790,6 +798,16 @@ void CCzmSocial::DrawProfile()
 		const int sy=m_copy.y+m_copy.h+gap/2,dot=Q_max(7,(int)(H*.012f)),fh=CZM_FontHeight(CZM_Font(CZMF_SMALL));
 		CZM_DrawImage(UI_DIR "dot.png",tx,sy+(fh-dot)/2,dot,dot,p.online?PackRGBA(66,216,137,255):PackRGBA(120,128,142,255));
 		CZM_DrawText(CZM_Font(CZMF_SMALL),tx+dot+gap,sy,tw-dot-gap,seen,p.online?PackRGBA(112,220,161,255):Muted());
+		// the place among all players and the time on game servers
+		if(p.topSeconds>0&&p.topPlace>0){
+			char time[48],line[120];CZM_FormatPlaytime(p.topSeconds,time,sizeof(time));
+			if(p.topPlace<=100)snprintf(line,sizeof(line),T("№%d в Топ 100  ·  %s на серверах","#%d in the Top 100  ·  %s on servers"),p.topPlace,time);
+			else snprintf(line,sizeof(line),T("Место №%d  ·  %s на серверах","Place #%d  ·  %s on servers"),p.topPlace,time);
+			const int ly=sy+fh+gap/2,icon=fh;
+			const unsigned color=p.topPlace<=100?CZM_TopColor(p.topPlace):Muted();
+			CZM_DrawImage(CZM_TopCrown(p.topPlace),tx,ly,icon,icon,color);
+			CZM_DrawText(CZM_Font(CZMF_SMALL),tx+icon+gap/2,ly,tw-icon-gap/2,line,p.topPlace<=100?color:Muted());
+		}
 	}
 	// the status: the whole row edits it on the own card
 	if(m_editStatus){

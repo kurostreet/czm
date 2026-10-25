@@ -50,7 +50,8 @@ void CZM_DrawMapPreview(const char*,int,int,int,int,const char*);
 bool CZM_RulesAllow(void(*)()=nullptr);void CZM_RulesRefused(int,void(*)()=nullptr);void CZM_ChatHidePlayer(int);
 using HIMAGE=int;HIMAGE CZM_MapPreview(const char*);HIMAGE CZM_Image(const char*);const char*CZM_MapModeArt(const char*,const char*);void CZM_DrawCover(HIMAGE,int,int,int,int);
 enum{CZM_LIMIT_TEXT,CZM_LIMIT_VOICE,CZM_LIMIT_PHOTO,CZM_LIMIT_COUNT};bool CZM_OnlineSupport();int CZM_SupportTagWidth(int);int CZM_DrawSupportTag(int,int,int);
-bool CZM_OnlineLimited(int,char* =nullptr,size_t=0);void CZM_ModerationOpen();void CZM_ModerationTarget(int,const char*,int=0,int=0,const char* ="");
+bool CZM_OnlineLimited(int,char* =nullptr,size_t=0);void CZM_ModerationOpen();
+unsigned CZM_TopColor(int);const char*CZM_TopCrown(int);int CZM_TopTagWidth(int,int);int CZM_DrawTopTag(int,int,int,int);void CZM_FormatPlaytime(int,char*,size_t);void CZM_ModerationTarget(int,const char*,int=0,int=0,const char* ="");
 struct CzmServer{char address[64];char prot[8];char name[64];};int CZM_ServerCount();CzmServer *CZM_Server(int);void CZM_CleanName(const char*,char*,size_t);void CZM_DrawSliced(const char*,int,int,int,int,int,int,unsigned=0xffffffff);
 '''
 HARNESS = r'''
@@ -89,7 +90,12 @@ static bool support,textLimited;static int moderationOpened,moderationTarget,mod
 bool CZM_OnlineSupport(){return support;}int CZM_SupportTagWidth(int h){return h*4;}
 int CZM_DrawSupportTag(int x,int y,int h){supportTags++;UI_FillRect(x,y,h*4,h,PackRGBA(196,150,62,255));return h*4;}
 bool CZM_OnlineLimited(int k,char*t,size_t n){if(k!=CZM_LIMIT_TEXT||!textLimited)return false;if(t&&n)Q_strncpy(t,"Чат ограничен модератором до 01.11 12:00. Спам",n);return true;}
-void CZM_ModerationOpen(){moderationOpened++;}void CZM_ModerationTarget(int id,const char*,int message,int,const char*){moderationTarget=id;moderationMessage=message;}
+void CZM_ModerationOpen(){moderationOpened++;}
+static int topTags;unsigned CZM_TopColor(int place){return place<=100?PackRGBA(231,187,96,255):PackRGBA(150,150,150,255);}
+const char*CZM_TopCrown(int){return "gfx/czm/ui/icon_crown_top.png";}
+int CZM_TopTagWidth(int place,int h){return place>=1&&place<=100?h*4:0;}
+int CZM_DrawTopTag(int x,int y,int h,int place){if(place<1||place>100)return 0;topTags++;UI_FillRect(x,y,h*4,h,CZM_TopColor(place));return h*4;}
+void CZM_FormatPlaytime(int seconds,char*out,size_t n){snprintf(out,n,"%d ч %d мин",seconds/3600,seconds/60%60);}void CZM_ModerationTarget(int id,const char*,int message,int,const char*){moderationTarget=id;moderationMessage=message;}
 '''
 SCENARIOS = r'''
 int main(int argc,char**argv){

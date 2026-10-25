@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, FileResponse, HTML
 from PIL import Image
 from pydantic import BaseModel, Field
 
-from . import service, mappics, accounts, settings, tab, social, website, distribution, lobbies, game_probe, voice_lobby, notifications, rules, moderation, play_feed
+from . import service, mappics, accounts, settings, tab, social, website, distribution, lobbies, game_probe, voice_lobby, notifications, rules, moderation, play_feed, playtime
 from .config import get_settings
 from .db import db
 
@@ -263,6 +263,15 @@ class WarningSeenIn(BaseModel):
 
 
 # The SUPPORT panel. Every request is checked for the role on the server.
+@router.get("/top")
+async def top(request: Request, x_czm_key: str | None = Header(default=None)):
+    """The Top 100 by time on game servers, and the viewer's own place."""
+    def run(conn):
+        viewer = service.player_by_key(conn, x_czm_key or "") if x_czm_key else None
+        return playtime.board(conn, viewer["id"] if viewer else 0)
+    return JSONResponse(await in_db(run), headers={"Cache-Control": "no-store"})
+
+
 @router.get("/moderation/summary")
 async def moderation_summary(request: Request, x_czm_key: str | None = Header(default=None)):
     return await social_result(request, lambda c: moderation.summary(c, x_czm_key or ""))

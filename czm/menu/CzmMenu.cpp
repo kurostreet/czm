@@ -140,11 +140,14 @@ static const struct { const char *key, *ru, *en; } s_strings[] =
 	{ "nav_servers", "Серверы", "Servers" },
 	{ "nav_settings", "Настройки", "Settings" },
 	{ "nav_about", "Об игре", "About" },
+	{ "nav_top", "Топ 100", "Top 100" },
+	{ "tab_about", "Об игре", "About" },
 	{ "nav_chat_hint", "Игроки онлайн", "Players online" },
 	{ "nav_chat_online", "%d онлайн", "%d online" },
 	{ "nav_servers_hint", "Найти игру", "Find a game" },
-	{ "nav_settings_hint", "Управление и HUD", "Controls and HUD" },
+	{ "nav_settings_hint", "Управление, HUD, об игре", "Controls, HUD, about" },
 	{ "nav_about_hint", "Проект и контакты", "Project and contacts" },
+	{ "nav_top_hint", "Время на серверах", "Time on servers" },
 	{ "bell_title", "Уведомления", "Notifications" },
 	{ "bell_empty", "Пока нет уведомлений", "No notifications yet" },
 	{ "about_title", "Об игре", "About" },
@@ -808,6 +811,78 @@ int CZM_DrawSupportTag( int x, int y, int h )
 		UI::Scissor::PopScissor();
 	}
 	return w;
+}
+
+unsigned int CZM_TopColor( int place )
+{
+	if( place == 1 ) return PackRGBA( 255, 206, 84, 255 );
+	if( place == 2 ) return PackRGBA( 214, 222, 236, 255 );
+	if( place == 3 ) return PackRGBA( 226, 150, 104, 255 );
+	if( place >= 4 && place <= 10 ) return PackRGBA( 231, 187, 96, 255 );
+	if( place >= 11 && place <= 50 ) return PackRGBA( 176, 188, 204, 255 );
+	return PackRGBA( 188, 128, 84, 255 );
+}
+
+const char *CZM_TopCrown( int place )
+{
+	return place >= 1 && place <= 3 ? "gfx/czm/ui/icon_crown_royal.png" : "gfx/czm/ui/icon_crown_top.png";
+}
+
+static void CZM_TopLabel( int place, char *out, size_t size )
+{
+	const int group = place <= 3 ? place : place <= 10 ? 10 : place <= 50 ? 50 : 100;
+	snprintf( out, size, "TOP %d", group );
+}
+
+int CZM_TopTagWidth( int place, int h )
+{
+	if( place < 1 || place > 100 )
+		return 0;
+	char label[16];
+	CZM_TopLabel( place, label, sizeof( label ));
+	return h / 3 + h * 72 / 100 + h / 5 + CZM_TextWidth( CZM_Font( CZM_SupportFont( h )), label ) + h / 3;
+}
+
+int CZM_DrawTopTag( int x, int y, int h, int place )
+{
+	const int w = CZM_TopTagWidth( place, h );
+	if( !w )
+		return 0;
+	const unsigned int color = CZM_TopColor( place );
+	const int line = Q_max( 1, ScreenHeight / 720 ), radius = Q_max( 2, h / 3 ), icon = h * 72 / 100;
+	const HFont font = CZM_Font( CZM_SupportFont( h ));
+	char label[16];
+	CZM_TopLabel( place, label, sizeof( label ));
+	CZM_DrawSliced( "gfx/czm/ui/surface.png", x, y, w, h, 16, radius, color );
+	CZM_DrawSliced( "gfx/czm/ui/surface.png", x + line, y + line, w - line * 2, h - line * 2, 16, Q_max( 1, radius - line ), PackRGBA( 30, 31, 36, 255 ));
+	CZM_DrawImage( CZM_TopCrown( place ), x + h / 3, y + ( h - icon ) / 2, icon, icon, color );
+	CZM_DrawText( font, x + h / 3 + icon + h / 5, y + ( h - CZM_FontHeight( font )) / 2, w, label, color );
+	// the three first glint now and then, each at its own moment
+	if( place <= 3 )
+	{
+		double t = fmod( uiStatic.realTime * 0.001 + place * 1.3, 4.0 );
+		if( t < 0.7 )
+		{
+			const int band = Q_max( 2, h / 3 ), bx = x - band + (int)(( w + band ) * t / 0.7 );
+			UI::Scissor::PushScissor( x + line, y + line, w - line * 2, h - line * 2 );
+			for( int i = 0; i < band; i++ )
+			{
+				const int alpha = 54 - abs( i * 2 - band ) * 54 / Q_max( 1, band );
+				UI_FillRect( bx + i, y, 1, h, PackRGBA( 255, 244, 214, Q_max( 0, alpha )));
+			}
+			UI::Scissor::PopScissor();
+		}
+	}
+	return w;
+}
+
+void CZM_FormatPlaytime( int seconds, char *out, size_t size )
+{
+	const int minutes = Q_max( 0, seconds ) / 60, hours = minutes / 60;
+	if( hours )
+		snprintf( out, size, CZM_IsRussian() ? "%d ч %d мин" : "%d h %d min", hours, minutes % 60 );
+	else
+		snprintf( out, size, CZM_IsRussian() ? "%d мин" : "%d min", minutes );
 }
 
 unsigned int CZM_PingColor( int ping )

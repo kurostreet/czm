@@ -302,6 +302,26 @@ def icon(kind, size=128, color=(255, 255, 255, 255)):
     elif kind == "block":
         d.ellipse([S * .10, S * .10, S * .90, S * .90], outline=c, width=lw)
         d.line([S * .24, S * .76, S * .76, S * .24], fill=c, width=lw)
+    elif kind == "crown_royal":
+        # the first three places: five points with pearls, a band with a jewel
+        peaks = ((.12, .32), (.31, .26), (.50, .16), (.69, .26), (.88, .32))
+        outline = [(S * .12, S * .80)]
+        for k, (x, y) in enumerate(peaks):
+            outline.append((S * x, S * y))
+            if k < len(peaks) - 1:
+                outline.append((S * (x + peaks[k + 1][0]) / 2, S * .56))
+        outline.append((S * .88, S * .80))
+        d.polygon(outline, fill=c)
+        for x, y in peaks:
+            d.ellipse([S * (x - .065), S * (y - .10), S * (x + .065), S * (y + .03)], fill=c)
+        d.rounded_rectangle([S * .10, S * .83, S * .90, S * .95], radius=S * .04, fill=c)
+        d.rectangle([S * .16, S * .66, S * .84, S * .71], fill=clear)
+        d.ellipse([S * .42, S * .60, S * .58, S * .76], fill=clear)
+        d.ellipse([S * .455, S * .635, S * .545, S * .725], fill=c)
+    elif kind == "crown":
+        d.polygon([(S * .10, S * .78), (S * .10, S * .28), (S * .32, S * .50), (S * .50, S * .20), (S * .68, S * .50),
+                   (S * .90, S * .28), (S * .90, S * .78)], fill=c)
+        d.rounded_rectangle([S * .10, S * .82, S * .90, S * .94], radius=S * .04, fill=c)
     elif kind == "person_add":
         d.ellipse([S * .14, S * .12, S * .50, S * .48], fill=c)
         d.pieslice([S * .02, S * .54, S * .62, S * 1.14], 180, 360, fill=c)
@@ -337,6 +357,11 @@ def main():
     OUTPUT.mkdir(parents=True, exist_ok=True)
     if "--support" in sys.argv:
         save(icon("shield"), "icon_shield.png")
+        return
+    if "--top" in sys.argv:
+        # Top 100: the crowns of the first three and of the rest
+        save(icon("crown_royal"), "icon_crown_royal.png")
+        save(icon("crown"), "icon_crown_top.png")
         return
     if "--profile" in sys.argv:
         # the profile card: copy the ID, the ⋯ menu, the avatar frame, report, block, add a friend

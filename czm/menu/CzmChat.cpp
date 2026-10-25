@@ -52,6 +52,7 @@ struct CzmChatMessage
 	int player;
 	int time;
 	bool support;         // the official SUPPORT account
+	int place;            // the place in the Top 100, 0 outside it
 	char nick[48];
 	char avatar[24];
 	char text[512];
@@ -292,6 +293,7 @@ void CCzmChat::ReadMessages( CzmChatRoom &room, const char *body )
 		Q_strncpy( m.avatar, j.String( j.Get( item, "a" )), sizeof( m.avatar ));
 		Q_strncpy( m.text, j.String( j.Get( item, "t" )), sizeof( m.text ));
 		m.support = !strcmp( j.String( j.Get( item, "r" )), "support" );
+		m.place = j.Int( j.Get( item, "k" ));
 		room.messages.AddToTail( m );
 		room.lastId = id;
 		added++;
@@ -884,6 +886,8 @@ void CCzmChat::DrawMessages( void )
 		CZM_DrawText( nameFont, m_iTextX, top, nickW + 2, m.nick, NickColor( m.player, mine ));
 		if( m.support )
 			nickW += H * 0.012f + CZM_DrawSupportTag( m_iTextX + nickW + H * 0.012f, top - 1, CZM_FontHeight( nameFont ) + 2 );
+		if( m.place >= 1 && m.place <= 100 )
+			nickW += H * 0.012f + CZM_DrawTopTag( m_iTextX + nickW + H * 0.012f, top - 1, CZM_FontHeight( nameFont ) + 2, m.place );
 		FormatTime( m.time, when, sizeof( when ));
 		CZM_DrawText( timeFont, m_iTextX + nickW + H * 0.018f, top + CZM_FontHeight( nameFont ) - CZM_FontHeight( timeFont ), m_iTextW / 3, when,
 			PackRGBA( 120, 126, 136, 255 ));

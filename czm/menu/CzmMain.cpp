@@ -31,10 +31,6 @@ GNU General Public License for more details.
 #define CZM_MAX_TILES 8
 #define CZM_ABOUT_ROWS 8
 
-#define CZM_CONTACT_URL "mailto:kuro.street.inc@gmail.com"
-#define CZM_GROUP_URL "https://t.me/counter_zombie_mobile"
-#define CZM_SITE_URL "https://counter-zombie.ru"
-#define CZM_SOURCE_URL "https://github.com/kurostreet/czm"
 
 namespace
 {
@@ -57,6 +53,11 @@ void BuildDate( char *out, size_t size )
 }
 
 } // namespace
+
+void CZM_BuildDate( char *out, size_t size )
+{
+	BuildDate( out, size );
+}
 
 /*
 =================
@@ -473,7 +474,7 @@ void CCzmMainMenu::Activate( int hit )
 		CZM_OpenServerList();
 		break;
 	case HIT_NAV + 3:
-		CZM_OpenSettings( CZM_TAB_LAST );
+		CZM_OpenTop();
 		break;
 	case HIT_ABOUT_TELEGRAM:
 		EngFuncs::ShellExecute( CZM_CONTACT_URL, NULL, false );
@@ -523,8 +524,7 @@ void CCzmMainMenu::Activate( int hit )
 		CZM_AccountRegister( CZM_OnlineKey(), m_nick.text );
 		break;
 	case HIT_NAV + 4:
-		m_overlay = OV_ABOUT;
-		m_iVersionTaps = 0;
+		CZM_OpenSettings( CZM_TAB_LAST ); // "About" lives in the settings now
 		break;
 	case HIT_BELL:
 		m_overlay = OV_BELL;
@@ -1000,9 +1000,10 @@ static void CZM_NavCard( const CzmRect &r, int cut, unsigned int color )
 
 void CCzmMainMenu::DrawNav( void )
 {
-	static const char *icons[5] = { UI_DIR "icon_chat.png", UI_DIR "icon_users.png", UI_DIR "icon_globe.png", UI_DIR "icon_gear.png", UI_DIR "icon_info.png" };
-	static const char *labels[5] = { "nav_chat", "nav_friends", "nav_servers", "nav_settings", "nav_about" };
-	static const char *hints[5] = { "nav_chat_hint", "nav_friends_hint", "nav_servers_hint", "nav_settings_hint", "nav_about_hint" };
+	// Chat, Friends, Servers, Top 100, Settings: the agreed order
+	static const char *icons[5] = { UI_DIR "icon_chat.png", UI_DIR "icon_users.png", UI_DIR "icon_globe.png", UI_DIR "icon_crown_top.png", UI_DIR "icon_gear.png" };
+	static const char *labels[5] = { "nav_chat", "nav_friends", "nav_servers", "nav_top", "nav_settings" };
+	static const char *hints[5] = { "nav_chat_hint", "nav_friends_hint", "nav_servers_hint", "nav_top_hint", "nav_settings_hint" };
 	HFont font = CZM_Font( CZMF_LANG ), small = CZM_Font( CZMF_SMALL );
 	int edge = CZM_LineWidth(), pad = H * 0.018f, cut = Q_max( 3, (int)( H * 0.010f ));
 	int badge = H * 0.062f, iconSize = H * 0.036f, chevron = H * 0.021f;

@@ -351,8 +351,9 @@ def init() -> None:
                         except sqlite3.OperationalError as e:  # the other process was first
                             if "duplicate column" not in str(e):
                                 raise
-            from . import notifications, play_feed
+            from . import notifications, play_feed, playtime
             conn.executescript(notifications.SCHEMA)
+            conn.executescript(playtime.SCHEMA)
             play_feed.migrate(conn)
             # Preserve existing unviewed incoming requests on upgrade.
             conn.execute("INSERT OR IGNORE INTO social_notices(player,peer,kind,created) "

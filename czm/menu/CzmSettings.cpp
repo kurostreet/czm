@@ -351,6 +351,7 @@ enum ERowType
 	ROW_MSGSTYLE, // three looks of the chat and server messages as cards
 	ROW_SPECSTYLE, // three looks of the spectator overlay as cards
 	ROW_MIC,      // microphone test: level meter and a start/stop button
+	ROW_ABOUT,    // "About": min is the item (contacts, group, site, rules, source, version, date, engine)
 	ROW_SECTION,
 };
 
@@ -450,6 +451,18 @@ const CzmRow s_profile[] =
 	{ ROW_SPRAYS, "s_spray", "s_spray_hint", NULL, NULL, NULL, 0, 0, 0, 0, {}, 0 },
 };
 
+const CzmRow s_about[] =
+{
+	{ ROW_ABOUT, "about_tg", NULL, NULL, NULL, NULL, 0, 0, 0, 0, {}, 0 },
+	{ ROW_ABOUT, "about_group", NULL, NULL, NULL, NULL, 1, 0, 0, 0, {}, 0 },
+	{ ROW_ABOUT, "about_site", NULL, NULL, NULL, NULL, 2, 0, 0, 0, {}, 0 },
+	{ ROW_ABOUT, "about_rules", NULL, NULL, NULL, NULL, 3, 0, 0, 0, {}, 0 },
+	{ ROW_ABOUT, "about_source", NULL, NULL, NULL, NULL, 4, 0, 0, 0, {}, 0 },
+	{ ROW_ABOUT, "about_version", NULL, NULL, NULL, NULL, 5, 0, 0, 0, {}, 0 },
+	{ ROW_ABOUT, "about_updated", NULL, NULL, NULL, NULL, 6, 0, 0, 0, {}, 0 },
+	{ ROW_ABOUT, "about_engine", NULL, NULL, NULL, NULL, 7, 0, 0, 0, {}, 0 },
+};
+
 constexpr struct
 {
 	const char *label;
@@ -464,6 +477,7 @@ constexpr struct
 	{ "tab_game", UI_DIR "icon_target.png", s_game, sizeof( s_game ) / sizeof( s_game[0] ) },
 	{ "tab_hud", UI_DIR "icon_display.png", s_hud, sizeof( s_hud ) / sizeof( s_hud[0] ) },
 	{ "tab_profile", UI_DIR "icon_user.png", s_profile, sizeof( s_profile ) / sizeof( s_profile[0] ) },
+	{ "tab_about", UI_DIR "icon_info.png", s_about, sizeof( s_about ) / sizeof( s_about[0] ) },
 };
 
 // Size the layout from the actual tabs so a new row cannot be silently hidden.
@@ -600,6 +614,8 @@ private:
 	bool m_bMicTest;     // the microphone test runs
 	bool m_bMicHeard;    // the meter moved during the test
 	int m_iMicPing;      // last time the test was kept alive
+	int m_iVersionTaps;  // About: five quick taps on the version open the console
+	double m_flVersionTap;
 	const char *m_szToast;
 	int m_iToastTime;
 	CzmTextEdit m_nick;
@@ -622,6 +638,8 @@ CCzmSettings::CCzmSettings() : CMenuFramework( "CzmSettings" )
 	m_bTouchChanged = false;
 	m_bMicTest = m_bMicHeard = false;
 	m_iMicPing = 0;
+	m_iVersionTaps = 0;
+	m_flVersionTap = 0;
 	m_szToast = NULL;
 	m_iToastTime = 0;
 	memset( &m_nick, 0, sizeof( m_nick ));
@@ -944,6 +962,8 @@ int CCzmSettings::HitTest( void ) const
 			break;
 		case ROW_SWITCH:
 			return HIT_ROW + i * 20; // the whole row toggles
+		case ROW_ABOUT:
+			return row.min <= 5 ? HIT_ROW + i * 20 : HIT_NONE; // links, rules and the version
 		case ROW_LAYOUTS:
 		case ROW_HUDEDIT:
 		case ROW_ACCOUNT:
@@ -1028,6 +1048,25 @@ void CCzmSettings::Activate( int hit )
 		{
 		case ROW_SWITCH:
 			row.set( row.get() != 0.0f ? 0.0f : 1.0f );
+			break;
+		case ROW_ABOUT:
+			switch( (int)row.min )
+			{
+			case 0: EngFuncs::ShellExecute( CZM_CONTACT_URL, NULL, false ); break;
+			case 1: EngFuncs::ShellExecute( CZM_GROUP_URL, NULL, false ); break;
+			case 2: EngFuncs::ShellExecute( CZM_SITE_URL, NULL, false ); break;
+			case 3: CZM_RulesShow(); break;
+			case 4: EngFuncs::ShellExecute( CZM_SOURCE_URL, NULL, false ); break;
+			case 5:
+			{
+				// five quick taps on the version: the developer console, as before
+				const double now = EngFuncs::DoubleTime();
+				if( now - m_flVersionTap > 2.0 ) m_iVersionTaps = 0;
+				m_flVersionTap = now;
+				if( ++m_iVersionTaps >= 5 ) { m_iVersionTaps = 0; CZM_OpenConsole(); }
+				break;
+			}
+			}
 			break;
 		case ROW_CHOICE:
 		case ROW_RADAR:
@@ -1481,6 +1520,32 @@ void CCzmSettings::DrawRow( int i )
 	case ROW_SWITCH:
 		DrawSwitch( l.control, row.get() != 0.0f, dim );
 		break;
+	case ROW_ABOUT:
+	{
+		const int item = (int)row.min;
+		const bool link = item <= 4;
+		char date[32];
+		const char *value = item == 0 ? "kuro.street.inc@gmail.com" : item == 1 ? "t.me/counter_zombie_mobile"
+			: item == 2 ? "counter-zombie.ru" : item == 4 ? "github.com/kurostreet/czm" : item == 5 ? CZM_Version()
+			: item == 7 ? "Xash3D FWGS (GPL)" : "";
+		unsigned int color = link ? PackRGBA( 125, 196, 255, 255 ) : CZM_White();
+		if( item == 3 )
+		{
+			value = CZM_RulesConfirmed() ? CZM_T( "about_rules_ok" ) : CZM_T( "about_rules_read" );
+			color = CZM_RulesConfirmed() ? PackRGBA( 107, 218, 167, 255 ) : PackRGBA( 125, 196, 255, 255 );
+		}
+		if( item == 6 ) { CZM_BuildDate( date, sizeof( date )); value = date; }
+		HFont valueFont = CZM_Font( CZMF_TILE_STATUS );
+		const int chevron = link || item == 3 ? (int)( l.rect.h * 0.28f ) : 0;
+		const int right = l.rect.x + l.rect.w - ( chevron ? chevron + H * 0.012f : 0 );
+		const int valueW = Q_min( CZM_TextWidth( valueFont, value ), l.control.w );
+		if( IsPressed( HIT_ROW + i * 20 ) && item <= 5 )
+			CZM_DrawSliced( UI_DIR "card.png", l.rect.x - H * 0.012f, l.rect.y + H * 0.004f, l.rect.w + H * 0.024f, l.rect.h - H * 0.008f, 30, (int)( H * 0.02f ));
+		CZM_DrawText( valueFont, right - valueW, l.rect.y + ( l.rect.h - CZM_FontHeight( valueFont )) / 2, valueW + 2, value, color, QM_RIGHT );
+		if( chevron )
+			CZM_DrawImage( UI_DIR "icon_chevron.png", l.rect.x + l.rect.w - chevron, l.rect.y + ( l.rect.h - chevron ) / 2, chevron, chevron, PackRGBA( 150, 156, 166, 255 ));
+		break;
+	}
 	case ROW_CHOICE:
 		DrawChoice( i, l );
 		break;
