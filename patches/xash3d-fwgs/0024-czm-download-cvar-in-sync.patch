@@ -1,0 +1,97 @@
+diff --git a/engine/client/czm_loading.c b/engine/client/czm_loading.c
+--- a/engine/client/czm_loading.c
++++ b/engine/client/czm_loading.c
+@@ -597,10 +597,20 @@ static void CZM_Update( void )
+ #define CZM_DOWNLOAD_IDLE  1.5  // seconds without a transfer: between two files of a queue
+ #define CZM_DOWNLOAD_STALL 20.0 // seconds without progress while a transfer still waits
+ 
++// Older engines wrote scr_download.value past its string; Cvar_SetValue skips a string that
++// did not change, so a "-1" string could hide a value of 100. Set both.
++static void CZM_RetireDownload( void )
++{
++	scr_download.value = -1.0f;
++	if( Q_strcmp( scr_download.string, "-1" ))
++		Cvar_DirectSet( &scr_download, "-1" );
++}
++
+ static void CZM_DownloadProgress( void )
+ {
+-	static double idleSince = -1.0, changedAt = 0.0;
++	static double idleSince = -1.0, changedAt = 0.0, fullSince = -1.0;
+ 	static float shown = -1.0f, retired = -2.0f;
++	static qboolean noted;
+ 	const double now = Platform_DoubleTime();
+ 	const float value = scr_download.value;
+ 	const qboolean moving = HTTP_FileDownloads( ) > 0
+@@ -610,7 +620,10 @@ static void CZM_DownloadProgress( void )
+ 	// a value set again in the same frame means the transfer that stopped is still there;
+ 	// a frame that shows none means it is gone and the next value is news
+ 	if( value < 0.0f )
++	{
+ 		retired = -2.0f;
++		noted = false;
++	}
+ 	if( value != shown || now < changedAt )
+ 	{
+ 		shown = value;
+@@ -620,6 +633,11 @@ static void CZM_DownloadProgress( void )
+ 		idleSince = -1.0;
+ 	else if( idleSince < 0.0 )
+ 		idleSince = now;
++	// full (a lingering complete buffer even counts past 100%) for a moment means done
++	if( value < 99.5f || now < fullSince )
++		fullSince = value < 99.5f ? -1.0 : now;
++	else if( fullSince < 0.0 )
++		fullSince = now;
+ 
+ 	// the loading screen keeps its own progress; in the menu and in a match only the truth is shown
+ 	if( !czm.active && value >= 0.0f && ( cls.state == ca_active || cls.state == ca_disconnected ))
+@@ -628,18 +646,21 @@ static void CZM_DownloadProgress( void )
+ 			why = ""; // a stopped transfer sets the same value again: it stays hidden
+ 		else if( idleSince >= 0.0 && now - idleSince >= CZM_DOWNLOAD_IDLE )
+ 			why = "no transfer";
++		else if( fullSince >= 0.0 && now - fullSince >= CZM_DOWNLOAD_IDLE )
++			why = "finished";
+ 		else if( moving && now - changedAt >= CZM_DOWNLOAD_STALL )
+ 			why = "no progress";
+ 	}
+ 
+ 	if( why )
+ 	{
+-		if( why[0] )
++		if( why[0] && !noted )
+ 			Con_Reportf( "download indicator hidden: %s (%d files left, %s, %.0f%%)\n", why,
+ 				host.downloadcount, host.downloadfile[0] ? host.downloadfile : "-", value );
++		noted = true; // the same transfer may keep coming back: one line is enough
+ 		retired = value;
+ 		idleSince = -1.0;
+-		Cvar_SetValue( "scr_download", -1.0f );
++		CZM_RetireDownload( );
+ 	}
+ 
+ 	CZM_SetValue( &czm_download_files, scr_download.value >= 0.0f ? host.downloadcount : 0 );
+diff --git a/engine/common/net_chan.c b/engine/common/net_chan.c
+--- a/engine/common/net_chan.c
++++ b/engine/common/net_chan.c
+@@ -1413,9 +1413,11 @@ void Netchan_UpdateProgress( netchan_t *chan )
+ 	int	total = 0;
+ 	float	bestpercent = 0.0;
+ 
++	// through the cvar API: a value written past its string made later Cvar_SetValue calls
++	// with the same string do nothing, and the download bar stayed at 100% for good
+ 	if( host.downloadcount == 0 )
+ 	{
+-		scr_download.value = -1.0f;
++		Cvar_DirectSetValue( &scr_download, -1.0f );
+ 		host.downloadfile[0] = '\0';
+ 	}
+ 
+@@ -1482,7 +1484,7 @@ void Netchan_UpdateProgress( netchan_t *chan )
+ 
+ 	}
+ 
+-	scr_download.value = bestpercent;
++	Cvar_DirectSetValue( &scr_download, bestpercent );
+ #endif // XASH_DEDICATED
+ }
+ 

@@ -26,15 +26,18 @@ enum { ca_disconnected, ca_connecting, ca_connected, ca_validate, ca_active };
 struct { bool active; } czm;
 struct { int state; struct { void *incomingbufs[2]; } netchan; } cls;
 struct { int downloadcount; char downloadfile[64]; } host;
-typedef struct { float value; } cvar_t;
-cvar_t scr_download, czm_download_files;
+#include <stdlib.h>
+typedef struct { float value; char string[32]; } cvar_t;
+cvar_t scr_download = { -1, "-1" }, czm_download_files;
 static double clock_now; static int files, notes; static char note[256];
 static double Platform_DoubleTime(void) { return clock_now; }
 static int HTTP_FileDownloads(void) { return files; }
 static void CZM_SetValue(cvar_t *v, float value) { v->value = value; }
-static void Cvar_SetValue(const char *name, float value) { assert(!strcmp(name,"scr_download")); scr_download.value = value; }
+// the engine skips a string that did not change, value included
+static void Cvar_DirectSet(cvar_t *v, const char *text) { if(!strcmp(text, v->string)) return; snprintf(v->string, sizeof(v->string), "%s", text); v->value = (float)atof(text); }
+#define Q_strcmp strcmp
 #define Con_Reportf(...) (notes++, snprintf(note, sizeof(note), __VA_ARGS__))
-''' + defines + "\n" + function(loading, "static void CZM_DownloadProgress(") + r'''
+''' + defines + "\n" + function(loading, "static void CZM_RetireDownload(") + "\n" + function(loading, "static void CZM_DownloadProgress(") + r'''
 static void Tick(double now) { clock_now = now; CZM_DownloadProgress(); }
 int main(void) {
  static int stream;
@@ -49,6 +52,7 @@ int main(void) {
  host.downloadcount=2; strcpy(host.downloadfile,"!MD5abc"); scr_download.value=100; Tick(50); Tick(51.6);
  assert(scr_download.value==-1&&czm_download_files.value==0&&notes==2&&strstr(note,"2 files left"));
  // Between two files of a queue the bar does not blink.
+ Tick(59); // a frame without a value: the next transfer is news
  host.downloadcount=3; files=1; scr_download.value=10; Tick(60); files=0; Tick(61); files=1; scr_download.value=20; Tick(61.4);
  files=0; Tick(62); assert(scr_download.value==20); files=1; Tick(62.5); assert(scr_download.value==20);
  // A transfer over the game connection counts as moving too.
@@ -58,12 +62,22 @@ int main(void) {
  Tick(99.9); assert(scr_download.value==31); Tick(100.1); assert(scr_download.value==-1&&strstr(note,"no progress"));
  int was=notes; scr_download.value=31; Tick(101.2); assert(scr_download.value==-1&&notes==was);
  scr_download.value=32; Tick(101.3); assert(scr_download.value==32); // it moved again
+ // A complete file whose buffer lingers is finished for the player, also past 100%.
+ scr_download.value=-1; Tick(101.8);
+ scr_download.value=100; Tick(102); Tick(103.4); assert(scr_download.value==100);
+ Tick(103.6); assert(scr_download.value==-1&&strstr(note,"finished"));
+ scr_download.value=100; Tick(103.7); assert(scr_download.value==-1); // set again: stays hidden
+ was=notes; scr_download.value=104.5f; Tick(103.8); scr_download.value=105.0f; Tick(103.9); assert(scr_download.value==-1&&notes==was);
  cls.netchan.incomingbufs[FRAG_FILE_STREAM]=0;
  // The loading screen keeps its own progress, and so does the connection.
  czm.active=true; scr_download.value=55; Tick(110); Tick(150); assert(scr_download.value==55);
  czm.active=false; cls.state=ca_validate; Tick(151); Tick(190); assert(scr_download.value==55);
  // In the menu an old value from a match goes as well.
  cls.state=ca_disconnected; Tick(191); Tick(192.6); assert(scr_download.value==-1);
+ // A value written past its string (an older netchan) still goes: "-1" in the string, 100 shown.
+ cls.state=ca_active; Tick(195); scr_download.value=100; Tick(196); Tick(197.6);
+ assert(scr_download.value==-1&&!strcmp(scr_download.string,"-1"));
+ snprintf(scr_download.string,sizeof(scr_download.string),"100"); scr_download.value=-1; Tick(198); assert(scr_download.value==-1);
  // Time going backwards starts a fresh grace period.
  cls.state=ca_active; scr_download.value=70; Tick(200); Tick(199); Tick(200.4); Tick(201.8); assert(scr_download.value==70);
  Tick(202); assert(scr_download.value==-1);
@@ -76,6 +90,12 @@ int main(void) {
             exe = folder / "check"
             subprocess.run(["gcc", "-std=c11", "-Wall", "-Wextra", "-Werror", str(folder / "check.c"), "-o", str(exe)], check=True)
             subprocess.run([str(exe)], check=True)
+
+    def test_netchan_keeps_the_download_cvar_string_and_value_together(self):
+        netchan = (ROOT / "3rdparty/xash3d-fwgs/engine/common/net_chan.c").read_text()
+        update = function(netchan, "void Netchan_UpdateProgress(")
+        self.assertNotIn("scr_download.value =", update)
+        self.assertEqual(update.count("Cvar_DirectSetValue( &scr_download,"), 2)
 
     def test_server_lists_read_into_memory_never_move_the_download_bar(self):
         http = (ROOT / "3rdparty/xash3d-fwgs/engine/common/http/net_http_xash.c").read_text()
