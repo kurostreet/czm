@@ -63,6 +63,9 @@ void CZM_OnlineAvatarChanged(){}const char*CZM_AvatarPhoto(){return "";}int CZM_
 void CZM_CleanName(const char*in,char*out,size_t n){snprintf(out,n,"%s",in);}bool CZM_NickIsValid(const char*){return true;}
 void CZM_ColorPickerShow(int,int,int){}
 bool CZM_RulesAllow(void(*)()){return true;}void ChoosePhoto(){}
+enum{CZM_LIMIT_TEXT,CZM_LIMIT_VOICE,CZM_LIMIT_PHOTO};static bool photoLimited;static int notices;
+bool CZM_OnlineLimited(int k,char*t=nullptr,size_t n=0){if(k!=CZM_LIMIT_PHOTO||!photoLimited)return false;if(t&&n)snprintf(t,n,"%s","photo limited");return true;}
+bool CZM_IsRussian(){return true;}void CZM_ShowNotice(const char*,const char*,const char* ="",bool=false){notices++;}
 unsigned PackRGBA(int,int,int,int){return 0;}unsigned CZM_White(int=255){return 0;}unsigned CZM_Grey(){return 0;}
 HFont CZM_Font(int n){return n;}int CZM_FontHeight(HFont){return ScreenHeight*.026f;}
 int CZM_TextWidth(HFont,const char*s){return strlen(s)*ScreenHeight*.014f;}

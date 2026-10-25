@@ -275,6 +275,15 @@ def icon(kind, size=128, color=(255, 255, 255, 255)):
             d.line(pts + [pts[0]], fill=c, width=int(lw * .95), joint="curve")
     elif kind == "play":
         d.polygon([(S * .32, S * .20), (S * .32, S * .80), (S * .82, S * .50)], fill=c)
+    elif kind == "shield":
+        # SUPPORT: a solid heater shield with a check cut out of it
+        right = [(S * .50, S * .07), (S * .66, S * .13), (S * .85, S * .16), (S * .85, S * .50)]
+        for i in range(1, 21):                       # the right side bends into the point
+            t = i / 20.0
+            right.append((S * (.85 - .35 * t * t), S * (.50 + .44 * t)))
+        left = [(S - x, y) for x, y in reversed(right[1:-1])]
+        d.polygon(right + left, fill=c)
+        d.line([(S * .32, S * .47), (S * .45, S * .60), (S * .69, S * .35)], fill=clear, width=int(lw * 1.1), joint="curve")
     return im.resize((size, size), Image.LANCZOS)
 
 
@@ -303,6 +312,9 @@ NEW_ICONS = ("chat", "globe", "search", "star", "star_on", "refresh", "plus", "l
 def main():
     import sys
     OUTPUT.mkdir(parents=True, exist_ok=True)
+    if "--support" in sys.argv:
+        save(icon("shield"), "icon_shield.png")
+        return
     if "--servers" in sys.argv:
         # server list and new navigation: only the new pictures, the rest stays as committed
         for kind in NEW_ICONS:
@@ -315,7 +327,7 @@ def main():
     make_tile_shadow("tile_shadow.png")
     make_dot("dot.png")
     make_glow("glow.png")
-    for kind in ("bell", "user", "stick", "gear", "info", "pencil", "close", "back", "display", "sound", "target", "check"):
+    for kind in ("bell", "user", "stick", "gear", "info", "pencil", "close", "back", "display", "sound", "target", "check", "shield"):
         save(icon(kind), f"icon_{kind}.png")
     for kind in NEW_ICONS:
         save(icon(kind), f"icon_{kind}.png")

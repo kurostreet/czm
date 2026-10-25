@@ -1096,6 +1096,14 @@ void CCzmSettings::Activate( int hit )
 			if( part == 0 )
 			{
 				// other players see the photo: the community rules come first
+				{
+					char why[300];
+					if( CZM_OnlineLimited( CZM_LIMIT_PHOTO, why, sizeof( why )))
+					{
+						CZM_ShowNotice( CZM_IsRussian() ? "Фото недоступно" : "Photo unavailable", why );
+						break;
+					}
+				}
 				if( !CZM_RulesAllow( ChoosePhoto ))
 					break;
 				if( CZM_AvatarPhoto()[0] && CZM_CurrentAvatar() != CZM_AVATAR_PHOTO )

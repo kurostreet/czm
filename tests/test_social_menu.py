@@ -48,6 +48,8 @@ void CZM_LobbyInviteFriend(int);
 void CZM_OpenLobbyById(const char*);
 void CZM_DrawMapPreview(const char*,int,int,int,int,const char*);
 bool CZM_RulesAllow(void(*)()=nullptr);void CZM_RulesRefused(int,void(*)()=nullptr);void CZM_ChatHidePlayer(int);
+enum{CZM_LIMIT_TEXT,CZM_LIMIT_VOICE,CZM_LIMIT_PHOTO,CZM_LIMIT_COUNT};bool CZM_OnlineSupport();int CZM_SupportTagWidth(int);int CZM_DrawSupportTag(int,int,int);
+bool CZM_OnlineLimited(int,char* =nullptr,size_t=0);void CZM_ModerationOpen();void CZM_ModerationTarget(int,const char*,int=0,int=0,const char* ="");
 struct CzmServer{char address[64];char prot[8];char name[64];};int CZM_ServerCount();CzmServer *CZM_Server(int);void CZM_CleanName(const char*,char*,size_t);void CZM_DrawSliced(const char*,int,int,int,int,int,int,unsigned=0xffffffff);
 '''
 HARNESS = r'''
@@ -82,6 +84,11 @@ static bool rulesOk=true;static void(*rulesThen)()=nullptr;static int hiddenPlay
 bool CZM_RulesAllow(void(*then)()){if(rulesOk)return true;rulesThen=then;return false;}
 void CZM_RulesRefused(int,void(*then)()){rulesOk=false;rulesThen=then;}
 void CZM_ChatHidePlayer(int id){hiddenPlayer=id;}
+static bool support,textLimited;static int moderationOpened,moderationTarget,moderationMessage,supportTags;
+bool CZM_OnlineSupport(){return support;}int CZM_SupportTagWidth(int h){return h*4;}
+int CZM_DrawSupportTag(int x,int y,int h){supportTags++;UI_FillRect(x,y,h*4,h,PackRGBA(196,150,62,255));return h*4;}
+bool CZM_OnlineLimited(int k,char*t,size_t n){if(k!=CZM_LIMIT_TEXT||!textLimited)return false;if(t&&n)Q_strncpy(t,"Чат ограничен модератором до 01.11 12:00. Спам",n);return true;}
+void CZM_ModerationOpen(){moderationOpened++;}void CZM_ModerationTarget(int id,const char*,int message,int,const char*){moderationTarget=id;moderationMessage=message;}
 '''
 SCENARIOS = r'''
 int main(int argc,char**argv){
@@ -168,6 +175,20 @@ int main(int argc,char**argv){
  assert(s_newFriends==2);replies[w.m_ack]={200,"{\"counts\":{\"revision\":102,\"new_friends\":0}}"};w.Frame();assert(s_newFriends==0);
  Counts(notices);assert(s_newFriends==0); // an older heartbeat cannot resurrect the badge
  identity++;CZM_SocialFrame();assert(CZM_SocialNotifications()==0&&CZM_ChatUnread()==0);
+ // A muted player learns why and until when; without the details the plain words remain.
+ assert(strstr(SocialError("muted"),"модератором")&&!strstr(SocialError("muted"),"01.11"));
+ textLimited=true;assert(strstr(SocialError("muted"),"до 01.11 12:00"));textLimited=false;
+ // SUPPORT: the tag shows on the official account; only a SUPPORT viewer gets the shield.
+ CzmJson staff;assert(staff.Parse("{\"profile\":{\"id\":12,\"nick\":\"Support\",\"account\":true,\"relation\":\"none\",\"role\":\"support\",\"created\":1792240000}}"));
+ w.OpenProfile(12,true);w.Read(staff,w.READ_PROFILE);assert(w.m_profile.support&&me!=12);supportTags=0;w.Draw();assert(supportTags==1&&!w.m_moderate.w);
+ w.OpenProfile(8,true,71);w.Read(j,w.READ_PROFILE);assert(!w.m_profile.support);w.Layout();assert(!w.m_moderate.w);
+ support=true;w.Layout();assert(w.m_moderate.w&&w.m_moderate.x+w.m_moderate.w<=w.m_refresh.x&&w.m_peer.x+w.m_peer.w<=w.m_moderate.x);
+ cursorX=w.m_moderate.x+2;cursorY=uiStatic.cursorY=w.m_moderate.y+2;assert(w.Hit()==w.MODERATE);w.KeyDown(1);w.KeyUp(1);
+ assert(moderationTarget==8&&moderationMessage==71);
+ w.OpenProfile(me,false);w.Read(j,w.READ_PROFILE);w.m_profile.id=me;w.Layout();assert(w.m_moderate.w);w.Activate(w.MODERATE);assert(moderationOpened==1);
+ // another staff member has no actions: the service refuses them anyway
+ w.OpenProfile(12,true);w.Read(staff,w.READ_PROFILE);w.Layout();assert(!w.m_moderate.w);
+ support=false;
  ScreenWidth=1536;ScreenHeight=716;
  if(argc>1){drawTrace=true;if(strcmp(argv[1],"dialog")){
   w.OpenProfile(8,false);w.Read(j,w.READ_PROFILE);

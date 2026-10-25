@@ -150,14 +150,22 @@ def history(conn: sqlite3.Connection, key: str, offset: int = 0) -> dict:
             "next": offset + PAGE if len(rows) > PAGE else -1}
 
 
-def player(conn: sqlite3.Connection, key: str, target: int) -> dict:
-    """The card a moderator acts from: who it is and what he is already under."""
+def player(conn: sqlite3.Connection, key: str, target: int, message: int = 0, lobby_message: int = 0) -> dict:
+    """The card a moderator acts from: who it is, what he is under, the message in question."""
     support_actor(conn, key)
     row = _player(conn, target)
     if row is None:
         raise accounts.AuthError("not_found", 404)
     ban = service.active_ban(conn, row)
-    return {"target": _person(conn, target), "role": role(conn, target),
+    quoted = None
+    if message:
+        m = conn.execute("SELECT id, text, room FROM messages WHERE id=? AND player=? AND deleted=0", (message, target)).fetchone()
+        quoted = {"message": m["id"], "text": m["text"], "context": m["room"]} if m else None
+    elif lobby_message:
+        m = conn.execute("SELECT m.id, m.text, l.title FROM lobby_messages m JOIN lobbies l ON l.id=m.lobby "
+                         "WHERE m.id=? AND m.sender=? AND m.deleted=0", (lobby_message, target)).fetchone()
+        quoted = {"lobby_message": m["id"], "text": m["text"], "context": m["title"]} if m else None
+    return {"target": _person(conn, target), "role": role(conn, target), "quote": quoted,
             "ban": ban, "moderation": {k: v for k, v in state(conn, row).items() if k != "warning"},
             "reports_week": conn.execute("SELECT COUNT(*) FROM reports WHERE target=? AND created>?",
                                          (target, now() - 7 * 86400)).fetchone()[0]}

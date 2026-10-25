@@ -16,6 +16,7 @@ GNU General Public License for more details.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "extdll_menu.h"
 #include "BaseMenu.h"
@@ -56,6 +57,12 @@ static struct
 	bool banForever;
 	int banUntil;
 	char banReason[128];
+
+	bool support;         // the official SUPPORT account
+	struct { bool active, forever; int until; char reason[128]; } limits[CZM_LIMIT_COUNT];
+	int warning;          // the newest moderator warning not yet shown, its text
+	char warningReason[220];
+	int warningShown, warningSeenId;
 
 	int newsLast;         // the newest news number on the server
 	int newsId;           // news list request in flight
@@ -134,6 +141,57 @@ bool CZM_OnlineBan( int *until, bool *forever, const char **reason )
 	if( until ) *until = s_online.banUntil;
 	if( forever ) *forever = s_online.banForever;
 	if( reason ) *reason = s_online.banReason;
+	return true;
+}
+
+bool CZM_OnlineSupport( void )
+{
+	return s_online.ready && s_online.support;
+}
+
+void CZM_OnlineSetLimit( int kind, const CzmJson &j, int node )
+{
+	if( kind < 0 || kind >= CZM_LIMIT_COUNT )
+		return;
+	if( j.Type( node ) != CzmJson::T_OBJECT )
+	{
+		s_online.limits[kind].active = false;
+		return;
+	}
+	s_online.limits[kind].active = true;
+	s_online.limits[kind].until = j.Int( j.Get( node, "until" ));
+	s_online.limits[kind].forever = j.Bool( j.Get( node, "forever" ));
+	Q_strncpy( s_online.limits[kind].reason, j.String( j.Get( node, "reason" )), sizeof( s_online.limits[kind].reason ));
+}
+
+bool CZM_OnlineLimited( int kind, char *text, size_t size )
+{
+	if( kind < 0 || kind >= CZM_LIMIT_COUNT || !s_online.limits[kind].active )
+		return false;
+	if( !s_online.limits[kind].forever && s_online.limits[kind].until <= (int)time( NULL ))
+	{
+		s_online.limits[kind].active = false; // it ran out; the next hello confirms
+		return false;
+	}
+	if( text && size )
+	{
+		static const char *ru[CZM_LIMIT_COUNT] = { "Чат ограничен модератором", "Голос ограничен модератором", "Фото ограничено модератором" };
+		static const char *en[CZM_LIMIT_COUNT] = { "A moderator limited your chat", "A moderator limited your voice", "A moderator limited your photo" };
+		char when[48] = "";
+		if( s_online.limits[kind].forever )
+			Q_strncpy( when, CZM_IsRussian() ? " навсегда" : " for good", sizeof( when ));
+		else
+		{
+			time_t until = s_online.limits[kind].until;
+			struct tm date;
+			char stamp[24];
+			localtime_r( &until, &date );
+			strftime( stamp, sizeof( stamp ), "%d.%m %H:%M", &date );
+			snprintf( when, sizeof( when ), CZM_IsRussian() ? " до %s" : " until %s", stamp );
+		}
+		snprintf( text, size, "%s%s%s%s", CZM_IsRussian() ? ru[kind] : en[kind], when,
+			s_online.limits[kind].reason[0] ? ". " : "", s_online.limits[kind].reason );
+	}
 	return true;
 }
 
@@ -241,6 +299,18 @@ static void OnHello( int status, const char *body )
 	s_online.player = j.Int( j.Get( 0, "id" ));
 	Q_strncpy( s_online.myAvatar, j.String( j.Get( 0, "avatar" )), sizeof( s_online.myAvatar ));
 	ReadBan( j, j.Get( 0, "ban" ));
+	s_online.support = !strcmp( j.String( j.Get( 0, "role" )), "support" );
+	{
+		int moderation = j.Get( 0, "moderation" ), warning = j.Get( moderation, "warning" );
+		static const char *kinds[CZM_LIMIT_COUNT] = { "text", "voice", "photo" };
+		for( int k = 0; k < CZM_LIMIT_COUNT; k++ )
+			CZM_OnlineSetLimit( k, j, j.Get( moderation, kinds[k] ));
+		// the service already shows the logo instead of the photo: the own screens agree
+		if( CZM_OnlineLimited( CZM_LIMIT_PHOTO ) && CZM_CurrentAvatar() == CZM_AVATAR_PHOTO )
+			CZM_SetAvatar( CZM_AVATAR_LOGO );
+		s_online.warning = j.Type( warning ) == CzmJson::T_OBJECT ? j.Int( j.Get( warning, "id" )) : 0;
+		Q_strncpy( s_online.warningReason, s_online.warning ? j.String( j.Get( warning, "reason" )) : "", sizeof( s_online.warningReason ));
+	}
 	{
 		int rules = j.Get( 0, "rules" );
 		if( j.Type( rules ) == CzmJson::T_OBJECT )
@@ -291,6 +361,8 @@ static void SyncPhoto( void )
 	// a photo is shown to everyone: it waits for the community rules
 	if( s_online.preserveAvatar || s_online.uploadId || !photo[0] || CZM_CurrentAvatar() != CZM_AVATAR_PHOTO || !CZM_RulesAccepted( ))
 		return;
+	if( CZM_OnlineLimited( CZM_LIMIT_PHOTO ))
+		return; // a moderator took the photo away for a while
 	if( !strcmp( photo, EngFuncs::GetCvarString( "czm_avatar_sent" )))
 		return;
 
@@ -347,10 +419,33 @@ static void StoreUpdateFrame( double now )
 		memset( &s_online.update, 0, sizeof( s_online.update ));
 }
 
+// a moderator warning is shown once, in the menu, and the service learns it was seen
+static void WarningFrame( void )
+{
+	int status;
+	CUtlString body;
+
+	if( s_online.warningSeenId && CZM_NetPoll( s_online.warningSeenId, &status, body ))
+		s_online.warningSeenId = 0;
+	if( !s_online.warning || s_online.warning == s_online.warningShown || s_online.warningSeenId || CL_IsActive( ))
+		return;
+	char text[400], payload[48];
+	snprintf( text, sizeof( text ), CZM_IsRussian()
+		? "%s\n\nПовторное нарушение может закончиться ограничением чата, голоса или блокировкой. Правила: counter-zombie.ru/rules"
+		: "%s\n\nAnother violation may limit your chat or voice or end in a ban. Rules: counter-zombie.ru/rules",
+		s_online.warningReason );
+	CZM_ShowNotice( CZM_IsRussian() ? "Предупреждение модератора" : "Moderator warning", text );
+	s_online.warningShown = s_online.warning;
+	snprintf( payload, sizeof( payload ), "{\"id\":%d}", s_online.warning );
+	s_online.warningSeenId = CZM_NetRequest( "POST", CZM_OnlineUrl( "/api/v1/moderation/warning/seen" ), s_online.key, payload );
+}
+
 void CZM_OnlineFrame( void )
 {
 	CZM_SprayFrame();
 	CZM_RulesFrame();
+	CZM_ModerationFrame();
+	WarningFrame();
 	double now = EngFuncs::DoubleTime();
 	int status;
 	CUtlString body;
@@ -512,6 +607,14 @@ void CZM_OnlineFrame( void )
 			bool parsed = j.Parse( body.Get( ));
 			if( parsed && !strcmp( j.String( j.Get( 0, "error" )), "rules" ))
 				CZM_RulesSetState( Q_max( 1, j.Int( j.Get( 0, "version" ))), false, "" ); // uploads again once accepted
+			else if( parsed && !strcmp( j.String( j.Get( 0, "error" )), "photo_restricted" ))
+			{
+				char why[300];
+				CZM_OnlineSetLimit( CZM_LIMIT_PHOTO, j, j.Get( 0, "restriction" ));
+				CZM_SetAvatar( CZM_AVATAR_LOGO ); // others see the logo too: the service reset the photo
+				if( CZM_OnlineLimited( CZM_LIMIT_PHOTO, why, sizeof( why )))
+					CZM_ShowNotice( CZM_IsRussian() ? "Фото недоступно" : "Photo unavailable", why );
+			}
 			else
 			{
 				if( parsed )

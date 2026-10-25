@@ -51,6 +51,7 @@ struct CzmChatMessage
 	int id;
 	int player;
 	int time;
+	bool support;         // the official SUPPORT account
 	char nick[48];
 	char avatar[24];
 	char text[512];
@@ -290,6 +291,7 @@ void CCzmChat::ReadMessages( CzmChatRoom &room, const char *body )
 		Q_strncpy( m.nick, j.String( j.Get( item, "n" )), sizeof( m.nick ));
 		Q_strncpy( m.avatar, j.String( j.Get( item, "a" )), sizeof( m.avatar ));
 		Q_strncpy( m.text, j.String( j.Get( item, "t" )), sizeof( m.text ));
+		m.support = !strcmp( j.String( j.Get( item, "r" )), "support" );
 		room.messages.AddToTail( m );
 		room.lastId = id;
 		added++;
@@ -371,6 +373,13 @@ void CCzmChat::Poll( void )
 				CZM_OnlineReadBan( j, j.Get( 0, "ban" ));
 			else if( !strcmp( error, "rules" ))
 				CZM_RulesRefused( j.Int( j.Get( 0, "version" )), AfterRules );
+			else if( !strcmp( error, "muted" ))
+			{
+				char why[300];
+				CZM_OnlineSetLimit( CZM_LIMIT_TEXT, j, j.Get( 0, "mute" ));
+				if( CZM_OnlineLimited( CZM_LIMIT_TEXT, why, sizeof( why )))
+					CZM_ShowNotice( CZM_IsRussian() ? "Чат ограничен" : "Chat limited", why );
+			}
 			else if( strcmp( error, "empty" ))
 				Toast( CZM_T( "chat_offline" ));
 		}
@@ -401,6 +410,14 @@ void CCzmChat::Send( void )
 	}
 	if( !CZM_RulesAllow( AfterRules ))
 		return;
+	{
+		char why[300];
+		if( CZM_OnlineLimited( CZM_LIMIT_TEXT, why, sizeof( why )))
+		{
+			CZM_ShowNotice( CZM_IsRussian() ? "Чат ограничен" : "Chat limited", why );
+			return;
+		}
+	}
 
 	body.Append( "{\"text\":" );
 	CZM_JsonQuote( body, p );
@@ -865,6 +882,8 @@ void CCzmChat::DrawMessages( void )
 		// nick and time
 		nickW = Q_min( CZM_TextWidth( nameFont, m.nick ), m_iTextW * 2 / 3 );
 		CZM_DrawText( nameFont, m_iTextX, top, nickW + 2, m.nick, NickColor( m.player, mine ));
+		if( m.support )
+			nickW += H * 0.012f + CZM_DrawSupportTag( m_iTextX + nickW + H * 0.012f, top - 1, CZM_FontHeight( nameFont ) + 2 );
 		FormatTime( m.time, when, sizeof( when ));
 		CZM_DrawText( timeFont, m_iTextX + nickW + H * 0.018f, top + CZM_FontHeight( nameFont ) - CZM_FontHeight( timeFont ), m_iTextW / 3, when,
 			PackRGBA( 120, 126, 136, 255 ));

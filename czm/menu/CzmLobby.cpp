@@ -23,7 +23,7 @@
 namespace {
 const char *L( const char *ru, const char *en ) { return CZM_IsRussian() ? ru : en; }
 struct RoomCard { char id[64], title[128], address[64], proto[8], map[64]; int count,capacity; };
-struct Member { int id; bool ready; char nick[100],avatar[32]; };
+struct Member { int id; bool ready,support; char nick[100],avatar[32]; };
 struct ChatLine { int id,sender; char nick[52],text[440]; };
 bool SafeAddress(const char *p) {
     if(!p || !*p || strlen(p)>=64 || !strchr(p,':')) return false;
@@ -233,6 +233,7 @@ bool CCzmLobby::VoiceBlocked() const{
     const int me=CZM_OnlinePlayer();
     if(!me)return true;
     if(m_voiceAllMuted&&me!=m_owner)return true;
+    if(CZM_OnlineLimited(CZM_LIMIT_VOICE))return true;
     for(int i=0;i<m_memberCount;i++)
         if(m_members[i].id==me)return m_hostMuted[i];
     return true;
@@ -453,6 +454,7 @@ void CCzmLobby::ReadRoom(const CzmJson &j,int n){
     for(int i=0;i<j.Count(members)&&m_memberCount<CZM_LOBBY_MEMBERS;i++){
         int item=j.At(members,i);Member &m=m_members[m_memberCount++];
         m.id=j.Int(j.Get(item,"id"));m.ready=j.Bool(j.Get(item,"ready"));
+        m.support=!strcmp(j.String(j.Get(item,"role")),"support");
         Q_strncpy(m.nick,j.String(j.Get(item,"nick")),sizeof(m.nick));
         Q_strncpy(m.avatar,j.String(j.Get(item,"avatar")),sizeof(m.avatar));
     }
@@ -523,6 +525,10 @@ void CCzmLobby::FinishRequest(int status,const char *body,int kind){
             else if(level>=3)Notice(L("Мут за нарушения · до 24 часов",
                                        "Muted for violations · up to 24 hours"));
             else Notice(L("Мут за нарушения правил","Muted for violations"));
+        }
+        else if(!strcmp(code,"muted")){
+            char why[220];
+            Notice(CZM_OnlineLimited(CZM_LIMIT_TEXT,why,sizeof(why))?why:L("Чат ограничен модератором","A moderator limited your chat"));
         }
         else if(!strcmp(code,"rules")){
             m_afterRules=kind==POST_CREATE?MAKE:SEND;
@@ -701,7 +707,9 @@ void CCzmLobby::Report(const char *body){
 void CCzmLobby::Action(int hit){
     if(m_sheet){
         const int sheet=m_sheet;m_sheet=0;
-        if(hit==SHEET&&sheet==SHEET_MESSAGE){
+        if(hit==SHEET&&sheet==SHEET_MESSAGE&&CZM_OnlineSupport()){
+            CZM_ModerationTarget(m_sheetSender,m_sheetNick,0,m_sheetMessage,m_sheetText);
+        }else if(hit==SHEET&&sheet==SHEET_MESSAGE){
             char body[64];snprintf(body,sizeof(body),"{\"lobby_message\":%d}",m_sheetMessage);Report(body);
         }else if(hit==SHEET+1&&sheet==SHEET_MESSAGE)CZM_OpenProfile(m_sheetSender);
         else if(hit==SHEET&&sheet==SHEET_ROOM&&m_room[0]&&m_owner!=CZM_OnlinePlayer()){
@@ -731,7 +739,9 @@ void CCzmLobby::Action(int hit){
     }
     if(hit==VOICE_MIC){
         if(VoiceBlocked()){
-            Notice(L("Микрофон выключен хозяином комнаты",
+            char why[220];
+            if(CZM_OnlineLimited(CZM_LIMIT_VOICE,why,sizeof(why)))Notice(why);
+            else Notice(L("Микрофон выключен хозяином комнаты",
                      "The host muted your microphone"));
             CZM_LobbyVoiceMic(false);
             return;
@@ -758,6 +768,12 @@ void CCzmLobby::Action(int hit){
             int id=m_selectedMemberId;
             CZM_LobbyVoiceLocalMute(id,!CZM_LobbyVoiceIsMuted(id));
             m_selectedMemberId=m_memberConfirm=0;return;
+        }
+        if(hit==MODAL_REPORT&&CZM_OnlineSupport()){
+            const int id=m_selectedMemberId;const char *nick="";
+            for(int i=0;i<m_memberCount;i++)if(m_members[i].id==id)nick=m_members[i].nick;
+            m_selectedMemberId=m_memberConfirm=0;StopInput();
+            CZM_ModerationTarget(id,nick);return;
         }
         if(hit==MODAL_REPORT){
             // the member's voice or behaviour in this room; the service checks both are here
@@ -1130,7 +1146,11 @@ void CCzmLobby::Draw(){
                 CZM_DrawImage(CZM_AvatarFor(member.avatar,member.id),ax,ay,av,av);
                 const int tx=ax+av+gap,icon=Q_max(14,(int)(H*.027f));
                 const int right=r.x+r.w-inset,tw=Q_max(10,right-tx-icon-gap/2);
-                CzmStyle::Text(CZM_Rect(tx,r.y+r.h/2-label-2,tw,label+4),member.nick,CZMF_UI_LABEL);
+                if(member.support){
+                    const int tagH=label,nw=Q_min(CZM_TextWidth(CZM_Font(CZMF_UI_LABEL),member.nick)+2,tw-CZM_SupportTagWidth(tagH)-gap/2);
+                    CzmStyle::Text(CZM_Rect(tx,r.y+r.h/2-label-2,Q_max(0,nw),label+4),member.nick,CZMF_UI_LABEL);
+                    CZM_DrawSupportTag(tx+Q_max(0,nw)+gap/2,r.y+r.h/2-label,tagH);
+                }else CzmStyle::Text(CZM_Rect(tx,r.y+r.h/2-label-2,tw,label+4),member.nick,CZMF_UI_LABEL);
                 const char *state=member.ready?L("Готов","Ready"):L("Не готов","Not ready");
                 CzmStyle::Text(CZM_Rect(tx,r.y+r.h/2+2,right-tx,label),state,CZMF_UI_META,member.ready?CzmStyle::Success():CzmStyle::Muted());
                 if(member.id==CZM_OnlinePlayer())CzmStyle::Text(
@@ -1197,7 +1217,7 @@ void CCzmLobby::Draw(){
         CzmStyle::Text(CZM_Rect(m_modal.x+pad,m_modal.y+pad,m_modal.w-pad*2,m_back.h),nick,CZMF_UI_TITLE);
         const char *labels[MODAL_ROWS]={L("Открыть профиль","Open profile"),
             CZM_LobbyVoiceIsMuted(m_selectedMemberId)?L("Включить звук у себя","Unmute for me"):L("Выключить звук у себя","Mute for me"),
-            L("Пожаловаться на игрока","Report player"),
+            CZM_OnlineSupport()?L("Модерация","Moderation"):L("Пожаловаться на игрока","Report player"),
             muted?L("Разрешить микрофон","Allow microphone"):L("Выключить микрофон игроку","Mute player for everyone"),
             m_memberConfirm==1?L("Подтвердить исключение","Confirm kick"):L("Исключить из лобби","Kick from lobby"),
             m_memberConfirm==2?L("Подтвердить передачу","Confirm transfer"):L("Передать права хозяина","Transfer host"),L("Закрыть","Close")};
@@ -1228,7 +1248,7 @@ void CCzmLobby::DrawSheet(){
     else snprintf(quote,sizeof(quote),"«%s»",m_sheetText);
     CzmStyle::Text(context,quote,CZMF_SMALL,CzmStyle::Muted());
     const char *labels[SHEET_ROWS]={
-        room?L("Пожаловаться на лобби","Report lobby"):L("Пожаловаться на сообщение","Report message"),
+        room?L("Пожаловаться на лобби","Report lobby"):CZM_OnlineSupport()?L("Модерация","Moderation"):L("Пожаловаться на сообщение","Report message"),
         room?L("Правила сообщества","Community rules"):L("Открыть профиль","Open profile"),
         L("Закрыть","Close")};
     for(int i=0;i<SHEET_ROWS;i++)

@@ -72,6 +72,14 @@ static bool rulesOk=true;static void(*rulesThen)()=nullptr;static int rulesShown
 bool CZM_RulesAllow(void(*then)()){if(rulesOk)return true;rulesThen=then;return false;}
 void CZM_RulesRefused(int version,void(*then)()){rulesOk=false;rulesVersion=version;rulesThen=then;}
 void CZM_RulesShow(){rulesShown++;}
+static bool support,voiceLimited,textLimited;static int moderationTarget,moderationLobbyMessage,supportTags;static std::string moderationQuote;
+bool CZM_OnlineSupport(){return support;}int CZM_SupportTagWidth(int h){return h*4;}
+int CZM_DrawSupportTag(int x,int y,int h){supportTags++;UI_FillRect(x,y,h*4,h,PackRGBA(196,150,62,255));return h*4;}
+bool CZM_OnlineLimited(int k,char*t,size_t n){
+ const bool on=(k==CZM_LIMIT_VOICE&&voiceLimited)||(k==CZM_LIMIT_TEXT&&textLimited);
+ if(on&&t&&n)Q_strncpy(t,k==CZM_LIMIT_VOICE?"Голос ограничен модератором до 02.11 10:00":"Чат ограничен модератором навсегда",n);return on;}
+void CZM_ModerationOpen(){}
+void CZM_ModerationTarget(int id,const char*,int,int lobbyMessage,const char*quote){moderationTarget=id;moderationLobbyMessage=lobbyMessage;moderationQuote=quote?quote:"";}
 '''
 SCENARIOS = r'''
 static void clear(CCzmLobby&w){w.m_request=0;w.m_kind=0;w.m_busy=false;}
@@ -81,7 +89,7 @@ static int hit(CCzmLobby&w,const CzmRect&r){cursorX=r.x+r.w/2;cursorY=r.y+r.h/2;
 static void populate(CCzmLobby&w){
  strcpy(w.m_room,"native-test-room");strcpy(w.m_roomTitle,"Zombie Team");strcpy(w.m_serverAddress,"203.0.113.5:27015");strcpy(w.m_pickedName,"Night Killers · Zombie Escape");strcpy(w.m_pickedMap,"ze_atix_panic_v1_fix");
  w.m_pickedPlayers=21;w.m_pickedSlots=32;w.m_owner=7;w.m_capacity=6;w.m_memberCount=3;
- for(int i=0;i<3;i++){auto&m=w.m_members[i];m.id=7+i;m.ready=i!=2;snprintf(m.nick,sizeof(m.nick),"%s",i==0?"Kuro":i==1?"Hunter":"Shadow");strcpy(m.avatar,"1");}
+ for(int i=0;i<3;i++){auto&m=w.m_members[i];m.id=7+i;m.ready=i!=2;m.support=false;snprintf(m.nick,sizeof(m.nick),"%s",i==0?"Kuro":i==1?"Hunter":"Shadow");strcpy(m.avatar,"1");}
 }
 int main(int argc,char**argv){
  auto&w=*menu_czmlobby;populate(w);strcpy(w.m_title,"Zombie Team");
@@ -205,6 +213,14 @@ int main(int argc,char**argv){
  w.m_selectedMemberId=8;w.Layout();assert(hit(w,w.m_modalButtons[2])==w.MODAL_REPORT);w.Action(w.MODAL_REPORT);
  assert(!w.m_selectedMemberId&&lastBody=="{\"player\":8,\"lobby\":\"native-test-room\"}");replies[w.m_reportRequest]={429,"{}"};w.Frame();
  player=8;w.m_selectedMemberId=9;w.Layout();assert(hit(w,w.m_modalButtons[3])==w.NONE&&hit(w,w.m_modalButtons[6])==w.MODAL_CANCEL);player=7;w.m_selectedMemberId=0;
+ // SUPPORT moderates instead of reporting: the member, and a message with its words
+ support=true;requests=nextRequest;
+ w.m_selectedMemberId=8;w.Layout();w.Action(w.MODAL_REPORT);assert(moderationTarget==8&&!w.m_selectedMemberId&&nextRequest==requests);
+ w.Action(w.MESSAGE);w.Action(w.SHEET);assert(moderationTarget==8&&moderationLobbyMessage==41&&moderationQuote=="bad words"&&nextRequest==requests);
+ w.m_members[1].support=true;supportTags=0;w.Draw();assert(supportTags==1);w.m_members[1].support=false;support=false;
+ // A moderator's limits: the voice stays off and the chat explains itself.
+ voiceLimited=true;assert(w.VoiceBlocked());micOn=false;w.Action(w.VOICE_MIC);assert(!micOn&&strstr(w.m_notice,"Голос ограничен"));voiceLimited=false;
+ textLimited=true;w.FinishRequest(403,"{\"error\":\"muted\"}",w.POST_CHAT);assert(strstr(w.m_notice,"Чат ограничен модератором навсегда"));textLimited=false;
  clear(w);w.m_chatCount=0;
  // Account changes clear the former room and voice state.
  micOn=true;w.ResetSession();assert(!w.HasRoom()&&!micOn);

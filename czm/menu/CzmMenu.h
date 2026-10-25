@@ -380,6 +380,13 @@ int CZM_OnlineCount( void ); // players in the game right now, -1 unknown
 int CZM_OnlineIdentity( void );
 int CZM_OnlinePlayer( void );
 bool CZM_OnlineBan( int *until, bool *forever, const char **reason );
+// SUPPORT and what a moderator limited for this player
+enum { CZM_LIMIT_TEXT = 0, CZM_LIMIT_VOICE, CZM_LIMIT_PHOTO, CZM_LIMIT_COUNT };
+bool CZM_OnlineSupport( void );
+int CZM_SupportTagWidth( int h );
+int CZM_DrawSupportTag( int x, int y, int h ); // returns its width
+bool CZM_OnlineLimited( int kind, char *text = NULL, size_t size = 0 ); // text: what to tell the player
+void CZM_OnlineSetLimit( int kind, const CzmJson &j, int node );         // from a refused post
 void CZM_OnlineReadBan( const CzmJson &j, int ban );
 int CZM_NewsUnread( void );
 void CZM_NewsOpen( void );             // loads the list
@@ -421,6 +428,10 @@ void CZM_LobbyPickedServer( const char *address,const char *proto,
 bool CZM_LobbyCanInvite( void );
 void CZM_LobbyInviteFriend( int player );
 void CZM_OpenProfile( int player, int chatMessage = 0 );
+// SUPPORT moderation (czm/menu/CzmModeration.cpp); the service checks the role on every request
+void CZM_ModerationOpen( void ); // the panel: reports, active sanctions, history
+void CZM_ModerationTarget( int player, const char *nick, int message = 0, int lobbyMessage = 0, const char *quote = "" );
+void CZM_ModerationFrame( void );
 void CZM_SocialFrame( void );
 int CZM_SocialUnread( void );
 int CZM_SocialRequests( void );

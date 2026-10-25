@@ -275,8 +275,10 @@ async def moderation_history(request: Request, offset: int = 0, x_czm_key: str |
 
 
 @router.get("/moderation/player/{target}")
-async def moderation_player(target: int, request: Request, x_czm_key: str | None = Header(default=None)):
-    return await social_result(request, lambda c: moderation.player(c, x_czm_key or "", target))
+async def moderation_player(target: int, request: Request, message: int = 0, lobby_message: int = 0,
+                            x_czm_key: str | None = Header(default=None)):
+    return await social_result(request, lambda c: moderation.player(c, x_czm_key or "", target,
+                                                                    max(0, message), max(0, lobby_message)))
 
 
 @router.post("/moderation/act")

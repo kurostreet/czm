@@ -767,6 +767,49 @@ void CZM_DrawCountBadge( const CzmRect &r, int count )
 		r.w, text, CZM_White(), QM_CENTER );
 }
 
+/*
+The official SUPPORT tag: a gold shield and SUPPORT on graphite with a thin gold edge.
+A soft glint crosses it now and then, so it reads as a badge, not as a button.
+*/
+static int CZM_SupportFont( int h )
+{
+	return h >= CZM_FontHeight( CZM_Font( CZMF_UI_LABEL )) + 6 ? CZMF_UI_LABEL : CZMF_UI_META;
+}
+
+int CZM_SupportTagWidth( int h )
+{
+	const int icon = h * 68 / 100;
+	return h / 3 + icon + h / 5 + CZM_TextWidth( CZM_Font( CZM_SupportFont( h )), "SUPPORT" ) + h / 3;
+}
+
+int CZM_DrawSupportTag( int x, int y, int h )
+{
+	const unsigned int gold = PackRGBA( 231, 187, 96, 255 );
+	const int w = CZM_SupportTagWidth( h ), line = Q_max( 1, ScreenHeight / 720 ), radius = Q_max( 2, h / 3 );
+	const int icon = h * 68 / 100;
+	const HFont font = CZM_Font( CZM_SupportFont( h ));
+
+	CZM_DrawSliced( "gfx/czm/ui/surface.png", x, y, w, h, 16, radius, PackRGBA( 196, 150, 62, 255 ));
+	CZM_DrawSliced( "gfx/czm/ui/surface.png", x + line, y + line, w - line * 2, h - line * 2, 16, Q_max( 1, radius - line ), PackRGBA( 30, 31, 36, 255 ));
+	CZM_DrawImage( "gfx/czm/ui/icon_shield.png", x + h / 3, y + ( h - icon ) / 2, icon, icon, gold );
+	CZM_DrawText( font, x + h / 3 + icon + h / 5, y + ( h - CZM_FontHeight( font )) / 2, w, "SUPPORT", gold );
+
+	// the glint: a narrow light band once every six seconds
+	double t = fmod( uiStatic.realTime * 0.001, 6.0 );
+	if( t < 0.8 )
+	{
+		const int band = Q_max( 2, h / 3 ), bx = x - band + (int)(( w + band ) * t / 0.8 );
+		UI::Scissor::PushScissor( x + line, y + line, w - line * 2, h - line * 2 );
+		for( int i = 0; i < band; i++ )
+		{
+			const int alpha = 46 - abs( i * 2 - band ) * 46 / Q_max( 1, band );
+			UI_FillRect( bx + i, y, 1, h, PackRGBA( 255, 236, 190, Q_max( 0, alpha )));
+		}
+		UI::Scissor::PopScissor();
+	}
+	return w;
+}
+
 unsigned int CZM_PingColor( int ping )
 {
 	if( ping < 80 )

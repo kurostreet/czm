@@ -148,6 +148,9 @@ class ModerationTests(unittest.TestCase):
         self.assertEqual(self.request("POST", "report", 2, json={"message": message}).status_code, 200)
         reports = self.request("GET", "moderation/reports").json()["reports"]
         self.assertEqual((len(reports), reports[0]["evidence"], reports[0]["target"]["id"]), (1, "rude words", self.ids[1]))
+        card = self.request("GET", "moderation/player/%d?message=%d" % (self.ids[1], message)).json()
+        self.assertEqual((card["quote"]["text"], card["target"]["id"]), ("rude words", self.ids[1]))
+        self.assertIsNone(self.request("GET", "moderation/player/%d?message=%d" % (self.ids[2], message)).json()["quote"])
         report = reports[0]["id"]
         wrong = self.act("delete_message", 2, report=report)
         self.assertEqual(wrong.status_code, 409)          # the complaint is not about player 2
