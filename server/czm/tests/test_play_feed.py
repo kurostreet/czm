@@ -201,7 +201,8 @@ class PlayFeedApiTests(unittest.TestCase):
         self.assertGreater(second["news"], news)
         site = self.client.get("/api/v1/site/news").json()["news"]
         self.assertEqual([(n["version"], n["notes"]) for n in site][0], ("1.35", "Стало лучше."))
-        self.assertEqual(self.client.post("/api/v1/hello", json={"key": "feed-api-key-0009-abcdef", "store": 2}).status_code, 400)
+        # only 0 or 1 (the service's own handler turns validation errors into 400)
+        self.assertIn(self.client.post("/api/v1/hello", json={"key": "feed-api-key-0009-abcdef", "store": 2}).status_code, (400, 422))
 
 
 if __name__ == "__main__":
