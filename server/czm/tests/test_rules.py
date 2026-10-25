@@ -10,13 +10,20 @@ from czm import accounts, api, bot, db, lobbies, rules, service, social, voice_l
 from czm.config import get_settings
 
 
+def clear_limits():
+    """Every test client shares one address; leave the request limits as other tests expect them."""
+    for value in vars(api).values():
+        if isinstance(value, api._Limiter):
+            value.calls.clear()
+
+
 class RulesTests(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory(); self.addCleanup(temp.cleanup)
         env = patch.dict(os.environ, {"CZM_DATA_DIR": temp.name, "CZM_PLAY_SERVICE_ACCOUNT_FILE": "/nonexistent"})
         env.start(); self.addCleanup(env.stop)
         get_settings.cache_clear(); self.addCleanup(get_settings.cache_clear)
-        api._lobby_limit.calls.clear()
+        clear_limits(); self.addCleanup(clear_limits)
         db.init()
         app = FastAPI(); app.include_router(api.router)
         self.client = TestClient(app); self.addCleanup(self.client.close)
@@ -211,7 +218,7 @@ class VoiceBlockTests(unittest.TestCase):
         env = patch.dict(os.environ, {"CZM_DATA_DIR": temp.name, "CZM_PLAY_SERVICE_ACCOUNT_FILE": "/nonexistent"})
         env.start(); self.addCleanup(env.stop)
         get_settings.cache_clear(); self.addCleanup(get_settings.cache_clear)
-        api._lobby_limit.calls.clear()
+        clear_limits(); self.addCleanup(clear_limits)
         db.init()
         app = FastAPI(); app.include_router(api.router)
         self.client = TestClient(app); self.addCleanup(self.client.close)
