@@ -5,6 +5,7 @@
   python -m czm.cli set-beta-open 0|1  # 1 only when Play testing links work
   python -m czm.cli create-dev-invite
   python -m czm.cli publish-migration <release-id>
+  python -m czm.cli support-grant <player-id> | support-revoke <player-id> | support-list
 
 add-release moves an uploaded APK into the download folder and remembers it as the
 newest private development build. The owner publishes it in the bot (/release).
@@ -42,6 +43,21 @@ def add_release(apk: Path, version: str, code: int) -> None:
 
 
 def main(argv: list[str]) -> int:
+    if len(argv) == 2 and argv[0] in ("support-grant", "support-revoke") and argv[1].isdigit():
+        from . import moderation
+        db.init()
+        with db.db() as conn:
+            if argv[0] == "support-grant":
+                print("SUPPORT:", moderation.grant(conn, int(argv[1])))
+            else:
+                print("revoked" if moderation.revoke(conn, int(argv[1])) else "no such SUPPORT")
+        return 0
+    if argv == ["support-list"]:
+        db.init()
+        with db.db() as conn:
+            for row in conn.execute("SELECT s.player, p.nick, s.role FROM staff s JOIN players p ON p.id=s.player"):
+                print(row["player"], row["nick"], row["role"])
+        return 0
     if argv == ["create-dev-invite"]:
         db.init()
         with db.db() as conn:

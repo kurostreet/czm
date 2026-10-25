@@ -78,6 +78,10 @@ def profile(conn, viewer, target, compact=False):
               "status": extra["status"] if extra else "", "relation": rel,
               "online": online, "last_seen": 0 if hidden else extra["last_seen"] if extra else 0,
               "playing": online and bool(presence["server"]), "server": "", "map": ""}
+    from . import moderation
+    staff = moderation.role(conn, target)
+    if staff:
+        result["role"] = staff
     if online and rel in ("self", "friend"):
         result.update(server=presence["server"], map=presence["map"])
         from . import lobbies
@@ -130,6 +134,8 @@ def update_status(conn, key, text):
     player = actor(conn, key)
     if service.active_ban(conn, player):
         raise accounts.AuthError("banned", 403)
+    from . import moderation
+    moderation.require_text(conn, player)
     text = service.profanity.clean(service.clean_text(text, 100))
     conn.execute("INSERT INTO social_profiles(player,status) VALUES(?,?) ON CONFLICT(player) DO UPDATE SET status=excluded.status", (player["id"], text))
     return {"profile": profile(conn, player, player["id"])}
@@ -237,6 +243,9 @@ def send(conn, key, target, text, nonce, invite=False):
         raise accounts.AuthError("not_friends", 403)
     if service.active_ban(conn, player):
         raise accounts.AuthError("banned", 403)
+    if not invite:
+        from . import moderation
+        moderation.require_text(conn, player)
     # typed text never passes for an invite: addresses are masked like links in the chat
     if not invite:
         text = service.profanity.clean(service.clean_text(text, 400))

@@ -94,7 +94,7 @@ def active_ban(conn: sqlite3.Connection, player: sqlite3.Row) -> dict | None:
     """The ban on this player or on this phone, if any."""
     t = now()
     row = conn.execute(
-        "SELECT * FROM bans WHERE lifted IS NULL AND (until IS NULL OR until > ?) "
+        "SELECT * FROM bans WHERE kind = 'ban' AND lifted IS NULL AND (until IS NULL OR until > ?) "
         "AND (player = ? OR (device_hash != '' AND device_hash = ?)) ORDER BY until IS NULL DESC, until DESC LIMIT 1",
         (t, player["id"], player["device_hash"]),
     ).fetchone()
@@ -114,14 +114,16 @@ def messages(conn: sqlite3.Connection, room: str, after: int, viewer: int = 0) -
     """The room's recent messages; without the players the viewer blocked."""
     limit = get_settings().room_history
     rows = conn.execute(
-        "SELECT m.id, m.player, m.text, m.created, p.nick, p.avatar, p.avatar_rev FROM messages m "
-        "JOIN players p ON p.id = m.player WHERE m.room = ? AND m.deleted = 0 AND m.id > ? "
+        "SELECT m.id, m.player, m.text, m.created, p.nick, p.avatar, p.avatar_rev, s.role FROM messages m "
+        "JOIN players p ON p.id = m.player LEFT JOIN staff s ON s.player = m.player "
+        "WHERE m.room = ? AND m.deleted = 0 AND m.id > ? "
         "AND NOT EXISTS (SELECT 1 FROM social_blocks b WHERE b.source = ? AND b.target = m.player) "
         "ORDER BY m.id DESC LIMIT ?",
         (room, after, viewer, limit),
     ).fetchall()
     return [
-        {"id": r["id"], "p": r["player"], "n": r["nick"], "a": avatar_ref(r), "t": profanity.clean(r["text"]), "ts": r["created"]}
+        {"id": r["id"], "p": r["player"], "n": r["nick"], "a": avatar_ref(r), "t": profanity.clean(r["text"]), "ts": r["created"],
+         **({"r": r["role"]} if r["role"] else {})}
         for r in reversed(rows)
     ]
 
@@ -146,6 +148,10 @@ def post_message(conn: sqlite3.Connection, player: sqlite3.Row, room: str, text:
     ban = active_ban(conn, player)
     if ban:
         raise ChatError("banned", 403, ban=ban)
+    from . import moderation
+    mute = moderation.sanction(conn, player, "text")
+    if mute:
+        raise ChatError("muted", 403, mute=mute)
 
     text = clean_text(text, settings.message_max_chars)
     if not text:
@@ -330,7 +336,7 @@ def active_bans(conn: sqlite3.Connection) -> list[dict]:
         "WHERE b.lifted IS NULL AND (b.until IS NULL OR b.until > ?) ORDER BY b.id DESC LIMIT 50",
         (now(),),
     ).fetchall()
-    return [{"player": r["player"], "nick": r["nick"], "until": r["until"], "reason": r["reason"]} for r in rows]
+    return [{"player": r["player"], "nick": r["nick"], "until": r["until"], "reason": r["reason"], "kind": r["kind"]} for r in rows]
 
 
 def resolve_report(conn: sqlite3.Connection, report_id: int, status: str) -> None:

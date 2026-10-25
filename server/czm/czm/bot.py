@@ -347,7 +347,9 @@ class OwnerBot:
         if not bans:
             await message.answer("Банов нет.")
             return
-        lines = [f"{html.escape(b['nick'])} (ID {b['player']}) — {when(b['until'])}"
+        kinds = {"text": "мут чата", "voice": "мут голоса", "photo": "запрет фото"}
+        lines = [f"{html.escape(b['nick'])} (ID {b['player']}) — "
+                 + (kinds[b["kind"]] + " " if b.get("kind") in kinds else "") + when(b["until"])
                  + (f", {html.escape(b['reason'])}" if b["reason"] else "") for b in bans]
         await message.answer("\n".join(lines))
 

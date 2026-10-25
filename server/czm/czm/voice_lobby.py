@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from collections import defaultdict
 
 from fastapi import WebSocket, WebSocketDisconnect
-from . import accounts, lobbies, rules
+from . import accounts, lobbies, moderation, rules
 from .db import db
 
 VOICE_PACKET = 321
@@ -74,7 +74,8 @@ def can_transmit(conn, key, room):
     muted = (bool(row and row["host_muted"]) or
              (not host and bool(active_room["voice_mute_all"])) or
              bool(punishment and punishment["mute_until"] > lobbies.now()) or
-             rules.required(terms))
+             rules.required(terms) or
+             moderation.sanction(conn, player, "voice") is not None)
     return player, muted
 
 

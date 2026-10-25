@@ -166,8 +166,9 @@ def _map_for_server(conn, address):
 
 def _state(conn, room):
     people = conn.execute(
-        "SELECT m.player, m.ready_revision, p.nick, p.avatar FROM lobby_members m "
-        "JOIN players p ON p.id=m.player WHERE m.lobby=? ORDER BY m.joined,m.player",
+        "SELECT m.player, m.ready_revision, p.nick, p.avatar, s.role FROM lobby_members m "
+        "JOIN players p ON p.id=m.player LEFT JOIN staff s ON s.player=m.player "
+        "WHERE m.lobby=? ORDER BY m.joined,m.player",
         (room["id"],)).fetchall()
     voice_muted=conn.execute(
         "SELECT player FROM lobby_voice_mutes WHERE lobby=? AND host_muted=1",
@@ -181,7 +182,8 @@ def _state(conn, room):
             "voice_muted": [r["player"] for r in voice_muted],
             "revision": room["revision"], "members": [
                 {"id": p["player"], "nick": p["nick"], "avatar": p["avatar"],
-                 "ready": p["ready_revision"] == room["revision"]} for p in people]}
+                 "ready": p["ready_revision"] == room["revision"],
+                 **({"role": p["role"]} if p["role"] else {})} for p in people]}
 
 
 def _current(conn, player):
@@ -236,8 +238,16 @@ def moderate(conn, player, body, nonce, kind):
     return response
 
 
-def create(conn, key, title, description, visibility, capacity, server, proto, nonce, language=""):
+def _speaker(conn, key):
+    """A player who may write in rooms: not banned, not muted by SUPPORT."""
     player = _actor(conn, key)
+    from . import moderation
+    moderation.require_text(conn, player)
+    return player
+
+
+def create(conn, key, title, description, visibility, capacity, server, proto, nonce, language=""):
+    player = _speaker(conn, key)
     _nonce(nonce)
     title = _title(title)
     description = unicodedata.normalize("NFKC", description).strip()
@@ -415,7 +425,7 @@ def chat(conn, key, room_id, before=0):
 
 
 def send(conn, key, room_id, text, nonce):
-    player = _actor(conn, key)
+    player = _speaker(conn, key)
     _nonce(nonce)
     _room(conn, room_id)
     _membership(conn, room_id, player)
@@ -540,7 +550,7 @@ def answer_invitation(conn, key, invitation, accept):
 
 
 def edit(conn, key, room_id, title, description, visibility, capacity):
-    player = _actor(conn, key)
+    player = _speaker(conn, key)
     room = _room(conn, room_id)
     if room["owner"] != player:
         raise accounts.AuthError("not_owner", 403)

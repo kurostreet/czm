@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, FileResponse, HTML
 from PIL import Image
 from pydantic import BaseModel, Field
 
-from . import service, mappics, accounts, settings, tab, social, website, distribution, lobbies, game_probe, voice_lobby, notifications, rules
+from . import service, mappics, accounts, settings, tab, social, website, distribution, lobbies, game_probe, voice_lobby, notifications, rules, moderation
 from .config import get_settings
 from .db import db
 
@@ -106,6 +106,8 @@ async def hello(body: HelloIn, request: Request):
             "max_chars": get_settings().message_max_chars,
             "distribution": {"development": distribution.allowed(conn, player)},
             "rules": rules.state(player),
+            "role": moderation.role(conn, player["id"]),
+            "moderation": moderation.state(conn, player),
         }
 
     try:
@@ -230,6 +232,68 @@ async def rules_accept(body: RulesIn, request: Request, x_czm_key: str | None = 
         return JSONResponse(await in_db(rules.accept, x_czm_key or "", body.version), headers={"Cache-Control": "no-store"})
     except accounts.AuthError as error:
         return JSONResponse({"error": error.code, "version": rules.VERSION}, status_code=error.status)
+
+
+class ModerationActIn(BaseModel):
+    target: int = Field(gt=0, le=2147483647)
+    action: str = Field(pattern=r"^(delete_message|remove_avatar|warn|mute_text|mute_voice|restrict_photo|ban|dismiss|close_lobby)$")
+    minutes: int | None = Field(default=None, ge=0, le=365 * 24 * 60)
+    reason: str = Field(default="", max_length=200)
+    report: int | None = Field(default=None, gt=0)
+    message: int | None = Field(default=None, gt=0)
+    lobby_message: int | None = Field(default=None, gt=0)
+    nonce: str = Field(pattern=r"^[A-Za-z0-9_-]{12,64}$")
+
+
+class ModerationNonceIn(BaseModel):
+    nonce: str = Field(pattern=r"^[A-Za-z0-9_-]{12,64}$")
+
+
+class WarningSeenIn(BaseModel):
+    id: int = Field(gt=0)
+
+
+# The SUPPORT panel. Every request is checked for the role on the server.
+@router.get("/moderation/summary")
+async def moderation_summary(request: Request, x_czm_key: str | None = Header(default=None)):
+    return await social_result(request, lambda c: moderation.summary(c, x_czm_key or ""))
+
+
+@router.get("/moderation/reports")
+async def moderation_reports(request: Request, offset: int = 0, x_czm_key: str | None = Header(default=None)):
+    return await social_result(request, lambda c: moderation.reports(c, x_czm_key or "", max(0, min(offset, 100000))))
+
+
+@router.get("/moderation/sanctions")
+async def moderation_sanctions(request: Request, x_czm_key: str | None = Header(default=None)):
+    return await social_result(request, lambda c: moderation.sanctions(c, x_czm_key or ""))
+
+
+@router.get("/moderation/history")
+async def moderation_history(request: Request, offset: int = 0, x_czm_key: str | None = Header(default=None)):
+    return await social_result(request, lambda c: moderation.history(c, x_czm_key or "", max(0, min(offset, 100000))))
+
+
+@router.get("/moderation/player/{target}")
+async def moderation_player(target: int, request: Request, x_czm_key: str | None = Header(default=None)):
+    return await social_result(request, lambda c: moderation.player(c, x_czm_key or "", target))
+
+
+@router.post("/moderation/act")
+async def moderation_act(body: ModerationActIn, request: Request, x_czm_key: str | None = Header(default=None)):
+    return await social_result(request, lambda c: moderation.act(
+        c, x_czm_key or "", body.target, body.action, body.minutes, body.reason,
+        body.report, body.message, body.lobby_message, body.nonce))
+
+
+@router.post("/moderation/sanctions/{sanction}/lift")
+async def moderation_lift(sanction: int, body: ModerationNonceIn, request: Request, x_czm_key: str | None = Header(default=None)):
+    return await social_result(request, lambda c: moderation.lift(c, x_czm_key or "", sanction, body.nonce))
+
+
+@router.post("/moderation/warning/seen")
+async def moderation_warning_seen(body: WarningSeenIn, request: Request, x_czm_key: str | None = Header(default=None)):
+    return await social_result(request, lambda c: moderation.warning_seen(c, x_czm_key or "", body.id))
 
 
 def rules_refused():
@@ -425,6 +489,9 @@ async def avatar(request: Request, x_czm_key: str | None = Header(default=None))
     player = await current_player(x_czm_key)
     if rules.required(player):
         return rules_refused()
+    photo = await in_db(moderation.sanction, player, "photo")
+    if photo:
+        return JSONResponse({"error": "photo_restricted", "restriction": photo}, status_code=403)
     data = await request.body()
     if not data or len(data) > 512 * 1024:
         raise HTTPException(413, {"error": "size"})

@@ -230,6 +230,37 @@ CREATE TABLE IF NOT EXISTS play_publishes (
     notified INTEGER NOT NULL DEFAULT 0
 );
 
+-- The official SUPPORT account(s); granted on the server only (python -m czm.cli support-grant).
+CREATE TABLE IF NOT EXISTS staff (
+    player INTEGER PRIMARY KEY REFERENCES players(id),
+    role TEXT NOT NULL CHECK(role IN ('support')),
+    granted INTEGER NOT NULL
+);
+-- Every moderation step taken in the game: who, on whom, what, why, for how long.
+CREATE TABLE IF NOT EXISTS moderation_log (
+    id INTEGER PRIMARY KEY,
+    moderator INTEGER NOT NULL,
+    target INTEGER NOT NULL,
+    action TEXT NOT NULL,
+    reason TEXT NOT NULL DEFAULT '',
+    until INTEGER,                        -- a sanction's end, NULL: forever or not a sanction
+    sanction INTEGER,                     -- bans.id
+    report INTEGER,
+    evidence TEXT NOT NULL DEFAULT '',
+    created INTEGER NOT NULL,
+    nonce TEXT,
+    UNIQUE(moderator, nonce)
+);
+CREATE INDEX IF NOT EXISTS moderation_log_target ON moderation_log(target, id);
+CREATE TABLE IF NOT EXISTS warnings (
+    id INTEGER PRIMARY KEY,
+    player INTEGER NOT NULL REFERENCES players(id),
+    reason TEXT NOT NULL,
+    created INTEGER NOT NULL,
+    seen INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS warnings_player ON warnings(player, seen);
+
 -- Private APK testing: a one-use invitation grants access to one registered game account.
 CREATE TABLE IF NOT EXISTS development_access (
     player INTEGER PRIMARY KEY REFERENCES players(id),
@@ -259,6 +290,8 @@ COLUMNS = {
                 "evidence": "TEXT NOT NULL DEFAULT ''",
                 "context": "TEXT NOT NULL DEFAULT ''"},
     "lobby_messages": {"deleted": "INTEGER NOT NULL DEFAULT 0"},
+    # kind: ban (everything), text, voice, photo; moderator: who gave it in the game (NULL: the bot)
+    "bans": {"kind": "TEXT NOT NULL DEFAULT 'ban'", "moderator": "INTEGER"},
     "lobbies": {"last_seen": "INTEGER NOT NULL DEFAULT 0",
                 "voice_mute_all":"INTEGER NOT NULL DEFAULT 0",
                 "language":"TEXT NOT NULL DEFAULT ''"},
