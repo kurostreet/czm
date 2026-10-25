@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from . import api, builds, db, steam
+from . import api, builds, db, play_feed, steam
 from .config import get_settings
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -42,7 +42,7 @@ async def lifespan(app: FastAPI):
     for folder in (settings.avatar_dir, settings.apk_dir, settings.incoming_dir, settings.serverlist_file.parent):
         folder.mkdir(parents=True, exist_ok=True)
 
-    tasks = [asyncio.create_task(cleanup_loop()), asyncio.create_task(steam.run())]
+    tasks = [asyncio.create_task(cleanup_loop()), asyncio.create_task(steam.run()), asyncio.create_task(play_feed.run())]
     bot = None
     if settings.bot_token and settings.owner_ids:
         from . import bot as botmod

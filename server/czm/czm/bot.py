@@ -207,10 +207,11 @@ class OwnerBot:
             return
         if release["published"]:
             await in_db(service.set_release_notes, release["id"], notes)
-            await message.answer(f"✏️ Текст обновления {release['version']} изменён, в колокольчике тоже.")
+            await message.answer(f"✏️ Текст сборки {release['version']} изменён.")
             return
         await in_db(service.publish_release, release["id"], notes)
-        await message.answer(f"✅ Обновление {release['version']} выпущено, игроки увидят его в игре.")
+        await message.answer(f"✅ Сборка {release['version']} выпущена в тестовый канал. "
+                             "Новость для игроков появится сама, когда обновление дойдёт до них в Google Play.")
 
     # automatic builds -----------------------------------------------------
 
@@ -269,6 +270,24 @@ class OwnerBot:
                     log.warning("could not send Google Play notice %s to %s: %s", p["id"], owner, e)
             if sent or not self.owners:
                 await in_db(service.mark_play_publish_notified, p["id"])
+
+    async def notify_play_news(self) -> None:
+        """A Google Play release reached the players: the owner learns it became news."""
+        from . import play_feed
+        for r in await in_db(play_feed.unnotified):
+            name = html.escape(play_feed.version_name(r["version"]) or r["version"])
+            text = (f"📣 Google Play: версия {name} ({r['code']}) уже у игроков. "
+                    f"Новость #{r['news_id']} в колокольчике, «Что нового» на сайте обновлено.\n"
+                    f"Убрать из колокольчика: /delnews {r['news_id']}")
+            sent = False
+            for owner in self.owners:
+                try:
+                    await self.bot.send_message(owner, text)
+                    sent = True
+                except TelegramAPIError as e:
+                    log.warning("could not send the Play news notice %s to %s: %s", r["code"], owner, e)
+            if sent or not self.owners:
+                await in_db(play_feed.mark_notified, r["code"])
 
     async def on_release_button(self, query: CallbackQuery, action: str, release_id: int) -> None:
         def act(conn):
@@ -470,6 +489,7 @@ async def builds_loop(owner: OwnerBot) -> None:
         try:
             await owner.notify_builds()
             await owner.notify_play()
+            await owner.notify_play_news()
         except asyncio.CancelledError:
             raise
         except Exception as e:

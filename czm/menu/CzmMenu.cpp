@@ -375,9 +375,9 @@ static const struct { const char *key, *ru, *en; } s_strings[] =
 	{ "upd_error_install", "Не удалось установить. Попробуй ещё раз", "Could not install. Try again" },
 	{ "upd_error_storage", "Освободи место на телефоне и попробуй ещё раз", "Free some space on your phone and try again" },
 	{ "upd_cancel", "Отмена", "Cancel" },
-	{ "upd_store_title", "Обновление в Google Play", "Update on Google Play" },
-	{ "upd_store_notes", "Доступна новая версия игры. Открой Google Play, чтобы установить обновление.", "A new version is available. Open Google Play to install the update." },
-	{ "upd_store_button", "Открыть Google Play", "Open Google Play" },
+	{ "upd_store_title", "Доступно обновление", "Update available" },
+	{ "upd_store_notes", "Новая версия игры уже в Google Play.", "A new version of the game is on Google Play." },
+	{ "upd_store_button", "Обновить в Google Play", "Update on Google Play" },
 	{ "news_loading", "Загружаем новости…", "Loading news…" },
 	// first start
 	{ "s_layouts", "Обмен раскладками", "Share layouts" },

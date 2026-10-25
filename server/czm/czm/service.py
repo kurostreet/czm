@@ -436,23 +436,10 @@ def release_news_text(version: str, notes: str) -> str:
 
 
 def publish_release(conn: sqlite3.Connection, release_id: int, notes: str) -> None:
-    """Players get the update, and the bell keeps what is new as a news item."""
+    """The site build goes to its channel. Players hear about Google Play releases only
+    (play_feed.py): a site build never makes news in the bell or on the site."""
     notes = notes.strip()[:1000] or DEFAULT_NOTES
-    row = conn.execute("SELECT version, news_id, channel FROM releases WHERE id = ?", (release_id,)).fetchone()
-    if row and row["channel"] == "development":
-        # Development releases never make public news or replace the migration APK.
-        conn.execute("UPDATE releases SET published=?, notes=? WHERE id=?", (now(), notes.strip() or DEFAULT_NOTES, release_id))
-        return
-    if row is None:
-        return
-    text = release_news_text(row["version"], notes)
-    news_id = row["news_id"]
-    if news_id and conn.execute("UPDATE news SET text = ?, deleted = 0 WHERE id = ?", (text, news_id)).rowcount:
-        pass
-    else:
-        news_id = add_news(conn, text)
-    conn.execute("UPDATE releases SET published = ?, notes = ?, news_id = ? WHERE id = ?",
-                 (now(), notes, news_id, release_id))
+    conn.execute("UPDATE releases SET published = ?, notes = ? WHERE id = ?", (now(), notes, release_id))
 
 
 def unpublish_release(conn: sqlite3.Connection, release_id: int) -> None:
@@ -472,8 +459,6 @@ def set_release_notes(conn: sqlite3.Connection, release_id: int, notes: str) -> 
     if row is None:
         return
     conn.execute("UPDATE releases SET notes = ? WHERE id = ?", (notes, release_id))
-    if row["news_id"]:
-        conn.execute("UPDATE news SET text = ? WHERE id = ?", (release_news_text(row["version"], notes), row["news_id"]))
 
 
 # automatic builds ------------------------------------------------------------

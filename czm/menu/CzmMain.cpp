@@ -1174,7 +1174,9 @@ void CCzmMainMenu::DrawBell( void )
 		snprintf( size, sizeof( size ), "%.1f %s", downloadSize / 1048576.0, CZM_T( "mb" ));
 		if( update->store && downloadSize <= 0 )
 			size[0] = 0;	// Play did not say the size
-		if( update->store )
+		if( update->store && update->version[0] )
+			snprintf( text, sizeof( text ), "%s %s", CZM_T( "upd_title" ), update->version );
+		else if( update->store )
 			Q_strncpy( text, CZM_T( "upd_store_title" ), sizeof( text ));
 		else
 			snprintf( text, sizeof( text ), "%s %s", CZM_T( "upd_title" ), update->version );
@@ -1183,7 +1185,8 @@ void CCzmMainMenu::DrawBell( void )
 
 		// what is new, up to three lines
 		ty = c.y + H * 0.022f + CZM_FontHeight( nameFont ) + H * 0.01f;
-		const char *notes = update->store ? CZM_T( "upd_store_notes" ) : update->notes;	// follows the language switch
+		// Play notes are written in Russian; other players read the plain line in their language
+		const char *notes = update->store && ( !update->notes[0] || !CZM_IsRussian( )) ? CZM_T( "upd_store_notes" ) : update->notes;
 		lines = CZM_WrapText( textFont, notes, c.w - H * 0.06f, starts, 3 );
 		for( int l = 0; l < lines && ty + CZM_FontHeight( textFont ) < m_updateButton.y; l++ )
 		{

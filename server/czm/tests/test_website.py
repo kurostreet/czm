@@ -124,16 +124,21 @@ class WebsiteTests(unittest.TestCase):
         self.assertEqual([m["room"] for m in later], ["en"])
         self.assertNotIn("p", data["messages"][0])
 
-    def test_news_lists_the_latest_published_releases(self):
+    def test_news_lists_google_play_releases_players_got(self):
+        # site builds of any channel are not news any more, the migration notice included
         for code in (5, 6, 7, 8):
             self.release(code)
-        self.release(9)
         with db.db() as conn:
             conn.execute("UPDATE releases SET channel='migration' WHERE code=8")
-            conn.execute("UPDATE releases SET channel='development', notes='Private test only' WHERE code=9")
+        self.assertEqual(self.client.get("/api/v1/site/news").json()["news"], [])
+        with db.db() as conn:
+            for code, notes, announced in ((40100867, "Голосовой чат в лобби.", 1000), (40140101, "Правила сообщества.", 2000),
+                                           (40140200, "Ещё на проверке.", None)):
+                conn.execute("INSERT INTO play_releases(code, version, notes, tracks, first_seen, announced) VALUES (?,?,?,?,?,?)",
+                             (code, f"1.35-{code}", notes, "alpha", 1, announced))
         news = self.client.get("/api/v1/site/news").json()["news"]
-        self.assertEqual([n["version"] for n in news], ["1.35-8", "1.35-7", "1.35-6"])
-        self.assertEqual(news[0]["notes"], "Новая музыка.")
+        self.assertEqual([(n["version"], n["notes"], n["ts"]) for n in news],
+                         [("1.35", "Правила сообщества.", 2000), ("1.35", "Голосовой чат в лобби.", 1000)])
 
 
 class InstallListTests(unittest.TestCase):

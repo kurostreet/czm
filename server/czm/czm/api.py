@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, FileResponse, HTML
 from PIL import Image
 from pydantic import BaseModel, Field
 
-from . import service, mappics, accounts, settings, tab, social, website, distribution, lobbies, game_probe, voice_lobby, notifications, rules, moderation
+from . import service, mappics, accounts, settings, tab, social, website, distribution, lobbies, game_probe, voice_lobby, notifications, rules, moderation, play_feed
 from .config import get_settings
 from .db import db
 
@@ -86,6 +86,8 @@ class HelloIn(BaseModel):
     keep_avatar: bool = False
     # 1: the game shows the community rules and asks to accept them before posting
     rules: int = Field(default=0, ge=0, le=100)
+    # 1: installed from Google Play, 0: the site build; absent in older games
+    store: int | None = Field(default=None, ge=0, le=1)
 
 
 @router.post("/hello")
@@ -93,7 +95,12 @@ async def hello(body: HelloIn, request: Request):
     _hello_limit.check(client_ip(request))
 
     def run(conn):
+        try:
+            before = service.player_by_key(conn, body.key)
+        except accounts.AuthError:
+            before = None
         player = service.hello(conn, body.key, body.device, body.nick, body.avatar, body.lang, body.version, body.keep_avatar)
+        play_feed.witness(conn, before, player, body.code, body.store)  # the bot tells the owner
         rules.remember_client(conn, player["id"], body.rules)
         release = distribution.update_for(conn, body.key, body.code, player=player)
         return {
@@ -108,6 +115,8 @@ async def hello(body: HelloIn, request: Request):
             "rules": rules.state(player),
             "role": moderation.role(conn, player["id"]),
             "moderation": moderation.state(conn, player),
+            # the bell shows the notes of the code Google Play offers this player
+            "play": play_feed.latest(conn),
         }
 
     try:

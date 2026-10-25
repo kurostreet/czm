@@ -65,6 +65,7 @@ static struct
 	int warningShown, warningSeenId;
 
 	int newsLast;         // the newest news number on the server
+	struct { int code; char version[16]; char notes[512]; } play[3]; // releases on the Play tracks, what is new in each
 	int newsId;           // news list request in flight
 	bool newsLoaded;
 	CUtlVector<CzmNews> news;
@@ -262,6 +263,7 @@ static void SendHello( void )
 	body.Append( ",\"code\":" ); body.Append( code );
 	if( s_online.preserveAvatar ) body.Append( ",\"keep_avatar\":true" );
 	body.Append( ",\"rules\":1" ); // this game shows the community rules before posting
+	body.Append( CZM_NetCanSelfUpdate() ? ",\"store\":0" : ",\"store\":1" ); // the site build or Google Play
 	body.Append( "}" );
 
 	Q_strncpy( s_online.sentNick, nick, sizeof( s_online.sentNick ));
@@ -319,6 +321,17 @@ static void OnHello( int status, const char *body )
 			CZM_RulesSetState( 0, false, "" );
 	}
 	s_online.newsLast = j.Int( j.Get( 0, "news" ));
+	{
+		int play = j.Get( 0, "play" );
+		memset( s_online.play, 0, sizeof( s_online.play ));
+		for( int i = 0; i < j.Count( play ) && i < 3; i++ )
+		{
+			int item = j.At( play, i );
+			s_online.play[i].code = j.Int( j.Get( item, "code" ));
+			Q_strncpy( s_online.play[i].version, j.String( j.Get( item, "version" )), sizeof( s_online.play[i].version ));
+			Q_strncpy( s_online.play[i].notes, j.String( j.Get( item, "notes" )), sizeof( s_online.play[i].notes ));
+		}
+	}
 	s_online.nextHello = EngFuncs::DoubleTime() + HELLO_EVERY;
 	if( s_online.refreshDistribution ) { s_online.refreshDistribution = false; s_online.nextHello = 0; }
 
@@ -413,6 +426,15 @@ static void StoreUpdateFrame( double now )
 			u.available = u.store = u.cleaned = true;
 			u.code = code;
 			u.size = bytes;
+		}
+		// what is new in it, when the service knows this very release (never another one's notes)
+		u.version[0] = u.notes[0] = 0;
+		for( int i = 0; i < 3; i++ )
+		{
+			if( s_online.play[i].code != code || !code )
+				continue;
+			Q_strncpy( u.version, s_online.play[i].version, sizeof( u.version ));
+			Q_strncpy( u.notes, s_online.play[i].notes, sizeof( u.notes ));
 		}
 	}
 	else if( s_online.update.store )
