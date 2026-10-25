@@ -284,6 +284,18 @@ void CZM_OnlineReadBan( const CzmJson &j, int ban )
 	ReadBan( j, ban );
 }
 
+// the menu font has no arrows: "Settings → Sound" showed gaps. "›" and "‹" have the same length
+static void PlainArrows( char *text )
+{
+	for( char *p = text; ( p = strstr( p, "\xE2\x86" )) != NULL; )
+	{
+		if( !p[2] ) break; // a cut sequence at the end
+		if( (unsigned char)p[2] == 0x92 ) { p[1] = (char)0x80; p[2] = (char)0xBA; } // → becomes ›
+		else if( (unsigned char)p[2] == 0x90 ) { p[1] = (char)0x80; p[2] = (char)0xB9; } // ← becomes ‹
+		p += 3;
+	}
+}
+
 static void OnHello( int status, const char *body )
 {
 	CzmJson j;
@@ -330,6 +342,7 @@ static void OnHello( int status, const char *body )
 			s_online.play[i].code = j.Int( j.Get( item, "code" ));
 			Q_strncpy( s_online.play[i].version, j.String( j.Get( item, "version" )), sizeof( s_online.play[i].version ));
 			Q_strncpy( s_online.play[i].notes, j.String( j.Get( item, "notes" )), sizeof( s_online.play[i].notes ));
+			PlainArrows( s_online.play[i].notes );
 		}
 	}
 	s_online.nextHello = EngFuncs::DoubleTime() + HELLO_EVERY;
@@ -347,6 +360,7 @@ static void OnHello( int status, const char *body )
 		Q_strncpy( u.sha256, j.String( j.Get( update, "sha256" )), sizeof( u.sha256 ));
 		Q_strncpy( u.url, j.String( j.Get( update, "url" )), sizeof( u.url ));
 		Q_strncpy( u.notes, j.String( j.Get( update, "notes" )), sizeof( u.notes ));
+		PlainArrows( u.notes );
 		u.patchSize = j.Int( j.Get( update, "patch_format" )) == 1 ? j.Number( j.Get( update, "patch_size" )) : 0;
 		Q_strncpy( u.patchUrl, j.String( j.Get( update, "patch_url" )), sizeof( u.patchUrl ));
 		Q_strncpy( u.patchSha256, j.String( j.Get( update, "patch_sha256" )), sizeof( u.patchSha256 ));
@@ -664,6 +678,7 @@ void CZM_OnlineFrame( void )
 				n.id = j.Int( j.Get( item, "id" ));
 				n.time = j.Int( j.Get( item, "ts" ));
 				Q_strncpy( n.text, j.String( j.Get( item, "text" )), sizeof( n.text ));
+				PlainArrows( n.text );
 				s_online.news.AddToTail( n );
 				s_online.newsLast = Q_max( s_online.newsLast, n.id );
 			}

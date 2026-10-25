@@ -213,6 +213,21 @@ static uint16_t table_cp1251[64] = {
 	0x0451, 0x2116, 0x0454, 0x00BB, 0x0458, 0x0405, 0x0455, 0x0457
 };
 
+/*
+cp1251 has no Western accented letters: server texts like "Infecção" or "Clássico" came out as
+"Infec??o". Such a letter becomes its base letter ("Infeccao", "Classico"): U+00C0..U+017F.
+*/
+static uint32_t Q_FoldLatin( uint32_t uc )
+{
+	static const char base[] =
+		"AAAAAAACEEEEIIIIDNOOOOOxOUUUUY?saaaaaaaceeeeiiiidnooooo/ouuuuy?y"
+		"AaAaAaCcCcCcCcDdDdEeEeEeEeEeGgGgGgGgHhHhIiIiIiIiIiIiJjKkkLlLlLlL"
+		"lLlNnNnNnnNnOoOoOoOoRrRrRrSsSsSsSsTtTtTtUuUuUuUuUuUuWwYyYZzZzZzs";
+	if( uc >= 0xC0 && uc < 0xC0 + sizeof( base ) - 1 )
+		return (unsigned char)base[uc - 0xC0];
+	return '?';
+}
+
 uint32_t Q_UnicodeToCP1251( uint32_t uc )
 {
 	size_t i;
@@ -232,7 +247,7 @@ uint32_t Q_UnicodeToCP1251( uint32_t uc )
 			return i + 0x80;
 	}
 
-	return '?';
+	return Q_FoldLatin( uc );
 }
 
 uint32_t Q_UnicodeToCP1252( uint32_t uc )
