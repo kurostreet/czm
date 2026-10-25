@@ -12,6 +12,7 @@
 #include "keydefs.h"
 #include "CzmMenu.h"
 #include "CzmJson.h"
+#include "CzmDesign.h"
 #include "../../common/czm_tab.h"
 
 #define UI_DIR "gfx/czm/ui/"
@@ -158,6 +159,28 @@ void Button( const CzmRect &r, const char *text, bool primary = false, bool pres
 	CZM_DrawButton( primary ? UI_DIR "button_primary.png" : UI_DIR "button_secondary.png", r, text, enabled ? CZM_White() : CZM_Grey(), pressed && enabled, font );
 }
 int Letters( const char *text ) { int n=0; for( ; *text; text++ ) if( ( *text & 0xc0 ) != 0x80 ) n++; return n; }
+// a round button with an icon: back, the gear, the shield, ⋯
+void Chip( const CzmRect &r, const char *icon, bool pressed, unsigned tint = 0 )
+{
+	CzmStyle::Surface( r, pressed ? PackRGBA( 41, 51, 67, 255 ) : PackRGBA( 28, 34, 45, 255 ), pressed && tint ? tint : CzmStyle::Border(), r.h / 2 );
+	const int side = r.h * 46 / 100;
+	CZM_DrawImage( icon, r.x + ( r.w - side ) / 2, r.y + ( r.h - side ) / 2, side, side, tint ? tint : CzmStyle::Ink() );
+}
+// the CZM button of the card: a thin edge, an icon before the words, red for the main action
+void ActionButton( const CzmRect &r, const char *icon, const char *label, bool primary, bool pressed, bool enabled = true, unsigned accent = 0 )
+{
+	CzmStyle::Button( r, "", enabled, primary, pressed, accent );
+	int font = CZMF_UI_LABEL;
+	if( CZM_TextWidth( CZM_Font( font ), label ) > r.w - r.h ) font = CZMF_UI_META;
+	const HFont f = CZM_Font( font );
+	const int side = icon && icon[0] ? r.h * 40 / 100 : 0, space = side ? r.h / 5 : 0;
+	int textW = Q_min( CZM_TextWidth( f, label ), r.w - r.h / 2 - side - space );
+	const bool withIcon = side && textW + side + space <= r.w - r.h / 3;
+	const int total = textW + ( withIcon ? side + space : 0 ), x = r.x + ( r.w - total ) / 2;
+	const unsigned color = !enabled ? CzmStyle::Muted() : accent && !primary ? accent : CzmStyle::Ink();
+	if( withIcon ) CZM_DrawImage( icon, x, r.y + ( r.h - side ) / 2, side, side, color );
+	CZM_DrawText( f, x + ( withIcon ? side + space : 0 ), r.y + ( r.h - CZM_FontHeight( f )) / 2, textW + 2, label, color );
+}
 }
 
 class CCzmSocial : public CMenuFramework
@@ -177,13 +200,15 @@ public:
 	void Frame();
 private:
 	enum { LIST, PROFILE, DIALOG };
-	enum { BACK=1, MINE, BLOCKED, REFRESH, FIELD, SEARCH, SEND, PREVIOUS, NEXT, PRIMARY, SECONDARY, BLOCK, REPORT, COPY, EDIT, SETTINGS, JOIN, CANCEL, CONFIRM, PEER, LOGIN, REPORT_CHAT, BACKDROP, INVITE, PARTY_INVITE, MODERATE, TAB=100, PICK=200, ROW=1000 };
+	enum { BACK=1, MINE, BLOCKED, REFRESH, FIELD, SEARCH, SEND, PREVIOUS, NEXT, PRIMARY, SECONDARY, BLOCK, REPORT, COPY, EDIT, SETTINGS, JOIN, CANCEL, CONFIRM, PEER, LOGIN, REPORT_CHAT, BACKDROP, INVITE, PARTY_INVITE, MODERATE, MORE, MORE_CLOSE, TAB=100, PICK=200, MORE_ROW=300, COUNT=400, ROW=1000 };
+	enum { MORE_ROWS = 4 };
 	enum { MAX_PICKS = 4 };
 	enum { READ_LIST=1, READ_PROFILE, READ_DIALOG, WRITE_ACTION, WRITE_STATUS, WRITE_MESSAGE, WRITE_REPORT };
 	void Layout(); void LayoutProfile(); int Hit(); void Activate( int hit ); void Navigate( int mode ); void Fetch();
 	void Write( int kind, const char *path, const char *body ); void Follow( const char *action ); void Send();
 	void Input( const char *value ); void EndInput(); void Notice( const char *text ); void Read( const CzmJson &j, int kind );
-	void DrawList(); void DrawProfile(); void DrawDialog(); void Field( const char *placeholder );
+	void DrawList(); void DrawProfile(); void DrawMore(); void DrawDialog(); void Field( const char *placeholder );
+	const char *ProfileStatusText() const;
 	int MessageHeight( const Message &m );
 	void BuildPicks(); void SendInvite( int index ); void DrawPicker();
 	static void AfterRules(); // the message or the status waits in the field while the rules are read
@@ -203,6 +228,9 @@ private:
 	bool m_pickOpen; int m_pickCount;
 	char m_pickAddress[MAX_PICKS][64], m_pickProto[MAX_PICKS][4], m_pickName[MAX_PICKS][64];
 	CzmRect m_moderate; // SUPPORT: the own profile opens the panel, another one the actions
+	// ⋯ of another player's card: report, block, end the friendship
+	CzmRect m_more, m_moreSheet, m_moreRows[MORE_ROWS]; int m_moreKind[MORE_ROWS], m_moreCount; bool m_moreOpen;
+	double m_appear; // when the card's data came: it rises into place
 	CzmRect m_invite, m_partyInvite, m_pickPanel, m_pick[MAX_PICKS], m_pickCancel;
 	int W, H, pad;
 };
@@ -214,7 +242,7 @@ CCzmSocial::CCzmSocial() : CMenuFramework( "CzmSocial" )
 	m_read=m_readView=m_readKind=m_write=m_writeView=m_writeKind=m_ack=0;
 	m_offset=m_before=m_nextBefore=m_blocking=0; m_nextOffset=-1;
 	m_open=m_typing=m_loaded=m_canSend=m_editStatus=m_outside=m_joinPending=m_drag=m_moved=false;
-	m_pickOpen=false; m_pickCount=0;
+	m_pickOpen=false; m_pickCount=0; m_moreOpen=false; m_moreCount=0; m_appear=0;
 	m_scroll=m_downScroll=0; m_downY=0; m_nextFetch=m_noticeUntil=0; W=H=pad=0;
 	m_input[0]=m_sent[0]=m_nonce[0]=m_nonceText[0]=m_notice[0]=m_confirm[0]=0;
 	memset( &m_profile,0,sizeof( m_profile ));
@@ -234,7 +262,7 @@ void CCzmSocial::Show()
 void CCzmSocial::Hide()
 {
 	EndInput(); m_open=false; m_chatMessage=0; m_confirm[0]=0; m_input[0]=m_sent[0]=m_nonce[0]=m_nonceText[0]=0;
-	m_pickOpen=false; m_pressed=0;
+	m_pickOpen=false; m_pressed=0; m_moreOpen=false;
 	m_view++; CMenuFramework::Hide();
 }
 void CCzmSocial::OpenProfile( int id, bool outside, int chatMessage )
@@ -248,7 +276,7 @@ void CCzmSocial::Navigate( int mode )
 {
 	EndInput(); m_mode=mode; m_view++; m_loaded=false; m_scroll=0; m_nextFetch=0; m_pressed=0;
 	m_chatMessage=0;
-	m_editStatus=false; m_confirm[0]=0; m_input[0]=0; m_notice[0]=0; m_joinPending=false; m_pickOpen=false;
+	m_editStatus=false; m_confirm[0]=0; m_input[0]=0; m_notice[0]=0; m_joinPending=false; m_pickOpen=false; m_moreOpen=false;
 	if( mode==LIST ) { m_offset=0; m_people.RemoveAll(); }
 	if( mode==DIALOG ) { m_before=m_nextBefore=0; m_messages.RemoveAll(); m_canSend=false; if(m_profile.id!=m_target)memset(&m_profile,0,sizeof(m_profile)); }
 	if( mode==PROFILE ) memset( &m_profile,0,sizeof( m_profile ));
@@ -300,6 +328,7 @@ void CCzmSocial::Send()
 
 void CCzmSocial::Read( const CzmJson &j,int kind )
 {
+	if( kind==READ_PROFILE && !m_loaded ) m_appear=EngFuncs::DoubleTime();
 	Counts(j); m_loaded=true;
 	if( kind==READ_LIST )
 	{
@@ -365,80 +394,107 @@ void CCzmSocial::Frame()
 
 void CCzmSocial::LayoutProfile()
 {
-	pad=Q_max(8,(int)(H*.018f));
-	const int width=Q_min((int)(W*.90f),(int)(H*.94f));
-	const int gap=Q_max(5,(int)(H*.011f)),bh=Q_max(32,(int)(H*.06f));
-	const int inner=width-pad*2,half=(inner-gap)/2;
+	// the personal card: header, the player, the status, three counters, the actions, "in CZM since"
+	pad=Q_max(10,(int)(H*.026f));
+	const int width=Q_min((int)(W*.92f),(int)(H*1.08f));
+	const int gap=Q_max(6,(int)(H*.014f)),bh=Q_max(34,(int)(H*.068f));
+	const int inner=width-pad*2;
+	const HFont meta=CZM_Font(CZMF_UI_META),body=CZM_Font(CZMF_PANEL_TEXT);
+	const bool self=m_profile.id==CZM_OnlinePlayer();
 	CzmRect empty=CZM_Rect(0,0,0,0);
 	m_primary=m_secondary=m_block=m_report=m_edit=m_settings=m_join=m_field=m_search=empty;
 	m_copy=m_hero=m_profileStatus=m_profileInfo=m_profileHint=m_profileServer=m_partyInvite=empty;
+	m_more=m_moderate=m_refresh=empty;
 	for(int i=0;i<3;i++)m_profileCounts[i]=empty;
-	int y=pad;
-	m_back=CZM_Rect(pad,y,bh,bh);m_refresh=CZM_Rect(width-pad-bh,y,bh,bh);
-	m_peer=CZM_Rect(pad+bh+gap,y,inner-bh*2-gap*2,bh);
-	m_moderate=CZM_Rect(0,0,0,0);
-	if(CZM_OnlineSupport()&&m_loaded&&m_profile.id>0&&!(m_profile.support&&m_profile.id!=CZM_OnlinePlayer())){
-		m_moderate=CZM_Rect(m_refresh.x-gap-bh,y,bh,bh);m_peer.w-=bh+gap;
-	}
+	m_moreCount=0;m_moreSheet=empty;for(int i=0;i<MORE_ROWS;i++)m_moreRows[i]=empty;
+	int y=pad,right=width-pad;
+	m_back=CZM_Rect(pad,y,bh,bh);
+	if(m_loaded&&self){m_settings=CZM_Rect(right-bh,y,bh,bh);right-=bh+gap;}
+	// SUPPORT: the shield sits next to the gear and does something else
+	if(CZM_OnlineSupport()&&m_loaded&&m_profile.id>0&&!(m_profile.support&&!self)){m_moderate=CZM_Rect(right-bh,y,bh,bh);right-=bh+gap;}
+	m_peer=CZM_Rect(pad+bh+gap,y,right-(pad+bh+gap),bh);
 	y+=bh+gap;
-	int contentY=y;
-	if(!m_loaded)y+=H*.14f;
-	else {
-		m_hero=CZM_Rect(pad,y,inner,H*.12f);
-		int avatar=m_hero.h-gap*2,tx=pad+avatar+gap*2;
-		m_copy=CZM_Rect(tx,y+gap+CZM_FontHeight(CZM_Font(CZMF_NICK)),width-pad-tx,CZM_FontHeight(CZM_Font(CZMF_SMALL))+gap/2);
+	const int contentY=y;
+	if(!m_loaded)y+=H*.18f;
+	else{
+		const int avatar=Q_max(56,(int)(H*.165f));
+		m_hero=CZM_Rect(pad,y,inner,avatar+gap*2);
+		const int tx=pad+gap*2+avatar+gap*2;
+		char id[32];snprintf(id,sizeof(id),"ID %d",m_profile.id);
+		const int chipH=CZM_FontHeight(meta)+gap,icon=chipH*62/100;
+		m_copy=CZM_Rect(tx,y+gap+CZM_FontHeight(CZM_Font(CZMF_NICK))+gap/2,CZM_TextWidth(meta,id)+icon+gap*2+gap/2,chipH);
 		y+=m_hero.h+gap;
-		int starts[PROFILE_STATUS_LINES+1],lineH=CZM_FontHeight(CZM_Font(CZMF_PANEL_TEXT))+2;
-		const char *status=m_profile.status[0]?m_profile.status:m_profile.id==CZM_OnlinePlayer()?T("Нажмите, чтобы задать статус","Tap to add a status"):T("Статус не указан","No status yet");
-		int lines=CZM_WrapText(CZM_Font(CZMF_PANEL_TEXT),status,inner,starts,PROFILE_STATUS_LINES);
-		m_profileStatus=CZM_Rect(pad,y,inner,Q_max(1,lines)*lineH);y+=m_profileStatus.h+gap/2;
-		m_profileInfo=CZM_Rect(pad,y,inner,CZM_FontHeight(CZM_Font(CZMF_SMALL))+gap);y+=m_profileInfo.h+gap/2;
-		int cw=(inner-gap*2)/3;
-		for(int i=0;i<3;i++)m_profileCounts[i]=CZM_Rect(pad+i*(cw+gap),y,cw,H*.075f);
-		y+=m_profileCounts[0].h+gap;
-		bool self=m_profile.id==CZM_OnlinePlayer();
-		bool friends=!strcmp(m_profile.relation,"friend"),following=!strcmp(m_profile.relation,"following");
-		bool blocked=!strcmp(m_profile.relation,"blocked"),unavailable=!strcmp(m_profile.relation,"unavailable");
-        bool join=m_profile.online&&friends&&
-                  (m_profile.server[0]||m_profile.lobbyId[0])&&!m_editStatus;
+		if(m_editStatus){
+			const int half=(inner-gap)/2;
+			m_field=CZM_Rect(pad,y,inner,bh);y+=bh+gap;
+			m_secondary=CZM_Rect(pad,y,half,bh);m_primary=CZM_Rect(pad+half+gap,y,half,bh);y+=bh+gap;
+		}else{
+			int starts[PROFILE_STATUS_LINES+1];
+			const int lineH=CZM_FontHeight(body)+2,iconW=self?bh/2+gap:0;
+			const int lines=CZM_WrapText(body,ProfileStatusText(),inner-gap*2-iconW,starts,PROFILE_STATUS_LINES);
+			m_profileStatus=CZM_Rect(pad,y,inner,Q_max(1,lines)*lineH+gap*2);
+			if(self)m_edit=m_profileStatus;
+			y+=m_profileStatus.h+gap;
+		}
+		const int cw=(inner-gap*2)/3,ch=Q_max(40,(int)(H*.088f));
+		for(int i=0;i<3;i++)m_profileCounts[i]=CZM_Rect(pad+i*(cw+gap),y,cw,ch);
+		y+=ch+gap;
+		const bool friends=!strcmp(m_profile.relation,"friend"),following=!strcmp(m_profile.relation,"following");
+		const bool blocked=!strcmp(m_profile.relation,"blocked"),unavailable=!strcmp(m_profile.relation,"unavailable");
+		const bool join=m_profile.online&&friends&&(m_profile.server[0]||m_profile.lobbyId[0])&&!m_editStatus;
 		if(!self&&!m_profile.account){
-			int n=CZM_WrapText(CZM_Font(CZMF_SMALL),T("Игрок пока гость. Дружба и ЛС доступны после регистрации.","This player is a guest. Friends and messages require registration."),inner,starts,2);
+			int starts[3];
+			const int n=CZM_WrapText(CZM_Font(CZMF_SMALL),T("Игрок пока гость. Дружба и ЛС доступны после регистрации.","This player is a guest. Friends and messages require registration."),inner,starts,2);
 			m_profileHint=CZM_Rect(pad,y,inner,n*(CZM_FontHeight(CZM_Font(CZMF_SMALL))+2));y+=m_profileHint.h+gap;
 		}
-        if(join&&m_profile.server[0]){
-            m_profileServer=CZM_Rect(pad,y,inner,m_profile.map[0]?
-                Q_max((int)(H*.095f),2*(CZM_FontHeight(CZM_Font(CZMF_SMALL))+2)):
-                (CZM_FontHeight(CZM_Font(CZMF_SMALL))+2));
-            y+=m_profileServer.h+gap;
-        }
-		if(m_editStatus){
-			m_field=CZM_Rect(pad,y,inner,H*.064f);y+=m_field.h+gap;
-			m_primary=CZM_Rect(pad,y,half,bh);m_secondary=CZM_Rect(pad+half+gap,y,half,bh);y+=bh;
-		}else if(self){
-			m_edit=CZM_Rect(pad,y,half,bh);m_settings=CZM_Rect(pad+half+gap,y,half,bh);y+=bh;
-		}else if(!m_profile.account){
-			m_primary=CZM_Rect(pad,y,half,bh);m_report=CZM_Rect(pad+half+gap,y,half,bh);y+=bh;
-		}else if(blocked||unavailable){
-			if(blocked)m_block=CZM_Rect(pad,y,half,bh);
-			m_report=CZM_Rect(blocked?pad+half+gap:pad,y,blocked?half:inner,bh);y+=bh;
-		}else{
-			m_primary=CZM_Rect(pad,y,join?half:inner,bh);
-			if(join)m_join=CZM_Rect(pad+half+gap,y,half,bh);
-			y+=bh+gap;
-			int n=friends||following?3:2,bw=(inner-gap*(n-1))/n,x=pad;
-			if(n==3){m_secondary=CZM_Rect(x,y,bw,bh);x+=bw+gap;}
-			m_block=CZM_Rect(x,y,bw,bh);m_report=CZM_Rect(x+bw+gap,y,bw,bh);y+=bh;
-        }
-        if(!self && friends && CZM_LobbyCanInvite() && !m_editStatus) {
-            m_partyInvite=CZM_Rect(pad,y,inner,bh);y+=bh+gap;
-        }
-    }
-    m_clip=CZM_Rect(pad,contentY,inner,y-contentY);
-	m_panel=CZM_Rect((W-width)/2,(H-y-pad)/2,width,y+pad);
-	CzmRect *rects[]={&m_back,&m_refresh,&m_moderate,&m_peer,&m_hero,&m_copy,&m_profileStatus,&m_profileInfo,
+		if(join&&m_profile.server[0]){
+			m_profileServer=CZM_Rect(pad,y,inner,m_profile.map[0]?Q_max((int)(H*.095f),2*(CZM_FontHeight(CZM_Font(CZMF_SMALL))+2)):(CZM_FontHeight(CZM_Font(CZMF_SMALL))+2));
+			y+=m_profileServer.h+gap;
+		}
+		if(!self&&!m_editStatus){
+			// one row: the main action, joining, a lobby invite, then ⋯ with report and block
+			const bool invite=friends&&CZM_LobbyCanInvite();
+			CzmRect *row[3];int n=0;
+			if(!blocked&&!unavailable)row[n++]=&m_primary;
+			else if(blocked)row[n++]=&m_block;
+			if(join)row[n++]=&m_join;
+			if(invite)row[n++]=&m_partyInvite;
+			const int rowW=inner-bh-gap;
+			const int bw=n?(rowW-gap*(n-1))/n:0;
+			if(n==3&&bw<H*.24f){
+				const int half=(rowW-gap)/2;
+				*row[0]=CZM_Rect(pad,y,half,bh);*row[1]=CZM_Rect(pad+half+gap,y,half,bh);
+				m_more=CZM_Rect(pad+inner-bh,y,bh,bh);y+=bh+gap;
+				*row[2]=CZM_Rect(pad,y,inner,bh);y+=bh+gap;
+			}else{
+				for(int i=0;i<n;i++)*row[i]=CZM_Rect(pad+i*(bw+gap),y,bw,bh);
+				m_more=n?CZM_Rect(pad+inner-bh,y,bh,bh):CZM_Rect(pad,y,inner,bh);
+				y+=bh+gap;
+			}
+			(void)following;
+		}
+		m_profileInfo=CZM_Rect(pad,y,inner,CZM_FontHeight(meta)+gap/2);y+=m_profileInfo.h;
+	}
+	m_clip=CZM_Rect(pad,contentY,inner,y-contentY);
+	const int height=y+pad;
+	// the card rises into place once its data is there
+	const double t=bound(0.0,( EngFuncs::DoubleTime()-m_appear )/0.2,1.0),ease=1.0-(1.0-t)*(1.0-t)*(1.0-t);
+	m_panel=CZM_Rect((W-width)/2,(H-height)/2+(int)(( 1.0-ease )*H*.035f),width,height);
+	CzmRect *rects[]={&m_back,&m_moderate,&m_peer,&m_hero,&m_copy,&m_profileStatus,&m_profileInfo,
 		&m_profileCounts[0],&m_profileCounts[1],&m_profileCounts[2],&m_profileHint,&m_profileServer,
-		&m_primary,&m_secondary,&m_block,&m_report,&m_edit,&m_settings,&m_join,&m_partyInvite,&m_field,&m_clip};
+		&m_primary,&m_secondary,&m_block,&m_report,&m_edit,&m_settings,&m_join,&m_partyInvite,&m_more,&m_field,&m_clip};
 	for(unsigned i=0;i<sizeof(rects)/sizeof(rects[0]);i++)if(rects[i]->w&&rects[i]->h){rects[i]->x+=m_panel.x;rects[i]->y+=m_panel.y;}
+	if(m_moreOpen&&!self&&m_loaded){
+		// ⋯: report, block or unblock, end the friendship or the request, close
+		if(m_profile.account&&strcmp(m_profile.relation,"blocked"))m_moreKind[m_moreCount++]=BLOCK; // unblocking is on the card
+		if(!strcmp(m_profile.relation,"friend")||!strcmp(m_profile.relation,"following"))m_moreKind[m_moreCount++]=SECONDARY;
+		m_moreKind[m_moreCount++]=REPORT;
+		m_moreKind[m_moreCount++]=CANCEL;
+		const int sw=Q_min((int)(W*.86f),(int)(H*.80f)),title=CZM_FontHeight(CZM_Font(CZMF_UI_TITLE))+gap*2;
+		const int sh=pad*2+title+m_moreCount*(bh+gap)-gap;
+		m_moreSheet=CZM_Rect((W-sw)/2,(H-sh)/2,sw,sh);
+		for(int i=0;i<m_moreCount;i++)m_moreRows[i]=CZM_Rect(m_moreSheet.x+pad,m_moreSheet.y+pad+title+i*(bh+gap),sw-pad*2,bh);
+	}
 }
 
 void CCzmSocial::Layout()
@@ -484,6 +540,7 @@ int CCzmSocial::Hit()
 {
 	if(m_pickOpen){for(int i=0;i<m_pickCount;i++)if(m_pick[i].HasCursor())return PICK+i;return m_pickCancel.HasCursor()||!m_pickPanel.HasCursor()?CANCEL:0;}
 	if(m_confirm[0]){if(m_confirmYes.HasCursor())return CONFIRM;if(m_confirmNo.HasCursor())return CANCEL;if(!strcmp(m_confirm,"report_choice")&&m_reportChat.HasCursor())return REPORT_CHAT;return 0;}
+	if(m_moreOpen&&m_mode==PROFILE){for(int i=0;i<m_moreCount;i++)if(m_moreRows[i].HasCursor())return MORE_ROW+i;return MORE_CLOSE;}
 	if(!m_panel.HasCursor())return BACKDROP; // a tap next to the window closes it, as in the chat and the profile
 	if(m_back.HasCursor())return BACK;if(m_refresh.HasCursor())return REFRESH;
 	if(m_mode==LIST){
@@ -493,16 +550,21 @@ int CCzmSocial::Hit()
 		if(m_field.HasCursor())return FIELD;if(m_search.HasCursor())return SEARCH;
 		if(m_prev.HasCursor()&&m_offset>0)return PREVIOUS;if(m_next.HasCursor()&&m_nextOffset>=0)return NEXT;
 		if(m_clip.HasCursor()){int i=(uiStatic.cursorY-m_clip.y+(int)m_scroll)/(int)(H*.105f);if(i>=0&&i<m_people.Count())return ROW+i;}
-    }else if(m_mode==PROFILE&&m_loaded){
-        if(m_moderate.w&&m_moderate.HasCursor())return MODERATE;
-        if(m_partyInvite.HasCursor())return PARTY_INVITE;
-        if(m_copy.HasCursor())return COPY;
+	}else if(m_mode==PROFILE&&m_loaded){
+		const bool self=m_profile.id==CZM_OnlinePlayer();
+		if(m_moderate.w&&m_moderate.HasCursor())return MODERATE;
+		if(m_settings.w&&m_settings.HasCursor())return SETTINGS;
+		if(m_copy.HasCursor())return COPY;
 		if(m_editStatus){if(m_field.HasCursor())return FIELD;if(m_primary.HasCursor())return SEND;if(m_secondary.HasCursor())return CANCEL;return 0;}
-		if(m_profile.id==CZM_OnlinePlayer()){if(m_edit.HasCursor()||m_profileStatus.HasCursor())return EDIT;if(m_settings.HasCursor())return SETTINGS;}
-		else{
-			if(m_primary.HasCursor())return PRIMARY;if(m_secondary.HasCursor())return SECONDARY;if(m_block.HasCursor())return BLOCK;if(m_report.HasCursor())return REPORT;
-            if(m_profile.online&&!strcmp(m_profile.relation,"friend")&&
-               (m_profile.server[0]||m_profile.lobbyId[0])&&m_join.HasCursor())return JOIN;
+		if(self){
+			if(m_edit.w&&m_edit.HasCursor())return EDIT;
+			for(int i=0;i<3;i++)if(m_profileCounts[i].HasCursor())return COUNT+i;
+		}else{
+			if(m_primary.w&&m_primary.HasCursor())return PRIMARY;
+			if(m_block.w&&m_block.HasCursor())return BLOCK;
+			if(m_join.w&&m_join.HasCursor())return JOIN;
+			if(m_partyInvite.w&&m_partyInvite.HasCursor())return PARTY_INVITE;
+			if(m_more.w&&m_more.HasCursor())return MORE;
 		}
 	}else if(m_mode==DIALOG){
 		if(m_peer.HasCursor())return PEER;
@@ -525,6 +587,15 @@ void CCzmSocial::Activate( int hit )
 	if(hit==REFRESH){m_nextFetch=0;return;}
 	if(hit==CANCEL&&m_pickOpen){m_pickOpen=false;return;}
 	if(hit==CANCEL){m_confirm[0]=0;m_editStatus=false;EndInput();m_input[0]=0;return;}
+	if(hit==MORE){EndInput();m_moreOpen=true;return;}
+	if(hit==MORE_CLOSE){m_moreOpen=false;return;}
+	if(hit>=MORE_ROW&&hit<MORE_ROW+MORE_ROWS){
+		const int i=hit-MORE_ROW,kind=i<m_moreCount?m_moreKind[i]:CANCEL;
+		m_moreOpen=false;
+		if(kind!=CANCEL)Activate(kind);
+		return;
+	}
+	if(hit>=COUNT&&hit<COUNT+3){static const int tabs[]={0,2,3};m_tab=tabs[hit-COUNT];Navigate(LIST);return;}
 	if(hit==MODERATE){
 		EndInput();
 		if(m_profile.id==CZM_OnlinePlayer())CZM_ModerationOpen();
@@ -595,7 +666,7 @@ bool CCzmSocial::KeyDown( int key )
 	Layout();
 	if(m_typing&&UI::Key::IsBackspace(key)){size_t n=strlen(m_input);if(n){n--;while(n&&((unsigned char)m_input[n]&0xc0)==0x80)n--;m_input[n]=0;}return true;}
 	if(m_typing&&UI::Key::IsEnter(key)){Activate(m_mode==LIST?SEARCH:SEND);return true;}
-	if(UI::Key::IsEscape(key)){if(m_confirm[0])m_confirm[0]=0;else if(m_typing)EndInput();else Activate(BACK);return true;}
+	if(UI::Key::IsEscape(key)){if(m_moreOpen)m_moreOpen=false;else if(m_confirm[0])m_confirm[0]=0;else if(m_typing)EndInput();else Activate(BACK);return true;}
 	if(UI::Key::IsLeftMouse(key)){m_pressed=Hit();m_drag=m_mode!=PROFILE&&m_clip.HasCursor()&&!m_confirm[0];m_moved=false;m_downY=uiStatic.cursorY;m_downScroll=m_scroll;if(m_typing&&m_pressed!=FIELD&&m_pressed!=SEND)EndInput();return true;}
 	if(key==K_MWHEELUP||key==K_MWHEELDOWN){m_scroll+=(key==K_MWHEELUP?1:-1)*H*.10f*(m_mode==LIST?-1:1);return true;}
 	return CMenuFramework::KeyDown(key);
@@ -669,64 +740,147 @@ void CCzmSocial::DrawList()
 	if(m_tab==4)Label(CZM_Rect(m_prev.x+m_prev.w+pad,m_prev.y,m_next.x-m_prev.x-m_prev.w-pad*2,m_prev.h),T("Заблокированные игроки","Blocked players"),CZMF_SMALL);
 }
 
+const char *CCzmSocial::ProfileStatusText() const
+{
+	if(m_profile.status[0])return m_profile.status;
+	if(m_profile.id!=CZM_OnlinePlayer())return T("Статус не указан","No status yet");
+	return Account()?T("Добавить статус","Add a status"):T("Войдите, чтобы добавить статус","Sign in to add a status");
+}
+
 void CCzmSocial::DrawProfile()
 {
-	if(!m_loaded){Label(m_clip,T("Загружаем профиль…","Loading profile…"));return;}
+	using namespace CzmStyle;
 	const Person &p=m_profile;
-	bool self=p.id==CZM_OnlinePlayer(),friends=!strcmp(p.relation,"friend"),following=!strcmp(p.relation,"following");
-	bool follower=!strcmp(p.relation,"follower"),blocked=!strcmp(p.relation,"blocked");
-	int gap=Q_max(5,(int)(H*.011f)),av=m_hero.h-gap*2;
-	UI_FillRect(m_hero.x,m_hero.y,m_hero.w,m_hero.h,PackRGBA(18,28,42,240));
-	UI_FillRect(m_hero.x,m_hero.y,Q_max(2,H/250),m_hero.h,PackRGBA(232,45,65,255));
-	CZM_DrawImage(CZM_AvatarFor(p.avatar,p.id),m_hero.x+gap,m_hero.y+gap,av,av);
+	const bool self=p.id==CZM_OnlinePlayer();
+	const int gap=Q_max(6,(int)(H*.014f));
+	const HFont meta=CZM_Font(CZMF_UI_META),body=CZM_Font(CZMF_PANEL_TEXT),nickFont=CZM_Font(CZMF_NICK);
+	// header: back, "Profile", the moderation shield and the gear
+	Chip(m_back,UI_DIR "icon_back.png",Pressed(BACK));
+	Text(m_peer,T("Профиль","Profile"),CZMF_UI_TITLE);
+	if(m_moderate.w)Chip(m_moderate,UI_DIR "icon_shield.png",Pressed(MODERATE),AccentGold());
+	if(m_settings.w)Chip(m_settings,UI_DIR "icon_gear.png",Pressed(SETTINGS));
+	if(!m_loaded){Text(m_clip,T("Загружаем профиль…","Loading profile…"),CZMF_PANEL_TEXT,Muted(),QM_CENTER);return;}
+
+	// the player: a soft red light behind the picture, a thin frame that slowly breathes
+	Surface(m_hero,PackRGBA(22,26,34,255),PackRGBA(48,55,68,255));
+	const int av=m_hero.h-gap*2,ax=m_hero.x+gap*2,ay=m_hero.y+gap;
+	CZM_DrawImage(UI_DIR "glow.png",ax-av*45/100,ay-av*45/100,av*190/100,av*190/100,PackRGBA(229,40,58,95));
+	CZM_DrawImage(CZM_AvatarFor(p.avatar,p.id),ax,ay,av,av);
+	const double wave=0.5+0.5*sin(EngFuncs::DoubleTime()*2.0*M_PI/3.2);
+	const int ring=Q_max(2,av/30);
+	CZM_DrawImage(UI_DIR "icon_ring.png",ax-ring,ay-ring,av+ring*2,av+ring*2,PackRGBA(236,72,86,(int)(150+70*wave)));
+	const int tx=m_copy.x,tw=m_hero.x+m_hero.w-gap*2-tx;
 	{
-		const int nh=CZM_FontHeight(CZM_Font(CZMF_NICK)),tagH=nh*82/100;
-		const int tagW=p.support?CZM_SupportTagWidth(tagH)+gap:0;
-		const int nw=Q_min(CZM_TextWidth(CZM_Font(CZMF_NICK),p.nick)+2,m_copy.w-tagW);
-		Label(CZM_Rect(m_copy.x,m_hero.y+gap,nw,nh),p.nick,CZMF_NICK);
-		if(p.support)CZM_DrawSupportTag(m_copy.x+nw+gap,m_hero.y+gap+(nh-tagH)/2,tagH);
+		const int nh=CZM_FontHeight(nickFont),tagH=nh*82/100,tagW=p.support?CZM_SupportTagWidth(tagH)+gap:0;
+		const int nw=Q_min(CZM_TextWidth(nickFont,p.nick)+2,tw-tagW);
+		CZM_DrawText(nickFont,tx,m_hero.y+gap,nw,p.nick,Ink());
+		if(p.support)CZM_DrawSupportTag(tx+nw+gap,m_hero.y+gap+(nh-tagH)/2,tagH);
 	}
-	char text[220];snprintf(text,sizeof(text),"ID %d  ·  %s",p.id,T("Копировать","Copy"));Label(m_copy,text,CZMF_SMALL,CZM_Grey());
-	SeenText(p,text,sizeof(text));int sy=m_copy.y+m_copy.h+1,dot=Q_max(7,(int)(H*.011f));
-	CZM_DrawImage(UI_DIR "dot.png",m_copy.x,sy+(CZM_FontHeight(CZM_Font(CZMF_SMALL))-dot)/2,dot,dot,p.online?PackRGBA(66,216,137,255):PackRGBA(242,77,94,255));
-	Label(CZM_Rect(m_copy.x+dot+gap,sy,m_copy.w-dot-gap,CZM_FontHeight(CZM_Font(CZMF_SMALL))),text,CZMF_SMALL,p.online?PackRGBA(112,220,161,255):CZM_Grey());
-	const char *status=p.status[0]?p.status:self?T("Нажмите, чтобы задать статус","Tap to add a status"):T("Статус не указан","No status yet");int starts[PROFILE_STATUS_LINES+1];
-	int lines=CZM_WrapText(CZM_Font(CZMF_PANEL_TEXT),status,m_profileStatus.w,starts,PROFILE_STATUS_LINES),lh=CZM_FontHeight(CZM_Font(CZMF_PANEL_TEXT))+2;
-	for(int i=0;i<lines;i++){char line[410];CZM_WrapLine(status,starts,i,line,sizeof(line));Label(CZM_Rect(m_profileStatus.x,m_profileStatus.y+i*lh,m_profileStatus.w,lh),line,CZMF_PANEL_TEXT,p.status[0]?CZM_White():CZM_Grey());}
-	time_t timestamp=p.created;struct tm date;char when[40];localtime_r(&timestamp,&date);strftime(when,sizeof(when),"%d.%m.%Y",&date);
-	snprintf(text,sizeof(text),"%s %s",p.account?T("В CZM с","Joined CZM"):T("Гостевой профиль с","Guest since"),when);Label(m_profileInfo,text,CZMF_SMALL,CZM_Grey());
-	const char *names[]={T("Друзья","Friends"),T("Подписчики","Followers"),T("Подписки","Following")};int values[]={p.friends,p.followers,p.following};
-	for(int i=0;i<3;i++){
-		const CzmRect &r=m_profileCounts[i];UI_FillRect(r.x,r.y,r.w,r.h,PackRGBA(25,35,49,245));
-		snprintf(text,sizeof(text),"%d",values[i]);Label(CZM_Rect(r.x+gap,r.y+gap/2,r.w-gap*2,r.h/2),text,CZMF_LANG);
-		Label(CZM_Rect(r.x+gap,r.y+r.h/2,r.w-gap*2,r.h/2-gap/2),names[i],CZMF_SMALL,CZM_Grey());
+	// the ID with a copy sign: the ID of this very player
+	{
+		char id[32];snprintf(id,sizeof(id),"ID %d",p.id);
+		Surface(m_copy,Pressed(COPY)?PackRGBA(41,51,67,255):PackRGBA(30,36,46,255),Border(),m_copy.h/2);
+		const int icon=m_copy.h*62/100;
+		CZM_DrawText(meta,m_copy.x+gap,m_copy.y+(m_copy.h-CZM_FontHeight(meta))/2,CZM_TextWidth(meta,id)+2,id,Muted());
+		CZM_DrawImage(UI_DIR "icon_copy.png",m_copy.x+m_copy.w-gap-icon,m_copy.y+(m_copy.h-icon)/2,icon,icon,Muted());
+	}
+	// presence, as it is: online in the menu, in a lobby, in a game, or last seen
+	{
+		char seen[160];SeenText(p,seen,sizeof(seen));
+		const int sy=m_copy.y+m_copy.h+gap/2,dot=Q_max(7,(int)(H*.012f)),fh=CZM_FontHeight(CZM_Font(CZMF_SMALL));
+		CZM_DrawImage(UI_DIR "dot.png",tx,sy+(fh-dot)/2,dot,dot,p.online?PackRGBA(66,216,137,255):PackRGBA(120,128,142,255));
+		CZM_DrawText(CZM_Font(CZMF_SMALL),tx+dot+gap,sy,tw-dot-gap,seen,p.online?PackRGBA(112,220,161,255):Muted());
+	}
+	// the status: the whole row edits it on the own card
+	if(m_editStatus){
+		Surface(m_field,PackRGBA(14,20,29,255),m_typing?AccentRed():Border());
+		const char *visible=m_input[0]?m_input:T("Ваш статус, до 100 символов","Your status, up to 100 characters");
+		if(m_input[0])while(*visible&&CZM_TextWidth(body,visible)>m_field.w-gap*3){visible++;while((*visible&0xc0)==0x80)visible++;}
+		CZM_DrawText(body,m_field.x+gap*3/2,m_field.y+(m_field.h-CZM_FontHeight(body))/2,m_field.w-gap*3,visible,m_input[0]?Ink():Muted());
+		if(m_typing&&((int)(EngFuncs::DoubleTime()*2)%2)==0){const int x=m_field.x+gap*3/2+(m_input[0]?CZM_TextWidth(body,visible):0);UI_FillRect(x,m_field.y+m_field.h/5,Q_max(1,H/400),m_field.h*3/5,AccentRed());}
+		ActionButton(m_secondary,"",T("Отмена","Cancel"),false,Pressed(CANCEL));
+		ActionButton(m_primary,UI_DIR "icon_check.png",m_write?T("Сохраняем…","Saving…"):T("Сохранить","Save"),true,Pressed(SEND),!m_write);
+	}else{
+		const bool down=self&&Pressed(EDIT);
+		Surface(m_profileStatus,down?PackRGBA(33,42,56,255):PackRGBA(20,24,32,255),PackRGBA(44,51,63,255));
+		const char *status=ProfileStatusText();
+		const int iconW=self?m_back.h/2+gap:0,lineH=CZM_FontHeight(body)+2;
+		int starts[PROFILE_STATUS_LINES+1];
+		const int lines=CZM_WrapText(body,status,m_profileStatus.w-gap*2-iconW,starts,PROFILE_STATUS_LINES);
+		for(int i=0;i<lines;i++){char line[410];CZM_WrapLine(status,starts,i,line,sizeof(line));
+			CZM_DrawText(body,m_profileStatus.x+gap,m_profileStatus.y+gap+i*lineH,m_profileStatus.w-gap*2-iconW,line,p.status[0]?Ink():Muted());}
+		if(self){const int icon=Q_min(m_back.h/2,m_profileStatus.h-gap);CZM_DrawImage(UI_DIR "icon_pencil.png",m_profileStatus.x+m_profileStatus.w-gap-icon,m_profileStatus.y+(m_profileStatus.h-icon)/2,icon,icon,p.status[0]?Muted():AccentRed());}
+	}
+	// friends, followers, following: a clear number, a calm caption; the own lists open
+	{
+		const char *names[]={T("Друзья","Friends"),T("Подписчики","Followers"),T("Подписки","Following")};
+		const int values[]={p.friends,p.followers,p.following};
+		const HFont number=CZM_Font(CZMF_UI_TITLE);
+		for(int i=0;i<3;i++){
+			const CzmRect &r=m_profileCounts[i];
+			Surface(r,self&&Pressed(COUNT+i)?PackRGBA(33,42,56,255):PackRGBA(24,30,40,255),PackRGBA(44,51,63,255));
+			char text[24];snprintf(text,sizeof(text),"%d",values[i]);
+			const int nh=CZM_FontHeight(number),mh=CZM_FontHeight(meta),top=r.y+(r.h-nh-mh-2)/2;
+			CZM_DrawText(number,r.x+gap,top,r.w-gap*2,text,Ink(),QM_CENTER);
+			CZM_DrawText(meta,r.x+gap,top+nh+2,r.w-gap*2,names[i],Muted(),QM_CENTER);
+		}
 	}
 	if(m_profileHint.h){
 		const char *hint=T("Игрок пока гость. Дружба и ЛС доступны после регистрации.","This player is a guest. Friends and messages require registration.");
-		int n=CZM_WrapText(CZM_Font(CZMF_SMALL),hint,m_profileHint.w,starts,2),h=CZM_FontHeight(CZM_Font(CZMF_SMALL))+2;
-		for(int i=0;i<n;i++){char line[240];CZM_WrapLine(hint,starts,i,line,sizeof(line));Label(CZM_Rect(m_profileHint.x,m_profileHint.y+i*h,m_profileHint.w,h),line,CZMF_SMALL,CZM_Grey());}
+		int starts[3];const int n=CZM_WrapText(CZM_Font(CZMF_SMALL),hint,m_profileHint.w,starts,2),h=CZM_FontHeight(CZM_Font(CZMF_SMALL))+2;
+		for(int i=0;i<n;i++){char line[240];CZM_WrapLine(hint,starts,i,line,sizeof(line));CZM_DrawText(CZM_Font(CZMF_SMALL),m_profileHint.x,m_profileHint.y+i*h,m_profileHint.w,line,Muted());}
 	}
 	if(m_profileServer.h){
-		int tx=m_profileServer.x, tw=m_profileServer.w;
-		if(p.map[0]){
-			int imageW=Q_min((int)(m_profileServer.h*1.7f),m_profileServer.w/3);
-			CZM_DrawMapPreview(p.map,m_profileServer.x,m_profileServer.y,imageW,m_profileServer.h,p.server);
-			tx+=imageW+gap;tw-=imageW+gap;
-		}
+		char text[160];int sx=m_profileServer.x,sw=m_profileServer.w;
+		if(p.map[0]){const int imageW=Q_min((int)(m_profileServer.h*1.7f),m_profileServer.w/3);CZM_DrawMapPreview(p.map,m_profileServer.x,m_profileServer.y,imageW,m_profileServer.h,p.server);sx+=imageW+gap;sw-=imageW+gap;}
 		snprintf(text,sizeof(text),"%s %s",T("Сервер:","Server:"),p.server);
-		Label(CZM_Rect(tx,m_profileServer.y,tw,CZM_FontHeight(CZM_Font(CZMF_SMALL))+2),text,CZMF_SMALL,CZM_Grey());
-		if(p.map[0])Label(CZM_Rect(tx,m_profileServer.y+CZM_FontHeight(CZM_Font(CZMF_SMALL))+2,tw,CZM_FontHeight(CZM_Font(CZMF_SMALL))+2),p.map,CZMF_SMALL,CZM_Grey());
+		const int sh=CZM_FontHeight(CZM_Font(CZMF_SMALL))+2;
+		CZM_DrawText(CZM_Font(CZMF_SMALL),sx,m_profileServer.y,sw,text,Muted());
+		if(p.map[0])CZM_DrawText(CZM_Font(CZMF_SMALL),sx,m_profileServer.y+sh,sw,p.map,Muted());
 	}
-	if(m_editStatus){Field(T("Ваш статус, до 100 символов","Your status, up to 100 characters"));Button(m_primary,T("Сохранить","Save"),true);Button(m_secondary,T("Отмена","Cancel"));}
-	else if(self){Button(m_edit,Account()?T("Изменить статус","Edit status"):T("Войти","Sign in"));Button(m_settings,T("Редактировать профиль","Edit profile"));}
-	else{
-		if(m_primary.w)Button(m_primary,friends?T("Написать","Message"):following?T("Заявка отправлена","Request sent"):follower?T("Принять в друзья","Accept friend"):T("Добавить в друзья","Add friend"),p.account&&!following,Pressed(PRIMARY),p.account);
-        if(m_join.w)Button(m_join,T("Присоединиться","Join"),true,Pressed(JOIN));
-        if(m_partyInvite.w)Button(m_partyInvite,T("Позвать в лобби","Invite to lobby"),true,Pressed(PARTY_INVITE));
-		if(m_secondary.w)Button(m_secondary,friends?T("Удалить друга","Remove friend"):T("Отписаться","Unfollow"));
-		if(m_block.w)Button(m_block,blocked?T("Разблокировать","Unblock"):T("Заблокировать","Block"));
-		if(m_report.w)Button(m_report,T("Пожаловаться","Report"));
+	// another player: what the relationship allows
+	if(!self&&!m_editStatus){
+		const bool friends=!strcmp(p.relation,"friend"),following=!strcmp(p.relation,"following"),follower=!strcmp(p.relation,"follower");
+		if(m_primary.w){
+			const char *label=friends?T("Написать","Message"):following?T("Заявка отправлена","Request sent"):follower?T("Принять в друзья","Accept friend"):T("Добавить в друзья","Add friend");
+			const char *icon=friends?UI_DIR "icon_chat.png":following?UI_DIR "icon_clock.png":follower?UI_DIR "icon_check.png":UI_DIR "icon_person_add.png";
+			ActionButton(m_primary,icon,label,p.account&&!following,Pressed(PRIMARY),p.account);
+		}
+		if(m_block.w)ActionButton(m_block,UI_DIR "icon_block.png",T("Разблокировать","Unblock"),false,Pressed(BLOCK));
+		if(m_join.w)ActionButton(m_join,UI_DIR "icon_play.png",T("Присоединиться","Join"),false,Pressed(JOIN),true,Success());
+		if(m_partyInvite.w)ActionButton(m_partyInvite,UI_DIR "icon_users.png",T("Позвать в лобби","Invite to lobby"),false,Pressed(PARTY_INVITE));
+		if(m_more.w){
+			if(m_more.w>m_more.h)ActionButton(m_more,UI_DIR "icon_more.png",T("Ещё","More"),false,Pressed(MORE));
+			else Chip(m_more,UI_DIR "icon_more.png",Pressed(MORE)||m_moreOpen);
+		}
 	}
+	// "In CZM since": the date the service keeps, nothing invented
+	{
+		time_t stamp=p.created;struct tm date;char when[40],text[96];localtime_r(&stamp,&date);strftime(when,sizeof(when),"%d.%m.%Y",&date);
+		snprintf(text,sizeof(text),"%s %s",p.account?T("В CZM с","In CZM since"):T("Гостевой профиль с","Guest since"),when);
+		Text(m_profileInfo,text,CZMF_UI_META,Muted(),QM_CENTER);
+	}
+}
+
+void CCzmSocial::DrawMore()
+{
+	using namespace CzmStyle;
+	const int gap=Q_max(6,(int)(H*.014f));
+	UI_FillRect(0,0,W,H,PackRGBA(2,6,12,205));
+	Surface(m_moreSheet,PackRGBA(18,24,34,255),PackRGBA(58,64,78,255),Q_max(6,(int)(H*.022f)));
+	const HFont title=CZM_Font(CZMF_UI_TITLE);
+	CZM_DrawText(title,m_moreSheet.x+pad,m_moreSheet.y+pad,m_moreSheet.w-pad*2,m_profile.nick,Ink());
+	for(int i=0;i<m_moreCount;i++){
+		const int kind=m_moreKind[i];
+		const bool blocked=!strcmp(m_profile.relation,"blocked");
+		const char *label=kind==REPORT?T("Пожаловаться","Report"):
+			kind==BLOCK?(blocked?T("Разблокировать","Unblock"):T("Заблокировать","Block")):
+			kind==SECONDARY?(!strcmp(m_profile.relation,"friend")?T("Удалить из друзей","Remove friend"):T("Отменить заявку","Cancel request")):
+			T("Закрыть","Close");
+		const char *icon=kind==REPORT?UI_DIR "icon_flag.png":kind==BLOCK?UI_DIR "icon_block.png":kind==SECONDARY?UI_DIR "icon_close.png":"";
+		ActionButton(m_moreRows[i],icon,label,false,Pressed(MORE_ROW+i),true,kind==REPORT||kind==BLOCK?AccentRed():0);
+	}
+	(void)gap;
 }
 
 void CCzmSocial::BuildPicks()
@@ -818,19 +972,21 @@ void CCzmSocial::DrawDialog()
 
 void CCzmSocial::Draw()
 {
-	Layout();UI_FillRect(0,0,W,H,PackRGBA(0,0,0,150));CZM_DrawPanel(m_panel);
-	CZM_DrawImage(UI_DIR "chip_round.png",m_back.x,m_back.y,m_back.w,m_back.h);int icon=m_back.h/2;CZM_DrawImage(UI_DIR "icon_back.png",m_back.x+icon/2,m_back.y+icon/2,icon,icon);
-	CZM_DrawImage(UI_DIR "icon_refresh.png",m_refresh.x+icon/2,m_refresh.y+icon/2,icon,icon);
-	if(m_moderate.w){
-		const bool down=m_pressed==MODERATE&&m_moderate.HasCursor();
-		CZM_DrawImage(UI_DIR "chip_round.png",m_moderate.x,m_moderate.y,m_moderate.w,m_moderate.h,down?PackRGBA(255,226,160,255):PackRGBA(255,255,255,255));
-		const int side=m_moderate.h*52/100;
-		CZM_DrawImage(UI_DIR "icon_shield.png",m_moderate.x+(m_moderate.w-side)/2,m_moderate.y+(m_moderate.h-side)/2,side,side,PackRGBA(231,187,96,255));
+	Layout();UI_FillRect(0,0,W,H,PackRGBA(0,0,0,150));
+	if(m_mode==PROFILE){
+		// a dense graphite card, readable over the bright game picture
+		CzmStyle::Surface(m_panel,PackRGBA(15,18,24,252),PackRGBA(58,64,78,255),Q_max(8,(int)(H*.03f)));
+		DrawProfile();
+	}else{
+		CZM_DrawPanel(m_panel);
+		CZM_DrawImage(UI_DIR "chip_round.png",m_back.x,m_back.y,m_back.w,m_back.h);int icon=m_back.h/2;CZM_DrawImage(UI_DIR "icon_back.png",m_back.x+icon/2,m_back.y+icon/2,icon,icon);
+		CZM_DrawImage(UI_DIR "icon_refresh.png",m_refresh.x+icon/2,m_refresh.y+icon/2,icon,icon);
+		Label(m_peer,m_mode==LIST?T("ДРУЗЬЯ","FRIENDS"):m_profile.nick[0]?m_profile.nick:T("ЛИЧНЫЕ СООБЩЕНИЯ","PRIVATE MESSAGES"),CZMF_NICK);
+		if(m_mode==LIST)DrawList();else DrawDialog();
 	}
-	Label(m_peer,m_mode==LIST?T("ДРУЗЬЯ","FRIENDS"):m_mode==PROFILE?T("ПРОФИЛЬ ИГРОКА","PLAYER PROFILE"):m_profile.nick[0]?m_profile.nick:T("ЛИЧНЫЕ СООБЩЕНИЯ","PRIVATE MESSAGES"),m_mode==PROFILE?CZMF_LANG:CZMF_NICK);
-	if(m_mode==LIST)DrawList();else if(m_mode==PROFILE)DrawProfile();else DrawDialog();
 	if(m_notice[0]&&EngFuncs::DoubleTime()<m_noticeUntil){CzmRect r=CZM_Rect(W*.12f,H*.035f,W*.76f,H*.075f);CZM_DrawPill(UI_DIR "button_secondary.png",r.x,r.y,r.w,r.h);Label(CZM_Rect(r.x+pad,r.y,r.w-pad*2,r.h),m_notice,CZMF_LANG);}
 	if(m_pickOpen)DrawPicker();
+	if(m_moreOpen&&m_mode==PROFILE&&m_moreCount)DrawMore();
 	if(m_confirm[0]){
 		UI_FillRect(0,0,W,H,PackRGBA(0,0,0,190));CZM_DrawPanel(m_confirmPanel);
 		bool choice=!strcmp(m_confirm,"report_choice"),profileReport=!strcmp(m_confirm,"profile_report");

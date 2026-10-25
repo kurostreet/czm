@@ -48,6 +48,7 @@ void CZM_LobbyInviteFriend(int);
 void CZM_OpenLobbyById(const char*);
 void CZM_DrawMapPreview(const char*,int,int,int,int,const char*);
 bool CZM_RulesAllow(void(*)()=nullptr);void CZM_RulesRefused(int,void(*)()=nullptr);void CZM_ChatHidePlayer(int);
+using HIMAGE=int;HIMAGE CZM_MapPreview(const char*);HIMAGE CZM_Image(const char*);const char*CZM_MapModeArt(const char*,const char*);void CZM_DrawCover(HIMAGE,int,int,int,int);
 enum{CZM_LIMIT_TEXT,CZM_LIMIT_VOICE,CZM_LIMIT_PHOTO,CZM_LIMIT_COUNT};bool CZM_OnlineSupport();int CZM_SupportTagWidth(int);int CZM_DrawSupportTag(int,int,int);
 bool CZM_OnlineLimited(int,char* =nullptr,size_t=0);void CZM_ModerationOpen();void CZM_ModerationTarget(int,const char*,int=0,int=0,const char* ="");
 struct CzmServer{char address[64];char prot[8];char name[64];};int CZM_ServerCount();CzmServer *CZM_Server(int);void CZM_CleanName(const char*,char*,size_t);void CZM_DrawSliced(const char*,int,int,int,int,int,int,unsigned=0xffffffff);
@@ -68,14 +69,14 @@ int CZM_WrapText(HFont f,const char*s,int w,int*starts,int max){int lines=0,i=0,
 void CZM_WrapLine(const char*s,const int*starts,int n,char*out,size_t size){int len=std::min((int)size-1,starts[n+1]-starts[n]);memcpy(out,s+starts[n],len);out[len]=0;}
 void CZM_DrawText(HFont f,int x,int y,int w,const char*s,unsigned c,unsigned just){if(drawTrace){printf("T\t%d\t%d\t%d\t%d\t%u\t%u\t%s\n",x,y,w,CZM_FontHeight(f),c,just,s);}}
 void UI_FillRect(int x,int y,int w,int h,unsigned c){if(drawTrace)printf("R\t%d\t%d\t%d\t%d\t%u\n",x,y,w,h,c);}
-void CZM_DrawImage(const char*p,int x,int y,int w,int h,unsigned c){if(drawTrace)printf("I\t%d\t%d\t%d\t%d\t%s\n",x,y,w,h,p);}
+void CZM_DrawImage(const char*p,int x,int y,int w,int h,unsigned c){if(drawTrace)printf("I\t%d\t%d\t%d\t%d\t%u\t%s\n",x,y,w,h,c,p);}
 void CZM_DrawPill(const char*,int x,int y,int w,int h,unsigned c){UI_FillRect(x,y,w,h,c);}
 void CZM_DrawPanel(const CzmRect&r){UI_FillRect(r.x,r.y,r.w,r.h,PackRGBA(10,17,26,250));}
 void CZM_DrawButton(const char*p,const CzmRect&r,const char*s,unsigned c,bool,int font){lastButtonFont=font;UI_FillRect(r.x,r.y,r.w,r.h,strstr(p,"primary")?PackRGBA(210,34,55,255):PackRGBA(31,43,59,255));CZM_DrawText(font,r.x+r.h/4,r.y+(r.h-CZM_FontHeight(font))/2,r.w-r.h/2,s,c,QM_CENTER);}
 bool CZM_OnlineReady(){return true;}bool CZM_OnlineAccount(){return authenticated;}int CZM_OnlineIdentity(){return identity;}const char*CZM_OnlineKey(){return key.c_str();}int CZM_OnlinePlayer(){return me;}const char*CZM_OnlineUrl(const char*p){return p;}const char*CZM_AvatarFor(const char*,int){return "gfx/czm/ui/avatar.png";}
 int CZM_NetRequest(const char*,const char*url,const char*,const char*body){requests.push_back({++ids,url,body});return ids;}
 bool CZM_NetPoll(int id,int*status,CUtlString&body){auto i=replies.find(id);if(i==replies.end())return false;*status=i->second.first;body.Set(i->second.second.c_str());replies.erase(i);return true;}
-void CZM_NetNewKey(char*out,size_t size){Q_strncpy(out,"0123456789abcdef0123456789abcdef",size);}int CZM_ServerCount(){return 0;}CzmServer *CZM_Server(int){return 0;}void CZM_CleanName(const char*in,char*out,size_t size){Q_strncpy(out,in,size);}void CZM_DrawSliced(const char*,int x,int y,int w,int h,int,int,unsigned c){UI_FillRect(x,y,w,h,c);}void CZM_OpenSettings(int){}void CZM_AccountShow(const char*,const char*){logins++;}bool CZM_CopyText(const char*){return true;}void CZM_JoinAddress(const char*){}void CZM_PlayClick(){}
+void CZM_NetNewKey(char*out,size_t size){Q_strncpy(out,"0123456789abcdef0123456789abcdef",size);}int CZM_ServerCount(){return 0;}CzmServer *CZM_Server(int){return 0;}void CZM_CleanName(const char*in,char*out,size_t size){Q_strncpy(out,in,size);}void CZM_DrawSliced(const char*,int x,int y,int w,int h,int,int radius,unsigned c){if(drawTrace)printf("S\t%d\t%d\t%d\t%d\t%u\t%d\n",x,y,w,h,c,radius);}void CZM_OpenSettings(int){}void CZM_AccountShow(const char*,const char*){logins++;}bool CZM_CopyText(const char*){return true;}void CZM_JoinAddress(const char*){}void CZM_PlayClick(){}
 bool CZM_LobbyCanInvite(){return false;}
 void CZM_LobbyInviteFriend(int){}
 void CZM_OpenLobbyById(const char*){}
@@ -128,9 +129,12 @@ int main(int argc,char**argv){
    if(variant==6)strcpy(w.m_profile.relation,"unavailable");
    if(variant==7){memset(w.m_profile.status,'W',100);w.m_profile.status[100]=0;}
    w.Draw();assert(w.m_panel.y>0&&w.m_panel.x>0);
-   assert(w.m_panel.w*w.m_panel.h<ScreenWidth*ScreenHeight*.5f);
+   assert(w.m_panel.w*w.m_panel.h<ScreenWidth*ScreenHeight*.6f);
    assert(w.m_panel.y+w.m_panel.h<ScreenHeight);
-   CzmRect*buttons[]={&w.m_primary,&w.m_secondary,&w.m_edit,&w.m_settings,&w.m_report,&w.m_block,&w.m_join,&w.m_copy};
+   CzmRect*buttons[]={&w.m_primary,&w.m_secondary,&w.m_edit,&w.m_settings,&w.m_report,&w.m_block,&w.m_join,&w.m_copy,&w.m_more,&w.m_back};
+   // the own counters open the lists; nothing of the card leaves it or covers the header
+   for(int i=0;i<3;i++){const CzmRect&r=w.m_profileCounts[i];assert(r.x>=w.m_panel.x&&r.x+r.w<=w.m_panel.x+w.m_panel.w&&r.y>w.m_back.y+w.m_back.h);
+    cursorX=r.x+r.w/2;cursorY=uiStatic.cursorY=r.y+r.h/2;if(w.m_profile.id==me&&!w.m_editStatus)assert(w.Hit()==w.COUNT+i);}
    for(auto r:buttons)if(r->w){
     assert(r->x>=w.m_panel.x&&r->y>=w.m_panel.y);
     assert(r->x+r->w<=w.m_panel.x+w.m_panel.w&&r->y+r->h<=w.m_panel.y+w.m_panel.h);
@@ -163,7 +167,7 @@ int main(int argc,char**argv){
  w.OpenProfile(8,true,72);w.Read(j,w.READ_PROFILE);w.Activate(w.REPORT);w.Layout();w.Activate(w.CONFIRM);assert(requests.back().body=="{\"player\":8}");replies[w.m_write]={200,"{}"};w.Frame();
  w.OpenProfile(10,true);w.Read(j,w.READ_PROFILE);w.Activate(w.REPORT);assert(!strcmp(w.m_confirm,"profile_report")&&w.m_chatMessage==0);w.Activate(w.CANCEL);
  // Guest cards explain the unavailable friendship instead of hiding the action.
- w.m_profile.account=false;w.Layout();auto count=requests.size();assert(w.m_primary.w&&w.m_report.w&&!w.m_block.w);w.Activate(w.PRIMARY);assert(requests.size()==count&&*w.m_notice);
+ w.m_profile.account=false;w.Layout();auto count=requests.size();assert(w.m_primary.w&&w.m_more.w&&!w.m_block.w);w.Activate(w.PRIMARY);assert(requests.size()==count&&*w.m_notice);
  // Counts distinguish totals from unread events and reject older responses.
  CzmJson notices;assert(notices.Parse("{\"counts\":{\"revision\":100,\"friends\":11,\"unread\":3,\"requests\":1,\"new_friends\":2,\"following_updates\":4,\"chat_global\":5,\"chat_ru\":1}}"));Counts(notices);
  assert(CZM_SocialNotifications()==10&&CZM_ChatUnread()==6&&s_friends==11);
@@ -182,13 +186,38 @@ int main(int argc,char**argv){
  CzmJson staff;assert(staff.Parse("{\"profile\":{\"id\":12,\"nick\":\"Support\",\"account\":true,\"relation\":\"none\",\"role\":\"support\",\"created\":1792240000}}"));
  w.OpenProfile(12,true);w.Read(staff,w.READ_PROFILE);assert(w.m_profile.support&&me!=12);supportTags=0;w.Draw();assert(supportTags==1&&!w.m_moderate.w);
  w.OpenProfile(8,true,71);w.Read(j,w.READ_PROFILE);assert(!w.m_profile.support);w.Layout();assert(!w.m_moderate.w);
- support=true;w.Layout();assert(w.m_moderate.w&&w.m_moderate.x+w.m_moderate.w<=w.m_refresh.x&&w.m_peer.x+w.m_peer.w<=w.m_moderate.x);
+ support=true;w.Layout();assert(w.m_moderate.w&&w.m_moderate.x+w.m_moderate.w<=w.m_panel.x+w.m_panel.w&&w.m_peer.x+w.m_peer.w<=w.m_moderate.x&&!w.m_settings.w);
  cursorX=w.m_moderate.x+2;cursorY=uiStatic.cursorY=w.m_moderate.y+2;assert(w.Hit()==w.MODERATE);w.KeyDown(1);w.KeyUp(1);
  assert(moderationTarget==8&&moderationMessage==71);
- w.OpenProfile(me,false);w.Read(j,w.READ_PROFILE);w.m_profile.id=me;w.Layout();assert(w.m_moderate.w);w.Activate(w.MODERATE);assert(moderationOpened==1);
+ w.OpenProfile(me,false);w.Read(j,w.READ_PROFILE);w.m_profile.id=me;w.Layout();
+ // the own card: the shield next to the gear, each with its own action
+ assert(w.m_moderate.w&&w.m_settings.w&&w.m_moderate.x+w.m_moderate.w<=w.m_settings.x&&w.m_peer.x+w.m_peer.w<=w.m_moderate.x);
+ w.Activate(w.MODERATE);assert(moderationOpened==1);
  // another staff member has no actions: the service refuses them anyway
  w.OpenProfile(12,true);w.Read(staff,w.READ_PROFILE);w.Layout();assert(!w.m_moderate.w);
  support=false;
+ // ⋯ on another player's card: report, block, end the friendship; Escape or a tap outside closes it
+ w.OpenProfile(8,true,71);w.Read(j,w.READ_PROFILE);w.Layout();assert(w.m_more.w&&!w.m_report.w&&!w.m_secondary.w);
+ cursorX=w.m_more.x+2;cursorY=uiStatic.cursorY=w.m_more.y+2;assert(w.Hit()==w.MORE);w.KeyDown(1);w.KeyUp(1);assert(w.m_moreOpen);
+ w.Layout();assert(w.m_moreCount==4&&w.m_moreKind[0]==w.BLOCK&&w.m_moreKind[1]==w.SECONDARY&&w.m_moreKind[2]==w.REPORT&&w.m_moreKind[3]==w.CANCEL);
+ for(int i=0;i<w.m_moreCount;i++){const CzmRect&r=w.m_moreRows[i];assert(r.x>=w.m_moreSheet.x&&r.y>=w.m_moreSheet.y&&r.x+r.w<=w.m_moreSheet.x+w.m_moreSheet.w&&r.y+r.h<=w.m_moreSheet.y+w.m_moreSheet.h);
+  cursorX=r.x+2;cursorY=uiStatic.cursorY=r.y+2;assert(w.Hit()==w.MORE_ROW+i);}
+ w.Draw();cursorX=1;cursorY=uiStatic.cursorY=1;assert(w.Hit()==w.MORE_CLOSE);w.KeyDown(1);w.KeyUp(1);assert(!w.m_moreOpen&&w.m_open);
+ w.Activate(w.MORE);w.KeyDown(27);assert(!w.m_moreOpen&&w.m_open);
+ w.Activate(w.MORE);w.Layout();w.Activate(w.MORE_ROW+2);assert(!w.m_moreOpen&&!strcmp(w.m_confirm,"report_choice"));w.Activate(w.CANCEL);
+ w.Activate(w.MORE);w.Layout();w.Activate(w.MORE_ROW+0);assert(!strcmp(w.m_confirm,"block"));w.Activate(w.CANCEL);
+ w.Activate(w.MORE);w.Layout();w.Activate(w.MORE_ROW+1);assert(!strcmp(w.m_confirm,"unfollow"));w.Activate(w.CANCEL);
+ // a blocked player: unblocking is on the card, the menu keeps the report
+ strcpy(w.m_profile.relation,"blocked");w.Layout();assert(w.m_block.w&&!w.m_primary.w&&w.m_more.w);
+ w.Activate(w.MORE);w.Layout();assert(w.m_moreCount==2&&w.m_moreKind[0]==w.REPORT);w.Activate(w.MORE_CLOSE);
+ // the own card: the counters open the lists, the status row edits, the gear opens the profile settings
+ w.OpenProfile(me,false);w.Read(j,w.READ_PROFILE);w.m_profile.id=me;w.Layout();assert(!w.m_more.w&&!w.m_primary.w&&w.m_settings.w);
+ w.Activate(w.COUNT+1);assert(w.m_mode==w.LIST&&w.m_tab==2);
+ w.OpenProfile(me,false);w.Read(j,w.READ_PROFILE);w.m_profile.id=me;w.Layout();w.Activate(w.COUNT+2);assert(w.m_tab==3);
+ // the card rises into place in a fifth of a second
+ w.OpenProfile(8,false);w.Read(j,w.READ_PROFILE);assert(w.m_appear>0);
+ w.m_appear=0;w.Layout();const int risen=w.m_panel.y;
+ w.m_appear=EngFuncs::DoubleTime();w.Layout();assert(w.m_panel.y>risen);w.m_appear=0;
  ScreenWidth=1536;ScreenHeight=716;
  if(argc>1){drawTrace=true;if(strcmp(argv[1],"dialog")){
   w.OpenProfile(8,false);w.Read(j,w.READ_PROFILE);
@@ -196,7 +225,9 @@ int main(int argc,char**argv){
   if(!strcmp(argv[1],"guest")){w.m_profile.account=false;strcpy(w.m_profile.relation,"none");strcpy(w.m_profile.status,"");}
   if(!strcmp(argv[1],"join")){strcpy(w.m_profile.server,"203.0.113.10:27015");strcpy(w.m_profile.map,"zm_survival");}
   if(!strcmp(argv[1],"report")){w.m_chatMessage=71;w.Activate(w.REPORT);}
- }else{w.m_target=8;w.Navigate(w.DIALOG);w.Read(j,w.READ_DIALOG);}w.Draw();}
+  if(!strcmp(argv[1],"more")){strcpy(w.m_profile.relation,"friend");w.Activate(w.MORE);}
+  if(!strcmp(argv[1],"edit")){w.m_profile.id=me;w.m_editStatus=true;strcpy(w.m_input,"Выживаем до рассвета");}
+ }else{w.m_target=8;w.Navigate(w.DIALOG);w.Read(j,w.READ_DIALOG);}w.m_appear=0;w.Draw();}
 }
 '''
 
@@ -208,10 +239,12 @@ class SocialMenuTests(unittest.TestCase):
             vector = VECTOR.replace("void RemoveAll(){v.clear();}", "void RemoveAll(){v.clear();} void Remove(int n){v.erase(v.begin()+n);} T&Tail(){return v.back();}")
             (p / "utlvector.h").write_text(vector)
             (p / "utlstring.h").write_text(STRING.replace("void Set(const char *v)", "void Clear(){s.clear();}void Set(const char *v)"))
-            (p / "stub.h").write_text(STUB)
+            # the profile card draws with the shared CZM surfaces and their fonts
+            (p / "stub.h").write_text(STUB.replace("CZMF_NICK,QM_CENTER=1", "CZMF_NICK,CZMF_TILE_STATUS,CZMF_UI_TITLE,CZMF_UI_ACTION,CZMF_UI_LABEL,CZMF_UI_META,QM_LEFT=0,QM_CENTER=1"))
             for name in ["extdll_menu.h", "BaseMenu.h", "Utils.h", "Framework.h", "Scissor.h", "keydefs.h", "CzmMenu.h"]:
                 (p / name).write_text('#include "stub.h"\n')
             (p / "CzmJson.h").write_text((ROOT / "czm/menu/CzmJson.h").read_text())
+            (p / "CzmDesign.h").write_text((ROOT / "czm/menu/CzmDesign.h").read_text())
             source = (ROOT / "czm/menu/CzmSocial.cpp").read_text().replace('#include "../../common/czm_tab.h"', '#include "czm_tab.h"').replace("private:\n\tenum", "public:\n\tenum")
             from test_loading_errors import function
             shared=(ROOT/'czm/menu/CzmMenu.cpp').read_text()
@@ -223,7 +256,7 @@ class SocialMenuTests(unittest.TestCase):
             preview = os.environ.get("CZM_SOCIAL_PREVIEW_DIR")
             if preview:
                 output = Path(preview); output.mkdir(parents=True, exist_ok=True)
-                for view in ["profile", "own", "guest", "join", "report", "dialog"]:
+                for view in ["profile", "own", "guest", "join", "report", "dialog", "more", "edit"]:
                     result = subprocess.run([str(exe), view], check=True, capture_output=True, text=True)
                     (output/(view+".tsv")).write_text(result.stdout)
 

@@ -284,6 +284,29 @@ def icon(kind, size=128, color=(255, 255, 255, 255)):
         left = [(S - x, y) for x, y in reversed(right[1:-1])]
         d.polygon(right + left, fill=c)
         d.line([(S * .32, S * .47), (S * .45, S * .60), (S * .69, S * .35)], fill=clear, width=int(lw * 1.1), joint="curve")
+    elif kind == "copy":
+        # two sheets: the back one is only an outline peeking out
+        d.rounded_rectangle([S * .12, S * .12, S * .62, S * .62], radius=S * .09, outline=c, width=lw)
+        d.rounded_rectangle([S * .34, S * .34, S * .90, S * .90], radius=S * .10, fill=c)
+        d.rounded_rectangle([S * .34 + lw * 1.4, S * .34 + lw * 1.4, S * .90 - lw * 1.4, S * .90 - lw * 1.4],
+                            radius=S * .05, fill=clear)
+    elif kind == "more":
+        for x in (.20, .50, .80):
+            d.ellipse([S * (x - .09), S * .41, S * (x + .09), S * .59], fill=c)
+    elif kind == "ring":
+        # the frame around a profile picture, tinted in the game
+        d.ellipse([S * .03, S * .03, S * .97, S * .97], outline=c, width=int(S * .045))
+    elif kind == "flag":
+        d.rounded_rectangle([S * .18, S * .08, S * .18 + lw, S * .94], radius=lw / 2, fill=c)
+        d.polygon([(S * .24, S * .12), (S * .84, S * .12), (S * .70, S * .32), (S * .84, S * .52), (S * .24, S * .52)], fill=c)
+    elif kind == "block":
+        d.ellipse([S * .10, S * .10, S * .90, S * .90], outline=c, width=lw)
+        d.line([S * .24, S * .76, S * .76, S * .24], fill=c, width=lw)
+    elif kind == "person_add":
+        d.ellipse([S * .14, S * .12, S * .50, S * .48], fill=c)
+        d.pieslice([S * .02, S * .54, S * .62, S * 1.14], 180, 360, fill=c)
+        d.rectangle([S * .70, S * .36, S * .70 + lw, S * .76], fill=c)
+        d.rectangle([S * .50 + lw / 2, S * .56 - lw / 2, S * .90 + lw / 2, S * .56 + lw / 2], fill=c)
     return im.resize((size, size), Image.LANCZOS)
 
 
@@ -314,6 +337,11 @@ def main():
     OUTPUT.mkdir(parents=True, exist_ok=True)
     if "--support" in sys.argv:
         save(icon("shield"), "icon_shield.png")
+        return
+    if "--profile" in sys.argv:
+        # the profile card: copy the ID, the ⋯ menu, the avatar frame, report, block, add a friend
+        for kind in ("copy", "more", "ring", "flag", "block", "person_add"):
+            save(icon(kind, 256 if kind == "ring" else 128), f"icon_{kind}.png")
         return
     if "--servers" in sys.argv:
         # server list and new navigation: only the new pictures, the rest stays as committed
