@@ -390,6 +390,10 @@ static const struct { const char *key, *ru, *en; } s_strings[] =
 	{ "s_radar_style", "Радар", "Radar" },
 	{ "s_radar_style_hint", "Вид мини-карты. Место и размер — Управление → Кнопки и интерфейс", "How the minimap looks. Place and size: Controls → Buttons and HUD" },
 	{ "s_msg_style", "Чат и сообщения сервера", "Chat and server messages" },
+	{ "s_msg_list", "Тексты сервера", "Server texts" },
+	{ "s_msg_list_hint", "Списком: боковые тексты столбиком в рамке из редактора", "As a list: side texts in a column inside the editor frame" },
+	{ "opt_msg_server", "Как на сервере", "As the server places" },
+	{ "opt_msg_list", "Списком", "As a list" },
 	{ "s_msg_style_hint", "Как они выглядят в матче. Место — Управление → Кнопки и интерфейс", "How they look in a match. Place: Controls → Buttons and HUD" },
 	{ "s_spec_style", "Режим наблюдателя", "Spectator view" },
 	{ "s_spec_style_hint", "Что видно после смерти: счёт, время и за кем смотришь", "After you die: the score, the time and who you watch" },
@@ -437,6 +441,7 @@ void CZM_Init( void )
 	EngFuncs::CvarRegister( "czm_parallax", "1", FCVAR_ARCHIVE );
 	EngFuncs::CvarRegister( "czm_hud_radar_style", "2", FCVAR_ARCHIVE ); // classic, tactical, minimal (default)
 	EngFuncs::CvarRegister( "czm_hud_msg_style", "1", FCVAR_ARCHIVE );   // chat and server messages: classic, CZM, outline
+	EngFuncs::CvarRegister( "czm_hud_msg_list", "0", FCVAR_ARCHIVE );    // server texts: as the server places them, or as a list
 	EngFuncs::CvarRegister( "czm_hud_spec_style", "1", FCVAR_ARCHIVE );  // spectator overlay: minimal, card (default), cinema
 	for( int i=0;i<CzmHud::BLOCKS;i++ ) for( int k=0;k<5;k++ ) {
 		char name[64],value[32];

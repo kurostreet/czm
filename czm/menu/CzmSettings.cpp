@@ -322,6 +322,8 @@ float GetRadarStyle( void ) { return bound( 0, (int)GetCvar( "czm_hud_radar_styl
 void SetRadarStyle( float v ) { SetCvar( "czm_hud_radar_style", bound( 0, (int)v, 2 )); EngFuncs::ClientCmd( false, "host_writeconfig\n" ); }
 // how the chat and the server messages look
 float GetMsgStyle( void ) { return bound( 0, (int)GetCvar( "czm_hud_msg_style" ), 2 ); }
+float GetMsgList( void ) { return GetCvar( "czm_hud_msg_list" ) > 0.5f ? 1 : 0; }
+void SetMsgList( float v ) { SetCvar( "czm_hud_msg_list", v > 0.5f ? 1 : 0 ); EngFuncs::ClientCmd( false, "host_writeconfig\n" ); }
 void SetMsgStyle( float v ) { SetCvar( "czm_hud_msg_style", bound( 0, (int)v, 2 )); EngFuncs::ClientCmd( false, "host_writeconfig\n" ); }
 float GetSpecStyle( void ) { return bound( 0, (int)GetCvar( "czm_hud_spec_style" ), 2 ); }
 void SetSpecStyle( float v ) { SetCvar( "czm_hud_spec_style", bound( 0, (int)v, 2 )); EngFuncs::ClientCmd( false, "host_writeconfig\n" ); }
@@ -438,6 +440,7 @@ const CzmRow s_hud[] =
 {
 	{ ROW_RADAR, "s_radar_style", "s_radar_style_hint", GetRadarStyle, SetRadarStyle, NULL, 0, 2, 1, 0, {}, 3 },
 	{ ROW_MSGSTYLE, "s_msg_style", "s_msg_style_hint", GetMsgStyle, SetMsgStyle, NULL, 0, 2, 1, 0, {}, 3 },
+	{ ROW_CHOICE, "s_msg_list", "s_msg_list_hint", GetMsgList, SetMsgList, NULL, 0, 1, 1, 0, { "opt_msg_server", "opt_msg_list" }, 2 },
 	{ ROW_SPECSTYLE, "s_spec_style", "s_spec_style_hint", GetSpecStyle, SetSpecStyle, NULL, 0, 2, 1, 0, {}, 3 },
 	{ ROW_CHOICE, "s_tab_style", "s_tab_style_hint", GetTabStyle, SetTabStyle, NULL, 0, 2, 1, 0, { "opt_tab_default", "opt_tab_compact", "opt_tab_tactical" }, 3 },
 	{ ROW_TABPREVIEW, "s_tab_preview", "s_tab_preview_hint", NULL, NULL, NULL, 0, 0, 0, 0, {}, 0 },

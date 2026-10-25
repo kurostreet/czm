@@ -105,6 +105,10 @@ float CHudMessage::FadeBlend( float fadein, float fadeout, float hold, float loc
 static CzmHud::Rect s_frame;
 static bool s_framesHidden;
 static int s_messageStyle;
+// "As a list" (czm_hud_msg_list 1): texts a server puts at the side (x != -1) stack in one column
+// at the top of the frame instead of their own places; texts in the centre stay where they are
+static bool s_list;
+static int s_listY;
 
 static void CzmMessageFrame( void )
 {
@@ -113,6 +117,14 @@ static void CzmMessageFrame( void )
 		CZM_HudValue( CzmHud::MESSAGES, "scale", 1 ), CZM_HudValue( CzmHud::MESSAGES, "opacity", 1 ));
 	s_framesHidden = CZM_HudValue( CzmHud::MESSAGES, "hidden", 0 ) > 0.5f;
 	s_messageStyle = (int)CzmHud::Clamp( gEngfuncs.pfnGetCvarFloat( "czm_hud_msg_style" ), 0, CzmHud::MSG_STYLES - 1, 0 );
+	s_list = gEngfuncs.pfnGetCvarFloat( "czm_hud_msg_list" ) > 0.5f;
+	s_listY = (int)( s_frame.h > 0 ? s_frame.y : 0 ) + gHUD.GetCharHeight() / 2; // every frame starts the column again
+}
+
+static int CzmListX( int width )
+{
+	const int left = (int)( s_frame.w > 0 ? s_frame.x : 0 ) + gHUD.GetCharHeight() / 2;
+	return left + width > ScreenWidth ? ( ScreenWidth - width > 0 ? ScreenWidth - width : 0 ) : left;
 }
 
 int	CHudMessage::XPosition( float x, int width, int totalWidth )
@@ -311,7 +323,9 @@ void CHudMessage::MessageDrawScan( client_textmessage_t *pMessage, float time )
 	m_parms.totalHeight = (m_parms.lines * gHUD.GetCharHeight());
 
 
-	m_parms.y = YPosition( pMessage->y, m_parms.totalHeight );
+	// one text of a channel is one line of the list: a channel's new text replaces its old one
+	const bool listed = s_list && pMessage->x != -1;
+	m_parms.y = listed ? s_listY : YPosition( pMessage->y, m_parms.totalHeight );
 	pText = pMessage->pMessage;
 
 	m_parms.charTime = 0;
@@ -340,7 +354,7 @@ void CHudMessage::MessageDrawScan( client_textmessage_t *pMessage, float time )
 		pText++;		// Skip LF
 		line[m_parms.lineLength] = 0;
 
-		m_parms.x = XPosition( pMessage->x, m_parms.width, m_parms.totalWidth );
+		m_parms.x = listed ? CzmListX( m_parms.width ) : XPosition( pMessage->x, m_parms.width, m_parms.totalWidth );
 
 		// CZM: a dark plate with an edge of the message colour; outline: a soft dark band under the text
 		if ( s_messageStyle != CzmHud::MSG_CLASSIC && m_parms.width > 0 )
@@ -381,6 +395,8 @@ void CHudMessage::MessageDrawScan( client_textmessage_t *pMessage, float time )
 
 		m_parms.y += gHUD.GetCharHeight();
 	}
+	if ( listed )
+		s_listY = m_parms.y + gHUD.GetCharHeight() / 3; // the next text goes under this one
 }
 
 

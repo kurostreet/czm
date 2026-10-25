@@ -46,6 +46,7 @@ static const char *const czm_settings_names[]={
     "czm_hud_money_scale",
     "czm_hud_money_x",
     "czm_hud_money_y",
+    "czm_hud_msg_list",
     "czm_hud_msg_style",
     "czm_hud_msgs_hidden",
     "czm_hud_msgs_opacity",
