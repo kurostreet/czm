@@ -11,12 +11,13 @@ from test_loading_errors import function
 ROOT = Path(__file__).resolve().parents[1]
 STUB = MODERATION_STUB + r'''
 unsigned CZM_TopColor(int);const char*CZM_TopCrown(int);int CZM_TopTagWidth(int,int);int CZM_DrawTopTag(int,int,int,int);
-void CZM_FormatPlaytime(int,char*,size_t);void CZM_OpenTop();
+void CZM_FormatPlaytime(int,char*,size_t);void CZM_OpenTop();const char*CZM_CurrentAvatarImage();
 '''
 HARNESS = MODERATION_HARNESS + r'''
 static int profileOpened,tops;
 void CZM_OpenProfile(int id){profileOpened=id;}
 void CZM_CleanName(const char*in,char*out,size_t n){Q_strncpy(out,in,n);}
+const char*CZM_CurrentAvatarImage(){return "gfx/czm/ui/avatar.png";}
 unsigned CZM_TopColor(int place){return place==1?PackRGBA(255,206,84,255):place<=10?PackRGBA(231,187,96,255):PackRGBA(176,188,204,255);}
 const char*CZM_TopCrown(int place){return place<=3?"gfx/czm/ui/icon_crown_royal.png":"gfx/czm/ui/icon_crown_top.png";}
 int CZM_TopTagWidth(int place,int h){return place>=1&&place<=100?h*4:0;}
@@ -42,6 +43,9 @@ int main(int argc,char**argv){
  w.Draw();assert(!w.m_loaded); // loading
  replies[w.m_request]={200,board(100,489,44280,120000)};w.Draw();
  assert(w.m_loaded&&w.m_count==100&&w.m_rows[0].support&&!w.m_rows[1].support&&w.m_hasMe&&w.m_mePlace==489&&w.m_meBehind==120000);
+ // the podium rises when the board arrives: nobody stands on it in the first frame, everyone a moment later
+ assert(w.m_openedAt==now);tags=0;w.Draw();assert(tags==0);
+ w.m_openedAt=now-1;
  for(auto size:{std::pair<int,int>{1536,716},{960,540},{800,360},{2960,1440},{640,320},{1024,768}})for(int lang=0;lang<2;lang++){
   ScreenWidth=size.first;ScreenHeight=size.second;russian=lang==0;w.Layout();
   assert(w.m_panel.x>=0&&w.m_panel.y>0&&w.m_panel.x+w.m_panel.w<=ScreenWidth&&w.m_panel.y+w.m_panel.h<ScreenHeight);
@@ -69,6 +73,8 @@ int main(int argc,char**argv){
  w.Activate(w.REFRESH);replies[w.m_request]={200,board(2,2,7200,0)};w.Draw();
  assert(w.m_count==2&&w.ListCount()==0&&w.m_maxScroll==0&&w.m_mePlace==2);
  point(w.m_podium[2]);assert(w.Hit()!=w.PODIUM+2);w.Draw();
+ // the sheet is only as tall as the board: two players and the own place, no empty list
+ w.Layout();assert(w.m_clip.h<w.rowH&&w.m_panel.h<ScreenHeight*3/4&&inside(w.m_me,w.m_panel)&&w.m_me.y>w.m_podium[0].y+w.m_podium[0].h);
  // nobody has played yet; a failed refresh keeps what was shown
  w.Activate(w.REFRESH);replies[w.m_request]={200,"{\"top\":[],\"players\":0}"};w.Draw();assert(w.m_loaded&&!w.m_count&&!w.m_hasMe);
  w.Activate(w.REFRESH);replies[w.m_request]={0,""};w.Draw();assert(w.m_loaded&&!w.m_failed);
@@ -77,7 +83,10 @@ int main(int argc,char**argv){
  if(argc>1){
   std::string view=argv[1];russian=view.find("en")==std::string::npos;
   CZM_OpenTop();w.m_openedAt=-10;
-  replies[w.m_request]={200,view.rfind("in",0)==0?board(100,7,420000,0):board(100,489,44280,120000)};
+  if(view.find("wide")!=std::string::npos){ScreenWidth=2000;ScreenHeight=932;}
+  if(view.find("small")!=std::string::npos){ScreenWidth=800;ScreenHeight=360;}
+  replies[w.m_request]={200,view.rfind("in",0)==0?board(100,7,420000,0):view.rfind("one",0)==0?board(1,0,0,0):
+   view.rfind("two",0)==0?board(2,2,1440,0):board(100,489,44280,120000)};w.Draw();w.m_openedAt=-10;
   trace=true;w.Draw();
  }
  puts("TOP_WINDOW_OK");
@@ -109,7 +118,7 @@ class TopWindowTests(unittest.TestCase):
             out = os.environ.get("CZM_TOP_PREVIEW_DIR")
             if out:
                 dest = Path(out); dest.mkdir(parents=True, exist_ok=True)
-                for view in ["out", "in", "out-en"]:
+                for view in ["out", "in", "out-en", "one-wide", "two", "in-wide"]:
                     r = subprocess.run([str(exe), view], capture_output=True, text=True, check=True)
                     (dest / (view + ".tsv")).write_text(r.stdout)
 
