@@ -10,11 +10,11 @@ umask 022
 COMMIT=${1:?usage: install.sh <commit>}
 REPO=https://raw.githubusercontent.com/kurostreet/czm/$COMMIT/server/czm
 FILES="requirements.txt czm/__init__.py czm/config.py czm/db.py czm/profanity.py czm/links.py czm/service.py czm/api.py
-       czm/bot.py czm/steam.py czm/main.py czm/cli.py czm/builds.py czm/assemble.py czm/distribution.py czm/game_branding.py czm/ui_art.py czm/apkpatch.py czm/mappics.py czm/game_probe.py czm/voice_lobby.py czm/accounts.py czm/settings.py czm/tab.py czm/social.py czm/notifications.py czm/lobbies.py czm/website.py czm/play.py czm/play_publish.py czm/settings_schema.json czm/tlds.txt
+       czm/bot.py czm/steam.py czm/main.py czm/cli.py czm/builds.py czm/assemble.py czm/distribution.py czm/game_branding.py czm/ui_art.py czm/apkpatch.py czm/mappics.py czm/game_probe.py czm/voice_lobby.py czm/accounts.py czm/settings.py czm/tab.py czm/social.py czm/notifications.py czm/rules.py czm/lobbies.py czm/website.py czm/play.py czm/play_publish.py czm/settings_schema.json czm/tlds.txt
        deploy/czm.service deploy/czm.caddy deploy/install.sh deploy/czm-set
        deploy/czm-assemble.service deploy/czm-assemble.path deploy/czm-assemble.timer"
 # the public site (pages, pictures, fonts, script)
-SITE="site/index.html site/privacy.html site/assets/apple-touch-icon.png site/assets/art-3.webp
+SITE="site/index.html site/privacy.html site/rules.html site/assets/apple-touch-icon.png site/assets/art-3.webp
       site/assets/avatar-1.png site/assets/avatar-10.png site/assets/avatar-2.png site/assets/avatar-3.png
       site/assets/avatar-4.png site/assets/avatar-5.png site/assets/avatar-6.png site/assets/avatar-7.png
       site/assets/avatar-8.png site/assets/avatar-9.png site/assets/ct.webp site/assets/env.webp

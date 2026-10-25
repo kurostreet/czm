@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from collections import defaultdict
 
 from fastapi import WebSocket, WebSocketDisconnect
-from . import accounts, lobbies
+from . import accounts, lobbies, rules
 from .db import db
 
 VOICE_PACKET = 321
@@ -39,6 +39,8 @@ class VoicePeer:
     control_window: float = 0.0
     controls: int = 0
     sensitivity: int = 50
+    # players this one blocked or was blocked by: no audio either way
+    blocked: frozenset = frozenset()
 
 _rooms: dict[str, dict[int, VoicePeer]] = defaultdict(dict)
 
@@ -67,9 +69,12 @@ def can_transmit(conn, key, room):
                        "WHERE lobby=? AND player=?", (room, player)).fetchone()
     punishment = conn.execute("SELECT mute_until FROM lobby_moderation WHERE player=?",
                               (player,)).fetchone()
+    # Without accepted community rules a player may listen but not speak.
+    terms = conn.execute("SELECT rules_version, rules_client FROM players WHERE id=?", (player,)).fetchone()
     muted = (bool(row and row["host_muted"]) or
              (not host and bool(active_room["voice_mute_all"])) or
-             bool(punishment and punishment["mute_until"] > lobbies.now()))
+             bool(punishment and punishment["mute_until"] > lobbies.now()) or
+             rules.required(terms))
     return player, muted
 
 
@@ -116,10 +121,18 @@ async def _send_loop(peer: VoicePeer):
             await peer.socket.send_json(item)
 
 
+def blocked_peers(conn, player):
+    rows = conn.execute("SELECT target AS other FROM social_blocks WHERE source=? "
+                        "UNION SELECT source FROM social_blocks WHERE target=?", (player, player)).fetchall()
+    return frozenset(row["other"] for row in rows)
+
+
 async def _acl(key,room):
+    """(player, muted, blocked) — rechecked every second."""
     def check():
         with db() as conn:
-            return can_transmit(conn,key,room)
+            player,muted=can_transmit(conn,key,room)
+            return player,muted,blocked_peers(conn,player)
     return await asyncio.to_thread(check)
 
 
@@ -129,7 +142,7 @@ async def websocket_voice(ws: WebSocket, room: str):
         await ws.close(code=4401)
         return
     try:
-        player,muted=await _acl(key,room)
+        player,muted,blocked=await _acl(key,room)
     except (accounts.AuthError,ValueError):
         await ws.close(code=4403)
         return
@@ -140,7 +153,7 @@ async def websocket_voice(ws: WebSocket, room: str):
         await ws.close(code=4409)
         return
     await ws.accept()
-    peer=VoicePeer(player=player,socket=ws,room=room)
+    peer=VoicePeer(player=player,socket=ws,room=room,blocked=blocked)
     occupants[player]=peer
     for other in occupants.values():
         if other.player!=player:
@@ -155,7 +168,7 @@ async def websocket_voice(ws: WebSocket, room: str):
             timestamp=time.monotonic()
             if timestamp-checked>=AUTH_INTERVAL:
                 try:
-                    _,muted=await _acl(key,room)
+                    _,muted,peer.blocked=await _acl(key,room)
                 except (accounts.AuthError,ValueError):
                     await ws.close(code=4403)
                     break
@@ -195,7 +208,7 @@ async def websocket_voice(ws: WebSocket, room: str):
                     break
                 if control["enabled"]:
                     try:
-                        _,muted=await _acl(key,room)
+                        _,muted,peer.blocked=await _acl(key,room)
                     except (accounts.AuthError,ValueError):
                         await ws.close(code=4403)
                         break
@@ -221,7 +234,7 @@ async def websocket_voice(ws: WebSocket, room: str):
                 peer.last_sound=timestamp
             packet=b"U"+struct.pack("!I",player)+audio[1:]
             for other,recipient in list(_rooms.get(room,{}).items()):
-                if other!=player:
+                if other!=player and other not in peer.blocked and player not in recipient.blocked:
                     _enqueue(recipient,packet)
     except (WebSocketDisconnect,RuntimeError):
         pass

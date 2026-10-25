@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, FileResponse, HTML
 from PIL import Image
 from pydantic import BaseModel, Field
 
-from . import service, mappics, accounts, settings, tab, social, website, distribution, lobbies, game_probe, voice_lobby, notifications
+from . import service, mappics, accounts, settings, tab, social, website, distribution, lobbies, game_probe, voice_lobby, notifications, rules
 from .config import get_settings
 from .db import db
 
@@ -84,6 +84,8 @@ class HelloIn(BaseModel):
     version: str = Field(default="", max_length=32)
     code: int = 0
     keep_avatar: bool = False
+    # 1: the game shows the community rules and asks to accept them before posting
+    rules: int = Field(default=0, ge=0, le=100)
 
 
 @router.post("/hello")
@@ -92,6 +94,7 @@ async def hello(body: HelloIn, request: Request):
 
     def run(conn):
         player = service.hello(conn, body.key, body.device, body.nick, body.avatar, body.lang, body.version, body.keep_avatar)
+        rules.remember_client(conn, player["id"], body.rules)
         release = distribution.update_for(conn, body.key, body.code, player=player)
         return {
             "id": player["id"],
@@ -102,6 +105,7 @@ async def hello(body: HelloIn, request: Request):
             "rooms": get_settings().room_list,
             "max_chars": get_settings().message_max_chars,
             "distribution": {"development": distribution.allowed(conn, player)},
+            "rules": rules.state(player),
         }
 
     try:
@@ -203,7 +207,7 @@ async def chat(room: str, request: Request, after: int = 0, x_czm_key: str | Non
 
     def run(conn):
         return {
-            "messages": service.messages(conn, room, max(0, after)),
+            "messages": service.messages(conn, room, max(0, after), player["id"]),
             "deleted": service.deleted_since(conn, room, after),
             "ban": service.active_ban(conn, player),
         }
@@ -215,10 +219,29 @@ class MessageIn(BaseModel):
     text: str = Field(max_length=1000)
 
 
+class RulesIn(BaseModel):
+    version: int = Field(ge=1, le=1000)
+
+
+@router.post("/rules/accept")
+async def rules_accept(body: RulesIn, request: Request, x_czm_key: str | None = Header(default=None)):
+    _social_limit.check(client_ip(request))
+    try:
+        return JSONResponse(await in_db(rules.accept, x_czm_key or "", body.version), headers={"Cache-Control": "no-store"})
+    except accounts.AuthError as error:
+        return JSONResponse({"error": error.code, "version": rules.VERSION}, status_code=error.status)
+
+
+def rules_refused():
+    return JSONResponse({"error": "rules", "version": rules.VERSION}, status_code=403, headers={"Cache-Control": "no-store"})
+
+
 @router.post("/chat/{room}")
 async def post(room: str, body: MessageIn, x_czm_key: str | None = Header(default=None)):
     check_room(room)
     player = await current_player(x_czm_key)
+    if rules.required(player):
+        return rules_refused()
     try:
         return await in_db(service.post_message, player, room, body.text)
     except service.ChatError as e:
@@ -229,13 +252,17 @@ class ReportIn(BaseModel):
     message: int | None = None
     player: int | None = None
     private_message: int | None = None
+    lobby_message: int | None = None
+    # with player: someone in that room (voice, behaviour); alone: the room's name
+    lobby: str | None = Field(default=None, max_length=64)
 
 
 @router.post("/report")
 async def report(body: ReportIn, x_czm_key: str | None = Header(default=None)):
     reporter = await current_player(x_czm_key)
     try:
-        info = await in_db(service.report, reporter, body.message, body.player, body.private_message)
+        info = await in_db(service.report, reporter, body.message, body.player, body.private_message,
+                           body.lobby_message, body.lobby)
     except service.ChatError as e:
         return JSONResponse({"error": e.code, **e.extra}, status_code=e.status)
     if info and notify_report:
@@ -322,7 +349,7 @@ async def social_profile(target: int, request: Request, x_czm_key: str | None = 
 
 @router.post("/social/status")
 async def social_status(body: SocialStatusIn, request: Request, x_czm_key: str | None = Header(default=None)):
-    return await social_result(request, lambda c: social.update_status(c, x_czm_key or "", body.text))
+    return await social_result(request, rules.guarded(x_czm_key, lambda c: social.update_status(c, x_czm_key or "", body.text)))
 
 
 @router.post("/social/action")
@@ -347,7 +374,7 @@ async def social_history(target: int, request: Request, before: int = 0, x_czm_k
 
 @router.post("/social/dialog/{target}")
 async def social_send(target: int, body: PrivateMessageIn, request: Request, x_czm_key: str | None = Header(default=None)):
-    return await social_result(request, lambda c: social.send(c, x_czm_key or "", target, body.text, body.nonce))
+    return await social_result(request, rules.guarded(x_czm_key, lambda c: social.send(c, x_czm_key or "", target, body.text, body.nonce)))
 
 
 class InviteIn(BaseModel):
@@ -396,6 +423,8 @@ async def avatar(request: Request, x_czm_key: str | None = Header(default=None))
     """The player's own photo: a PNG or JPEG up to 512 KB, stored as a 192 px PNG."""
     _upload_limit.check(client_ip(request))
     player = await current_player(x_czm_key)
+    if rules.required(player):
+        return rules_refused()
     data = await request.body()
     if not data or len(data) > 512 * 1024:
         raise HTTPException(413, {"error": "size"})
@@ -587,9 +616,9 @@ class LobbyMessageIn(BaseModel):
 @router.post("/lobbies")
 async def lobby_create(body:LobbyCreateIn, request:Request,
                        x_czm_key:str|None=Header(default=None)):
-    return await lobby_result(request,lambda c:lobbies.create(
+    return await lobby_result(request,rules.guarded(x_czm_key,lambda c:lobbies.create(
         c,x_czm_key or "",body.title,body.description,body.visibility,
-        body.capacity,body.server,body.proto,body.nonce,body.language))
+        body.capacity,body.server,body.proto,body.nonce,body.language)))
 
 @router.get("/lobbies")
 async def lobby_catalog(request:Request, offset:int=0, mode:str="", language:str="",
@@ -667,7 +696,7 @@ async def lobby_messages(room:str,request:Request,before:int=0,
 @router.post("/lobbies/{room}/messages")
 async def lobby_send(room:str,body:LobbyMessageIn,request:Request,
                      x_czm_key:str|None=Header(default=None)):
-    return await lobby_result(request,lambda c:lobbies.send(c,x_czm_key or "",room,body.text,body.nonce))
+    return await lobby_result(request,rules.guarded(x_czm_key,lambda c:lobbies.send(c,x_czm_key or "",room,body.text,body.nonce)))
 
 
 @router.post("/lobbies/{room}/invite/{target}")
@@ -678,8 +707,8 @@ async def lobby_invite(room:str,target:int,body:LobbyInviteIn,request:Request,
 @router.post("/lobbies/{room}/edit")
 async def lobby_edit(room:str,body:LobbyEditIn,request:Request,
                      x_czm_key:str|None=Header(default=None)):
-    return await lobby_result(request,lambda c:lobbies.edit(
-        c,x_czm_key or "",room,body.title,body.description,body.visibility,body.capacity))
+    return await lobby_result(request,rules.guarded(x_czm_key,lambda c:lobbies.edit(
+        c,x_czm_key or "",room,body.title,body.description,body.visibility,body.capacity)))
 
 
 class LobbyLaunchIn(BaseModel):

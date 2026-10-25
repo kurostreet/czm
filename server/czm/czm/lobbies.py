@@ -405,8 +405,12 @@ def chat(conn, key, room_id, before=0):
     rows = conn.execute(
         "SELECT m.id,m.sender,p.nick,m.text,m.created FROM lobby_messages m "
         "JOIN players p ON p.id=m.sender "
-        "WHERE m.lobby=? AND (?=0 OR m.id<?) ORDER BY m.id DESC LIMIT 50",
-        (room_id,before,before)).fetchall()
+        "WHERE m.lobby=? AND m.deleted=0 AND (?=0 OR m.id<?) "
+        # people who blocked each other do not see each other in a shared room
+        "AND NOT EXISTS (SELECT 1 FROM social_blocks b WHERE "
+        "(b.source=? AND b.target=m.sender) OR (b.source=m.sender AND b.target=?)) "
+        "ORDER BY m.id DESC LIMIT 50",
+        (room_id,before,before,player,player)).fetchall()
     return {"messages": [dict(r) for r in reversed(rows)]}
 
 

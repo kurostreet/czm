@@ -110,13 +110,15 @@ def set_photo(conn: sqlite3.Connection, player_id: int) -> int:
 
 # chat ------------------------------------------------------------------------
 
-def messages(conn: sqlite3.Connection, room: str, after: int) -> list[dict]:
+def messages(conn: sqlite3.Connection, room: str, after: int, viewer: int = 0) -> list[dict]:
+    """The room's recent messages; without the players the viewer blocked."""
     limit = get_settings().room_history
     rows = conn.execute(
         "SELECT m.id, m.player, m.text, m.created, p.nick, p.avatar, p.avatar_rev FROM messages m "
         "JOIN players p ON p.id = m.player WHERE m.room = ? AND m.deleted = 0 AND m.id > ? "
+        "AND NOT EXISTS (SELECT 1 FROM social_blocks b WHERE b.source = ? AND b.target = m.player) "
         "ORDER BY m.id DESC LIMIT ?",
-        (room, after, limit),
+        (room, after, viewer, limit),
     ).fetchall()
     return [
         {"id": r["id"], "p": r["player"], "n": r["nick"], "a": avatar_ref(r), "t": profanity.clean(r["text"]), "ts": r["created"]}
@@ -171,39 +173,86 @@ def post_message(conn: sqlite3.Connection, player: sqlite3.Row, room: str, text:
 
 # complaints and bans ---------------------------------------------------------
 
-def report(conn: sqlite3.Connection, reporter: sqlite3.Row, message_id: int | None, player_id: int | None, private_message_id: int | None = None) -> dict | None:
-    """A new complaint, or None if it repeats one or makes no sense."""
+MESSAGE_REPORTS = ("chat", "private", "lobby_message")
+
+
+def _profile_status(conn: sqlite3.Connection, player_id: int) -> str:
+    row = conn.execute("SELECT status FROM social_profiles WHERE player = ?", (player_id,)).fetchone()
+    return row["status"] if row else ""
+
+
+def report(conn: sqlite3.Connection, reporter: sqlite3.Row, message_id: int | None, player_id: int | None,
+           private_message_id: int | None = None, lobby_message_id: int | None = None,
+           lobby_id: str | None = None) -> dict | None:
+    """A new complaint, or None if it repeats one or makes no sense.
+
+    The reported text is copied into the complaint: lobby rooms and old chat messages
+    are deleted long before the owner may look at it."""
     t = now()
     if conn.execute("SELECT COUNT(*) FROM reports WHERE reporter = ? AND created > ?", (reporter["id"], t - 3600)).fetchone()[0] >= 10:
         raise ChatError("slow", 429, wait=600)
 
-    message = None
+    def member(lobby, player):
+        return conn.execute("SELECT 1 FROM lobby_members WHERE lobby = ? AND player = ?", (lobby, player)).fetchone() is not None
+
+    kind, evidence, context, lobby = "profile", "", "", None
     if private_message_id:
         message = conn.execute(
             "SELECT m.*,d.low,d.high FROM private_messages m JOIN private_dialogs d ON d.id=m.dialog WHERE m.id=? AND m.deleted=0",
             (private_message_id,)).fetchone()
         if message is None or reporter["id"] not in (message["low"], message["high"]) or message["sender"] == reporter["id"]:
             return None
+        player_id, message_id, lobby_message_id = message["sender"], None, None
+        kind, evidence, context = "private", message["text"], "Личное сообщение"
+    elif lobby_message_id:
+        message = conn.execute("SELECT m.*, l.title FROM lobby_messages m JOIN lobbies l ON l.id = m.lobby "
+                               "WHERE m.id = ? AND m.deleted = 0", (lobby_message_id,)).fetchone()
+        # only someone in the same room has seen the message
+        if message is None or not member(message["lobby"], reporter["id"]):
+            return None
         player_id, message_id = message["sender"], None
+        kind, evidence, context, lobby = "lobby_message", message["text"], message["title"], message["lobby"]
+    elif lobby_id:
+        room = conn.execute("SELECT * FROM lobbies WHERE id = ?", (lobby_id,)).fetchone()
+        if room is None:
+            return None
+        message_id, lobby = None, room["id"]
+        if player_id:  # someone in the room: voice or behaviour
+            if not member(room["id"], reporter["id"]) or not member(room["id"], player_id):
+                return None
+            kind, context = "lobby_member", room["title"]
+        else:  # the room itself: its name and description
+            if room["visibility"] != "public" and not member(room["id"], reporter["id"]):
+                return None
+            player_id = room["owner"]
+            kind, context = "lobby", room["title"]
+            evidence = room["title"] + ("\n" + room["description"] if room["description"] else "")
     elif message_id:
         message = conn.execute("SELECT * FROM messages WHERE id = ? AND deleted = 0", (message_id,)).fetchone()
         if message is None:
             return None
         player_id = message["player"]
+        kind, evidence, context = "chat", message["text"], message["room"]
     if not player_id or player_id == reporter["id"]:
         return None
     if conn.execute("SELECT 1 FROM players WHERE id = ?", (player_id,)).fetchone() is None:
         return None
+    if kind == "profile":
+        evidence = _profile_status(conn, player_id)
 
     if conn.execute(
-        "SELECT 1 FROM reports WHERE reporter = ? AND target = ? AND message IS ? AND private_message IS ? AND created > ?",
-        (reporter["id"], player_id, message_id or None, private_message_id or None, t - 86400),
+        "SELECT 1 FROM reports WHERE reporter = ? AND target = ? AND message IS ? AND private_message IS ? "
+        "AND lobby_message IS ? AND lobby IS ? AND kind IN (?, '') AND created > ?",
+        (reporter["id"], player_id, message_id or None, private_message_id or None, lobby_message_id or None,
+         lobby, kind, t - 86400),
     ).fetchone():
         return None
 
     cur = conn.execute(
-        "INSERT INTO reports (reporter, target, message, private_message, created) VALUES (?, ?, ?, ?, ?)",
-        (reporter["id"], player_id, message_id or None, private_message_id or None, t),
+        "INSERT INTO reports (reporter, target, message, private_message, lobby_message, lobby, kind, evidence, context, created) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (reporter["id"], player_id, message_id or None, private_message_id or None, lobby_message_id or None,
+         lobby, kind, evidence[:2000], context[:200], t),
     )
     return report_info(conn, cur.lastrowid)
 
@@ -214,22 +263,33 @@ def report_info(conn: sqlite3.Connection, report_id: int) -> dict | None:
         return None
     target = conn.execute("SELECT * FROM players WHERE id = ?", (r["target"],)).fetchone()
     reporter = conn.execute("SELECT nick FROM players WHERE id = ?", (r["reporter"],)).fetchone()
-    message = conn.execute("SELECT * FROM messages WHERE id = ?", (r["message"],)).fetchone() if r["message"] else None
-    private = conn.execute("SELECT * FROM private_messages WHERE id=?", (r["private_message"],)).fetchone() if r["private_message"] else None
+    kind = r["kind"] or ("private" if r["private_message"] else "chat" if r["message"] else "profile")
+    evidence, context = r["evidence"], r["context"]
+    if not r["kind"]:  # written before the text was copied into complaints
+        message = conn.execute("SELECT * FROM messages WHERE id = ?", (r["message"],)).fetchone() if r["message"] else None
+        private = conn.execute("SELECT * FROM private_messages WHERE id=?", (r["private_message"],)).fetchone() if r["private_message"] else None
+        evidence = private["text"] if private else message["text"] if message else ""
+        context = "Личное сообщение" if private else message["room"] if message else ""
     count = conn.execute("SELECT COUNT(*) FROM reports WHERE target = ? AND created > ?", (r["target"], now() - 7 * 86400)).fetchone()[0]
     return {
         "id": r["id"],
         "status": r["status"],
-        "target": target["id"],
-        "nick": target["nick"],
-        "avatar": target["avatar"],
-        "avatar_rev": target["avatar_rev"],
+        "kind": kind,
+        "target": target["id"] if target else r["target"],
+        "nick": target["nick"] if target else "",
+        "avatar": target["avatar"] if target else "",
+        "avatar_rev": target["avatar_rev"] if target else 0,
         "reporter": r["reporter"],
         "reporter_nick": reporter["nick"] if reporter else "",
-        "message": private["text"] if private else message["text"] if message else None,
-        "room": "Личное сообщение" if private else message["room"] if message else None,
+        # the reported text; None for a profile or for someone's voice in a lobby
+        "message": evidence if kind in MESSAGE_REPORTS or kind == "lobby" else None,
+        "evidence": evidence,
+        "room": context if kind in ("chat", "private") else None,
+        "context": context,
+        "lobby": r["lobby"],
         "message_id": r["message"],
         "private_message_id": r["private_message"],
+        "lobby_message_id": r["lobby_message"],
         "reports_week": count,
     }
 
@@ -284,8 +344,26 @@ def delete_message(conn: sqlite3.Connection, message_id: int) -> None:
 def delete_report_message(conn, info):
     if info.get("private_message_id"):
         conn.execute("UPDATE private_messages SET deleted=1 WHERE id=?", (info["private_message_id"],))
+    elif info.get("lobby_message_id"):
+        conn.execute("UPDATE lobby_messages SET deleted=1 WHERE id=?", (info["lobby_message_id"],))
     elif info.get("message_id"):
         delete_message(conn, info["message_id"])
+
+
+def remove_report_content(conn, info) -> str:
+    """Take down what the complaint is about. Returns what was done, for the owner."""
+    kind = info.get("kind")
+    if kind in MESSAGE_REPORTS:
+        delete_report_message(conn, info)
+        return "сообщение удалено"
+    if kind == "lobby" and info.get("lobby"):
+        conn.execute("DELETE FROM lobbies WHERE id=?", (info["lobby"],))
+        return "лобби закрыто"
+    if kind == "profile":
+        reset_avatar(conn, info["target"])
+        conn.execute("UPDATE social_profiles SET status='' WHERE player=?", (info["target"],))
+        return "аватар и статус сброшены"
+    return ""
 
 
 # news and releases -----------------------------------------------------------

@@ -247,7 +247,18 @@ CREATE TABLE IF NOT EXISTS development_invites (
 # columns added after the first version of a table
 COLUMNS = {
     "releases": {"news_id": "INTEGER", "auto": "INTEGER NOT NULL DEFAULT 0", "channel": "TEXT NOT NULL DEFAULT 'legacy'"},
-    "reports": {"private_message": "INTEGER"},
+    "players": {"rules_version": "INTEGER NOT NULL DEFAULT 0",
+                "rules_at": "INTEGER NOT NULL DEFAULT 0",
+                "rules_client": "INTEGER NOT NULL DEFAULT 0"},
+    # kind: chat, private, lobby_message, lobby, lobby_member, profile ('' = written before kinds).
+    # evidence keeps the reported text: lobby rooms and old chat disappear before a review.
+    "reports": {"private_message": "INTEGER",
+                "lobby_message": "INTEGER",
+                "lobby": "TEXT",
+                "kind": "TEXT NOT NULL DEFAULT ''",
+                "evidence": "TEXT NOT NULL DEFAULT ''",
+                "context": "TEXT NOT NULL DEFAULT ''"},
+    "lobby_messages": {"deleted": "INTEGER NOT NULL DEFAULT 0"},
     "lobbies": {"last_seen": "INTEGER NOT NULL DEFAULT 0",
                 "voice_mute_all":"INTEGER NOT NULL DEFAULT 0",
                 "language":"TEXT NOT NULL DEFAULT ''"},

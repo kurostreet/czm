@@ -70,14 +70,33 @@ def when(ts: int | None) -> str:
     return datetime.fromtimestamp(ts, MSK).strftime("до %d.%m.%Y %H:%M")
 
 
+REPORT_SUBJECT = {
+    "chat": "На сообщение в комнате {context}:",
+    "private": "На личное сообщение:",
+    "lobby_message": "На сообщение в лобби «{context}»:",
+    "lobby": "На название или описание лобби:",
+    "lobby_member": "На игрока в лобби «{context}»: голос или поведение.",
+    "profile": "На профиль: ник, аватар или статус.",
+}
+REMOVE_BUTTON = {
+    "chat": "🗑 Удалить сообщение",
+    "private": "🗑 Удалить сообщение",
+    "lobby_message": "🗑 Удалить сообщение",
+    "lobby": "🗑 Закрыть лобби",
+    "profile": "🧹 Сбросить аватар и статус",
+}
+
+
 def report_text(info: dict, result: str = "") -> str:
     target = f"<b>{html.escape(info['nick'])}</b> (ID {info['target']})"
-    lines = [f"⚠️ <b>Жалоба #{info['id']}</b>"]
-    if info["message"] is not None:
-        lines.append(f"На сообщение в комнате {info['room'].upper()}:")
-        lines.append(f"«{html.escape(info['message'])}»")
-    else:
-        lines.append("На аватар.")
+    kind = info.get("kind", "profile")
+    context = info.get("context") or ""
+    if kind == "chat":
+        context = context.upper()
+    lines = [f"⚠️ <b>Жалоба #{info['id']}</b>",
+             html.escape(REPORT_SUBJECT.get(kind, REPORT_SUBJECT["profile"]).format(context=context))]
+    if info.get("evidence"):
+        lines.append(f"«{html.escape(info['evidence'])}»")
     lines.append(f"Автор: {target}, жалоб за неделю: {info['reports_week']}")
     lines.append(f"Пожаловался: {html.escape(info['reporter_nick'])} (ID {info['reporter']})")
     if result:
@@ -94,8 +113,8 @@ def report_keyboard(info: dict) -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="🚫 Навсегда", callback_data=f"b:{r}:f"),
     ]]
     second = []
-    if info["message"] is not None:
-        second.append(InlineKeyboardButton(text="🗑 Удалить сообщение", callback_data=f"d:{r}"))
+    if info.get("kind") in REMOVE_BUTTON:
+        second.append(InlineKeyboardButton(text=REMOVE_BUTTON[info["kind"]], callback_data=f"d:{r}"))
     second.append(InlineKeyboardButton(text="✅ Не нарушение", callback_data=f"k:{r}"))
     rows.append(second)
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -114,12 +133,13 @@ class OwnerBot:
         for owner in self.owners:
             try:
                 photo = self.settings.avatar_dir / f"{info['target']}.png"
-                if info["message"] is None and info["avatar"] == "photo" and photo.exists():
+                profile = info.get("kind") == "profile"
+                if profile and info["avatar"] == "photo" and photo.exists():
                     await self.bot.send_photo(owner, BufferedInputFile(photo.read_bytes(), "avatar.png"),
                                               caption=report_text(info), reply_markup=report_keyboard(info))
                 else:
                     text = report_text(info)
-                    if info["message"] is None:
+                    if profile:
                         text += f"\nАватар: {'свой' if info['avatar'] == 'photo' else ('№' + info['avatar'] if info['avatar'] else 'логотип игры')}"
                     await self.bot.send_message(owner, text, reply_markup=report_keyboard(info))
             except TelegramAPIError as e:
@@ -361,18 +381,15 @@ class OwnerBot:
             if parts[0] == "b" and len(parts) == 3 and parts[2] in LENGTHS:
                 length = LENGTHS[parts[2]]
                 service.ban(conn, info["target"], length, f"жалоба #{report_id}")
-                if info["message_id"] or info.get("private_message_id"):
-                    service.delete_report_message(conn, info)
-                else:
-                    service.reset_avatar(conn, info["target"])
+                removed = service.remove_report_content(conn, info)
                 # the other complaints about this player are answered too
                 conn.execute("UPDATE reports SET status = 'banned', resolved = strftime('%s','now') WHERE target = ? AND status = 'open'",
                              (info["target"],))
-                return info, f"🚫 Забанен {LENGTH_NAMES[length]}" + (", сообщение удалено." if info["message_id"] or info.get("private_message_id") else ", аватар сброшен.")
-            if parts[0] == "d" and (info["message_id"] or info.get("private_message_id")):
-                service.delete_report_message(conn, info)
+                return info, f"🚫 Забанен {LENGTH_NAMES[length]}" + (f", {removed}." if removed else ".")
+            if parts[0] == "d" and info.get("kind") in REMOVE_BUTTON:
+                removed = service.remove_report_content(conn, info)
                 service.resolve_report(conn, report_id, "deleted")
-                return info, "🗑 Сообщение удалено."
+                return info, f"🗑 {removed[:1].upper()}{removed[1:]}."
             if parts[0] == "k":
                 service.resolve_report(conn, report_id, "dismissed")
                 return info, "✅ Не нарушение."

@@ -77,7 +77,7 @@ counter-zombie.ru, kontrafps.ru {
 		file_server
 	}
 
-	# pages: / and /privacy; the hash allows the one inline line that applies the saved theme
+	# pages: /, /privacy and /rules; the hash allows the one inline line that applies the saved theme
 	handle {
 		root * /opt/czm/current/site
 		header {

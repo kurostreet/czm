@@ -223,7 +223,7 @@ class InstallListTests(unittest.TestCase):
 
     def test_pages_have_no_inline_code_beyond_the_allowed_line(self):
         caddy = (self.base / "deploy" / "czm.caddy").read_text()
-        for page in ("index.html", "privacy.html"):
+        for page in ("index.html", "privacy.html", "rules.html"):
             html = (self.base / "site" / page).read_text()
             self.assertNotRegex(html, r"\son[a-z]+=", page)
             for code in re.findall(r"<script>(.*?)</script>", html, re.S):
