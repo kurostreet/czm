@@ -154,7 +154,8 @@ header{position:sticky;top:0;z-index:30;background:var(--glass);-webkit-backdrop
 .features-badge{flex:none;display:flex;align-items:center;gap:8px;margin-top:3px;padding:7px 11px;border:1px solid var(--line);border-radius:999px;font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)}
 .features-badge .dot{width:6px;height:6px;background:var(--gold)}
 .feats{padding:10px;overflow:hidden;background:linear-gradient(135deg,var(--surface2),var(--surface) 42%);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow)}
-.tabs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;padding-bottom:10px;min-width:0}
+.tabs{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;padding-bottom:10px;min-width:0}
+@media(min-width:701px) and (max-width:1000px){.tabs{grid-template-columns:repeat(4,minmax(0,1fr))}}
 .tab{display:flex;align-items:center;justify-content:center;gap:9px;min-height:48px;padding:8px 10px;border-radius:11px;cursor:pointer;text-align:center;border:1px solid transparent;background:transparent;color:var(--muted);font:600 14px "CZM Text";transition:background .2s ease,border-color .2s ease,color .2s ease}
 .tab svg{width:19px;height:19px;flex:none;opacity:.8}
 .tab:hover{background:var(--surface2);color:var(--text)}
@@ -394,7 +395,7 @@ footer .h-game{font-size:14px;color:var(--text);margin-right:auto}
 <div class="features-head">
 <div><h2 class="h-game" data-i18n="featTitle">Возможности</h2>
 <p data-i18n="featLead">Загляни в игру. Выбирай раздел и знакомься с интерфейсом.</p></div>
-<span class="features-badge"><span class="dot" aria-hidden="true"></span><span data-i18n="featBadge">10 экранов игры</span></span>
+<span class="features-badge"><span class="dot" aria-hidden="true"></span><span data-i18n="featBadge">11 экранов игры</span></span>
 </div>
 <div class="feats">
 <div class="tabs" role="tablist" id="tabs" data-i18n-aria="featTitle" aria-label="Возможности"></div>

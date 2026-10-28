@@ -196,7 +196,7 @@ class InstallListTests(unittest.TestCase):
         self.assertIn('id="features"', html)
         self.assertIn('id="tabs"', html)
         self.assertIn('id="panels"', html)
-        self.assertIn("var FEAT_SHOTS = ['menu', 'servers', 'chat', 'controls', 'graphics', 'audio', 'game', 'hud', 'profile', 'friends']", js)
+        self.assertIn("var FEAT_SHOTS = ['menu', 'servers', 'top', 'chat', 'controls', 'graphics', 'audio', 'game', 'hud', 'profile', 'friends']", js)
         self.assertIn('function shotSrc(i)', js)
         self.assertIn('function gallerySrc(i)', js)
         self.assertIn('buildStrip()', js)

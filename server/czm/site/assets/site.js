@@ -29,12 +29,13 @@
       overviewError: 'Не удалось загрузить видео. Попробуй запустить его ещё раз.', overviewFallback: 'Браузер не поддерживает видео.',
       shotsTitle: 'Кадры', gallery: ['Игровая сцена: бой', 'Игровая сцена: начало раунда', 'Зомби-режим: локация', 'Зомби-режим: сражение'],
       featTitle: 'Возможности', featLead: 'Загляни в игру. Выбирай раздел и знакомься с интерфейсом.',
-      featBadge: '10 экранов игры', featHint: 'Настоящие скриншоты игры · Нажми на экран, чтобы рассмотреть детали',
+      featBadge: '11 экранов игры', featHint: 'Настоящие скриншоты игры · Нажми на экран, чтобы рассмотреть детали',
       featZoom: 'На весь экран', featOpen: 'Открыть экран: ', featPrev: 'Предыдущий раздел', featNext: 'Следующий раздел',
       feats: [
-        ['Главное меню', 'Всё для старта на одном экране: быстрая игра, любимые серверы, чат и друзья. Уведомления помогут не пропустить новости и обновления.'],
+        ['Главное меню', 'Всё для старта на одном экране: быстрая игра, лобби с друзьями, любимые серверы, чат и Топ 100. Уведомления помогут не пропустить новости и обновления.'],
         ['Серверы', 'Найди свой сервер: поиск по названию, карте или IP, фильтры и сортировка. Смотри пинг, свободные места и игроков, сохраняй любимые серверы.'],
-        ['Общий чат', 'Общайся с игроками до начала матча. Переключайся между Global, RU и EN, выбирай аватар и оставайся на связи с сообществом.'],
+        ['Топ 100', 'Рейтинг по времени, сыгранному на серверах. Первая тройка стоит на пьедестале с коронами, у первой сотни значок TOP рядом с ником, а своё место видно всегда.'],
+        ['Общий чат', 'Общайся с игроками до начала матча в комнатах Global, RU и EN. Рядом с ником видно значки SUPPORT и TOP, а пожаловаться на сообщение можно одним нажатием.'],
         ['Управление', 'Три схемы кнопок, редактор управления и HUD, обмен раскладками. Настрой чувствительность камеры, прицеливания и гироскоп под себя.'],
         ['Графика', 'Выбери подходящий режим отрисовки, яркость и лимит FPS. Настрой размер текста и HUD, количество эффектов и отображение пинга.'],
         ['Звук', 'Отрегулируй игру, музыку и голосовой чат отдельно. Выбери трек меню, настрой громкость голосов и проверь микрофон перед матчем.'],
@@ -75,12 +76,13 @@
       overviewError: 'The video could not load. Please try playing it again.', overviewFallback: 'Your browser does not support video.',
       shotsTitle: 'Screenshots', gallery: ['Gameplay: battle', 'Gameplay: round start', 'Zombie mode: location', 'Zombie mode: combat'],
       featTitle: 'Features', featLead: 'Take a look inside. Choose a section and explore the game interface.',
-      featBadge: '10 game screens', featHint: 'Real game screenshots · Tap a screen to take a closer look',
+      featBadge: '11 game screens', featHint: 'Real game screenshots · Tap a screen to take a closer look',
       featZoom: 'Full screen', featOpen: 'Open screen: ', featPrev: 'Previous section', featNext: 'Next section',
       feats: [
-        ['Main menu', 'Everything you need to get started: quick play, favourite servers, chat and friends. Notifications keep you up to date with game news and updates.'],
+        ['Main menu', 'Everything you need to get started: quick play, lobbies with friends, favourite servers, chat and the Top 100. Notifications keep you up to date with game news and updates.'],
         ['Servers', 'Find a server by name, map or IP, with filters and sorting. Check ping, available slots and players, and save your favourites.'],
-        ['Global chat', 'Meet the community before a match. Switch between Global, RU and EN, choose an avatar and stay in touch with other players.'],
+        ['Top 100', 'A ranking by time played on servers. The top three stand on a podium with crowns, the first hundred get a TOP badge next to their nickname, and your own place is always shown.'],
+        ['Global chat', 'Talk to players before a match in the Global, RU and EN rooms. SUPPORT and TOP badges show next to nicknames, and you can report a message with one tap.'],
         ['Controls', 'Three button layouts, a controls and HUD editor, and layout sharing. Adjust camera, aiming and gyroscope sensitivity to suit you.'],
         ['Graphics', 'Choose a rendering mode, brightness and FPS limit. Adjust text and HUD size, effects and the on-screen ping display.'],
         ['Audio', 'Adjust game audio, music and voice chat separately. Choose a menu track, set voice volume and check your microphone before a match.'],
@@ -104,10 +106,11 @@
       beta3: 'Install and play', beta3Note: 'Play at least a couple of times a week: Google checks that the test is alive.', beta3Btn: 'Open in Google Play'
     }
   };
-  var FEAT_SHOTS = ['menu', 'servers', 'chat', 'controls', 'graphics', 'audio', 'game', 'hud', 'profile', 'friends'];
+  var FEAT_SHOTS = ['menu', 'servers', 'top', 'chat', 'controls', 'graphics', 'audio', 'game', 'hud', 'profile', 'friends'];
   var FEAT_ICONS = [
     '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
     '<rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/><path d="M7 6.5h.01M7 17.5h.01M11 6.5h6M11 17.5h6"/>',
+    '<path d="M3 7.5 7.5 11 12 5l4.5 6L21 7.5 19 18H5L3 7.5Z"/><path d="M5 21h14"/>',
     '<path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5Z"/>',
     '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="9" r="4"/><path d="M12 13v8"/>',
     '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
