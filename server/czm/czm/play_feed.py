@@ -1,16 +1,16 @@
 """What players hear about Google Play releases: the bell's news and the site's "What's new".
 
-A build that passed CI, was uploaded or sent to Google's review is not news. Every quarter of an hour
-the service reads the Play tracks (read only) and learns each release's code, version and notes. A
-release becomes news once players who already had the game update to this very version on the
-public track: the closed test while there is no production, then production. That happens only
-after Google's review, when the audience really gets it. Internal releases are never announced.
-
-Two different players must update: a reviewer signs in with one guest account, and a test device
-of Google is a new install. The official SUPPORT account does not count either.
+A build that passed CI or sits on the internal track is not news. Every quarter of an hour the
+service reads the Play tracks (read only) and learns each release's code, version and notes. A
+release becomes news as soon as it is on the public track: the closed test (alpha) while there is
+no production, then production. The bell in the game, the site's "What's new" and the owner's bot
+get it at once (the owner's decision of 28.10.2026: every alpha update is announced everywhere).
+Google may still be reviewing it for a few hours; the bell's button opens Google Play, which offers
+the update as soon as Google approves it. Internal releases are never announced.
 
 The old feed (one item per site build, "1.35-<commit>") was cleared once; the migration screen of
-old site installs is a separate mechanism (distribution.py) and stays.
+old site installs is a separate mechanism (distribution.py) and stays. play_witnesses still records
+who updated (account deletion removes those rows).
 """
 import logging
 import re
@@ -23,7 +23,7 @@ log = logging.getLogger("czm.play_feed")
 
 PUBLIC_TRACKS = ("production", "alpha")
 SYNC_EVERY = 900
-WITNESSES = 2                  # players who updated before the release is news
+WITNESSES = 2                  # a fallback only: sync() announces a public release first
 MONTHS = ("января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября",
           "октября", "ноября", "декабря")
 
@@ -141,6 +141,10 @@ def sync(conn: sqlite3.Connection, tracks: dict) -> None:
     if found:
         marks = ",".join("?" * len(found))
         conn.execute(f"UPDATE play_releases SET tracks='' WHERE code NOT IN ({marks})", tuple(found))
+    if not first_run:
+        # a release on the public track is news at once: the bell, the site and the bot
+        for code in sorted(c for c, info in found.items() if public in info["tracks"]):
+            announce(conn, code)
 
 
 def witness(conn: sqlite3.Connection, before, player, code: int, store: int | None = None) -> bool:

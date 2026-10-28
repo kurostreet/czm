@@ -272,11 +272,11 @@ class OwnerBot:
                 await in_db(service.mark_play_publish_notified, p["id"])
 
     async def notify_play_news(self) -> None:
-        """A Google Play release reached the players: the owner learns it became news."""
+        """A Google Play release is on the public track: the owner learns it became news."""
         from . import play_feed
         for r in await in_db(play_feed.unnotified):
             name = html.escape(play_feed.version_name(r["version"]) or r["version"])
-            text = (f"📣 Google Play: версия {name} ({r['code']}) уже у игроков. "
+            text = (f"📣 Google Play: версия {name} ({r['code']}) вышла для игроков. "
                     f"Новость #{r['news_id']} в колокольчике, «Что нового» на сайте обновлено.\n"
                     f"Убрать из колокольчика: /delnews {r['news_id']}")
             sent = False

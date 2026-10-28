@@ -1,4 +1,4 @@
-"""News about Google Play releases: only what players really got, never a site build or an internal one."""
+"""News about Google Play releases: every release on the public track, never a site build or an internal one."""
 import os
 import tempfile
 import unittest
@@ -66,8 +66,8 @@ class PlayFeedTests(unittest.TestCase):
                 self.assertTrue(conn.execute("SELECT published FROM releases WHERE id=?", (rid,)).fetchone()[0])
             self.assertEqual(service.last_news_id(conn), before)
 
-    def test_a_release_is_news_once_two_testers_update_on_the_public_track(self):
-        for n in range(1, 8):
+    def test_a_release_is_news_as_soon_as_it_is_on_the_public_track(self):
+        for n in range(1, 4):
             self.player(n)
         with db.db() as conn:
             # first look: what testers already have is listed on the site, the bell stays quiet
@@ -76,31 +76,18 @@ class PlayFeedTests(unittest.TestCase):
             self.assertEqual([n["version"] for n in play_feed.site_news(conn, 3)], ["1.35"])
             self.assertEqual(play_feed.unnotified(conn), [])
             news_before = service.last_news_id(conn)
-            # a new candidate on internal only: nobody hears about it
+            # a new candidate on internal only: nobody hears about it, even after updates
             self.clock += 600
             play_feed.sync(conn, {"internal": [track(101, "1.35-bbb2222", "Новый профиль и SUPPORT.")], "alpha": [track(100)]})
             self.assertEqual([r["code"] for r in play_feed.latest(conn)], [101, 100])  # notes for the code Play offers
         self.assertFalse(self.update(1, "1.35-bbb2222", 101))
-        self.assertFalse(self.update(2, "1.35-bbb2222", 101))
         with db.db() as conn:
             self.assertEqual(service.last_news_id(conn), news_before)
-            # promoted to the closed test; Google reviews it, a reviewer and a test device start it
+            self.assertEqual(play_feed.unnotified(conn), [])
+            # sent to the closed test: the next look makes it news everywhere at once
             self.clock += 600
             play_feed.sync(conn, {"internal": [track(101, "1.35-bbb2222", "Новый профиль и SUPPORT.")],
                                   "alpha": [track(101, "1.35-bbb2222", "Новый профиль и SUPPORT.")]})
-        self.clock += 60
-        self.player(99, "1.35-bbb2222")                     # a new install: Google's test device
-        self.assertFalse(self.update(99, "1.35-bbb2223", 101))
-        self.assertFalse(self.update(2, "1.35-bbb2222", 101))  # already had it from internal: no update now
-        self.assertFalse(self.update(3, "1.35-bbb2222", 101, store=0))  # the site build
-        with db.db() as conn:
-            conn.execute("INSERT INTO staff(player, role, granted) VALUES (4,'support',1)")
-        self.assertFalse(self.update(4, "1.35-bbb2222", 101))  # the owner's SUPPORT account
-        self.assertFalse(self.update(5, "1.35-bbb2222", 101, store=1))  # the first tester
-        self.assertFalse(self.update(5, "1.35-old", 100))     # back and forth: still one player
-        self.assertFalse(self.update(5, "1.35-bbb2222", 101))
-        self.assertTrue(self.update(6, "1.35-bbb2222", 101))   # the second: Google approved, players get it
-        with db.db() as conn:
             items = service.news(conn)
             self.assertEqual(items[0]["text"], "Обновление в Google Play, версия 1.35\nНовый профиль и SUPPORT.")
             self.assertNotIn("bbb2222", items[0]["text"])
@@ -110,11 +97,22 @@ class PlayFeedTests(unittest.TestCase):
             play_feed.mark_notified(conn, 101)
             self.assertEqual(play_feed.unnotified(conn), [])
             last = service.last_news_id(conn)
-        # more updates and more syncs never repeat it
-        self.assertFalse(self.update(7, "1.35-bbb2222", 101))
+        # updates and more looks never repeat it
+        self.assertFalse(self.update(2, "1.35-bbb2222", 101, store=1))
+        self.assertFalse(self.update(3, "1.35-bbb2222", 101))
         with db.db() as conn:
-            play_feed.sync(conn, {"alpha": [track(101, "1.35-bbb2222", "Новый профиль и SUPPORT.")]})
+            self.clock += 900
+            play_feed.sync(conn, {"internal": [track(101)], "alpha": [track(101, "1.35-bbb2222", "Новый профиль и SUPPORT.")]})
             self.assertEqual(service.last_news_id(conn), last)
+            # a draft or a halted rollout on the closed test reaches nobody: not news
+            self.clock += 900
+            play_feed.sync(conn, {"alpha": [track(101), track(102, "1.35-ccc3333", status="draft")]})
+            self.assertEqual(service.last_news_id(conn), last)
+            # the next one is news again, once
+            self.clock += 900
+            play_feed.sync(conn, {"alpha": [track(103, "1.35-ddd4444", "Русские буквы в HUD.")]})
+            self.assertEqual(service.news(conn)[0]["text"], "Обновление в Google Play, версия 1.35\nРусские буквы в HUD.")
+            self.assertEqual([r["code"] for r in play_feed.unnotified(conn)], [103])
 
     def test_production_becomes_the_public_track(self):
         for n in range(1, 4):
@@ -129,6 +127,7 @@ class PlayFeedTests(unittest.TestCase):
         self.assertFalse(self.update(2, "1.35-c201", 201))
         with db.db() as conn:
             self.assertIsNone(conn.execute("SELECT public_since FROM play_releases WHERE code=201").fetchone()[0])
+            self.assertIsNone(conn.execute("SELECT announced FROM play_releases WHERE code=201").fetchone()[0])
 
     def test_tracks_are_read_in_a_throwaway_edit(self):
         calls = []
@@ -185,25 +184,22 @@ class PlayFeedApiTests(unittest.TestCase):
         self.assertEqual(r.status_code, 200, r.text)
         return r.json()
 
-    def test_hello_gives_the_notes_and_two_updates_make_the_news(self):
+    def test_hello_gives_the_notes_and_the_news_of_a_public_release(self):
         for n in (1, 2):
             self.assertEqual(self.hello(n, "1.35-old", 400)["play"], [])
+        news = self.hello(1, "1.35-old", 400)["news"]
         with db.db() as conn:
             play_feed.sync(conn, {"alpha": [track(400, "1.35-old", "Было.")]})
-            conn.execute("UPDATE play_releases SET public_since=public_since-10")
+            self.assertEqual(service.last_news_id(conn), news)          # what players already have stays quiet
             play_feed.sync(conn, {"alpha": [track(401, "1.35-new", "Стало лучше.")]})
-            conn.execute("UPDATE play_releases SET public_since=public_since+10 WHERE code=401")
-        news = self.hello(1, "1.35-old", 400)["news"]
-        first = self.hello(1, "1.35-new", 401, store=1)
+        first = self.hello(1, "1.35-old", 400, store=1)
         self.assertEqual(first["play"], [{"code": 401, "version": "1.35", "notes": "Стало лучше."}])
-        self.assertEqual(first["news"], news)
-        second = self.hello(2, "1.35-new", 401)
-        self.assertGreater(second["news"], news)
+        self.assertGreater(first["news"], news)                          # the bell rings before the update
+        self.assertEqual(self.hello(2, "1.35-new", 401)["news"], first["news"])
         site = self.client.get("/api/v1/site/news").json()["news"]
         self.assertEqual([(n["version"], n["notes"]) for n in site][0], ("1.35", "Стало лучше."))
         # only 0 or 1 (the service's own handler turns validation errors into 400)
         self.assertIn(self.client.post("/api/v1/hello", json={"key": "feed-api-key-0009-abcdef", "store": 2}).status_code, (400, 422))
-
 
 if __name__ == "__main__":
     unittest.main()
