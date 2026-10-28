@@ -60,6 +60,56 @@ int main(){
             subprocess.run(["g++", "-std=c++11", "-Wall", "-Werror", str(p / "main.cpp"), "-o", str(p / "arrows")], check=True)
             self.assertIn("ARROWS_OK", subprocess.run([str(p / "arrows")], check=True, capture_output=True, text=True).stdout)
 
+    def test_cyrillic_hud_font_for_the_shipped_gfx_wad(self):
+        """Server HUD texts are drawn with the credits font. The font inside our valve/gfx.wad (the 25th
+        anniversary Half-Life, zlib crc32 0xe53ecdca) has no letters above 127, so the engine has to take
+        creditsfont_cp1251.fnt for it too, as it does for the old gfx.wad."""
+        patch = (ROOT / "patches/xash3d-fwgs/0027-czm-hud-font-cyrillic-hl25.patch").read_text()
+        self.assertIn('+\tif( !CRC32_File( &crc, "gfx.wad" ) || crc == 0x49eb9f16 || crc == 0x1ac13235 )', patch)
+        # CRC32_File returns the register before the final xor: the inverted zlib value
+        self.assertEqual(0xe53ecdca ^ 0xffffffff, 0x1ac13235)
+        engine = ROOT / "3rdparty/xash3d-fwgs"
+        build = engine / "3rdparty/library_suffix/include"
+        if not (build / "build.h").is_file():
+            self.skipTest("the engine's library_suffix submodule is not checked out")
+        program = r'''
+#include <stdio.h>
+#include <stdint.h>
+#include "crclib.h"
+int main(void){
+ static unsigned char data[74314]; uint32_t seed = 12345, crc;
+ for(unsigned i = 0; i < sizeof(data); i++){ seed = seed * 1103515245u + 12345u; data[i] = seed >> 16; }
+ CRC32_Init(&crc);
+ for(unsigned i = 0; i < sizeof(data); i += 1024) CRC32_ProcessBuffer(&crc, data + i, sizeof(data) - i < 1024 ? (int)(sizeof(data) - i) : 1024);
+ printf("%08x\n", crc); return 0;
+}
+'''
+        with tempfile.TemporaryDirectory() as folder:
+            p = Path(folder)
+            (p / "main.c").write_text(program)
+            subprocess.run(["gcc", "-std=gnu11", "-I" + str(engine / "public"), "-I" + str(engine / "common"),
+                            "-I" + str(engine / "engine"), "-I" + str(build), str(p / "main.c"),
+                            str(engine / "public/crclib.c"), "-o", str(p / "crc")], check=True)
+            raw = int(subprocess.run([str(p / "crc")], check=True, capture_output=True, text=True).stdout, 16)
+        import zlib
+        seed, data = 12345, bytearray()
+        for _ in range(74314):
+            seed = (seed * 1103515245 + 12345) & 0xffffffff
+            data.append((seed >> 16) & 0xff)
+        self.assertEqual(raw, zlib.crc32(bytes(data)) ^ 0xffffffff)
+
+    def test_keyboard_pan_does_not_move_the_touch_safe_area(self):
+        """While the chat keyboard is open the view is panned up; the safe area must not be measured from
+        the panned surface, or the touch buttons stay shifted down after the keyboard hides (upstream e76d82f)."""
+        patch = (ROOT / "patches/xash3d-fwgs/0026-czm-android-insets-cutouts-only.patch").read_text()
+        self.assertIn("-\t\tsurface.getLocationInWindow(origin);", patch)
+        self.assertIn("+\t\tmWindowInsets = new float[] { left / width, top / height, right / width, bottom / height };", patch)
+        activity = (ROOT / "3rdparty/xash3d-fwgs/android/app/src/main/java/su/xash/engine/XashActivity.java").read_text()
+        if "upstream e76d82f" in activity:  # the patches are applied (CI)
+            body = activity[activity.index("private void updateWindowInsets("):activity.index("public void onDestroy()")]
+            self.assertNotIn("getLocationInWindow", body)
+            self.assertNotIn("getTranslation", body)
+
 
 if __name__ == "__main__":
     unittest.main()

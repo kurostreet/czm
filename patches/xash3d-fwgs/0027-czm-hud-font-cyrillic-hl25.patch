@@ -1,0 +1,15 @@
+diff --git a/engine/client/cl_scrn.c b/engine/client/cl_scrn.c
+--- a/engine/client/cl_scrn.c
++++ b/engine/client/cl_scrn.c
+@@ -791,7 +791,10 @@ void SCR_LoadCreditsFont( void )
+ 	dword crc = 0;
+ 
+ 	// replace default gfx.wad textures by current charset's font
+-	if( !CRC32_File( &crc, "gfx.wad" ) || crc == 0x49eb9f16 )
++	// CZM: also the gfx.wad of the 25th anniversary Half-Life that we ship (CRC32_File gives the
++	// value before the final xor: 0x1ac13235, zlib crc32 0xe53ecdca). Its credits font has the same
++	// metrics and no letters above 127, so Russian server HUD texts lost every Cyrillic letter.
++	if( !CRC32_File( &crc, "gfx.wad" ) || crc == 0x49eb9f16 || crc == 0x1ac13235 )
+ 	{
+ 		string charsetFnt;
+ 
