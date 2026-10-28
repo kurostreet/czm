@@ -62,7 +62,7 @@ def day(ts: int) -> str:
 
 
 def news_text(row) -> str:
-    title = "Обновление в Google Play"
+    title = TITLE
     name = version_name(row["version"])
     head = f"{title}, версия {name}" if name else title
     return f"{head}\n{(row['notes'] or 'Исправления и улучшения.').strip()}"[:1000]
@@ -184,11 +184,25 @@ def latest(conn: sqlite3.Connection, limit: int = 3) -> list[dict]:
     return [{"code": r["code"], "version": version_name(r["version"]), "notes": r["notes"]} for r in rows]
 
 
+TITLE = "Обновление в Google Play"
+
+
 def site_news(conn: sqlite3.Connection, limit: int) -> list[dict]:
-    rows = conn.execute("SELECT version, notes, announced FROM play_releases WHERE announced IS NOT NULL "
-                        "ORDER BY code DESC LIMIT ?", (limit,)).fetchall()
-    return [{"version": version_name(r["version"]), "notes": (r["notes"] or "Исправления и улучшения.").strip()[:600],
-             "ts": r["announced"]} for r in rows]
+    """The site says what the bell says: the text of the release's news item, as the owner may have
+    corrected it (/editnews), and nothing for an item he removed (/delnews). Releases players already
+    had on the first look have no item and show the Play notes."""
+    rows = conn.execute("SELECT r.version, r.notes, r.announced, n.text FROM play_releases r "
+                        "LEFT JOIN news n ON n.id = r.news_id WHERE r.announced IS NOT NULL AND COALESCE(n.deleted, 0) = 0 "
+                        "ORDER BY r.code DESC LIMIT ?", (limit,)).fetchall()
+    items = []
+    for r in rows:
+        notes = r["notes"]
+        if r["text"]:
+            head, _, body = r["text"].partition("\n")
+            notes = body if head.startswith(TITLE) and body.strip() else r["text"]
+        items.append({"version": version_name(r["version"]), "notes": (notes or "Исправления и улучшения.").strip()[:600],
+                      "ts": r["announced"]})
+    return items
 
 
 def unnotified(conn: sqlite3.Connection) -> list[dict]:

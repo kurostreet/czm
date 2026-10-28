@@ -114,6 +114,31 @@ class PlayFeedTests(unittest.TestCase):
             self.assertEqual(service.news(conn)[0]["text"], "Обновление в Google Play, версия 1.35\nРусские буквы в HUD.")
             self.assertEqual([r["code"] for r in play_feed.unnotified(conn)], [103])
 
+    def test_the_site_says_what_the_bell_says(self):
+        with db.db() as conn:
+            play_feed.sync(conn, {"alpha": [track(300, "1.35-aaa", "Старое.")]})
+            self.clock += 600
+            play_feed.sync(conn, {"alpha": [track(301, "1.35-bbb", "Топ 100. Профиль. Русские буквы в HUD.")]})
+            item = service.news(conn)[0]
+            self.assertEqual(play_feed.site_news(conn, 3)[0]["notes"], "Топ 100. Профиль. Русские буквы в HUD.")
+            # the owner keeps only what is new in this version: the bell and the site change together
+            self.assertTrue(service.edit_news(conn, item["id"], "Обновление в Google Play, версия 1.35\nРусские буквы в HUD."))
+            self.assertEqual(service.news(conn)[0]["text"], "Обновление в Google Play, версия 1.35\nРусские буквы в HUD.")
+            self.assertEqual(play_feed.site_news(conn, 3)[0]["notes"], "Русские буквы в HUD.")
+            # a later look at the tracks with the old Play notes does not bring them back
+            self.clock += 900
+            play_feed.sync(conn, {"alpha": [track(301, "1.35-bbb", "Топ 100. Профиль. Русские буквы в HUD.")]})
+            self.assertEqual(play_feed.site_news(conn, 3)[0]["notes"], "Русские буквы в HUD.")
+            # a text without the title is shown as it is
+            service.edit_news(conn, item["id"], "Буквы и кнопки.")
+            self.assertEqual(play_feed.site_news(conn, 3)[0]["notes"], "Буквы и кнопки.")
+            self.assertFalse(service.edit_news(conn, item["id"], "   "))
+            self.assertFalse(service.edit_news(conn, 999999, "Нет такой."))
+            # removed from the bell: gone from the site too; what players had on the first look stays
+            self.assertTrue(service.delete_news(conn, item["id"]))
+            self.assertFalse(service.edit_news(conn, item["id"], "Поздно."))
+            self.assertEqual([(n["version"], n["notes"]) for n in play_feed.site_news(conn, 3)], [("1.35", "Старое.")])
+
     def test_production_becomes_the_public_track(self):
         for n in range(1, 4):
             self.player(n)

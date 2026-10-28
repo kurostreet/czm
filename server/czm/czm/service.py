@@ -393,6 +393,12 @@ def last_news_id(conn: sqlite3.Connection) -> int:
     return conn.execute("SELECT COALESCE(MAX(id), 0) FROM news WHERE deleted = 0").fetchone()[0]
 
 
+def edit_news(conn: sqlite3.Connection, news_id: int, text: str) -> bool:
+    """The owner corrects a news item: the bell and the site show the new text."""
+    text = text.strip()[:1000]
+    return bool(text) and conn.execute("UPDATE news SET text = ? WHERE id = ? AND deleted = 0", (text, news_id)).rowcount > 0
+
+
 def delete_news(conn: sqlite3.Connection, news_id: int) -> bool:
     return conn.execute("UPDATE news SET deleted = 1 WHERE id = ?", (news_id,)).rowcount > 0
 

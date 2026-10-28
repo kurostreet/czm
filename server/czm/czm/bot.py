@@ -34,6 +34,7 @@ HELP = (
     "Жалобы из игрового чата приходят сюда с кнопками бана.\n\n"
     "/news <i>текст</i> — новость в колокольчик всем игрокам\n"
     "/news — последние новости, /delnews <i>номер</i> — убрать новость\n"
+    "/editnews <i>номер</i> <i>текст</i> — поправить текст новости (колокольчик и сайт)\n"
     "Обновления выходят сами: после каждой правки сервер собирает игру и выпускает её, "
     "сюда приходит сообщение с кнопкой отмены.\n"
     "/release — что сейчас у игроков, /release <i>текст</i> — поправить «что нового»\n"
@@ -184,6 +185,17 @@ class OwnerBot:
         ok = arg.isdigit() and await in_db(service.delete_news, int(arg))
         await message.answer("Новость убрана." if ok else "Нет такой новости. Номер — в списке /news.")
 
+    async def on_editnews(self, message: Message, command: CommandObject) -> None:
+        if not self.allowed(message.from_user and message.from_user.id):
+            return
+        number, _, text = (command.args or "").strip().lstrip("#").partition(" ")
+        if not number.isdigit() or not text.strip():
+            await message.answer("Напиши /editnews, номер новости и новый текст. Номер — в списке /news.")
+            return
+        ok = await in_db(service.edit_news, int(number), text)
+        await message.answer(f"✅ Новость #{number} поправлена: колокольчик и сайт покажут новый текст."
+                             if ok else "Нет такой новости. Номер — в списке /news.")
+
     async def on_release(self, message: Message, command: CommandObject) -> None:
         if not self.allowed(message.from_user and message.from_user.id):
             return
@@ -278,7 +290,7 @@ class OwnerBot:
             name = html.escape(play_feed.version_name(r["version"]) or r["version"])
             text = (f"📣 Google Play: версия {name} ({r['code']}) вышла для игроков. "
                     f"Новость #{r['news_id']} в колокольчике, «Что нового» на сайте обновлено.\n"
-                    f"Убрать из колокольчика: /delnews {r['news_id']}")
+                    f"Поправить текст: /editnews {r['news_id']} <i>текст</i>\nУбрать: /delnews {r['news_id']}")
             sent = False
             for owner in self.owners:
                 try:
@@ -455,6 +467,7 @@ def build(settings: Settings) -> tuple[Bot, Dispatcher, OwnerBot]:
     router.message.register(owner.on_stats, Command("stats"))
     router.message.register(owner.on_news, Command("news"))
     router.message.register(owner.on_delnews, Command("delnews"))
+    router.message.register(owner.on_editnews, Command("editnews"))
     router.message.register(owner.on_release, Command("release"))
     router.message.register(owner.on_ban, Command("ban"))
     router.message.register(owner.on_unban, Command("unban"))
