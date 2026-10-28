@@ -1,0 +1,1 @@
+Cyrillic letters in server messages on the screen no longer disappear. Touch controls stay in place after you send a chat message.

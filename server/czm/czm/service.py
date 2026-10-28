@@ -378,25 +378,40 @@ def remove_report_content(conn, info) -> str:
 
 # news and releases -----------------------------------------------------------
 
-def add_news(conn: sqlite3.Connection, text: str) -> int:
-    return conn.execute("INSERT INTO news (text, created) VALUES (?, ?)", (text.strip()[:1000], now())).lastrowid
+def bilingual(text: str) -> tuple[str, str]:
+    """The owner writes "Russian | English" in the bot; one text is Russian for everybody."""
+    ru, _, en = (text or "").partition("|")
+    return ru.strip(), en.strip()
 
 
-def news(conn: sqlite3.Connection, after: int = 0, limit: int = 20) -> list[dict]:
+def add_news(conn: sqlite3.Connection, text: str, text_en: str = "") -> int:
+    return conn.execute("INSERT INTO news (text, text_en, created) VALUES (?, ?, ?)",
+                        (text.strip()[:1000], (text_en or "").strip()[:1000], now())).lastrowid
+
+
+def news(conn: sqlite3.Connection, after: int = 0, limit: int = 20, lang: str = "ru") -> list[dict]:
+    """The bell: in English for the English game when the item has an English text, else Russian."""
+    english = (lang or "").lower().startswith("en")
     rows = conn.execute(
         "SELECT * FROM news WHERE deleted = 0 AND id > ? ORDER BY id DESC LIMIT ?", (after, limit)
     ).fetchall()
-    return [{"id": r["id"], "text": r["text"], "ts": r["created"]} for r in rows]
+    return [{"id": r["id"], "text": r["text_en"] if english and r["text_en"] else r["text"], "ts": r["created"]} for r in rows]
 
 
 def last_news_id(conn: sqlite3.Connection) -> int:
     return conn.execute("SELECT COALESCE(MAX(id), 0) FROM news WHERE deleted = 0").fetchone()[0]
 
 
-def edit_news(conn: sqlite3.Connection, news_id: int, text: str) -> bool:
-    """The owner corrects a news item: the bell and the site show the new text."""
+def edit_news(conn: sqlite3.Connection, news_id: int, text: str, text_en: str | None = None) -> bool:
+    """The owner corrects a news item: the bell and the site show the new text. text_en None keeps
+    the English text, "" removes it (the English game shows the Russian one)."""
     text = text.strip()[:1000]
-    return bool(text) and conn.execute("UPDATE news SET text = ? WHERE id = ? AND deleted = 0", (text, news_id)).rowcount > 0
+    if not text:
+        return False
+    if text_en is None:
+        return conn.execute("UPDATE news SET text = ? WHERE id = ? AND deleted = 0", (text, news_id)).rowcount > 0
+    return conn.execute("UPDATE news SET text = ?, text_en = ? WHERE id = ? AND deleted = 0",
+                        (text, text_en.strip()[:1000], news_id)).rowcount > 0
 
 
 def delete_news(conn: sqlite3.Connection, news_id: int) -> bool:

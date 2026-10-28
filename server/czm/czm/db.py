@@ -302,6 +302,8 @@ COLUMNS = {
                 "evidence": "TEXT NOT NULL DEFAULT ''",
                 "context": "TEXT NOT NULL DEFAULT ''"},
     "lobby_messages": {"deleted": "INTEGER NOT NULL DEFAULT 0"},
+    # the English text of a news item: players with the English game read it ('' = Russian for all)
+    "news": {"text_en": "TEXT NOT NULL DEFAULT ''"},
     # kind: ban (everything), text, voice, photo; moderator: who gave it in the game (NULL: the bot)
     "bans": {"kind": "TEXT NOT NULL DEFAULT 'ban'", "moderator": "INTEGER"},
     "lobbies": {"last_seen": "INTEGER NOT NULL DEFAULT 0",

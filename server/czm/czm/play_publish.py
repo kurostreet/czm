@@ -60,14 +60,26 @@ def _check(r: httpx.Response, what: str) -> dict:
     return r.json() if r.content else {}
 
 
+def english_listing(client: httpx.Client, auth: dict, app: str, edit: str) -> str | None:
+    """The English language of the store listing (en-US first), None when there is none: Play takes
+    release notes only in the listing's languages."""
+    languages = [l.get("language", "") for l in _check(client.get(f"{app}/edits/{edit}/listings", headers=auth),
+                                                        "языки").get("listings", [])]
+    for language in ["en-US", "en-GB"] + languages:
+        if language in languages and language.lower().startswith("en"):
+            return language
+    return None
+
+
 def _chunks(path: Path) -> Iterator[bytes]:
     with path.open("rb") as f:
         while chunk := f.read(1 << 20):
             yield chunk
 
 
-def publish(bundle: Path, version: str, notes: str, client: httpx.Client | None = None) -> int:
-    """Puts the bundle on the testing tracks and sends it for review; returns its version code."""
+def publish(bundle: Path, version: str, notes: str, client: httpx.Client | None = None, notes_en: str = "") -> int:
+    """Puts the bundle on the testing tracks and sends it for review; returns its version code.
+    notes_en: the English "What's new", sent when the store listing has an English language."""
     settings = get_settings()
     own = client is None
     if own:
@@ -86,6 +98,9 @@ def publish(bundle: Path, version: str, notes: str, client: httpx.Client | None 
             code = int(uploaded["versionCode"])
             release = {"name": f"{code} ({version})", "versionCodes": [str(code)], "status": "completed",
                        "releaseNotes": [{"language": "ru-RU", "text": release_notes(notes)}]}
+            english = english_listing(client, auth, app, edit) if (notes_en or "").strip() else None
+            if english:
+                release["releaseNotes"].append({"language": english, "text": release_notes(notes_en)})
             for track in settings.play_track_list:
                 _check(client.put(f"{app}/edits/{edit}/tracks/{track}", headers=auth,
                                   json={"track": track, "releases": [release]}), f"версия {track}")

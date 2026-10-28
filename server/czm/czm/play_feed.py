@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS play_releases (
     code INTEGER PRIMARY KEY,
     version TEXT NOT NULL DEFAULT '',
     notes TEXT NOT NULL DEFAULT '',
+    notes_en TEXT NOT NULL DEFAULT '',      -- the English notes ('' = none: English players read Russian)
     tracks TEXT NOT NULL DEFAULT '',
     first_seen INTEGER NOT NULL,
     public_since INTEGER,
@@ -93,6 +94,17 @@ def news_text(row, earlier: list[str] | None = None) -> str:
     return f"{head}\n{body or 'Исправления и улучшения.'}"[:1000]
 
 
+def news_text_en(row, earlier: list[str] | None = None) -> str:
+    """The same item for the English game; '' when the release has no English notes."""
+    notes = (row["notes_en"] or "").strip()
+    if not notes:
+        return ""
+    name = version_name(row["version"])
+    head = f"{TITLE_EN}, version {name}" if name else TITLE_EN
+    body = fresh_notes(notes, earlier or []) if earlier else notes
+    return f"{head}\n{body or 'Fixes and improvements.'}"[:1000]
+
+
 def _flag(conn, name: str) -> bool:
     row = conn.execute("SELECT value FROM site_counters WHERE name=?", (name,)).fetchone()
     return bool(row and row[0])
@@ -107,6 +119,8 @@ def migrate(conn: sqlite3.Connection) -> None:
     """Once: the bell and the site drop the items of the old site builds. Called by db.init(),
     outside a transaction: executescript commits whatever is open."""
     conn.executescript(SCHEMA)
+    if "notes_en" not in {r[1] for r in conn.execute("PRAGMA table_info(play_releases)")}:
+        conn.execute("ALTER TABLE play_releases ADD COLUMN notes_en TEXT NOT NULL DEFAULT ''")
     if _flag(conn, "news_feed_play"):
         return
     gone = conn.execute("UPDATE news SET deleted=1 WHERE deleted=0 AND id IN "
@@ -115,11 +129,13 @@ def migrate(conn: sqlite3.Connection) -> None:
     log.info("news of %d site builds left the bell", gone)
 
 
-def _notes(release: dict) -> str:
+def _notes(release: dict, english: bool = False) -> str:
     notes = release.get("releaseNotes") or []
     for n in notes:
-        if str(n.get("language", "")).lower().startswith("ru"):
+        if str(n.get("language", "")).lower().startswith("en" if english else "ru"):
             return str(n.get("text", "")).strip()
+    if english:
+        return ""
     return str(notes[0].get("text", "")).strip() if notes else ""
 
 
@@ -146,23 +162,25 @@ def sync(conn: sqlite3.Connection, tracks: dict) -> None:
             if release.get("status") not in ("completed", "inProgress"):
                 continue                      # a draft or a halted rollout reaches nobody
             for code in release.get("versionCodes") or []:
-                info = found.setdefault(int(code), {"version": _version(release), "notes": _notes(release), "tracks": set()})
+                info = found.setdefault(int(code), {"version": _version(release), "notes": _notes(release),
+                                                    "notes_en": _notes(release, True), "tracks": set()})
                 info["tracks"].add(track)
     for code, info in found.items():
         on_public = public in info["tracks"]
         listed = ",".join(sorted(info["tracks"]))
         row = conn.execute("SELECT * FROM play_releases WHERE code=?", (code,)).fetchone()
         if row is None:
-            conn.execute("INSERT INTO play_releases(code, version, notes, tracks, first_seen, public_since) VALUES (?,?,?,?,?,?)",
-                         (code, info["version"], info["notes"], listed, t, t if on_public else None))
+            conn.execute("INSERT INTO play_releases(code, version, notes, notes_en, tracks, first_seen, public_since) "
+                         "VALUES (?,?,?,?,?,?,?)", (code, info["version"], info["notes"], info["notes_en"], listed, t,
+                                                    t if on_public else None))
             if first_run and on_public:
                 # players already have it: the site lists it, the bell does not ring for it
                 uploaded = conn.execute("SELECT MIN(created) FROM play_publishes WHERE version_code=?", (code,)).fetchone()[0]
                 conn.execute("UPDATE play_releases SET announced=?, notified=1 WHERE code=?", (uploaded or t, code))
         else:
-            conn.execute("UPDATE play_releases SET version=?, notes=?, tracks=?, public_since=COALESCE(public_since, ?) "
-                         "WHERE code=?", (info["version"] or row["version"], info["notes"] or row["notes"], listed,
-                                          t if on_public else None, code))
+            conn.execute("UPDATE play_releases SET version=?, notes=?, notes_en=?, tracks=?, public_since=COALESCE(public_since, ?) "
+                         "WHERE code=?", (info["version"] or row["version"], info["notes"] or row["notes"],
+                                          info["notes_en"] or row["notes_en"], listed, t if on_public else None, code))
     if found:
         marks = ",".join("?" * len(found))
         conn.execute(f"UPDATE play_releases SET tracks='' WHERE code NOT IN ({marks})", tuple(found))
@@ -196,10 +214,13 @@ def announce(conn: sqlite3.Connection, code: int) -> bool:
     if row is None or row["announced"]:
         return False
     # what the bell and the site already told players about the previous updates
-    earlier = [r["text"] or r["notes"] for r in conn.execute(
-        "SELECT n.text, r.notes FROM play_releases r LEFT JOIN news n ON n.id = r.news_id AND n.deleted = 0 "
-        "WHERE r.announced IS NOT NULL AND r.code < ? ORDER BY r.code DESC LIMIT 3", (code,))]
-    news_id = conn.execute("INSERT INTO news (text, created) VALUES (?, ?)", (news_text(row, earlier), now())).lastrowid
+    told = conn.execute(
+        "SELECT n.text, n.text_en, r.notes, r.notes_en FROM play_releases r LEFT JOIN news n ON n.id = r.news_id AND n.deleted = 0 "
+        "WHERE r.announced IS NOT NULL AND r.code < ? ORDER BY r.code DESC LIMIT 3", (code,)).fetchall()
+    earlier = [r["text"] or r["notes"] for r in told]
+    earlier_en = [r["text_en"] or r["notes_en"] for r in told]
+    news_id = conn.execute("INSERT INTO news (text, text_en, created) VALUES (?, ?, ?)",
+                           (news_text(row, earlier), news_text_en(row, earlier_en), now())).lastrowid
     conn.execute("UPDATE play_releases SET announced=?, news_id=? WHERE code=?", (now(), news_id, code))
     log.info("Google Play %s (%d) is news", row["version"], code)
     return True
@@ -208,29 +229,36 @@ def announce(conn: sqlite3.Connection, code: int) -> bool:
 def latest(conn: sqlite3.Connection, limit: int = 3) -> list[dict]:
     """The releases on the Play tracks now, newest first: Play offers each account the one of its
     track, and the bell shows the notes of exactly that code."""
-    rows = conn.execute("SELECT code, version, notes FROM play_releases WHERE tracks != '' ORDER BY code DESC LIMIT ?",
+    rows = conn.execute("SELECT code, version, notes, notes_en FROM play_releases WHERE tracks != '' ORDER BY code DESC LIMIT ?",
                         (limit,)).fetchall()
-    return [{"code": r["code"], "version": version_name(r["version"]), "notes": r["notes"]} for r in rows]
+    return [{"code": r["code"], "version": version_name(r["version"]), "notes": r["notes"], "notes_en": r["notes_en"]}
+            for r in rows]
 
 
 TITLE = "Обновление в Google Play"
+TITLE_EN = "Google Play update"
+
+
+def _body(text: str, title: str) -> str:
+    head, _, body = (text or "").partition("\n")
+    return body if head.startswith(title) and body.strip() else (text or "")
 
 
 def site_news(conn: sqlite3.Connection, limit: int) -> list[dict]:
     """The site says what the bell says: the text of the release's news item, as the owner may have
     corrected it (/editnews), and nothing for an item he removed (/delnews). Releases players already
-    had on the first look have no item and show the Play notes."""
-    rows = conn.execute("SELECT r.version, r.notes, r.announced, n.text FROM play_releases r "
-                        "LEFT JOIN news n ON n.id = r.news_id WHERE r.announced IS NOT NULL AND COALESCE(n.deleted, 0) = 0 "
+    had on the first look have no item and show the Play notes. notes_en: the English text ('' =
+    none, the site shows the Russian one)."""
+    rows = conn.execute("SELECT r.version, r.notes, r.notes_en, r.announced, n.id AS news, n.text, n.text_en "
+                        "FROM play_releases r LEFT JOIN news n ON n.id = r.news_id "
+                        "WHERE r.announced IS NOT NULL AND COALESCE(n.deleted, 0) = 0 "
                         "ORDER BY r.code DESC LIMIT ?", (limit,)).fetchall()
     items = []
     for r in rows:
-        notes = r["notes"]
-        if r["text"]:
-            head, _, body = r["text"].partition("\n")
-            notes = body if head.startswith(TITLE) and body.strip() else r["text"]
+        notes = _body(r["text"], TITLE) if r["text"] else r["notes"]
+        notes_en = (_body(r["text_en"], TITLE_EN) if r["text_en"] else "") if r["news"] else r["notes_en"]
         items.append({"version": version_name(r["version"]), "notes": (notes or "Исправления и улучшения.").strip()[:600],
-                      "ts": r["announced"]})
+                      "notes_en": (notes_en or "").strip()[:600], "ts": r["announced"]})
     return items
 
 

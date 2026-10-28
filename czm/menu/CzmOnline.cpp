@@ -65,7 +65,7 @@ static struct
 	int warningShown, warningSeenId;
 
 	int newsLast;         // the newest news number on the server
-	struct { int code; char version[16]; char notes[512]; } play[3]; // releases on the Play tracks, what is new in each
+	struct { int code; char version[16]; char notes[512], notes_en[512]; } play[3]; // releases on the Play tracks, what is new in each
 	int newsId;           // news list request in flight
 	bool newsLoaded;
 	CUtlVector<CzmNews> news;
@@ -342,7 +342,9 @@ static void OnHello( int status, const char *body )
 			s_online.play[i].code = j.Int( j.Get( item, "code" ));
 			Q_strncpy( s_online.play[i].version, j.String( j.Get( item, "version" )), sizeof( s_online.play[i].version ));
 			Q_strncpy( s_online.play[i].notes, j.String( j.Get( item, "notes" )), sizeof( s_online.play[i].notes ));
+			Q_strncpy( s_online.play[i].notes_en, j.String( j.Get( item, "notes_en" )), sizeof( s_online.play[i].notes_en ));
 			PlainArrows( s_online.play[i].notes );
+			PlainArrows( s_online.play[i].notes_en );
 		}
 	}
 	s_online.nextHello = EngFuncs::DoubleTime() + HELLO_EVERY;
@@ -448,7 +450,9 @@ static void StoreUpdateFrame( double now )
 			if( s_online.play[i].code != code || !code )
 				continue;
 			Q_strncpy( u.version, s_online.play[i].version, sizeof( u.version ));
-			Q_strncpy( u.notes, s_online.play[i].notes, sizeof( u.notes ));
+			// in the menu's language; a release without English notes keeps the Russian ones
+			const bool english = !CZM_IsRussian() && s_online.play[i].notes_en[0];
+			Q_strncpy( u.notes, english ? s_online.play[i].notes_en : s_online.play[i].notes, sizeof( u.notes ));
 		}
 	}
 	else if( s_online.update.store )
@@ -718,7 +722,8 @@ void CZM_NewsOpen( void )
 {
 	if( !s_online.ready || s_online.newsId )
 		return;
-	s_online.newsId = CZM_NetRequest( "GET", CZM_OnlineUrl( "/api/v1/news" ), "", "" );
+	// the bell in the menu's language: the service sends the English text when an item has one
+	s_online.newsId = CZM_NetRequest( "GET", CZM_OnlineUrl( CZM_IsRussian() ? "/api/v1/news?lang=ru" : "/api/v1/news?lang=en" ), "", "" );
 }
 
 void CZM_NewsMarkRead( void )

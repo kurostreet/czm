@@ -9,9 +9,12 @@ from czm import db, play_feed, service
 from czm.config import get_settings
 
 
-def track(code, version="1.35-abc1234", notes="Новый профиль.", status="completed"):
-    return {"name": f"{code} ({version})", "versionCodes": [str(code)], "status": status,
-            "releaseNotes": [{"language": "en-US", "text": "New profile."}, {"language": "ru-RU", "text": notes}]}
+def track(code, version="1.35-abc1234", notes="Новый профиль.", status="completed", english="New profile."):
+    release = {"name": f"{code} ({version})", "versionCodes": [str(code)], "status": status,
+               "releaseNotes": [{"language": "ru-RU", "text": notes}]}
+    if english:
+        release["releaseNotes"].insert(0, {"language": "en-US", "text": english})
+    return release
 
 
 class PlayFeedTests(unittest.TestCase):
@@ -145,6 +148,39 @@ class PlayFeedTests(unittest.TestCase):
             self.assertEqual(service.news(conn)[0]["text"], "Обновление в Google Play, версия 1.35\nИсправления и улучшения.")
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM play_releases WHERE news_id IS NOT NULL").fetchone()[0], 3)
 
+    def test_english_players_read_english(self):
+        def bilingual(code, version, ru, en):
+            return track(code, version, ru, english=en)
+        with db.db() as conn:
+            play_feed.sync(conn, {"alpha": [track(600, "1.35-aaa", "Старое.", english="")]})
+            self.clock += 600
+            play_feed.sync(conn, {"alpha": [bilingual(601, "1.35-bbb", "Топ 100.", "Top 100.")]})
+            self.clock += 600
+            play_feed.sync(conn, {"alpha": [bilingual(602, "1.35-ccc", "Топ 100. Русские буквы в HUD.", "Top 100. Cyrillic in the HUD.")]})
+            self.assertEqual(service.news(conn)[0]["text"], "Обновление в Google Play, версия 1.35\nРусские буквы в HUD.")
+            self.assertEqual(service.news(conn, lang="en")[0]["text"], "Google Play update, version 1.35\nCyrillic in the HUD.")
+            self.assertEqual(service.news(conn, lang="en")[1]["text"], "Google Play update, version 1.35\nTop 100.")
+            # a release without English notes: the English game reads Russian, the site says nothing in English
+            self.clock += 600
+            play_feed.sync(conn, {"alpha": [track(603, "1.35-ddd", "Только по-русски.", english="")]})
+            self.assertEqual(service.news(conn, lang="en")[0]["text"], "Обновление в Google Play, версия 1.35\nТолько по-русски.")
+            site = play_feed.site_news(conn, 3)
+            self.assertEqual([(n["notes"], n["notes_en"]) for n in site],
+                             [("Только по-русски.", ""), ("Русские буквы в HUD.", "Cyrillic in the HUD."), ("Топ 100.", "Top 100.")])
+            self.assertEqual(play_feed.latest(conn)[0]["notes_en"], "")
+            play_feed.sync(conn, {"alpha": [bilingual(603, "1.35-ddd", "Только по-русски.", "Russian only, then English.")]})
+            self.assertEqual(play_feed.latest(conn)[0]["notes_en"], "Russian only, then English.")
+            # the owner's own items: "Russian | English"; a correction without "|" keeps the English text
+            self.assertEqual(service.bilingual(" Турнир в субботу | Tournament on Saturday "), ("Турнир в субботу", "Tournament on Saturday"))
+            self.assertEqual(service.bilingual("Только по-русски"), ("Только по-русски", ""))
+            own = service.add_news(conn, *service.bilingual("Турнир | Tournament"))
+            self.assertEqual(service.news(conn, lang="en")[0]["text"], "Tournament")
+            self.assertEqual(service.news(conn, lang="ru")[0]["text"], "Турнир")
+            self.assertTrue(service.edit_news(conn, own, "Турнир в субботу"))
+            self.assertEqual(service.news(conn, lang="en")[0]["text"], "Tournament")
+            self.assertTrue(service.edit_news(conn, own, "Турнир", ""))
+            self.assertEqual(service.news(conn, lang="en")[0]["text"], "Турнир")
+
     def test_the_site_says_what_the_bell_says(self):
         with db.db() as conn:
             play_feed.sync(conn, {"alpha": [track(300, "1.35-aaa", "Старое.")]})
@@ -247,13 +283,18 @@ class PlayFeedApiTests(unittest.TestCase):
         with db.db() as conn:
             play_feed.sync(conn, {"alpha": [track(400, "1.35-old", "Было.")]})
             self.assertEqual(service.last_news_id(conn), news)          # what players already have stays quiet
-            play_feed.sync(conn, {"alpha": [track(401, "1.35-new", "Стало лучше.")]})
+            play_feed.sync(conn, {"alpha": [track(401, "1.35-new", "Стало лучше.", english="Better now.")]})
         first = self.hello(1, "1.35-old", 400, store=1)
-        self.assertEqual(first["play"], [{"code": 401, "version": "1.35", "notes": "Стало лучше."}])
+        self.assertEqual(first["play"], [{"code": 401, "version": "1.35", "notes": "Стало лучше.", "notes_en": "Better now."}])
         self.assertGreater(first["news"], news)                          # the bell rings before the update
         self.assertEqual(self.hello(2, "1.35-new", 401)["news"], first["news"])
         site = self.client.get("/api/v1/site/news").json()["news"]
         self.assertEqual([(n["version"], n["notes"]) for n in site][0], ("1.35", "Стало лучше."))
+        # the bell in the player's language
+        english = self.client.get("/api/v1/news", params={"lang": "en"}).json()["news"]
+        self.assertEqual(english[0]["text"], "Google Play update, version 1.35\nBetter now.")
+        self.assertEqual(self.client.get("/api/v1/news").json()["news"][0]["text"], "Обновление в Google Play, версия 1.35\nСтало лучше.")
+        self.assertEqual(first["play"][0]["notes_en"], "Better now.")
         # only 0 or 1 (the service's own handler turns validation errors into 400)
         self.assertIn(self.client.post("/api/v1/hello", json={"key": "feed-api-key-0009-abcdef", "store": 2}).status_code, (400, 422))
 

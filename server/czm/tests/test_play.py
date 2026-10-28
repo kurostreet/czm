@@ -127,8 +127,8 @@ def service_account(path: Path) -> None:
 
 class FakePlay:
     """Google's token and Android Publisher endpoints, recording what the server sent."""
-    def __init__(self, fail_track=None):
-        self.calls, self.fail_track, self.deleted = [], fail_track, False
+    def __init__(self, fail_track=None, english=("en-US",)):
+        self.calls, self.fail_track, self.deleted, self.english = [], fail_track, False, english
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         path, method = request.url.path, request.method
@@ -138,6 +138,8 @@ class FakePlay:
         assert request.headers["authorization"] == "Bearer secret-token"
         if method == "POST" and path.endswith("/edits"):
             return httpx.Response(200, json={"id": "e1"})
+        if method == "GET" and path.endswith("/listings"):
+            return httpx.Response(200, json={"listings": [{"language": "ru-RU"}] + [{"language": l} for l in self.english]})
         if "/upload/" in path:
             self.uploaded = request.read()
             return httpx.Response(200, json={"versionCode": 4321})
@@ -194,6 +196,21 @@ class PlayPublishTests(unittest.TestCase):
                                         "releaseNotes": [{"language": "ru-RU", "text": "Новые карты."}]})
         self.assertTrue(fake.calls[-1][1].endswith(":commit"))
         self.assertFalse(fake.deleted)
+
+    def test_english_notes_go_to_the_english_listing(self):
+        service_account(self.key)
+        for english, expected in ((("en-US",), [{"language": "ru-RU", "text": "Новые карты."}, {"language": "en-US", "text": "New maps."}]),
+                                  (("en-GB",), [{"language": "ru-RU", "text": "Новые карты."}, {"language": "en-GB", "text": "New maps."}]),
+                                  ((), [{"language": "ru-RU", "text": "Новые карты."}])):
+            fake = FakePlay(english=english)
+            with httpx.Client(transport=httpx.MockTransport(fake)) as client:
+                play_publish.publish(self.bundle, "1.35-abc", "Новые карты.", client, notes_en="New maps.")
+            self.assertEqual(fake.release["releaseNotes"], expected)
+        # no English text: the listing is not even asked
+        fake = FakePlay()
+        with httpx.Client(transport=httpx.MockTransport(fake)) as client:
+            play_publish.publish(self.bundle, "1.35-abc", "Новые карты.", client)
+        self.assertFalse(any(c[1].endswith("/listings") for c in fake.calls))
 
     def test_a_refused_step_drops_the_edit_and_says_why(self):
         service_account(self.key)

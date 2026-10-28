@@ -588,9 +588,9 @@ async def site_news(request: Request):
 
 
 @router.get("/news")
-async def news(request: Request, after: int = 0):
+async def news(request: Request, after: int = 0, lang: str = ""):
     _read_limit.check(client_ip(request))
-    return {"news": await in_db(service.news, max(0, after))}
+    return {"news": await in_db(service.news, max(0, after), 20, lang[:8])}
 
 
 @router.get("/update")

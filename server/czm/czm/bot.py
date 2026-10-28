@@ -32,9 +32,10 @@ BETA_GOAL = 50                                  # the scale of the beta counter 
 HELP = (
     "<b>Counter Zombie Mobile — бот владельца</b>\n\n"
     "Жалобы из игрового чата приходят сюда с кнопками бана.\n\n"
-    "/news <i>текст</i> — новость в колокольчик всем игрокам\n"
+    "/news <i>текст</i> — новость в колокольчик всем игрокам; "
+    "<i>по-русски | in English</i> — английский текст для игры на английском\n"
     "/news — последние новости, /delnews <i>номер</i> — убрать новость\n"
-    "/editnews <i>номер</i> <i>текст</i> — поправить текст новости (колокольчик и сайт)\n"
+    "/editnews <i>номер</i> <i>текст</i> или <i>по-русски | in English</i> — поправить новость (колокольчик и сайт)\n"
     "Обновления выходят сами: после каждой правки сервер собирает игру и выпускает её, "
     "сюда приходит сообщение с кнопкой отмены.\n"
     "/release — что сейчас у игроков, /release <i>текст</i> — поправить «что нового»\n"
@@ -172,11 +173,19 @@ class OwnerBot:
             if not items:
                 await message.answer("Новостей пока нет. Напиши /news и текст.")
                 return
-            lines = [f"#{n['id']} · {datetime.fromtimestamp(n['ts'], MSK):%d.%m %H:%M}\n{html.escape(n['text'])}" for n in items]
+            english = {n["id"]: n["text"] for n in await in_db(service.news, 0, 10, "en")}
+            lines = [f"#{n['id']} · {datetime.fromtimestamp(n['ts'], MSK):%d.%m %H:%M}\n{html.escape(n['text'])}"
+                     + (f"\n🇬🇧 {html.escape(english[n['id']])}" if english.get(n["id"], n["text"]) != n["text"] else "")
+                     for n in items]
             await message.answer("\n\n".join(lines))
             return
-        news_id = await in_db(service.add_news, text)
-        await message.answer(f"✅ Новость #{news_id} в колокольчике у всех игроков.")
+        ru, en = service.bilingual(text)
+        if not ru:
+            await message.answer("Сначала текст по-русски, потом, если нужно, «|» и текст по-английски.")
+            return
+        news_id = await in_db(service.add_news, ru, en)
+        await message.answer(f"✅ Новость #{news_id} в колокольчике у всех игроков"
+                             + (" (у игры на английском — по-английски)." if en else "."))
 
     async def on_delnews(self, message: Message, command: CommandObject) -> None:
         if not self.allowed(message.from_user and message.from_user.id):
@@ -192,7 +201,8 @@ class OwnerBot:
         if not number.isdigit() or not text.strip():
             await message.answer("Напиши /editnews, номер новости и новый текст. Номер — в списке /news.")
             return
-        ok = await in_db(service.edit_news, int(number), text)
+        ru, en = service.bilingual(text)
+        ok = bool(ru) and await in_db(service.edit_news, int(number), ru, en if "|" in text else None)
         await message.answer(f"✅ Новость #{number} поправлена: колокольчик и сайт покажут новый текст."
                              if ok else "Нет такой новости. Номер — в списке /news.")
 

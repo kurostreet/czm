@@ -795,7 +795,7 @@ var beta = $('beta');
       d.textContent = T.version + ' ' + n.version + (n.ts ? ' · ' + date.toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-GB', { day: 'numeric', month: 'long' }) : '');
       var t = doc.createElement('div');
       t.className = 'n';
-      t.textContent = n.notes;
+      t.textContent = lang === 'en' && n.notes_en ? n.notes_en : n.notes;  // English when the release has it
       item.appendChild(d);
       item.appendChild(t);
       box2.appendChild(item);
