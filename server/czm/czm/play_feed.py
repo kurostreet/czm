@@ -209,6 +209,21 @@ def witness(conn: sqlite3.Connection, before, player, code: int, store: int | No
     return announce(conn, code)
 
 
+def remember(conn: sqlite3.Connection, code: int, version: str, notes: str, notes_en: str) -> None:
+    """What we sent to Google Play with a release. Play keeps release notes only in the store
+    listing's languages; while the listing has no English, the English text lives here and the
+    bell and the site still get it. Notes Play gives later take the place of these."""
+    t = now()
+    conn.execute("INSERT INTO play_releases(code, version, notes, notes_en, tracks, first_seen) VALUES (?,?,?,?,'',?) "
+                 "ON CONFLICT(code) DO UPDATE SET notes_en=CASE WHEN play_releases.notes_en='' THEN excluded.notes_en "
+                 "ELSE play_releases.notes_en END", (int(code), version, (notes or "").strip(), (notes_en or "").strip(), t))
+    row = conn.execute("SELECT news_id, notes_en FROM play_releases WHERE code=?", (int(code),)).fetchone()
+    if row["news_id"] and row["notes_en"]:
+        # already news: the English game gets the English text too
+        conn.execute("UPDATE news SET text_en=? WHERE id=? AND text_en=''",
+                     (news_text_en(conn.execute("SELECT * FROM play_releases WHERE code=?", (int(code),)).fetchone()), row["news_id"]))
+
+
 def announce(conn: sqlite3.Connection, code: int) -> bool:
     row = conn.execute("SELECT * FROM play_releases WHERE code=?", (code,)).fetchone()
     if row is None or row["announced"]:

@@ -181,6 +181,25 @@ class PlayFeedTests(unittest.TestCase):
             self.assertTrue(service.edit_news(conn, own, "Турнир", ""))
             self.assertEqual(service.news(conn, lang="en")[0]["text"], "Турнир")
 
+    def test_english_we_sent_counts_while_play_has_only_russian(self):
+        with db.db() as conn:
+            play_feed.sync(conn, {"alpha": [track(700, "1.35-aaa", "Старое.", english="")]})
+            # published with both texts, Play kept only the Russian one (no English listing)
+            play_feed.remember(conn, 701, "1.35-bbb", "Колокольчик на языке игры.", "The bell in the game language.")
+            self.clock += 600
+            play_feed.sync(conn, {"alpha": [track(701, "1.35-bbb", "Колокольчик на языке игры.", english="")]})
+            self.assertEqual(service.news(conn, lang="en")[0]["text"], "Google Play update, version 1.35\nThe bell in the game language.")
+            self.assertEqual(play_feed.site_news(conn, 3)[0]["notes_en"], "The bell in the game language.")
+            # remembered after it already became news: the item gets its English text
+            self.clock += 600
+            play_feed.sync(conn, {"alpha": [track(702, "1.35-ccc", "Ещё правка.", english="")]})
+            self.assertEqual(service.news(conn, lang="en")[0]["text"], "Обновление в Google Play, версия 1.35\nЕщё правка.")
+            play_feed.remember(conn, 702, "1.35-ccc", "Ещё правка.", "One more fix.")
+            self.assertEqual(service.news(conn, lang="en")[0]["text"], "Google Play update, version 1.35\nOne more fix.")
+            # English notes from Play win over what we remembered
+            play_feed.sync(conn, {"alpha": [track(702, "1.35-ccc", "Ещё правка.", english="Another fix.")]})
+            self.assertEqual(conn.execute("SELECT notes_en FROM play_releases WHERE code=702").fetchone()[0], "Another fix.")
+
     def test_the_site_says_what_the_bell_says(self):
         with db.db() as conn:
             play_feed.sync(conn, {"alpha": [track(300, "1.35-aaa", "Старое.")]})
