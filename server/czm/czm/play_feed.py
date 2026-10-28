@@ -61,11 +61,36 @@ def day(ts: int) -> str:
     return f"{t.tm_mday} {MONTHS[t.tm_mon - 1]}"
 
 
-def news_text(row) -> str:
+def _sentences(text: str) -> list[str]:
+    return [p.strip() for p in re.split(r"(?<=[.!?…])\s+|\n+", text or "") if p.strip()]
+
+
+def _words(sentence: str) -> set[str]:
+    return set(re.findall(r"\w+", sentence.lower().replace("ё", "е")))
+
+
+def fresh_notes(notes: str, earlier: list[str]) -> str:
+    """Play notes often repeat the previous update for players who skipped it; the bell and the site
+    list every update, so a news item keeps only the sentences that are new. A sentence is old when
+    nearly all of its words (4 of 5) were in one sentence of an earlier item: "Индикатор загрузки не
+    зависает" after "Индикатор загрузки больше не зависает" is old, a new fix is not."""
+    old = [_words(s) for text in earlier for s in _sentences(text)]
+    kept = []
+    for sentence in _sentences(notes):
+        words = _words(sentence)
+        if words and any(len(words & o) * 5 >= len(words) * 4 for o in old if o):
+            continue
+        kept.append(sentence)
+    return " ".join(kept)
+
+
+def news_text(row, earlier: list[str] | None = None) -> str:
     title = TITLE
     name = version_name(row["version"])
     head = f"{title}, версия {name}" if name else title
-    return f"{head}\n{(row['notes'] or 'Исправления и улучшения.').strip()}"[:1000]
+    notes = (row["notes"] or "").strip()
+    body = fresh_notes(notes, earlier or []) if earlier else notes
+    return f"{head}\n{body or 'Исправления и улучшения.'}"[:1000]
 
 
 def _flag(conn, name: str) -> bool:
@@ -170,7 +195,11 @@ def announce(conn: sqlite3.Connection, code: int) -> bool:
     row = conn.execute("SELECT * FROM play_releases WHERE code=?", (code,)).fetchone()
     if row is None or row["announced"]:
         return False
-    news_id = conn.execute("INSERT INTO news (text, created) VALUES (?, ?)", (news_text(row), now())).lastrowid
+    # what the bell and the site already told players about the previous updates
+    earlier = [r["text"] or r["notes"] for r in conn.execute(
+        "SELECT n.text, r.notes FROM play_releases r LEFT JOIN news n ON n.id = r.news_id AND n.deleted = 0 "
+        "WHERE r.announced IS NOT NULL AND r.code < ? ORDER BY r.code DESC LIMIT 3", (code,))]
+    news_id = conn.execute("INSERT INTO news (text, created) VALUES (?, ?)", (news_text(row, earlier), now())).lastrowid
     conn.execute("UPDATE play_releases SET announced=?, news_id=? WHERE code=?", (now(), news_id, code))
     log.info("Google Play %s (%d) is news", row["version"], code)
     return True

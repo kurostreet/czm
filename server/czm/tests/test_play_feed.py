@@ -114,6 +114,37 @@ class PlayFeedTests(unittest.TestCase):
             self.assertEqual(service.news(conn)[0]["text"], "Обновление в Google Play, версия 1.35\nРусские буквы в HUD.")
             self.assertEqual([r["code"] for r in play_feed.unnotified(conn)], [103])
 
+    def test_a_news_item_keeps_only_what_is_new(self):
+        before = ("Новый раздел «Топ 100»: рейтинг по времени на игровых серверах с коронами для первой сотни. "
+                  "Новая карточка профиля: место в топе, статус меняется прямо в карточке, жалоба и блокировка в меню. "
+                  "«Об игре» теперь в настройках. Правила сообщества и жалобы в лобби, заблокированные игроки не видны "
+                  "и не слышны. Индикатор загрузки больше не зависает. В колокольчике видно, что нового в обновлении.")
+        now_notes = ("Новый раздел «Топ 100»: рейтинг по времени на серверах с коронами для первой сотни. Новая карточка "
+                     "профиля: место в топе, статус меняется прямо в карточке, жалоба и блокировка в меню. «Об игре» теперь "
+                     "в настройках. Правила сообщества и жалобы в лобби. Русские буквы в сообщениях сервера на экране больше "
+                     "не пропадают, кнопки управления не сдвигаются после чата. Индикатор загрузки не зависает. В колокольчике "
+                     "видно, что нового в обновлении.")
+        self.assertEqual(play_feed.fresh_notes(now_notes, ["Обновление в Google Play, версия 1.35\n" + before]),
+                         "Русские буквы в сообщениях сервера на экране больше не пропадают, кнопки управления не сдвигаются после чата.")
+        # a new fix that shares a few words with an old line stays
+        self.assertEqual(play_feed.fresh_notes("Индикатор загрузки снова показывает скорость.", [before]),
+                         "Индикатор загрузки снова показывает скорость.")
+        with db.db() as conn:
+            play_feed.sync(conn, {"alpha": [track(500, "1.35-aaa", "Старое.")]})
+            self.clock += 600
+            play_feed.sync(conn, {"alpha": [track(501, "1.35-bbb", before)]})
+            self.clock += 600
+            play_feed.sync(conn, {"alpha": [track(502, "1.35-ccc", now_notes)]})
+            items = service.news(conn)
+            self.assertEqual(items[0]["text"], "Обновление в Google Play, версия 1.35\nРусские буквы в сообщениях сервера на "
+                                               "экране больше не пропадают, кнопки управления не сдвигаются после чата.")
+            self.assertEqual(items[1]["text"], "Обновление в Google Play, версия 1.35\n" + before)
+            # one item per release, and one with nothing new still says something
+            self.clock += 600
+            play_feed.sync(conn, {"alpha": [track(503, "1.35-ddd", now_notes)]})
+            self.assertEqual(service.news(conn)[0]["text"], "Обновление в Google Play, версия 1.35\nИсправления и улучшения.")
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM play_releases WHERE news_id IS NOT NULL").fetchone()[0], 3)
+
     def test_the_site_says_what_the_bell_says(self):
         with db.db() as conn:
             play_feed.sync(conn, {"alpha": [track(300, "1.35-aaa", "Старое.")]})
