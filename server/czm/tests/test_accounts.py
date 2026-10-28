@@ -181,6 +181,72 @@ class AccountTests(unittest.TestCase):
     def test_member_deletion_preserves_other_players_rooms_and_notices(self):
         self.check_lobby_deletion(False)
 
+    def deletion_peer(self):
+        with db.db() as conn:
+            return service.hello(conn, "delete-regression-peer-secret-123456", "peer-device",
+                                 "DeletionPeer", "1", "ru", "audit")["id"]
+
+    def test_account_deletion_cleans_top_time_and_update_witnesses(self):
+        token = self.register()
+        peer = self.deletion_peer()
+        with db.db() as conn:
+            for pid in (self.player, peer):
+                conn.execute("INSERT INTO playtime(player,seconds,credited,updated) VALUES(?,120,100,100)", (pid,))
+                conn.execute("INSERT INTO playtime_installs(player,owner,last_play) VALUES(?,?,100)",
+                             (pid, "install-%d" % pid))
+                conn.execute("INSERT INTO play_witnesses(code,player,seen) VALUES(40140794,?,100)", (pid,))
+        self.assertEqual(self.post("delete-account", token, password="WrongPassword1").status_code, 401)
+        with db.db() as conn:
+            self.assertEqual(conn.execute("SELECT seconds FROM playtime WHERE player=?", (self.player,)).fetchone()[0], 120)
+        result = self.post("delete-account", token, password="Password123")
+        self.assertEqual(result.status_code, 200, result.text)
+        with db.db() as conn:
+            for table in ("playtime", "playtime_installs", "play_witnesses"):
+                self.assertIsNone(conn.execute(f"SELECT 1 FROM {table} WHERE player=?", (self.player,)).fetchone(), table)
+                self.assertIsNotNone(conn.execute(f"SELECT 1 FROM {table} WHERE player=?", (peer,)).fetchone(), table)
+            self.assertEqual(conn.execute("PRAGMA foreign_key_check").fetchall(), [])
+
+    def test_warned_support_account_can_delete_and_preserve_moderation_history(self):
+        token = self.register()
+        peer = self.deletion_peer()
+        with db.db() as conn:
+            for pid in (self.player, peer):
+                conn.execute("INSERT INTO staff(player,role,granted) VALUES(?,'support',1)", (pid,))
+                conn.execute("INSERT INTO warnings(player,reason,created) VALUES(?,'test warning',1)", (pid,))
+            report = conn.execute("INSERT INTO reports(reporter,target,created) VALUES(?,?,1)",
+                                  (peer, self.player)).lastrowid
+            conn.execute("INSERT INTO moderation_log(moderator,target,action,reason,created) VALUES(?,?,'warn','test warning',1)",
+                         (peer, self.player))
+            service.ban(conn, self.player, "week", "retained safety record")
+        result = self.post("delete-account", token, password="Password123")
+        self.assertEqual(result.status_code, 200, result.text)
+        with db.db() as conn:
+            for table in ("staff", "warnings"):
+                self.assertIsNone(conn.execute(f"SELECT 1 FROM {table} WHERE player=?", (self.player,)).fetchone(), table)
+                self.assertIsNotNone(conn.execute(f"SELECT 1 FROM {table} WHERE player=?", (peer,)).fetchone(), table)
+            self.assertIsNotNone(conn.execute("SELECT 1 FROM reports WHERE id=?", (report,)).fetchone())
+            self.assertIsNotNone(conn.execute("SELECT 1 FROM moderation_log WHERE target=?", (self.player,)).fetchone())
+            self.assertIsNotNone(conn.execute("SELECT 1 FROM bans WHERE player=?", (self.player,)).fetchone())
+            self.assertEqual(conn.execute("PRAGMA foreign_key_check").fetchall(), [])
+
+    def test_account_deletion_removes_private_test_access_and_preserves_other_invites(self):
+        token = self.register()
+        peer = self.deletion_peer()
+        with db.db() as conn:
+            for pid in (self.player, peer):
+                conn.execute("INSERT INTO development_access(player,created) VALUES(?,1)", (pid,))
+                conn.execute("INSERT INTO development_invites(token_hash,created,expires,player,used) VALUES(?,1,9999999999,?,2)",
+                             ("used-invite-%d" % pid, pid))
+            conn.execute("INSERT INTO development_invites(token_hash,created,expires) VALUES('unused-invite',1,9999999999)")
+        result = self.post("delete-account", token, password="Password123")
+        self.assertEqual(result.status_code, 200, result.text)
+        with db.db() as conn:
+            for table in ("development_access", "development_invites"):
+                self.assertIsNone(conn.execute(f"SELECT 1 FROM {table} WHERE player=?", (self.player,)).fetchone(), table)
+                self.assertIsNotNone(conn.execute(f"SELECT 1 FROM {table} WHERE player=?", (peer,)).fetchone(), table)
+            self.assertIsNotNone(conn.execute("SELECT 1 FROM development_invites WHERE token_hash='unused-invite'").fetchone())
+            self.assertEqual(conn.execute("PRAGMA foreign_key_check").fetchall(), [])
+
     def test_guest_with_same_nick_cannot_claim_or_change_account(self):
         token = self.register()
         other = "different-secret-key-123456789"
@@ -190,6 +256,31 @@ class AccountTests(unittest.TestCase):
         r = self.post("register", other, nick="KURO", password="AnotherPassword", repeat="AnotherPassword")
         self.assertEqual(r.status_code, 409)
         self.assertEqual(self.post("me", token).json()["nick"], "OldName")
+
+    def test_deleted_player_id_is_not_reissued_with_the_old_players_ban(self):
+        token = self.register()
+        with db.db() as conn:
+            service.ban(conn, self.player, "week", "old account safety record")
+        result = self.post("delete-account", token, password="Password123")
+        self.assertEqual(result.status_code, 200, result.text)
+        db.init()  # a service restart must not lose the ID reservation
+        with db.db() as conn:
+            newcomer = service.hello(conn, "new-unrelated-player-secret-123456", "unrelated-device",
+                                     "NewPlayer", "1", "ru", "audit")
+            self.assertGreater(newcomer["id"], self.player)
+            self.assertIsNone(service.active_ban(conn, newcomer))
+            self.assertIsNotNone(conn.execute("SELECT 1 FROM bans WHERE player=?", (self.player,)).fetchone())
+
+    def test_player_id_migration_reserves_old_report_and_moderation_references(self):
+        with db.db() as conn:
+            conn.execute("INSERT INTO reports(reporter,target,created) VALUES(7000,8000,1)")
+            conn.execute("INSERT INTO moderation_log(moderator,target,action,created) VALUES(9000,10000,'warn',1)")
+        db.init()
+        with db.db() as conn:
+            newcomer = service.hello(conn, "migration-unrelated-player-secret-123456", "unrelated-device",
+                                     "NewPlayer", "1", "ru", "audit")
+            self.assertGreater(newcomer["id"], 10000)
+            self.assertEqual(conn.execute("PRAGMA foreign_key_check").fetchall(), [])
 
     def test_limits_persist_across_failures_and_api_instances(self):
         self.register()
@@ -507,3 +598,4 @@ class MailDeliveryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

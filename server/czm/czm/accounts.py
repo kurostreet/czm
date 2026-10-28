@@ -160,7 +160,8 @@ def delete_account(conn, token, password, ip):
     """The player deletes the account from the game (Google Play requires it): the password confirms it.
 
     Gone: the account, its sessions and codes, email, cloud settings, friends, follows, blocks,
-    private dialogs, chat messages, lobbies, notifications, status, the photo and the profile itself. Reports and bans stay:
+    private dialogs, chat messages, lobbies, notifications, playtime, staff access, warnings,
+    private-test access, status, the photo and the profile itself. Reports and bans stay:
     they protect other players, and a ban is kept by the device hash, not by the profile.
     """
     rate(conn, "delete-ip", ip, 6, 3600)
@@ -187,7 +188,12 @@ def delete_account(conn, token, password, ip):
                           ("lobby_creation_ops", "player"), ("lobby_moderation_ops", "player"),
                           ("lobby_moderation", "player"), ("chat_reads", "player")):
         conn.execute(f"DELETE FROM {table} WHERE {column}=?", (pid,))
-    for table in ("social_profiles", "social_presence", "player_settings", "settings_history", "auth_codes",
+    # These rows were added with Top 100 and moderation. Clear both their foreign
+    # keys and the non-FK presence/witness rows before removing the profile.
+    # A consumed private invitation must not keep identifying a deleted player.
+    for table in ("playtime_installs", "playtime", "play_witnesses", "staff", "warnings",
+                  "development_access", "development_invites",
+                  "social_profiles", "social_presence", "player_settings", "settings_history", "auth_codes",
                   "account_sessions", "tab_bindings", "messages", "accounts"):
         conn.execute(f"DELETE FROM {table} WHERE player=?", (pid,))
     conn.execute("DELETE FROM players WHERE id=?", (pid,))
@@ -411,3 +417,4 @@ def reset(conn, nick, code, password, repeat, ip):
     conn.execute("DELETE FROM account_sessions WHERE player=?", (row["player"],))
     conn.execute("DELETE FROM auth_codes WHERE player=?", (row["player"],))
     return {"ok": True}
+

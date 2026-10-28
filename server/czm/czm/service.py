@@ -75,9 +75,10 @@ def hello(conn: sqlite3.Connection, key: str, device: str, nick: str, avatar: st
     if row is None and (key.startswith(accounts.SESSION_PREFIX) or conn.execute("SELECT 1 FROM players WHERE key_hash=?", (key_hash,)).fetchone()):
         raise accounts.AuthError("session", 401)
     if row is None:
+        next_id = conn.execute("SELECT last_id+1 FROM player_id_sequence WHERE id=1").fetchone()[0]
         conn.execute(
-            "INSERT INTO players (key_hash, device_hash, nick, avatar, lang, version, created, seen) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (key_hash, device_hash, clean_nick(nick), clean_avatar(avatar), lang[:8], version[:32], t, t),
+            "INSERT INTO players (id, key_hash, device_hash, nick, avatar, lang, version, created, seen) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (next_id, key_hash, device_hash, clean_nick(nick), clean_avatar(avatar), lang[:8], version[:32], t, t),
         )
     else:
         if keep_avatar:
@@ -530,3 +531,4 @@ def stats(conn: sqlite3.Connection) -> dict:
         "reports_open": one("SELECT COUNT(*) FROM reports WHERE status = 'open'"),
         "bans_active": one("SELECT COUNT(*) FROM bans WHERE lifted IS NULL AND (until IS NULL OR until > ?)", t),
     }
+

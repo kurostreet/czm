@@ -23,6 +23,18 @@ CREATE TABLE IF NOT EXISTS players (
 );
 CREATE INDEX IF NOT EXISTS players_device ON players(device_hash);
 
+-- Keep IDs unique across account deletion: moderation records intentionally outlive profiles.
+CREATE TABLE IF NOT EXISTS player_id_sequence (
+    id INTEGER PRIMARY KEY CHECK(id=1),
+    last_id INTEGER NOT NULL
+);
+INSERT OR IGNORE INTO player_id_sequence(id,last_id) VALUES(1,0);
+UPDATE player_id_sequence SET last_id=MAX(last_id, COALESCE((SELECT MAX(id) FROM players),0)) WHERE id=1;
+CREATE TRIGGER IF NOT EXISTS player_id_sequence_insert AFTER INSERT ON players
+BEGIN
+    UPDATE player_id_sequence SET last_id=MAX(last_id,NEW.id) WHERE id=1;
+END;
+
 CREATE TABLE IF NOT EXISTS accounts (
     player INTEGER PRIMARY KEY REFERENCES players(id),
     login TEXT NOT NULL,
@@ -340,6 +352,14 @@ def init() -> None:
         conn = connect()
         try:
             conn.executescript(SCHEMA)
+            # Older versions could remove the highest profile ID while retaining its
+            # safety records. Reserve those IDs too when upgrading an existing database.
+            conn.execute("UPDATE player_id_sequence SET last_id=MAX(last_id, "
+                         "COALESCE((SELECT MAX(player) FROM bans),0), "
+                         "COALESCE((SELECT MAX(target) FROM reports),0), "
+                         "COALESCE((SELECT MAX(reporter) FROM reports),0), "
+                         "COALESCE((SELECT MAX(target) FROM moderation_log),0), "
+                         "COALESCE((SELECT MAX(moderator) FROM moderation_log),0)) WHERE id=1")
             from . import lobbies
             conn.executescript(lobbies.LOBBY_SCHEMA)
             for table, columns in COLUMNS.items():
@@ -378,3 +398,4 @@ def cleanup(conn: sqlite3.Connection, keep_days: int, room_history: int, rooms: 
             "(SELECT id FROM messages WHERE room = ? ORDER BY id DESC LIMIT ?)",
             (room, room, room_history * 3),
         )
+
