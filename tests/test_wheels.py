@@ -70,7 +70,7 @@ void UI_FillRect( int x, int y, int w, int h, unsigned c );
 void CZM_DrawImage( const char *p, int x, int y, int w, int h, unsigned c = 0xffffffff );
 void CZM_DrawText( HFont f, int x, int y, int w, const char *s, unsigned c, int just = 0 );
 void UI_DrawString( HFont f, int x, int y, int w, int h, const char *s, unsigned c, int ch, int just, int flags );
-bool CZM_ShopCarried( unsigned int bits, int slot, const char **name, const char **image );
+bool CZM_ShopCarried( unsigned int bits, int slot, const char **name, const char **image, int *weapon );
 void CZM_ShopDrawSilhouette( const char *image, int x, int y, int w, int h, unsigned int color );
 struct MenuEntry { MenuEntry( const char *n, void ( *f )( void )) { entries()[n] = f; } static std::map<std::string, void ( * )( void )> &entries() { static std::map<std::string, void ( * )( void )> m; return m; } };
 #define ADD_COMMAND( cmd, fn ) static MenuEntry entry_##cmd( #cmd, fn )
@@ -88,12 +88,13 @@ void CZM_DrawImage( const char *p, int x, int y, int w, int h, unsigned c ) { as
 void CZM_DrawText( HFont f, int x, int y, int w, const char *s, unsigned c, int j ) { assert( inScreen( x, y, w, CZM_FontHeight( f ))); drawn.push_back( s ); if( trace ) printf( "T\t%d\t%d\t%d\t%d\t%u\t%d\t%s\n", x, y, w, CZM_FontHeight( f ), c, j, s ); }
 void UI_DrawString( HFont, int x, int y, int w, int h, const char *s, unsigned c, int, int j, int ) { assert( inScreen( x, y, w, h )); drawn.push_back( s ); if( trace ) printf( "T\t%d\t%d\t%d\t%d\t%u\t%d\t%s\n", x, y, w, h, c, j, s ); }
 // the shop knows weapon 28 (AK-47) as a primary, 17 (Glock) as a pistol, 4 (HE) as a grenade
-bool CZM_ShopCarried( unsigned int bits, int slot, const char **name, const char **image ) {
+bool CZM_ShopCarried( unsigned int bits, int slot, const char **name, const char **image, int *weapon ) {
 	static const int ids[] = { 28, 17, 4 }; static const char *names[] = { "AK-47", "Glock-18", "Осколочная" }, *images[] = { "ak47", "glock18", "hegrenade" };
 	if( !( bits & ( 1u << ids[slot] )))
 		return false;
 	*name = names[slot];
 	*image = images[slot];
+	*weapon = ids[slot];
 	return true;
 }
 void CZM_ShopDrawSilhouette( const char *image, int x, int y, int w, int h, unsigned int c ) { assert( w > 0 && h > 0 ); drawn.push_back( std::string( "vgui/" ) + image + ( ( c >> 24 ) < 255 ? " pale" : "" )); if( trace ) printf( "I\t%d\t%d\t%d\t%d\t%u\t%s\n", x, y, w, h, c, image ); }
@@ -109,11 +110,17 @@ static void open() { commands.clear(); assert( CZM_RadioShow( 38 )); assert( w.s
 int main( int argc, char **argv ) {
 	// the engine's picks: a tap is the last weapon, a slide picks by its direction (up primary, then clockwise)
 	pick( "weapons 1 0 0 200" ); assert( sent( "lastinv\n" ));
+	// nothing carried: the slot command; carried: that very weapon in hand at once
 	pick( "weapons 1 0 -90 200" ); assert( sent( "slot1\n" ));
 	pick( "weapons 1 80 -30 200" ); assert( sent( "slot2\n" ));
 	pick( "weapons 1 50 60 200" ); assert( sent( "slot4\n" ));
 	pick( "weapons 1 -50 60 200" ); assert( sent( "buy\n" ));
-	pick( "weapons 1 -80 -30 200" ); assert( sent( "slot3\n" ));
+	pick( "weapons 1 -80 -30 200" ); assert( sent( "weapon_knife\n" ));
+	cvars["czm_buy_state"] = "800 2 " + std::to_string(( 1u << 28 ) | ( 1u << 17 ) | ( 1u << 4 ) | ( 1u << 29 )) + " 0 0 1";
+	pick( "weapons 1 0 -90 200" ); assert( sent( "weapon_ak47\n" ));
+	pick( "weapons 1 80 -30 200" ); assert( sent( "weapon_glock18\n" ));
+	pick( "weapons 1 50 60 200" ); assert( sent( "weapon_hegrenade\n" ));
+	cvars["czm_buy_state"] = "";
 	// the open radio wheel: the place counts, the hub and outside pick nothing
 	pick( "radio 2 0 -120 200" ); assert( sent( "enemyspot\n" ));
 	pick( "radio 2 0 30 200" ); assert( commands.empty());

@@ -294,7 +294,7 @@ bool CZM_RadioShow( int menuType );
 // the touch wheels over the game, drawn from the engine's czm_wheel (CzmWheels.cpp)
 void CZM_DrawTouchWheel( void );
 // the weapon wheel: the gun carried in a slot (0 primary, 1 pistol, 2 grenade) by the client's weapon bits
-bool CZM_ShopCarried( unsigned int weaponBits, int slot, const char **name, const char **image );
+bool CZM_ShopCarried( unsigned int weaponBits, int slot, const char **name, const char **image, int *weapon );
 // a buy menu picture as a white silhouette, as large as fits into the box
 void CZM_ShopDrawSilhouette( const char *image, int x, int y, int w, int h, unsigned int color );
 // in a match: server menus (plugins, votes) drawn as cards over the game

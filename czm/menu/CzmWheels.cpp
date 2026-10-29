@@ -76,7 +76,7 @@ static const CzmWheelSlot s_weapons[] =
 	{ "deserteagle", "Пистолет", "Pistol", "slot2", KIND_WEAPON, 1 },
 	{ "hegrenade", "Гранаты", "Grenades", "slot4", KIND_WEAPON, 2 },
 	{ "icon_cart", "Магазин", "Shop", "buy", KIND_ICON, 0 },
-	{ "icon_knife", "Нож", "Knife", "slot3", KIND_ICON, 0 },
+	{ "icon_knife", "Нож", "Knife", "weapon_knife", KIND_ICON, 0 },
 };
 
 struct CzmWheel
@@ -150,10 +150,27 @@ static int WheelChoice( const CzmWheel &wheel, int mode, float dx, float dy, flo
 	return SectorOf( wheel.count, dx, dy );
 }
 
+static unsigned int CarriedWeapons( void );
+
+// the class names of the weapons by id: "weapon_ak47" takes it in hand at once, "slot1" would only
+// open the weapon list unless hud_fastswitch is on
+static const char *s_weaponNames[31] =
+{
+	NULL, "p228", NULL, "scout", "hegrenade", "xm1014", "c4", "mac10", "aug", "smokegrenade", "elite",
+	"fiveseven", "ump45", "sg550", "galil", "famas", "usp", "glock18", "awp", "mp5navy", "m249",
+	"m3", "m4a1", "tmp", "g3sg1", "flashbang", "deagle", "sg552", "ak47", "knife", "p90",
+};
+
 static void RunSlot( const CzmWheelSlot &slot )
 {
+	const char *name, *image;
+	int weapon = 0;
+
 	if( slot.kind == KIND_CHAT )
 		EngFuncs::ClientCmdF( false, "say \"%s\"\n", SlotLabel( slot ));
+	else if( slot.kind == KIND_WEAPON && CZM_ShopCarried( CarriedWeapons(), slot.carry, &name, &image, &weapon )
+		&& weapon > 0 && weapon < 31 && s_weaponNames[weapon] )
+		EngFuncs::ClientCmdF( false, "weapon_%s\n", s_weaponNames[weapon] );
 	else
 		EngFuncs::ClientCmdF( false, "%s\n", slot.command );
 }
@@ -210,9 +227,10 @@ static void DrawWheel( const CzmWheel &wheel, int cx, int cy, int r, int hover, 
 		if( slot.kind == KIND_WEAPON )
 		{
 			const char *name = NULL, *image = NULL;
+			int weapon = 0;
 
 			// the gun carried in this slot, or a pale picture of the slot when there is none
-			lit = CZM_ShopCarried( carried, slot.carry, &name, &image );
+			lit = CZM_ShopCarried( carried, slot.carry, &name, &image, &weapon );
 			if( lit )
 			{
 				where = label;
