@@ -27,8 +27,18 @@ int main()
 
 class DefaultLayoutTests(unittest.TestCase):
     def test_scheme1_preset_is_the_shared_layout_with_round_buttons(self):
-        lines = [l for l in (ROOT / "3rdparty/cs16client-extras/touch_presets/czm_scheme1.cfg").read_text().splitlines() if l.startswith("touch_addbutton")]
-        buttons = LAYOUT["layouts"]["1"]
+        self.check_preset(1, LAYOUT)
+
+    def test_scheme2_preset_is_the_owners_layout(self):
+        # 29.10.2026: the owner's layout with the weapon wheel is the default of scheme 2
+        layout = json.loads((ROOT / "scripts/layouts/scheme2.json").read_text())
+        self.check_preset(2, layout)
+        self.assertIn("_czmwheel weapons", [button[2] for button in layout["layouts"]["2"]])
+
+    def check_preset(self, number, layout):
+        lines = [l for l in (ROOT / f"3rdparty/cs16client-extras/touch_presets/czm_scheme{number}.cfg").read_text().splitlines()
+                 if l.startswith("touch_addbutton")]
+        buttons = layout["layouts"][str(number)]
         self.assertEqual(len(lines), len(buttons))
         for line, button in zip(lines, buttons):
             t = shlex.split(line)
