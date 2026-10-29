@@ -1,0 +1,72 @@
+diff --git a/engine/client/input/in_touch.c b/engine/client/input/in_touch.c
+--- a/engine/client/input/in_touch.c
++++ b/engine/client/input/in_touch.c
+@@ -1306,6 +1306,58 @@ static void Touch_InitConfig( void )
+ ============================================================================
+ */
+ 
++/*
++============
++Counter Zombie Mobile: the second fire button on the left (czm_fire_left)
++
++0 always, 1 only while the scope is up, 2 never. A "+attack" button in the left half of the
++screen counts only while a fire button is in the right half too: a lone fire button is never
++taken away. A button under a finger stays until the finger is lifted. The client registers
++the cvar (cl_dll/input/czm_shooting.cpp), the editors show every button.
++============
++*/
++static qboolean Touch_CzmFireRight( void )
++{
++	static uint frame = (uint)-1;
++	static qboolean right;
++
++	if( frame != host.framecount )
++	{
++		frame = host.framecount;
++		right = false;
++		for( touch_button_t *b = touch.list_user.first; b; b = b->next )
++		{
++			if( !Q_strcmp( b->command, "+attack" ) && !FBitSet( b->flags, TOUCH_FL_HIDE ) && b->x1 + b->x2 >= 1.0f )
++			{
++				right = true;
++				break;
++			}
++		}
++	}
++	return right;
++}
++
++static qboolean Touch_CzmLeftFireHidden( const touch_button_t *button )
++{
++	static convar_t *mode;
++	float open;
++
++	if( Q_strcmp( button->command, "+attack" ) || button->finger != -1 || button->x1 + button->x2 >= 1.0f )
++		return false;
++	if( !mode )
++		mode = Cvar_FindVar( "czm_fire_left" );
++	if( !mode || mode->value <= 0.0f || !Touch_CzmFireRight( ))
++		return false;
++	if( mode->value >= 2.0f )
++		return true;
++
++	// in the scope the client asks for a field of view below the default one
++	open = Cvar_VariableValue( "default_fov" );
++	if( open <= 0.0f )
++		open = 90.0f;
++	return !( cl.local.scr_fov > 0.0f && cl.local.scr_fov < open - 0.5f );
++}
++
+ static qboolean Touch_IsVisible( touch_button_t *button )
+ {
+ 	if( !FBitSet( button->flags, TOUCH_FL_CLIENT ) && touch.clientonly )
+@@ -1317,6 +1369,9 @@ static qboolean Touch_IsVisible( touch_button_t *button )
+ 	if( FBitSet( button->flags, TOUCH_FL_HIDE ))
+ 		return false; // skip hidden
+ 
++	if( Touch_CzmLeftFireHidden( button ))
++		return false; // Counter Zombie Mobile: the left fire button, see above
++
+ 	if( cl.maxclients == 1 )
+ 	{
+ 		if( FBitSet( button->flags, TOUCH_FL_MP ))

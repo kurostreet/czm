@@ -42,6 +42,14 @@ void VectorAngles( const float *forward, float *angles );
 int CL_ButtonBits( int );
 bool IN_AutoRunActive( void ); // input_xash3d.cpp
 
+// scope and fire buttons on a touch screen (input/czm_shooting.cpp)
+void CZM_ShootingInit( void );
+bool CZM_ScopeDown( void );
+bool CZM_ScopeUp( void );
+bool CZM_FireDown( void );
+bool CZM_FireUp( void );
+int CZM_ShootingButtons( int buttons );
+
 // xxx need client dll function to get and clear impuse
 extern cvar_t *in_joystick;
 
@@ -456,12 +464,21 @@ extern void __CmdFunc_InputPlayerSpecial(void);
 
 void IN_Attack2Down(void) 
 {
+	if( CZM_ScopeDown( ))
+		return;
+
 	KeyDown(&in_attack2);
 
 	gHUD.m_Spectator.HandleButtonsDown( IN_ATTACK2 );
 }
 
-void IN_Attack2Up(void) {KeyUp(&in_attack2);}
+void IN_Attack2Up(void)
+{
+	if( CZM_ScopeUp( ))
+		return;
+
+	KeyUp(&in_attack2);
+}
 void IN_UseDown (void)
 {
 	KeyDown(&in_use);
@@ -491,14 +508,20 @@ void IN_GraphUp(void) {KeyUp(&in_graph);}
 
 void IN_AttackDown(void)
 {
+	if( CZM_FireDown( ))
+		return;
+
 	KeyDown( &in_attack );
 	gHUD.m_Spectator.HandleButtonsDown( IN_ATTACK );
 }
 
 void IN_AttackUp(void)
 {
-	KeyUp( &in_attack );
 	in_cancel = 0;
+	if( CZM_FireUp( ))
+		return;
+
+	KeyUp( &in_attack );
 }
 
 // Special handling
@@ -738,6 +761,9 @@ void DLLEXPORT CL_CreateMove ( float frametime, struct usercmd_s *cmd, int activ
 	// set button and flag bits
 	//
 	cmd->buttons = CL_ButtonBits( 1 );
+
+	// hold and mixed scope, fire on release (input/czm_shooting.cpp)
+	cmd->buttons = CZM_ShootingButtons( cmd->buttons );
 
 	// auto run also holds the forward button, ladders climb by it
 	if ( active && IN_AutoRunActive() )
@@ -1001,6 +1027,7 @@ void InitInput (void)
 	CAM_Init();
 	// Initialize inputs
 	IN_Init();
+	CZM_ShootingInit();
 	// Initialize keyboard
 	KB_Init();
 	// Initialize view system

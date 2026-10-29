@@ -348,6 +348,10 @@ void CHudMenu::ShowVGUIMenu( int menuType )
 		case MENU_CLASS_CT:
 			g_pMenu->ShowVGUIMenu( menuType, gHUD.GetGameType() == GAME_CZERO, haveCancel );
 			return;
+		case MENU_RADIOSELECTOR:
+			// Counter Zombie Mobile: the radio wheel (czm/menu/CzmRadio.cpp)
+			g_pMenu->ShowVGUIMenu( menuType, 0, 0 );
+			return;
 		case MENU_BUY:
 		case MENU_BUY_PISTOL:
 		case MENU_BUY_SHOTGUN:

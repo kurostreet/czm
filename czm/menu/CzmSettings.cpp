@@ -98,6 +98,14 @@ void SetGyroPower( float v )
 	SetCvar( "gyro_pitch", v );
 }
 
+// shooting on a touch screen: cl_dll/input/czm_shooting.cpp, the left fire button in patch czm-left-fire
+float GetScopeMode( void ) { return bound( 0, (int)GetCvar( "czm_scope_mode" ), 2 ); }
+void SetScopeMode( float v ) { SetCvar( "czm_scope_mode", bound( 0, (int)v, 2 )); }
+float GetFireRelease( void ) { return GetCvar( "czm_sniper_release" ) != 0.0f; }
+void SetFireRelease( float v ) { SetCvar( "czm_sniper_release", v ); }
+float GetFireLeft( void ) { return bound( 0, (int)GetCvar( "czm_fire_left" ), 2 ); }
+void SetFireLeft( float v ) { SetCvar( "czm_fire_left", bound( 0, (int)v, 2 )); }
+
 // graphics
 float GetBrightness( void ) { return GetCvar( "brightness" ); }
 void SetBrightness( float v ) { SetCvar( "brightness", v ); }
@@ -377,93 +385,105 @@ struct CzmRow
 	int format;
 	const char *options[4];
 	int numOptions;
+	int recommend; // choices: the option marked with a star for newcomers, 1-based; 0 none
 };
 
 // everything about the layout of buttons and HUD sits together at the top
 const CzmRow s_controls[] =
 {
-	{ ROW_CHOICE, "s_scheme", "s_scheme_hint", GetScheme, SetScheme, NULL, 0, 2, 1, 0, { "opt_scheme1", "opt_scheme2", "opt_scheme3" }, 3 },
-	{ ROW_BUTTONS, "s_buttons", "s_buttons_hint", NULL, NULL, NULL, 0, 0, 0, 0, { "b_edit", "b_reset" }, 2 },
-	{ ROW_LAYOUTS, "s_layouts", "s_layouts_hint", NULL, NULL, NULL, 0, 0, 0, 0, {}, 0 },
-	{ ROW_SLIDER, "s_look", "s_look_hint", GetLook, SetLook, NULL, 0.5f, 10.0f, 0.1f, FMT_DECIMAL, {}, 0 },
-	{ ROW_SLIDER, "s_zoom", "s_zoom_hint", GetZoom, SetZoom, NULL, 0.2f, 3.0f, 0.05f, FMT_DECIMAL, {}, 0 },
-	{ ROW_SLIDER, "s_move", "s_move_hint", GetMove, SetMove, NULL, 1.0f, 10.0f, 1.0f, FMT_INT, {}, 0 },
-	{ ROW_SWITCH, "s_gyro", "s_gyro_hint", GetGyro, SetGyro, GyroAvailable, 0, 1, 1, 0, {}, 0 },
-	{ ROW_SLIDER, "s_gyro_power", NULL, GetGyroPower, SetGyroPower, GyroOn, 0.2f, 4.0f, 0.1f, FMT_DECIMAL, {}, 0 },
+	{ ROW_SECTION, "s_sec_buttons", NULL, NULL, NULL, NULL, 0, 0, 0, 0, {}, 0, 0 },
+	{ ROW_CHOICE, "s_scheme", "s_scheme_hint", GetScheme, SetScheme, NULL, 0, 2, 1, 0, { "opt_scheme1", "opt_scheme2", "opt_scheme3" }, 3, 0 },
+	{ ROW_BUTTONS, "s_buttons", "s_buttons_hint", NULL, NULL, NULL, 0, 0, 0, 0, { "b_edit", "b_reset" }, 2, 0 },
+	{ ROW_LAYOUTS, "s_layouts", "s_layouts_hint", NULL, NULL, NULL, 0, 0, 0, 0, {}, 0, 0 },
+	{ ROW_SECTION, "s_sec_shooting", NULL, NULL, NULL, NULL, 0, 0, 0, 0, {}, 0, 0 },
+	{ ROW_CHOICE, "s_scope", "s_scope_hint0", GetScopeMode, SetScopeMode, NULL, 0, 2, 1, 0, { "opt_scope_tap", "opt_scope_hold", "opt_scope_mixed" }, 3, 3 },
+	{ ROW_CHOICE, "s_fire_release", "s_fire_release_hint0", GetFireRelease, SetFireRelease, NULL, 0, 1, 1, 0, { "opt_fire_press", "opt_fire_release" }, 2, 0 },
+	{ ROW_CHOICE, "s_fire_left", "s_fire_left_hint0", GetFireLeft, SetFireLeft, NULL, 0, 2, 1, 0, { "opt_always", "opt_in_scope", "opt_never" }, 3, 1 },
+	{ ROW_SECTION, "s_sec_sens", NULL, NULL, NULL, NULL, 0, 0, 0, 0, {}, 0, 0 },
+	{ ROW_SLIDER, "s_look", "s_look_hint", GetLook, SetLook, NULL, 0.5f, 10.0f, 0.1f, FMT_DECIMAL, {}, 0, 0 },
+	{ ROW_SLIDER, "s_zoom", "s_zoom_hint", GetZoom, SetZoom, NULL, 0.2f, 3.0f, 0.05f, FMT_DECIMAL, {}, 0, 0 },
+	{ ROW_SLIDER, "s_move", "s_move_hint", GetMove, SetMove, NULL, 1.0f, 10.0f, 1.0f, FMT_INT, {}, 0, 0 },
+	{ ROW_SECTION, "s_sec_gyro", NULL, NULL, NULL, NULL, 0, 0, 0, 0, {}, 0, 0 },
+	{ ROW_SWITCH, "s_gyro", "s_gyro_hint", GetGyro, SetGyro, GyroAvailable, 0, 1, 1, 0, {}, 0, 0 },
+	{ ROW_SLIDER, "s_gyro_power", NULL, GetGyroPower, SetGyroPower, GyroOn, 0.2f, 4.0f, 0.1f, FMT_DECIMAL, {}, 0, 0 },
 };
 
 const CzmRow s_graphics[] =
 {
-	{ ROW_SLIDER, "s_brightness", NULL, GetBrightness, SetBrightness, NULL, 0.0f, 3.0f, 0.05f, FMT_RANGE, {}, 0 },
-	{ ROW_CHOICE, "s_fps", "s_fps_hint", GetFps, SetFps, NULL, 0, 3, 1, 0, { "30", "60", "90", "120" }, 4 },
-	{ ROW_CHOICE, "s_render", "s_render_hint", GetRenderer, SetRenderer, NULL, 0, 2, 1, 0, { "render_classic", "render_compatible", "render_modern" }, 3 },
-	{ ROW_CHOICE, "s_textsize", "s_textsize_hint", GetTextSize, SetTextSize, NULL, 0, 2, 1, 0, { "opt_small", "opt_medium", "opt_large" }, 3 },
-	{ ROW_CHOICE, "s_hudsize", "s_hudsize_hint", GetHudSize, SetHudSize, NULL, 0, 2, 1, 0, { "opt_small", "opt_medium", "opt_large" }, 3 },
-	{ ROW_SWITCH, "s_showfps", NULL, GetShowFps, SetShowFps, NULL, 0, 1, 1, 0, {}, 0 },
-	{ ROW_SWITCH, "s_showping", NULL, GetShowPing, SetShowPing, NULL, 0, 1, 1, 0, {}, 0 },
-	{ ROW_CHOICE, "s_effects", "s_effects_hint", GetEffects, SetEffects, NULL, 0, 2, 1, 0, { "opt_low", "opt_mid", "opt_high" }, 3 },
-	{ ROW_SWITCH, "s_shadows", NULL, GetShadows, SetShadows, NULL, 0, 1, 1, 0, {}, 0 },
-	{ ROW_SWITCH, "s_weather", "s_weather_hint", GetWeather, SetWeather, NULL, 0, 1, 1, 0, {}, 0 },
-	{ ROW_SWITCH, "s_parallax", "s_parallax_hint", GetParallax, SetParallax, NULL, 0, 1, 1, 0, {}, 0 },
+	{ ROW_SLIDER, "s_brightness", NULL, GetBrightness, SetBrightness, NULL, 0.0f, 3.0f, 0.05f, FMT_RANGE, {}, 0, 0 },
+	{ ROW_CHOICE, "s_fps", "s_fps_hint", GetFps, SetFps, NULL, 0, 3, 1, 0, { "30", "60", "90", "120" }, 4, 2 },
+	{ ROW_CHOICE, "s_render", "s_render_hint", GetRenderer, SetRenderer, NULL, 0, 2, 1, 0, { "render_classic", "render_compatible", "render_modern" }, 3, 0 },
+	{ ROW_CHOICE, "s_textsize", "s_textsize_hint", GetTextSize, SetTextSize, NULL, 0, 2, 1, 0, { "opt_small", "opt_medium", "opt_large" }, 3, 0 },
+	{ ROW_CHOICE, "s_hudsize", "s_hudsize_hint", GetHudSize, SetHudSize, NULL, 0, 2, 1, 0, { "opt_small", "opt_medium", "opt_large" }, 3, 0 },
+	{ ROW_SWITCH, "s_showfps", NULL, GetShowFps, SetShowFps, NULL, 0, 1, 1, 0, {}, 0, 0 },
+	{ ROW_SWITCH, "s_showping", NULL, GetShowPing, SetShowPing, NULL, 0, 1, 1, 0, {}, 0, 0 },
+	{ ROW_CHOICE, "s_effects", "s_effects_hint", GetEffects, SetEffects, NULL, 0, 2, 1, 0, { "opt_low", "opt_mid", "opt_high" }, 3, 0 },
+	{ ROW_SWITCH, "s_shadows", NULL, GetShadows, SetShadows, NULL, 0, 1, 1, 0, {}, 0, 0 },
+	{ ROW_SWITCH, "s_weather", "s_weather_hint", GetWeather, SetWeather, NULL, 0, 1, 1, 0, {}, 0, 0 },
+	{ ROW_SWITCH, "s_parallax", "s_parallax_hint", GetParallax, SetParallax, NULL, 0, 1, 1, 0, {}, 0, 0 },
 };
 
 const CzmRow s_sound[] =
 {
-	{ ROW_SLIDER, "s_volume", NULL, GetVolume, SetVolume, NULL, 0.0f, 1.0f, 0.05f, FMT_PERCENT, {}, 0 },
-	{ ROW_SLIDER, "s_music", NULL, GetMusic, SetMusic, NULL, 0.0f, 1.0f, 0.05f, FMT_PERCENT, {}, 0 },
-	{ ROW_CHOICE, "s_music_track", "s_music_track_hint", GetMenuMusic, SetMenuMusic, NULL, 0, 3, 1, 0, { "opt_music_silent", "opt_music_city", "opt_music_thoughts", "opt_music_rain" }, 4 },
-	{ ROW_SLIDER, "s_ui_volume", NULL, GetUiVolume, SetUiVolume, NULL, 0.0f, 1.0f, 0.05f, FMT_PERCENT, {}, 0 },
-	{ ROW_SWITCH, "s_voice", "s_voice_hint", GetVoice, SetVoice, NULL, 0, 1, 1, 0, {}, 0 },
-	{ ROW_SLIDER, "s_voice_in", NULL, GetVoiceIn, SetVoiceIn, VoiceOn, 0.0f, 2.0f, 0.05f, FMT_PERCENT, {}, 0 },
-	{ ROW_SLIDER, "s_voice_out", NULL, GetVoiceOut, SetVoiceOut, VoiceOn, 0.0f, 2.0f, 0.05f, FMT_PERCENT, {}, 0 },
-	{ ROW_MIC, "s_mic", "s_mic_hint", NULL, NULL, MicTestAvailable, 0, 0, 0, 0, { "b_check", "b_stop" }, 2 },
+	{ ROW_SLIDER, "s_volume", NULL, GetVolume, SetVolume, NULL, 0.0f, 1.0f, 0.05f, FMT_PERCENT, {}, 0, 0 },
+	{ ROW_SLIDER, "s_music", NULL, GetMusic, SetMusic, NULL, 0.0f, 1.0f, 0.05f, FMT_PERCENT, {}, 0, 0 },
+	{ ROW_CHOICE, "s_music_track", "s_music_track_hint", GetMenuMusic, SetMenuMusic, NULL, 0, 3, 1, 0, { "opt_music_silent", "opt_music_city", "opt_music_thoughts", "opt_music_rain" }, 4, 0 },
+	{ ROW_SLIDER, "s_ui_volume", NULL, GetUiVolume, SetUiVolume, NULL, 0.0f, 1.0f, 0.05f, FMT_PERCENT, {}, 0, 0 },
+	{ ROW_SWITCH, "s_voice", "s_voice_hint", GetVoice, SetVoice, NULL, 0, 1, 1, 0, {}, 0, 0 },
+	{ ROW_SLIDER, "s_voice_in", NULL, GetVoiceIn, SetVoiceIn, VoiceOn, 0.0f, 2.0f, 0.05f, FMT_PERCENT, {}, 0, 0 },
+	{ ROW_SLIDER, "s_voice_out", NULL, GetVoiceOut, SetVoiceOut, VoiceOn, 0.0f, 2.0f, 0.05f, FMT_PERCENT, {}, 0, 0 },
+	{ ROW_MIC, "s_mic", "s_mic_hint", NULL, NULL, MicTestAvailable, 0, 0, 0, 0, { "b_check", "b_stop" }, 2, 0 },
 };
 
 const CzmRow s_game[] =
 {
-	{ ROW_CHOICE, "s_lang", NULL, GetLang, SetLang, NULL, 0, 1, 1, 0, { "RU", "EN" }, 2 },
-	{ ROW_XHAIR, "s_xhair", "s_xhair_hint", NULL, NULL, NULL, 0, 0, 0, 0, {}, 0 },
-	{ ROW_CHOICE, "s_xhair_size", NULL, GetXhairSize, SetXhairSize, NULL, 0, 3, 1, 0, { "opt_auto", "opt_small", "opt_medium", "opt_large" }, 4 },
-	{ ROW_COLORS, "s_xhair_color", "s_xhair_color_hint", GetXhairColor, SetXhairColor, NULL, 0, 0, 0, 0, {}, 0 },
-	{ ROW_SWITCH, "s_xhair_dyn", "s_xhair_dyn_hint", GetXhairDynamic, SetXhairDynamic, NULL, 0, 1, 1, 0, {}, 0 },
-	{ ROW_SWITCH, "s_xhair_trans", NULL, GetXhairTrans, SetXhairTrans, NULL, 0, 1, 1, 0, {}, 0 },
-	{ ROW_CHOICE, "s_hand", NULL, GetHand, SetHand, NULL, 0, 1, 1, 0, { "opt_right", "opt_left" }, 2 },
-	{ ROW_SWITCH, "s_autoswitch", "s_autoswitch_hint", GetAutoSwitch, SetAutoSwitch, NULL, 0, 1, 1, 0, {}, 0 },
-	{ ROW_CHOICE, "s_shop", "s_shop_hint", GetShop, SetShop, NULL, 0, 2, 1, 0, { "opt_wheel", "opt_grid", "opt_classic" }, 3 },
-	{ ROW_SWITCH, "s_shop_auto", "s_shop_auto_hint", GetShopAuto, SetShopAuto, NULL, 0, 1, 1, 0, {}, 0 },
-	{ ROW_SWITCH, "s_menucards", "s_menucards_hint", GetMenuCards, SetMenuCards, NULL, 0, 1, 1, 0, {}, 0 },
-	{ ROW_SECTION, "s_advanced", NULL, NULL, NULL, NULL, 0, 0, 0, 0, {}, 0 },
-	{ ROW_CHOICE, "s_diagnostics", "s_diagnostics_hint", GetDiagnostics, SetDiagnostics, NULL, 0, 2, 1, 0, { "diag_off", "diag_basic", "diag_detailed" }, 3 },
+	{ ROW_SECTION, "s_sec_general", NULL, NULL, NULL, NULL, 0, 0, 0, 0, {}, 0, 0 },
+	{ ROW_CHOICE, "s_lang", NULL, GetLang, SetLang, NULL, 0, 1, 1, 0, { "RU", "EN" }, 2, 0 },
+	{ ROW_SECTION, "s_sec_xhair", NULL, NULL, NULL, NULL, 0, 0, 0, 0, {}, 0, 0 },
+	{ ROW_XHAIR, "s_xhair", "s_xhair_hint", NULL, NULL, NULL, 0, 0, 0, 0, {}, 0, 0 },
+	{ ROW_CHOICE, "s_xhair_size", NULL, GetXhairSize, SetXhairSize, NULL, 0, 3, 1, 0, { "opt_auto", "opt_small", "opt_medium", "opt_large" }, 4, 0 },
+	{ ROW_COLORS, "s_xhair_color", "s_xhair_color_hint", GetXhairColor, SetXhairColor, NULL, 0, 0, 0, 0, {}, 0, 0 },
+	{ ROW_SWITCH, "s_xhair_dyn", "s_xhair_dyn_hint", GetXhairDynamic, SetXhairDynamic, NULL, 0, 1, 1, 0, {}, 0, 0 },
+	{ ROW_SWITCH, "s_xhair_trans", NULL, GetXhairTrans, SetXhairTrans, NULL, 0, 1, 1, 0, {}, 0, 0 },
+	{ ROW_SECTION, "s_sec_weapons", NULL, NULL, NULL, NULL, 0, 0, 0, 0, {}, 0, 0 },
+	{ ROW_CHOICE, "s_hand", NULL, GetHand, SetHand, NULL, 0, 1, 1, 0, { "opt_right", "opt_left" }, 2, 0 },
+	{ ROW_SWITCH, "s_autoswitch", "s_autoswitch_hint", GetAutoSwitch, SetAutoSwitch, NULL, 0, 1, 1, 0, {}, 0, 0 },
+	{ ROW_SECTION, "s_sec_menus", NULL, NULL, NULL, NULL, 0, 0, 0, 0, {}, 0, 0 },
+	{ ROW_CHOICE, "s_shop", "s_shop_hint", GetShop, SetShop, NULL, 0, 2, 1, 0, { "opt_wheel", "opt_grid", "opt_classic" }, 3, 1 },
+	{ ROW_SWITCH, "s_shop_auto", "s_shop_auto_hint", GetShopAuto, SetShopAuto, NULL, 0, 1, 1, 0, {}, 0, 0 },
+	{ ROW_SWITCH, "s_menucards", "s_menucards_hint", GetMenuCards, SetMenuCards, NULL, 0, 1, 1, 0, {}, 0, 0 },
+	{ ROW_SECTION, "s_advanced", NULL, NULL, NULL, NULL, 0, 0, 0, 0, {}, 0, 0 },
+	{ ROW_CHOICE, "s_diagnostics", "s_diagnostics_hint", GetDiagnostics, SetDiagnostics, NULL, 0, 2, 1, 0, { "diag_off", "diag_basic", "diag_detailed" }, 3, 0 },
 };
 
 const CzmRow s_hud[] =
 {
-	{ ROW_RADAR, "s_radar_style", "s_radar_style_hint", GetRadarStyle, SetRadarStyle, NULL, 0, 2, 1, 0, {}, 3 },
-	{ ROW_MSGSTYLE, "s_msg_style", "s_msg_style_hint", GetMsgStyle, SetMsgStyle, NULL, 0, 2, 1, 0, {}, 3 },
-	{ ROW_CHOICE, "s_msg_list", "s_msg_list_hint", GetMsgList, SetMsgList, NULL, 0, 1, 1, 0, { "opt_msg_server", "opt_msg_list" }, 2 },
-	{ ROW_SPECSTYLE, "s_spec_style", "s_spec_style_hint", GetSpecStyle, SetSpecStyle, NULL, 0, 2, 1, 0, {}, 3 },
-	{ ROW_CHOICE, "s_tab_style", "s_tab_style_hint", GetTabStyle, SetTabStyle, NULL, 0, 2, 1, 0, { "opt_tab_default", "opt_tab_compact", "opt_tab_tactical" }, 3 },
-	{ ROW_TABPREVIEW, "s_tab_preview", "s_tab_preview_hint", NULL, NULL, NULL, 0, 0, 0, 0, {}, 0 },
+	{ ROW_RADAR, "s_radar_style", "s_radar_style_hint", GetRadarStyle, SetRadarStyle, NULL, 0, 2, 1, 0, {}, 3, 0 },
+	{ ROW_MSGSTYLE, "s_msg_style", "s_msg_style_hint", GetMsgStyle, SetMsgStyle, NULL, 0, 2, 1, 0, {}, 3, 0 },
+	{ ROW_CHOICE, "s_msg_list", "s_msg_list_hint", GetMsgList, SetMsgList, NULL, 0, 1, 1, 0, { "opt_msg_server", "opt_msg_list" }, 2, 0 },
+	{ ROW_SPECSTYLE, "s_spec_style", "s_spec_style_hint", GetSpecStyle, SetSpecStyle, NULL, 0, 2, 1, 0, {}, 3, 0 },
+	{ ROW_CHOICE, "s_tab_style", "s_tab_style_hint", GetTabStyle, SetTabStyle, NULL, 0, 2, 1, 0, { "opt_tab_default", "opt_tab_compact", "opt_tab_tactical" }, 3, 0 },
+	{ ROW_TABPREVIEW, "s_tab_preview", "s_tab_preview_hint", NULL, NULL, NULL, 0, 0, 0, 0, {}, 0, 0 },
 };
 
 const CzmRow s_profile[] =
 {
-	{ ROW_ACCOUNT, "s_account", "s_account_hint", NULL, NULL, NULL, 0, 0, 0, 0, {}, 0 },
-	{ ROW_NICK, "s_nick", "s_nick_hint", NULL, NULL, NULL, 0, 0, 0, 0, {}, 0 },
-	{ ROW_AVATARS, "s_avatar", "s_avatar_hint", NULL, NULL, NULL, 0, 0, 0, 0, {}, 0 },
-	{ ROW_SPRAYS, "s_spray", "s_spray_hint", NULL, NULL, NULL, 0, 0, 0, 0, {}, 0 },
+	{ ROW_ACCOUNT, "s_account", "s_account_hint", NULL, NULL, NULL, 0, 0, 0, 0, {}, 0, 0 },
+	{ ROW_NICK, "s_nick", "s_nick_hint", NULL, NULL, NULL, 0, 0, 0, 0, {}, 0, 0 },
+	{ ROW_AVATARS, "s_avatar", "s_avatar_hint", NULL, NULL, NULL, 0, 0, 0, 0, {}, 0, 0 },
+	{ ROW_SPRAYS, "s_spray", "s_spray_hint", NULL, NULL, NULL, 0, 0, 0, 0, {}, 0, 0 },
 };
 
 const CzmRow s_about[] =
 {
-	{ ROW_ABOUT, "about_tg", NULL, NULL, NULL, NULL, 0, 0, 0, 0, {}, 0 },
-	{ ROW_ABOUT, "about_group", NULL, NULL, NULL, NULL, 1, 0, 0, 0, {}, 0 },
-	{ ROW_ABOUT, "about_site", NULL, NULL, NULL, NULL, 2, 0, 0, 0, {}, 0 },
-	{ ROW_ABOUT, "about_rules", NULL, NULL, NULL, NULL, 3, 0, 0, 0, {}, 0 },
-	{ ROW_ABOUT, "about_source", NULL, NULL, NULL, NULL, 4, 0, 0, 0, {}, 0 },
-	{ ROW_ABOUT, "about_version", NULL, NULL, NULL, NULL, 5, 0, 0, 0, {}, 0 },
-	{ ROW_ABOUT, "about_updated", NULL, NULL, NULL, NULL, 6, 0, 0, 0, {}, 0 },
-	{ ROW_ABOUT, "about_engine", NULL, NULL, NULL, NULL, 7, 0, 0, 0, {}, 0 },
+	{ ROW_ABOUT, "about_tg", NULL, NULL, NULL, NULL, 0, 0, 0, 0, {}, 0, 0 },
+	{ ROW_ABOUT, "about_group", NULL, NULL, NULL, NULL, 1, 0, 0, 0, {}, 0, 0 },
+	{ ROW_ABOUT, "about_site", NULL, NULL, NULL, NULL, 2, 0, 0, 0, {}, 0, 0 },
+	{ ROW_ABOUT, "about_rules", NULL, NULL, NULL, NULL, 3, 0, 0, 0, {}, 0, 0 },
+	{ ROW_ABOUT, "about_source", NULL, NULL, NULL, NULL, 4, 0, 0, 0, {}, 0, 0 },
+	{ ROW_ABOUT, "about_version", NULL, NULL, NULL, NULL, 5, 0, 0, 0, {}, 0, 0 },
+	{ ROW_ABOUT, "about_updated", NULL, NULL, NULL, NULL, 6, 0, 0, 0, {}, 0, 0 },
+	{ ROW_ABOUT, "about_engine", NULL, NULL, NULL, NULL, 7, 0, 0, 0, {}, 0, 0 },
 };
 
 constexpr struct
@@ -785,7 +805,7 @@ void CCzmSettings::Layout( void )
 		int h = rowH;
 
 		if( row.type == ROW_SECTION )
-			h = H * 0.055f;
+			h = H * ( i ? 0.085f : 0.068f ); // a band, with air above it after the rows of the section before
 		else if( row.type == ROW_XHAIR )
 			h = rowH * 1.6f;
 		else if( row.type == ROW_TABPREVIEW )
@@ -822,7 +842,7 @@ void CCzmSettings::Layout( void )
 		case ROW_CHOICE:
 		{
 			int ch = H * 0.064f;
-			int cw = row.get == GetRenderer || row.get == GetTabStyle || row.get == GetMenuMusic || row.get == GetDiagnostics ? controlW : Q_min( controlW, (int)( row.numOptions * H * 0.16f ));
+			int cw = row.get == GetRenderer || row.get == GetTabStyle || row.get == GetMenuMusic || row.get == GetDiagnostics || row.get == GetScopeMode ? controlW : Q_min( controlW, (int)( row.numOptions * H * 0.16f ));
 			l.control = CZM_Rect( l.rect.x + l.rect.w - cw, l.rect.y + ( h - ch ) / 2, cw, ch );
 			for( int k = 0; k < row.numOptions; k++ )
 				l.parts[k] = CZM_Rect( l.control.x + l.control.w * k / row.numOptions, l.control.y,
@@ -1372,6 +1392,16 @@ void CCzmSettings::DrawChoice( int i, const RowLayout &l )
 		UI_DrawString( font, p.x + inset, p.y + ( p.h - textH ) / 2, available, textH, label,
 			active ? CZM_White() : PackRGBA( 190, 196, 206, 255 ), textH, QM_CENTER | QM_TOP, ETF_NO_WRAP | ETF_FORCECOL );
 	}
+
+	// the option we recommend: a gold star on its top left corner, over the edge of the control
+	if( row.recommend > 0 && row.recommend <= l.numParts )
+	{
+		const CzmRect &p = l.parts[row.recommend - 1];
+		const int star = Q_max( 10, (int)( H * 0.03f ));
+
+		CZM_DrawImage( UI_DIR "dot.png", p.x + inset - star / 6, p.y - star / 2 - star / 6, star + star / 3, star + star / 3, PackRGBA( 24, 28, 36, 255 ));
+		CZM_DrawImage( UI_DIR "icon_star_on.png", p.x + inset, p.y - star / 2, star, star, PackRGBA( 231, 187, 96, 255 ));
+	}
 }
 
 void CCzmSettings::DrawCrosshairPreview( const CzmRect &box )
@@ -1472,7 +1502,15 @@ void CCzmSettings::DrawRow( int i )
 	const RowLayout &l = m_rows[i];
 	if( row.type == ROW_SECTION )
 	{
-		CZM_DrawText( CZM_Font( CZMF_SMALL ), l.rect.x, l.rect.y + H * .018f, l.rect.w, CZM_T( row.label ), CZM_Grey() );
+		// a band with a red mark on the left, the rows of the section follow
+		HFont font = CZM_Font( CZMF_TILE_STATUS );
+		const int bandH = H * 0.056f, y = l.rect.y + l.rect.h - bandH - H * 0.006f;
+		const int mark = Q_max( 3, (int)( H * 0.006f ));
+
+		FillClipped( l.rect.x, y, l.rect.w, bandH, PackRGBA( 255, 255, 255, 13 ), m_clip );
+		FillClipped( l.rect.x, y, mark, bandH, PackRGBA( 229, 63, 77, 255 ), m_clip );
+		CZM_DrawText( font, l.rect.x + mark + H * 0.022f, y + ( bandH - CZM_FontHeight( font )) / 2, l.rect.w - H * 0.05f,
+			CZM_T( row.label ), CZM_White());
 		return;
 	}
 	HFont labelFont = CZM_Font( CZMF_TILE_STATUS );
@@ -1492,6 +1530,14 @@ void CCzmSettings::DrawRow( int i )
 
 	if( row.get == GetDiagnostics )
 		hint = CZM_T( GetDiagnostics() == 0 ? "diag_off_hint" : GetDiagnostics() == 1 ? "diag_basic_hint" : "diag_detailed_hint" );
+
+	// the shooting rows tell what the chosen way does
+	if( row.get == GetScopeMode || row.get == GetFireRelease || row.get == GetFireLeft )
+	{
+		char key[40];
+		snprintf( key, sizeof( key ), "%s_hint%d", row.label, (int)row.get( ));
+		hint = CZM_T( key );
+	}
 
 	// the gyroscope row explains why it is off
 	if( row.get == GetGyro && !GyroAvailable( ))

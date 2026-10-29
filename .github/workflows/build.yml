@@ -86,6 +86,9 @@ jobs:
           python3 -m unittest discover -s tests -p test_top_window.py -v
           python3 -m unittest discover -s tests -p test_hud_letters.py -v
           python3 -m unittest discover -s tests -p test_news_language.py -v
+          python3 -m unittest discover -s tests -p test_touch_shooting.py -v
+          python3 -m unittest discover -s tests -p test_left_fire.py -v
+          python3 -m unittest discover -s tests -p test_radio_wheel.py -v
           python3 -m unittest discover -s tests -p test_loading_errors.py -v
           python3 -m unittest discover -s tests -p test_connection_notices.py -v
           python3 -m unittest discover -s tests -p test_background_downloads.py -v

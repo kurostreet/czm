@@ -186,12 +186,14 @@ def brand_connection_progress(source):
 def brand_udll_int(source):
     filename = "udll_int.cpp"
     source = replace_once(source, '#include "Utils.h"\n', '#include "Utils.h"\n#include "CzmMenu.h"\n', filename)
-    # buy menus open our shop (wheel or grid), the stock ones stay for "czm_shop 0"
+    # buy menus open our shop (wheel or grid), the stock ones stay for "czm_shop 0";
+    # the radio selector opens our radio wheel
     return replace_once(
         source,
         "\t\tEngFuncs::KEY_ClearStates();\n\n\t\tswitch( menuType )\n",
         "\t\tEngFuncs::KEY_ClearStates();\n\n"
         "\t\tif( CZM_ShopShow( menuType, param2 ))\n\t\t\treturn;\n\n"
+        "\t\tif( CZM_RadioShow( menuType ))\n\t\t\treturn;\n\n"
         "\t\tswitch( menuType )\n",
         filename,
     )

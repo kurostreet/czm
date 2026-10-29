@@ -212,6 +212,9 @@ public:
 	CHudUserCmd(Rebuy);
 	CHudUserCmd(Autobuy);
 
+	// the weapon in the hands, 0 none (the touch scope and fire buttons, input/czm_shooting.cpp)
+	int CurrentWeaponId( void ) const;
+
 private:
 	float m_fFade;
 	RGBA  m_rgba;

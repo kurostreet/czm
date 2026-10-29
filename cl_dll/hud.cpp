@@ -643,6 +643,8 @@ float HUD_GetFOV( void )
 	return g_lastFOV;
 }
 
+bool CZM_ScopeHidden( void );
+
 int CHud::MsgFunc_SetFOV(const char *pszName,  int iSize, void *pbuf)
 {
 	//Weapon prediction already takes care of changing the fog. ( g_lastFOV ).
@@ -658,6 +660,10 @@ int CHud::MsgFunc_SetFOV(const char *pszName,  int iSize, void *pbuf)
 
 	g_lastFOV = newfov;
 	m_iFOV = newfov ? newfov : def_fov;
+
+	// walking out of the scope (input/czm_shooting.cpp): the steps on the way are not shown
+	if( CZM_ScopeHidden( ))
+		m_iFOV = def_fov;
 
 	// the clients fov is actually set in the client data update section of the hud
 

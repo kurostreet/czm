@@ -1603,6 +1603,11 @@ void CHudAmmo::DrawCrosshair( int weaponId )
 	}
 }
 
+int CHudAmmo::CurrentWeaponId( void ) const
+{
+	return m_pWeapon ? m_pWeapon->iId : 0;
+}
+
 void CHudAmmo::DrawCrosshair()
 {
 	if( g_iUser1 && g_iUser1 != OBS_IN_EYE )

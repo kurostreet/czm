@@ -200,6 +200,14 @@ def icon(kind, size=128, color=(255, 255, 255, 255)):
         d.line([S * .60, S * .60, S * .88, S * .88], fill=c, width=int(lw * 1.3))
         r = lw * .65
         d.ellipse([S * .88 - r, S * .88 - r, S * .88 + r, S * .88 + r], fill=c)
+    elif kind == "spray":
+        # a spray can, a cloud of paint leaving the nozzle
+        d.rounded_rectangle([S * .14, S * .34, S * .58, S * .95], radius=S * .1, outline=c, width=lw)
+        d.rounded_rectangle([S * .23, S * .17, S * .49, S * .34], radius=S * .04, fill=c)
+        d.rounded_rectangle([S * .49, S * .20, S * .62, S * .28], radius=S * .02, fill=c)
+        d.line([S * .14 + lw, S * .56, S * .58 - lw, S * .56], fill=c, width=int(lw * .7))
+        for x, y, r in ((.76, .16, .055), (.90, .10, .045), (.80, .32, .05), (.94, .26, .04)):
+            d.ellipse([S * (x - r), S * (y - r), S * (x + r), S * (y + r)], fill=c)
     elif kind in ("star", "star_on"):
         pts = []
         for i in range(10):
@@ -357,6 +365,10 @@ def main():
     OUTPUT.mkdir(parents=True, exist_ok=True)
     if "--support" in sys.argv:
         save(icon("shield"), "icon_shield.png")
+        return
+    if "--radio" in sys.argv:
+        # the radio wheel: the spray slot
+        save(icon("spray"), "icon_spray.png")
         return
     if "--top" in sys.argv:
         # Top 100: the crowns of the first three and of the rest

@@ -40,6 +40,7 @@ int grgLogoFrame[MAX_LOGO_FRAMES] =
 extern int g_iVisibleMouse;
 
 float HUD_GetFOV( void );
+bool CZM_ScopeHidden( void );
 
 // Think
 void CHud::Think(void)
@@ -77,6 +78,13 @@ void CHud::Think(void)
 	if ( m_iFOV == 0 )
 	{  // only let players adjust up in fov,  and only if they are not overriden by something else
 		m_iFOV = max( default_fov->value, 90 );
+	}
+
+	// walking out of the scope on a touch screen (input/czm_shooting.cpp): the open view on the way
+	if( CZM_ScopeHidden( ))
+	{
+		m_iFOV = default_fov->value;
+		m_flMouseSensitivity = 0;
 	}
 
 }

@@ -289,6 +289,8 @@ const char *CZM_SpectatorStyleName( int style );
  */
 // the client asks for a buy menu; true if our shop took it
 bool CZM_ShopShow( int menuType, int team );
+// the client asks for the radio selector; true if our radio wheel took it (CzmRadio.cpp)
+bool CZM_RadioShow( int menuType );
 // in a match: server menus (plugins, votes) drawn as cards over the game
 void CZM_DrawGameOverlay( void );
 

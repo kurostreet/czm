@@ -116,7 +116,7 @@ static const CzmAction s_actions[] =
 	{ "chat", "Чат", "Chat", "messagemode", GROUP_TALK },
 	{ "teamchat", "Командный чат", "Team chat", "messagemode2", GROUP_TALK },
 	{ "voice", "Голос", "Voice", "+voicerecord", GROUP_TALK },
-	{ "radio", "Рация", "Radio", "showvguimenu 38", GROUP_TALK },
+	{ "radio", "Колесо рации", "Radio wheel", "showvguimenu 38", GROUP_TALK },
 	{ "radio1", "Рация: команды", "Radio: commands", "radio1", GROUP_TALK },
 	{ "radio2", "Рация: группа", "Radio: group", "radio2", GROUP_TALK },
 	{ "radio3", "Рация: ответы", "Radio: replies", "radio3", GROUP_TALK },

@@ -79,9 +79,11 @@ inline void DrawTexture( int tex, float x1, float y1, float x2, float y2 )
 	//gEngfuncs.pTriAPI->End();
 }
 
+bool CZM_ScopeHidden( void );
+
 int CHudSniperScope::Draw(float flTime)
 {
-	if(gHUD.m_iFOV > 40)
+	if(gHUD.m_iFOV > 40 || CZM_ScopeHidden())
 		return 1;
 
 	gEngfuncs.pTriAPI->RenderMode(kRenderTransColor);
