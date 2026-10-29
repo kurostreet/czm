@@ -2373,7 +2373,7 @@ void CCzmServers::DrawDetails( void )
 		( CZM_IsRussian() ? "Сервер" : "Server" ), CZMF_UI_ACTION );
 	CzmStyle::Button( m_detailsClose, "", true, false, IsPressed( HIT_DETAILS_CLOSE ) );
 	CzmStyle::Icon( m_detailsClose, UI_DIR "icon_close.png" );
-	CzmStyle::Button( m_report, CZM_IsRussian() ? "Заблокировать" : "Block", true, false, IsPressed( HIT_REPORT ), CZMF_SMALL );
+	CzmStyle::Button( m_report, CZM_IsRussian() ? "Заблокировать" : "Block", true, false, IsPressed( HIT_REPORT ), 0, CZMF_SMALL );
 
 	DrawMapPicture( e, photo.x, photo.y, photo.w, photo.h );
 	if( e->badge[0] )

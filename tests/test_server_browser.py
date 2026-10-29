@@ -39,6 +39,10 @@ HARNESS = LOBBY_HARNESS.replace('unsigned CZM_White(){return 0xffffffff;}',
 HARNESS = HARNESS.replace('int h=f==CZMF_UI_TITLE?',
     'int h=f==CZMF_PANEL_TITLE?42:f==CZMF_NICK?28:f==CZMF_TILE_TEXT?19:'
     'f==CZMF_SHOP_PRICE?20:f==CZMF_BUTTON?27:f==CZMF_UI_TITLE?')
+HARNESS = HARNESS.replace('void CZM_DrawText(HFont f,int x,int y,int w,const char*s,unsigned c,unsigned just){',
+    'static unsigned blockLabelColor;static int blockLabels;'
+    'void CZM_DrawText(HFont f,int x,int y,int w,const char*s,unsigned c,unsigned just){'
+    'if(!strcmp(s,"Заблокировать")||!strcmp(s,"Block")){blockLabelColor=c;blockLabels++;}')
 HARNESS += r'''
 #include <cmath>
 static int picked,detailsAsked,authOpened,reportsOpened,blocksOpened;static std::string pickedAddress,blockedAddress,reportedAddress;
@@ -103,7 +107,8 @@ int main(int argc,char**argv){
    w.Activate(w.HIT_ROW);assert(w.m_bDetailsOpen&&picked==oldPicked);
    w.m_iPlayersState=2;w.m_iNumPlayers=18;strcpy(w.m_szPlayersFor,e.address);
    for(int i=0;i<18;i++){snprintf(w.m_players[i].name,48,"Player %d",i+1);w.m_players[i].frags=65-i;}
-   mapRects.clear();w.Draw();for(auto&r:mapRects)assert(r.w==r.h);
+   mapRects.clear();int oldLabels=blockLabels;w.Draw();for(auto&r:mapRects)assert(r.w==r.h);
+   assert(blockLabels==oldLabels+1&&blockLabelColor==CzmStyle::Ink());
    int beforeReport=reportsOpened;cursor(w.m_report);assert(w.HitTest()==w.HIT_REPORT);w.Activate(w.HIT_REPORT);
    assert(reportsOpened==beforeReport+1&&reportedAddress==e.address);
    cursor(w.m_play);assert(w.HitTest()==w.HIT_PLAY);
