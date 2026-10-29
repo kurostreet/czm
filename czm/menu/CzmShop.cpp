@@ -592,6 +592,7 @@ void CCzmShop::Open( int team )
 	m_iPressed = HIT_NONE;
 	m_szToast[0] = 0;
 	m_bClosing = false;
+	CZM_KeepClientMenu( this );
 	Show();
 }
 
@@ -602,15 +603,13 @@ void CCzmShop::Show()
 	BaseClass::Show();
 }
 
+// the stock way, on the next frame (Hide() on the only client window would leave it in the stack)
 void CCzmShop::Hide()
 {
-	BaseClass::Hide();
-	if( m_pStack->Count() <= 1 )
-	{
-		EngFuncs::KEY_ClearStates();
-		EngFuncs::KEY_SetDest( KEY_GAME );
-		EngFuncs::ClientCmd( false, "touch_setclientonly 0" );
-	}
+	if( m_bClosing )
+		return;
+	m_bClosing = true;
+	CZM_CloseClientMenuSoon( this );
 }
 
 bool CCzmShop::Owned( const CzmShopItem &item ) const
@@ -1144,14 +1143,9 @@ void CCzmShop::Draw()
 	ReadState();
 
 	// dead, spectating or out of the game: the shop is not for now
-	// (Hide only marks the window, the stack removes it after drawing)
-	if( !m_bAlive || !CL_IsActive( ))
+	if( m_bClosing || !m_bAlive || !CL_IsActive( ))
 	{
-		if( !m_bClosing )
-		{
-			m_bClosing = true;
-			Hide();
-		}
+		Hide();
 		return;
 	}
 
@@ -1201,7 +1195,7 @@ bool CZM_ShopShow( int menuType, int team )
 		return false;
 
 	// the server sends the buy menu again after a purchase: keep the open shop as it is
-	if( uiStatic.client.IsActive() && uiStatic.client.Current() == menu_czmshop )
+	if( CZM_ClientMenuOpen( menu_czmshop ))
 		return true;
 
 	menu_czmshop->Open( team );

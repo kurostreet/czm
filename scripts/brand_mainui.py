@@ -43,6 +43,8 @@ def brand_base_menu(source):
         "\t// advance global time\n\tuiStatic.realTime = flTime * 1000;\n",
         "\t// advance global time\n\tuiStatic.realTime = flTime * 1000;\n\n"
         "\tCZM_MenuAudioFrame();\n\n"
+        "\t// our windows over the game: closes asked for, the touch buttons back when none is open\n"
+        "\tCZM_ClientMenuFrame();\n\n"
         "\t// our loading screen replaces the console while the engine connects\n"
         "\tif( CZM_DrawLoadingScreen( ))\n\t\treturn;\n\n"
         "\t// server menus as cards over the game\n"

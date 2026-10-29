@@ -28,30 +28,73 @@ template<class T> T Q_max( T a, T b ) { return a > b ? a : b; }
 inline unsigned PackRGBA( int r, int g, int b, int a ) { return r | g << 8 | b << 16 | (unsigned)a << 24; }
 extern int ScreenWidth, ScreenHeight;
 struct Point { int x, y; }; struct Size { int w, h; };
-struct ClientStack { bool active = false; void *current = nullptr; bool IsActive() const { return active; } void *Current() const { return current; } };
+#define FBitSet( a, b ) (( a ) & ( b ))
+enum { QMF_HIDDEN = 1 << 3, QMF_CLOSING = 1 << 29 };
+class CMenuBaseWindow;
+// the rules of mainui's CWindowStack (WindowSystem.cpp) that matter here: Remove marks the window closing
+// and makes the last open one active; Update never removes the active window and does not draw a closing one
+struct WindowStack {
+	std::vector<CMenuBaseWindow *> stack; int active = -1;
+	bool IsActive() const { return !stack.empty(); }
+	int Count() const { return (int)stack.size(); }
+	CMenuBaseWindow *Current() const { return active >= 0 && active < Count() ? stack[active] : nullptr; }
+	void Clean() { stack.clear(); active = -1; }
+	bool IsVisible( const CMenuBaseWindow *w ) const;
+	void Add( CMenuBaseWindow *w ); void Remove( CMenuBaseWindow *w ); void Update();
+};
 struct MenuStack { bool active = false; bool IsActive() const { return active; } };
-struct UiStatic { int xOffset = 0, yOffset = 0, width = 1024, realTime = 0, cursorX = 0, cursorY = 0; ClientStack client; MenuStack menu; };
+struct UiStatic { int xOffset = 0, yOffset = 0, width = 1024, realTime = 0, cursorX = 0, cursorY = 0; WindowStack client; MenuStack menu; };
 extern UiStatic uiStatic;
-struct Stack { int count = 1; int Count() const { return count; } };
-class CMenuBaseClientWindow {
+class CMenuBaseWindow {
 public:
-	CMenuBaseClientWindow( const char * ) {}
-	virtual ~CMenuBaseClientWindow() {}
+	CMenuBaseWindow( const char * ) {}
+	virtual ~CMenuBaseWindow() {}
 	virtual void Init() {} virtual void VidInit() {}
-	virtual void Show() { shown = true; uiStatic.client.active = true; uiStatic.client.current = this; }
-	virtual void Hide() { shown = false; uiStatic.client.active = false; uiStatic.client.current = nullptr; }
+	virtual void Show() { Init(); VidInit(); m_pStack->Add( this ); closing = false; }
+	virtual void Hide() { m_pStack->Remove( this ); closing = true; }
 	virtual void Draw() {} virtual bool KeyDown( int ) { return false; } virtual bool KeyUp( int ) { return false; }
 	virtual bool MouseMove( int, int ) { return false; }
-	bool shown = false; Point pos; Size size; Stack stackStorage; Stack *m_pStack = &stackStorage;
+	unsigned iFlags = 0; bool closing = false; int draws = 0; Point pos; Size size; WindowStack *m_pStack = &uiStatic.client;
 };
+class CMenuBaseClientWindow : public CMenuBaseWindow { public: CMenuBaseClientWindow( const char *n ) : CMenuBaseWindow( n ) {} };
+inline bool WindowStack::IsVisible( const CMenuBaseWindow *w ) const {
+	return w == Current() || ( !FBitSet( w->iFlags, QMF_HIDDEN ) && std::find( stack.begin(), stack.end(), w ) != stack.end());
+}
+inline void WindowStack::Add( CMenuBaseWindow *w ) {
+	if( w == Current())
+		return; // as it is, a closing flag too
+	auto found = std::find( stack.begin(), stack.end(), w );
+	if( found == stack.end()) { stack.push_back( w ); found = stack.end() - 1; }
+	active = (int)( found - stack.begin());
+	w->iFlags &= ~QMF_CLOSING;
+}
+inline void WindowStack::Remove( CMenuBaseWindow *w ) {
+	if( !Count()) { uiStatic.menu.active = false; return; } // the stock code closes the main menu then
+	w->iFlags |= QMF_CLOSING;
+	for( int i = Count() - 1; i >= 0; i-- ) if( !FBitSet( stack[i]->iFlags, QMF_CLOSING )) { active = i; break; }
+}
+inline void WindowStack::Update() {
+	CMenuBaseWindow *current = Current();
+	std::vector<CMenuBaseWindow *> keep;
+	if( !current )
+		return;
+	for( int i = 0; i < Count(); i++ ) {
+		CMenuBaseWindow *w = stack[i];
+		if( i != active && !w->closing && FBitSet( w->iFlags, QMF_CLOSING )) { w->iFlags &= ~QMF_CLOSING; continue; }
+		if( i != active ) w->closing = false; // its closing animation is drawn under the active window, then it goes
+		keep.push_back( w );
+	}
+	stack = keep; active = (int)( std::find( stack.begin(), stack.end(), current ) - stack.begin());
+	if( !current->closing ) { current->draws++; current->Draw(); }
+}
 namespace UI { namespace Key { inline bool IsEscape( int k ) { return k == 27; } inline bool IsLeftMouse( int k ) { return k == 1; } } }
 extern std::vector<std::string> commands, args;
 extern std::map<std::string, std::string> cvars;
-extern int keyDest;
+extern int keyDest, clientOnly;
 struct EngFuncs {
 	static void KEY_SetDest( int d ) { keyDest = d; }
 	static void KEY_ClearStates() {}
-	static void ClientCmd( bool, const char *s ) { commands.push_back( s ); }
+	static void ClientCmd( bool, const char *s ) { commands.push_back( s ); if( !strncmp( s, "touch_setclientonly ", 20 )) clientOnly = s[20] - '0'; }
 	static void ClientCmdF( bool, const char *f, ... ) { char b[256]; va_list a; va_start( a, f ); vsnprintf( b, sizeof( b ), f, a ); va_end( a ); commands.push_back( b ); }
 	static const char *GetCvarString( const char *k ) { return cvars[k].c_str(); }
 	static int CmdArgc() { return (int)args.size(); }
@@ -75,10 +118,18 @@ void CZM_ShopDrawSilhouette( const char *image, int x, int y, int w, int h, unsi
 struct MenuEntry { MenuEntry( const char *n, void ( *f )( void )) { entries()[n] = f; } static std::map<std::string, void ( * )( void )> &entries() { static std::map<std::string, void ( * )( void )> m; return m; } };
 #define ADD_COMMAND( cmd, fn ) static MenuEntry entry_##cmd( #cmd, fn )
 #define ADD_MENU3( cmd, type, fn ) static type *cmd = new type(); void fn( void )
+inline void UI_CloseClientMenu( void ) { // BaseMenu.cpp
+	if( !uiStatic.client.IsActive()) return;
+	uiStatic.client.Clean(); EngFuncs::KEY_ClearStates(); EngFuncs::KEY_SetDest( KEY_GAME ); EngFuncs::ClientCmd( false, "touch_setclientonly 0" );
+}
+void CZM_CloseClientMenuSoon( CMenuBaseWindow *window );
+void CZM_KeepClientMenu( CMenuBaseWindow *window );
+bool CZM_ClientMenuOpen( CMenuBaseWindow *window );
+void CZM_ClientMenuFrame( void );
 '''
 
 SCENARIOS = r'''
-int ScreenWidth = 1536, ScreenHeight = 716, keyDest = KEY_GAME;
+int ScreenWidth = 1536, ScreenHeight = 716, keyDest = KEY_GAME, clientOnly = 0;
 UiStatic uiStatic; std::vector<std::string> commands, args; std::map<std::string, std::string> cvars;
 bool russian = true, active = true, trace = false;
 static std::vector<std::string> drawn; static std::string lastTint;
@@ -106,7 +157,17 @@ static void wheel( const char *v ) { cvars["czm_wheel"] = v; CZM_DrawTouchWheel(
 static CCzmRadio &w = *menu_czmradio;
 static void point( int x, int y ) { uiStatic.cursorX = x; uiStatic.cursorY = y; }
 static void centre( int slot ) { w.Layout(); float a = ( -90.0f + slot * 45.0f ) * M_PI / 180.0f; point( w.m_iX + cosf( a ) * w.m_iR * 0.64f, w.m_iY + sinf( a ) * w.m_iR * 0.64f ); }
-static void open() { commands.clear(); assert( CZM_RadioShow( 38 )); assert( w.shown && keyDest == KEY_MENU ); }
+// one frame of the menu: our frame hook, then the client windows
+static void frame() { uiStatic.realTime += 16; CZM_ClientMenuFrame(); uiStatic.client.Update(); }
+static bool closed() { frame(); frame(); return !uiStatic.client.IsActive() && clientOnly == 0 && keyDest == KEY_GAME; }
+static void open() { commands.clear(); assert( CZM_RadioShow( 38 )); assert( CZM_ClientMenuOpen( &w ) && keyDest == KEY_MENU && clientOnly == 1 ); frame(); assert( w.draws ); w.draws = 0; }
+static bool onlyTouch() { for( auto &c : commands ) if( c.rfind( "touch_setclientonly ", 0 )) return false; return true; }
+// a stock client window (menus/client/ClientWindow.h): Show and Hide as there
+struct Stock : CMenuBaseClientWindow {
+	Stock() : CMenuBaseClientWindow( "stock" ) {}
+	void Show() override { EngFuncs::KEY_SetDest( KEY_MENU ); EngFuncs::ClientCmd( true, "touch_setclientonly 1" ); CMenuBaseClientWindow::Show(); }
+	void Hide() override { CMenuBaseClientWindow::Hide(); if( m_pStack->Count() <= 1 ) { EngFuncs::KEY_SetDest( KEY_GAME ); EngFuncs::ClientCmd( false, "touch_setclientonly 0" ); } }
+};
 int main( int argc, char **argv ) {
 	// the engine's picks: a tap is the last weapon, a slide picks by its direction (up primary, then clockwise)
 	pick( "weapons 1 0 0 200" ); assert( sent( "lastinv\n" ));
@@ -154,24 +215,50 @@ int main( int argc, char **argv ) {
 	ScreenWidth = 1536; ScreenHeight = 716;
 
 	// the radio window for "showvguimenu 38" typed in the console
-	assert( !CZM_RadioShow( 28 ) && !CZM_RadioShow( 35 ) && !w.shown ); // buy menus and text radio menus stay as they are
+	assert( !CZM_RadioShow( 28 ) && !CZM_RadioShow( 35 ) && !uiStatic.client.IsActive()); // buy menus and text radio menus stay as they are
 	for( auto size : { std::pair<int,int>{ 1536, 716 }, { 2000, 932 }, { 960, 540 }, { 800, 360 }, { 1024, 768 } }) for( int lang = 0; lang < 2; lang++ ) {
 		ScreenWidth = size.first; ScreenHeight = size.second; russian = lang == 0;
 		open(); w.Layout();
 		for( int i = 0; i < 8; i++ ) { centre( i ); assert( w.Slot( uiStatic.cursorX, uiStatic.cursorY ) == i && w.HitTest() == w.HIT_SLOT + i ); }
 		point( w.m_iX, w.m_iY ); assert( w.HitTest() == w.HIT_HUB );
 		point( 2, 2 ); assert( w.HitTest() == w.HIT_OUTSIDE );
-		w.Draw(); w.Hide();
+		w.Draw(); w.Hide(); assert( closed());
 	}
 	ScreenWidth = 1536; ScreenHeight = 716; russian = true;
-	open(); centre( 3 ); w.KeyDown( 1 ); w.KeyUp( 1 ); assert( !w.shown && sent( "coverme\n" ) && keyDest == KEY_GAME );
-	open(); centre( 6 ); w.KeyDown( 1 ); centre( 7 ); w.MouseMove( 0, 0 ); assert( w.m_iHover == 7 ); w.KeyUp( 1 ); assert( sent( "holdpos\n" ));
-	open(); centre( 4 ); w.KeyDown( 1 ); w.KeyUp( 1 ); assert( sent( "impulse 201\n" ));
-	open(); point( w.m_iX, w.m_iY ); w.KeyDown( 1 ); w.KeyUp( 1 ); assert( !w.shown && commands.size() == 2 );
-	open(); point( 2, 2 ); w.KeyDown( 1 ); w.KeyUp( 1 ); assert( !w.shown );
-	open(); w.KeyDown( 27 ); assert( !w.shown );
-	open(); uiStatic.realTime += 7000; w.Draw(); assert( !w.shown );
-	open(); active = false; w.Draw(); assert( !w.shown ); active = true;
+	// every way out closes it for good: it opens again, the touch buttons and the keys are the game's
+	for( int round = 0; round < 3; round++ ) {
+		open(); centre( 3 ); w.KeyDown( 1 ); w.KeyUp( 1 ); assert( sent( "coverme\n" ) && closed());
+		open(); centre( 6 ); w.KeyDown( 1 ); centre( 7 ); w.MouseMove( 0, 0 ); assert( w.m_iHover == 7 ); w.KeyUp( 1 ); assert( sent( "holdpos\n" ) && closed());
+		open(); centre( 4 ); w.KeyDown( 1 ); w.KeyUp( 1 ); assert( sent( "impulse 201\n" ) && closed());
+		open(); point( w.m_iX, w.m_iY ); w.KeyDown( 1 ); w.KeyUp( 1 ); assert( closed() && onlyTouch());
+		open(); point( 2, 2 ); w.KeyDown( 1 ); w.KeyUp( 1 ); assert( closed());
+		open(); w.KeyDown( 27 ); assert( closed());
+		open(); uiStatic.realTime += 7000; frame(); assert( closed());
+		open(); active = false; frame(); active = true; assert( closed());
+	}
+	// asked again before the close went through: stays open
+	open(); w.KeyDown( 27 ); assert( CZM_RadioShow( 38 )); frame(); frame(); assert( uiStatic.client.Current() == &w && w.draws == 2 && clientOnly == 1 );
+	w.KeyDown( 27 ); assert( closed());
+	// over a stock window: only the radio goes, the window under it stays with the buttons hidden
+	{
+		Stock team; team.Show(); frame(); open(); w.KeyDown( 27 ); frame(); frame();
+		assert( uiStatic.client.Current() == &team && uiStatic.client.Count() == 1 && team.draws && clientOnly == 1 && keyDest == KEY_MENU );
+		UI_CloseClientMenu(); assert( closed());
+		// a stock window closed with Hide() as the only one: taken out of the stack, the radio opens again
+		team.Show(); frame(); team.Hide(); assert( closed()); open(); w.KeyDown( 27 ); assert( closed());
+		// it closes in the very frame it opens, over another window on its way out: the buttons come back all the same
+		team.Show(); frame(); open(); uiStatic.client.Remove( &team ); team.closing = true; w.KeyDown( 27 ); assert( closed());
+		team.Show(); frame(); open(); w.KeyDown( 27 ); team.Hide(); assert( closed());
+		team.Show(); frame(); open(); team.Hide(); frame(); assert( uiStatic.client.Current() == &w && clientOnly == 1 ); w.KeyDown( 27 ); assert( closed());
+	}
+	// the windows cleared without the stock close (a map change): the buttons come back once
+	open(); uiStatic.client.Clean(); commands.clear(); frame(); assert( clientOnly == 0 && keyDest == KEY_GAME && commands.size() == 1 );
+	frame(); assert( commands.size() == 1 );
+	// not over the main menu: the keys stay with it
+	open(); uiStatic.menu.active = true; keyDest = KEY_MENU; uiStatic.client.Clean(); frame(); assert( clientOnly == 0 && keyDest == KEY_MENU );
+	uiStatic.menu.active = false; keyDest = KEY_GAME;
+	// the touch wheels are drawn again once the radio window is gone
+	open(); w.KeyDown( 27 ); assert( closed()); wheel( "radio 2 700 400 214 0 0 0 1" ); assert( saw( "gfx/czm/shop/wheel8.png" ));
 
 	if( argc > 1 ) {
 		std::string view = argv[1]; russian = view.find( "en" ) == std::string::npos;
@@ -192,7 +279,10 @@ def build(folder):
     for name in ["extdll_menu.h", "BaseMenu.h", "BaseClientWindow.h", "Utils.h", "keydefs.h", "CzmMenu.h"]:
         (p / name).write_text('#include "stub.h"\n')
     source = (ROOT / "czm/menu/CzmWheels.cpp").read_text()
-    (p / "main.cpp").write_text("#include <cmath>\n" + source + SCENARIOS)
+    menu = (ROOT / "czm/menu/CzmMenu.cpp").read_text()
+    start = menu.index("static CMenuBaseWindow *s_closeSoon;")
+    end = menu.index("\n}\n", menu.index("void CZM_ClientMenuFrame( void )")) + 3
+    (p / "main.cpp").write_text("#include <cmath>\n" + source + "\n" + menu[start:end] + SCENARIOS)
     exe = p / "wheels"
     subprocess.run(["g++", "-std=c++11", "-Wall", "-Werror", "-Wno-unused-function", "-I" + folder,
                     str(p / "main.cpp"), "-o", str(exe)], check=True)
@@ -211,6 +301,15 @@ class WheelsTests(unittest.TestCase):
         brand = (ROOT / "scripts/brand_mainui.py").read_text()
         self.assertIn("CZM_RadioShow( menuType )", brand)
         self.assertIn("CZM_DrawTouchWheel();", brand)
+        # our windows over the game never close with Hide(): it would leave them in the client stack
+        self.assertIn("\\tCZM_ClientMenuFrame();\\n", brand)
+        self.assertLess(brand.index("CZM_ClientMenuFrame();"), brand.index("CZM_DrawLoadingScreen( ))"))
+        shop = (ROOT / "czm/menu/CzmShop.cpp").read_text()
+        for source in (shop, (ROOT / "czm/menu/CzmWheels.cpp").read_text()):
+            self.assertNotIn("BaseClass::Hide()", source)
+            self.assertIn("CZM_CloseClientMenuSoon( this );", source)
+            self.assertIn("CZM_KeepClientMenu( this );", source)
+        self.assertIn("if( CZM_ClientMenuOpen( menu_czmshop ))", shop)
         self.assertIn("czm/menu/CzmWheels.cpp", (ROOT / "cmake/CzmBranding.cmake").read_text())
         touch = (ROOT / "czm/menu/CzmTouch.cpp").read_text()
         self.assertIn('{ "wheel", "Колесо оружия", "Weapon wheel", "_czmwheel weapons", GROUP_COMBAT },', touch)

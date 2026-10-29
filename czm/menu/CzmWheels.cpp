@@ -419,6 +419,7 @@ void CCzmRadio::Open( void )
 	m_iHover = -1;
 	m_iActive = uiStatic.realTime;
 	m_bClosing = false;
+	CZM_KeepClientMenu( this );
 	Show();
 }
 
@@ -431,21 +432,16 @@ void CCzmRadio::Show()
 
 void CCzmRadio::Hide()
 {
-	BaseClass::Hide();
-	if( m_pStack->Count() <= 1 )
-	{
-		EngFuncs::KEY_ClearStates();
-		EngFuncs::KEY_SetDest( KEY_GAME );
-		EngFuncs::ClientCmd( false, "touch_setclientonly 0" );
-	}
+	Close();
 }
 
+// the stock way, on the next frame (Hide() on the only client window would leave it in the stack)
 void CCzmRadio::Close( void )
 {
 	if( m_bClosing )
 		return;
 	m_bClosing = true;
-	Hide();
+	CZM_CloseClientMenuSoon( this );
 }
 
 void CCzmRadio::Layout( void )
@@ -545,8 +541,8 @@ void CCzmRadio::Draw()
 {
 	HFont hintFont = CZM_Font( CZMF_TILE_STATUS );
 
-	// out of the match or idle: close (Hide only marks the window, the stack removes it after drawing)
-	if( !CL_IsActive() || uiStatic.realTime - m_iActive > CZM_RADIO_IDLE )
+	// out of the match or idle: close
+	if( m_bClosing || !CL_IsActive() || uiStatic.realTime - m_iActive > CZM_RADIO_IDLE )
 	{
 		Close();
 		return;
@@ -574,7 +570,7 @@ bool CZM_RadioShow( int menuType )
 	if( menuType != CZM_MENU_RADIOSELECTOR || !menu_czmradio )
 		return false;
 
-	if( uiStatic.client.IsActive() && uiStatic.client.Current() == menu_czmradio )
+	if( CZM_ClientMenuOpen( menu_czmradio ))
 		return true; // already open
 
 	menu_czmradio->Open();

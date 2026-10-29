@@ -1787,6 +1787,61 @@ void CZM_PlayClick( void )
 	EngFuncs::PlayLocalSound( uiStatic.sounds[SND_LAUNCH] );
 }
 
+/*
+ * windows over the game (shop, radio). Hide() on the only client window leaves it in the stack for
+ * good: the stack never removes its active window, so the client stack stays "active", the window
+ * is not drawn and the next one cannot close properly. Our windows close the stock way,
+ * UI_CloseClientMenu(), one frame later, out of the stack's own walk.
+ */
+static CMenuBaseWindow *s_closeSoon;
+static bool s_clientWasActive;
+
+void CZM_CloseClientMenuSoon( CMenuBaseWindow *window )
+{
+	s_closeSoon = window;
+}
+
+void CZM_KeepClientMenu( CMenuBaseWindow *window )
+{
+	if( s_closeSoon == window )
+		s_closeSoon = NULL;
+}
+
+bool CZM_ClientMenuOpen( CMenuBaseWindow *window )
+{
+	return window && s_closeSoon != window && uiStatic.client.Current() == window && !FBitSet( window->iFlags, QMF_CLOSING );
+}
+
+void CZM_ClientMenuFrame( void )
+{
+	CMenuBaseWindow *window = s_closeSoon, *current;
+
+	s_closeSoon = NULL;
+	if( window && uiStatic.client.IsVisible( window ))
+	{
+		if( uiStatic.client.Count() > 1 )
+			window->CMenuBaseWindow::Hide(); // another window stays open: the stack takes this one away
+		else
+			UI_CloseClientMenu();
+	}
+
+	// every window left is closing (a stock window closed with Hide()): the stack is done
+	current = uiStatic.client.Current();
+	if( current && FBitSet( current->iFlags, QMF_CLOSING ))
+		UI_CloseClientMenu();
+
+	// no window over the game any more, however it went: the touch buttons and the keys are the game's
+	if( uiStatic.client.IsActive( ))
+		s_clientWasActive = true;
+	else if( s_clientWasActive )
+	{
+		s_clientWasActive = false;
+		EngFuncs::ClientCmd( true, "touch_setclientonly 0" );
+		if( CL_IsActive() && !uiStatic.menu.IsActive( ))
+			EngFuncs::KEY_SetDest( KEY_GAME );
+	}
+}
+
 // main menu tracks in the order of the choice in Settings → Sound (credits in README.md)
 static const char *const CZM_MENU_TRACKS[] =
 {
