@@ -56,6 +56,7 @@ void Counts( const CzmJson &j )
 
 const char *SocialError( const char *code )
 {
+    if( !strcmp( code, "server_blocked" )) return T( "Сервер заблокирован модерацией CZM", "CZM moderation restricted this server" );
 	if( !strcmp( code, "account_required" ) || !strcmp( code, "session" )) return T( "Войдите в аккаунт, чтобы пользоваться друзьями и ЛС", "Sign in to use friends and messages" );
 	if( !strcmp( code, "not_found" ) || !strcmp( code, "account_not_found" )) return T( "Игрок с таким ID не найден", "No player with this ID" );
 	if( !strcmp( code, "not_friends" )) return T( "Отправлять сообщения можно только взаимным друзьям", "Messages require mutual friendship" );

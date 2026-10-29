@@ -505,6 +505,7 @@ void CCzmLobby::FinishRequest(int status,const char *body,int kind){
         }else if(!strcmp(code,"members_not_ready"))Notice(L("Не все игроки готовы","Players are not ready"));
         else if(!strcmp(code,"server_full"))Notice(L("На сервере не хватает мест","Not enough server slots"));
         else if(!strcmp(code,"server_unavailable"))Notice(L("Сервер не отвечает","Game server unavailable"));
+        else if(!strcmp(code,"server_blocked"))Notice(L("Сервер заблокирован модерацией CZM. Выберите другой","CZM moderation restricted this server. Choose another"));
         else if(!strcmp(code,"lobby_full"))Notice(L("Комната заполнена","The room is full"));
         else if(!strcmp(code,"language_warning")){
             const int warnings=j.Int(j.Get(0,"warnings"),0);

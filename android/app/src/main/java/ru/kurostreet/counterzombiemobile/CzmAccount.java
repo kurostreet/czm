@@ -51,6 +51,7 @@ final class CzmAccount {
     }
 
     static synchronized int generation() { load(); return generation; }
+    static synchronized boolean hasSession() { load(); return !token.isEmpty(); }
 
     private static JSONObject object(String response) throws Exception {
         int line = response.indexOf('\n');
@@ -276,6 +277,7 @@ final class CzmAccount {
     static void show(String legacy, String nick, boolean ru) {
         show(legacy, nick, ru, false);
     }
+    static void showContext(String legacy, boolean ru) { show(legacy, profileNick, ru); }
     static void register(String legacy, String nick, boolean ru) {
         show(legacy, nick, ru, true);
     }

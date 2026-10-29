@@ -42,6 +42,14 @@ public final class CzmNet {
 
     private CzmNet() {}
 
+    public static void serverPolicyBegin(){ServerPolicy.INSTANCE.beginConnection();ServerBlocks.refresh(true);}
+    public static int serverPolicyState(String address){int state=ServerPolicy.INSTANCE.connectionState(address);return state==1?ServerBlocks.connectionState(address):state;}
+    public static boolean serverPolicyBlocked(String address){return ServerPolicy.INSTANCE.blocked(address)||ServerBlocks.hidden(address);}
+    public static int serverPolicyRevision(){return ServerPolicy.INSTANCE.revision()+ServerBlocks.revision();}
+    public static void serverBlocksFrame(String key){ServerBlocks.context(key);}
+    public static void serverBlocksShow(String key,boolean ru){ServerBlocks.show(key,ru);}
+    public static void serverReportShow(String address,String name,String key,boolean ru){CzmServerReport.show(address,name,key,ru);}
+
     public static void lobbyVoiceStart(String url,String key,int player){CzmLobbyVoiceDialog.loadPreferences();CzmLobbyVoice.start(url,key,player);}
     public static void lobbyVoiceTest(){CzmLobbyVoiceDialog.show();}
     public static boolean lobbyVoiceMicEnabled(int player){return CzmLobbyVoice.microphoneEnabled(player);}

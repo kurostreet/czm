@@ -74,6 +74,18 @@ public class AccountClientTest {
         results.put(50,"200\nold-profile"); generations.put(50,1);
         check(new String(CzmNet.poll(50),StandardCharsets.UTF_8).equals("409\n"), "discard already completed stale response");
         check(!results.containsKey(50) && !generations.containsKey(50), "drain completion maps");
+        JSONObject hidden=new JSONObject("{\"hidden\":[{\"server\":\"203.0.113.5:27015\",\"enabled\":1}]}");
+        ServerBlocks.acceptReport(hidden,2);
+        check(ServerBlocks.hidden("203.0.113.5:27015"),"report hides server for its account");
+        ServerBlocks.acceptReport(new JSONObject("{\"hidden\":[{\"server\":\"203.0.113.5:27015\",\"enabled\":0}]}"),2);
+        check(!ServerBlocks.hidden("203.0.113.5:27015"),"personal off restores visibility");
+        field(ServerPolicy.class,"blocked").set(ServerPolicy.INSTANCE,java.util.Collections.singleton(ServerPolicy.endpoint("203.0.113.5:27015")));
+        check(CzmNet.serverPolicyBlocked("203.0.113.5:27015"),"personal off cannot cancel moderation");
+        field(ServerPolicy.class,"blocked").set(ServerPolicy.INSTANCE,java.util.Collections.emptySet());
+        ServerBlocks.acceptReport(hidden,2);set("generation",3);
+        check(!ServerBlocks.hidden("203.0.113.5:27015"),"another account never inherits personal blocks");
+        ServerBlocks.acceptReport(hidden,2);
+        check(!ServerBlocks.hidden("203.0.113.5:27015"),"late old-account receipt cannot hide a new account's server");
         System.out.println("ACCOUNT_CLIENT_ROUTING_OK");
     }
 }

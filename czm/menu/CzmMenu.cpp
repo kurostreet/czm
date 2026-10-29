@@ -108,6 +108,9 @@ static const struct { const char *key, *ru, *en; } s_strings[] =
 	{ "diag_detailed_hint", "Расширенные сведения для поиска ошибок", "Detailed information for troubleshooting" },
 	{ "err_connect", "Соединение прервалось до входа в игру.\nПричина отключения не передана.", "The connection closed before entering the game.\nNo disconnect reason was provided." },
 	{ "err_timeout", "Сервер не ответил за отведённое время.\nСоединение закрыто по таймауту.", "The server did not respond in time.\nThe connection timed out." },
+	{ "err_server_blocked", "Этот сервер заблокирован модерацией CZM.\nВыберите другой сервер.", "CZM moderation restricted this server.\nChoose another server." },
+	{ "err_server_policy", "Не удалось проверить доступ к серверу.\nПроверьте интернет и повторите подключение.", "Could not check server access.\nCheck your connection and try again." },
+	{ "err_server_hidden", "Этот сервер в вашем списке заблокированных.\nОткройте «Серверы» — «Заблокированные», чтобы вернуть доступ.", "This server is in your blocked list.\nOpen Servers — Blocked to restore access." },
 	{ "err_full", "Сервер заполнен.\nПопробуй позже или выбери другой режим.", "The server is full.\nTry again later or pick another mode." },
 	{ "err_password", "Неверный пароль сервера.", "Wrong server password." },
 	{ "err_banned", "Доступ на этот сервер закрыт.", "You are not allowed on this server." },
@@ -1138,23 +1141,29 @@ static void CZM_HomeEnsureLoaded( void )
 int CZM_ServerCount( void )
 {
 	CZM_HomeEnsureLoaded();
-	return s_homeCount;
+	int visible = 0;
+	for( int i = 0; i < s_homeCount; i++ ) if( !CZM_ServerBlocked( s_home[i].address )) visible++;
+	return visible;
 }
 
 CzmServer *CZM_Server( int index )
 {
 	CZM_HomeEnsureLoaded();
-	return ( index >= 0 && index < s_homeCount ) ? &s_home[index] : NULL;
+	if( index < 0 ) return NULL;
+	for( int i = 0; i < s_homeCount; i++ )
+		if( !CZM_ServerBlocked( s_home[i].address ) && index-- == 0 ) return &s_home[i];
+	return NULL;
 }
 
 int CZM_HomePinCount( void )
 {
-	return CZM_ServerCount();
+	CZM_HomeEnsureLoaded(); return s_homeCount;
 }
 
 bool CZM_HomePinned( const char *address )
 {
-	for( int i = 0; i < CZM_ServerCount(); i++ )
+	CZM_HomeEnsureLoaded();
+	for( int i = 0; i < s_homeCount; i++ )
 	{
 		if( !strcmp( s_home[i].address, address ))
 			return true;
@@ -1391,6 +1400,12 @@ static void CZM_ShowPendingError( void )
 		snprintf( text, sizeof( text ), "%s", CZM_T( "err_connect" ));
 	else if( !strcmp( reason, "#connection_timeout" ))
 		snprintf( text, sizeof( text ), "%s", CZM_T( "err_timeout" ));
+	else if( !strcmp( reason, "#czm_server_blocked" ))
+		snprintf( text, sizeof( text ), "%s", CZM_T( "err_server_blocked" ));
+	else if( !strcmp( reason, "#czm_server_policy" ))
+		snprintf( text, sizeof( text ), "%s", CZM_T( "err_server_policy" ));
+	else if( !strcmp( reason, "#czm_server_hidden" ))
+		snprintf( text, sizeof( text ), "%s", CZM_T( "err_server_hidden" ));
 	else if( CZM_Contains( reason, "full" ))
 		snprintf( text, sizeof( text ), "%s", CZM_T( "err_full" ));
 	else if( CZM_Contains( reason, "password" ))

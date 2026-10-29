@@ -332,5 +332,7 @@ def invite(conn, key, target, server, proto, name, nonce):
     """A game invite in the private dialog: the friend's game shows it as a card with a join button."""
     if not _valid_server(server) or proto not in ("gs", "49"):
         raise accounts.AuthError("server")
+    from . import server_moderation
+    server_moderation.require_allowed(conn, server)
     name = service.profanity.clean(service.clean_text(name, 60)) or server
     return send(conn, key, target, f"{INVITE}{proto} {server} {name}", nonce, invite=True)

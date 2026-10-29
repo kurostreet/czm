@@ -30,6 +30,8 @@ struct CzmTextEdit{char text[128];bool active;void End(){active=false;}
 const char*CZM_T(const char*);unsigned CZM_PingColor(int);int CZM_LineWidth();
 bool CZM_HomePinned(const char*);bool CZM_HomeSetPinned(const char*,const char*,bool);
 void CZM_ServerAuthShow(const char*,const char*);
+void CZM_ServerReportShow(const char*,const char*);bool CZM_ServerBlocked(const char*);
+void CZM_ServerBlocksShow();
 void CZM_LobbyPickedServer(const char*,const char*,const char*,const char*,int,int);
 '''
 HARNESS = LOBBY_HARNESS.replace('unsigned CZM_White(){return 0xffffffff;}',
@@ -39,7 +41,10 @@ HARNESS = HARNESS.replace('int h=f==CZMF_UI_TITLE?',
     'f==CZMF_SHOP_PRICE?20:f==CZMF_BUTTON?27:f==CZMF_UI_TITLE?')
 HARNESS += r'''
 #include <cmath>
-static int picked,detailsAsked,authOpened;static std::string pickedAddress;
+static int picked,detailsAsked,authOpened,reportsOpened,blocksOpened;static std::string pickedAddress,blockedAddress,reportedAddress;
+bool CZM_ServerBlocked(const char*a){return blockedAddress==a;}
+void CZM_ServerReportShow(const char*a,const char*){reportsOpened++;reportedAddress=a;}
+void CZM_ServerBlocksShow(){blocksOpened++;}
 unsigned CZM_PingColor(int){return PackRGBA(231,187,96,255);}int CZM_LineWidth(){return 1;}
 const char*CZM_T(const char*k){
  static const char*labels[][3]={{"srv_title","СЕРВЕРЫ","SERVERS"},{"srv_tab_all","Все","All"},
@@ -86,8 +91,12 @@ int main(int argc,char**argv){
   ScreenWidth=resolution.first;ScreenHeight=resolution.second;
   for(int lang=0;lang<2;lang++)for(int picker=0;picker<2;picker++){
    russian=lang==0;s_lobbyPicker=picker;w.m_bDetailsOpen=false;w.Layout();
+   int beforeBlocks=blocksOpened;cursor(w.m_blocked);assert(w.HitTest()==w.HIT_BLOCKS);w.Activate(w.HIT_BLOCKS);
+   assert(blocksOpened==beforeBlocks+1);
    assert(w.m_clip.w==ScreenWidth-w.m_iMargin*2);assert(w.m_detailsMap.w==w.m_detailsMap.h);
-   for(auto*r:{&w.m_detailsMap,&w.m_detailsInfo,&w.m_detailsClose,&w.m_fav,&w.m_admin,&w.m_play})assert(inside(*r,w.m_details));
+   for(auto*r:{&w.m_detailsMap,&w.m_detailsInfo,&w.m_detailsClose,&w.m_report,&w.m_fav,&w.m_admin,&w.m_play})assert(inside(*r,w.m_details));
+   assert(!overlap(w.m_report,w.m_detailsClose));
+   for(auto&r:w.m_filters)assert(r.y>w.m_tabs[0].y||!overlap(r,w.m_blocked));
    assert(!overlap(w.m_detailsMap,w.m_detailsInfo));assert(!overlap(w.m_detailsMap,w.m_fav));
    assert(!overlap(w.m_admin,w.m_play)&&!overlap(w.m_fav,w.m_admin));
    cursor(w.RowRect(0));assert(w.HitTest()==w.HIT_ROW);int oldPicked=picked;
@@ -95,6 +104,8 @@ int main(int argc,char**argv){
    w.m_iPlayersState=2;w.m_iNumPlayers=18;strcpy(w.m_szPlayersFor,e.address);
    for(int i=0;i<18;i++){snprintf(w.m_players[i].name,48,"Player %d",i+1);w.m_players[i].frags=65-i;}
    mapRects.clear();w.Draw();for(auto&r:mapRects)assert(r.w==r.h);
+   int beforeReport=reportsOpened;cursor(w.m_report);assert(w.HitTest()==w.HIT_REPORT);w.Activate(w.HIT_REPORT);
+   assert(reportsOpened==beforeReport+1&&reportedAddress==e.address);
    cursor(w.m_play);assert(w.HitTest()==w.HIT_PLAY);
    float scroll=w.m_flScroll;w.KeyDown(K_MWHEELDOWN);assert(w.m_flScroll==scroll);
    w.KeyDown(1);assert(!w.m_bMaybeScroll);w.KeyUp(1);
@@ -108,6 +119,11 @@ int main(int argc,char**argv){
    w.m_bDetailsOpen=true;w.OpenDialog(w.DLG_PASSWORD);cursor(w.m_dlgField);assert(w.HitTest()==w.HIT_DIALOG_FIELD);
    w.KeyDown(27);assert(w.m_iDialog==w.DLG_NONE&&w.m_bDetailsOpen);w.m_bDetailsOpen=false;
   }
+ }
+ for(int tab=0;tab<TAB_COUNT;tab++){
+  w.m_iTab=tab;w.m_iFilters=0;w.m_szQuery[0]=0;e.sources=SRC_INTERNET|SRC_FAVORITE|SRC_HISTORY;
+  blockedAddress.clear();assert(w.Passes(e));blockedAddress=e.address;assert(!w.Passes(e));
+  blockedAddress.clear();assert(w.Passes(e));assert(e.sources==(SRC_INTERNET|SRC_FAVORITE|SRC_HISTORY));
  }
  ScreenWidth=1536;ScreenHeight=716;russian=true;s_lobbyPicker=true;w.m_bDetailsOpen=false;w.Layout();
  if(argc>1){trace=true;if(!strcmp(argv[1],"details"))w.m_bDetailsOpen=true;w.Draw();}
@@ -165,7 +181,7 @@ int main(){for(int photo=0;photo<2;photo++)for(int size:{48,136,280}){
             'void CCzmServers::Activate(', 'bool CCzmServers::KeyDown(', 'bool CCzmServers::KeyUp(',
             'bool CCzmServers::MouseMove(', 'void CCzmServers::Char(', 'void CCzmServers::DrawDetails(',
             'void CCzmServers::DrawHeader(', 'void CCzmServers::DrawFilters(', 'void CCzmServers::DrawRow(',
-            'void CCzmServers::DrawChip(', 'void CCzmServers::Connect(']
+            'void CCzmServers::DrawChip(', 'void CCzmServers::Connect(', 'bool CCzmServers::Passes(']
         drawing='\n'.join(function(source,s) for s in ['static const char *Plural(', 'static void CountText(', 'static void DrawMapPicture(', 'static unsigned int ModeColor(', 'static void FillRect('])
         code='\n'.join([HARNESS,wrapping,declarations,drawing,declaration,'static CCzmServers*s_browser;static bool s_lobbyPicker;\n'])
         code+='\n'.join(function(source,s) for s in methods)+ADAPTERS+SCENARIOS

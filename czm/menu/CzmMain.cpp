@@ -1459,6 +1459,7 @@ private:
 		HIT_RESUME,
 		HIT_SETTINGS,
 		HIT_LEAVE,
+		HIT_REPORT,
 	};
 
 	void Layout( void );
@@ -1467,7 +1468,7 @@ private:
 	void Activate( int hit );
 
 	int m_iPressed;
-	CzmRect m_panel, m_resume, m_settings, m_leave;
+	CzmRect m_panel, m_resume, m_settings, m_leave, m_report;
 };
 
 CCzmPauseMenu::CCzmPauseMenu() : CMenuFramework( "CzmPause" )
@@ -1484,18 +1485,19 @@ void CCzmPauseMenu::Show()
 void CCzmPauseMenu::Layout( void )
 {
 	const int W = ScreenWidth, H = ScreenHeight;
-	int pw = H * 0.66f, ph = H * 0.48f;
+	int pw = H * 0.80f, ph = H * 0.60f;
 	int bw, bh, y, gap;
 
 	m_panel = CZM_Rect(( W - pw ) / 2, ( H - ph ) / 2, pw, ph );
 	bw = pw * 0.78f;
-	bh = ph * 0.15f;
-	gap = ph * 0.05f;
-	y = m_panel.y + ph * 0.34f;
+	bh = ph * 0.12f;
+	gap = ph * 0.04f;
+	y = m_panel.y + ph * 0.29f;
 
 	m_resume = CZM_Rect(( W - bw ) / 2, y, bw, bh );
 	m_settings = CZM_Rect( m_resume.x, y + bh + gap, bw, bh );
-	m_leave = CZM_Rect( m_resume.x, y + ( bh + gap ) * 2, bw, bh );
+	m_report = CZM_Rect( m_resume.x, y + ( bh + gap ) * 2, bw, bh );
+	m_leave = CZM_Rect( m_resume.x, y + ( bh + gap ) * 3, bw, bh );
 }
 
 int CCzmPauseMenu::HitTest( void ) const
@@ -1506,6 +1508,7 @@ int CCzmPauseMenu::HitTest( void ) const
 		return HIT_SETTINGS;
 	if( m_leave.HasCursor( ))
 		return HIT_LEAVE;
+	if( m_report.HasCursor( )) return HIT_REPORT;
 	return HIT_NONE;
 }
 
@@ -1581,6 +1584,7 @@ void CCzmPauseMenu::Draw()
 
 	CZM_DrawButton( UI_DIR "button_primary.png", m_resume, CZM_T( "resume" ), CZM_White(), IsPressed( HIT_RESUME ));
 	CZM_DrawButton( UI_DIR "button_secondary.png", m_settings, CZM_T( "settings" ), CZM_White(), IsPressed( HIT_SETTINGS ));
+	CZM_DrawButton( UI_DIR "button_secondary.png", m_report, CZM_IsRussian() ? "Пожаловаться на сервер" : "Report server", CZM_White(), IsPressed( HIT_REPORT ), CZMF_SMALL );
 	CZM_DrawButton( UI_DIR "button_danger.png", m_leave, CZM_T( "to_menu" ), PackRGBA( 255, 150, 150, 255 ), IsPressed( HIT_LEAVE ));
 }
 
@@ -1615,6 +1619,14 @@ void CCzmPauseMenu::Activate( int hit )
 	case HIT_SETTINGS:
 		CZM_OpenSettings( CZM_TAB_LAST );
 		break;
+	case HIT_REPORT:
+	{
+		char address[64] = "";
+		sscanf( EngFuncs::GetCvarString( "czm_tab_state" ), "%63s", address );
+		if( !address[0] ) Q_strncpy( address, EngFuncs::GetCvarString( "czm_retry_address" ), sizeof( address ));
+		CZM_ServerReportShow( address, EngFuncs::GetCvarString( "czm_loading_host" ));
+		break;
+	}
 	case HIT_LEAVE:
 		EngFuncs::ClientCmd( false, "disconnect\n" );
 		// the disconnect runs on the next frame, open the main screen directly

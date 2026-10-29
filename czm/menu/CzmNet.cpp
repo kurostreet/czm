@@ -147,6 +147,55 @@ bool CZM_CopyText( const char *text )
 	CZM_End( env ); return copied;
 }
 
+bool CZM_ServerBlocked( const char *address )
+{
+	JNIEnv *env; jclass cls;
+	if( !CZM_Begin( &env, &cls )) return false;
+	jmethodID m = CZM_Method( env, cls, "serverPolicyBlocked", "(Ljava/lang/String;)Z" );
+	bool blocked = m && env->CallStaticBooleanMethod( cls, m, env->NewStringUTF( address ? address : "" ));
+	CZM_End( env ); return blocked;
+}
+
+int CZM_ServerPolicyRevision( void )
+{
+	JNIEnv *env; jclass cls;
+	if( !CZM_Begin( &env, &cls )) return 0;
+	jmethodID m = CZM_Method( env, cls, "serverPolicyRevision", "()I" );
+	int revision = m ? env->CallStaticIntMethod( cls, m ) : 0;
+	CZM_End( env ); return revision;
+}
+
+void CZM_ServerReportShow( const char *address, const char *name )
+{
+	if( !address || !address[0] ) return;
+	if( !CZM_OnlineAccount() ) { CZM_AccountShow( CZM_OnlineKey(), EngFuncs::GetCvarString( "name" )); return; }
+	JNIEnv *env; jclass cls;
+	if( !CZM_Begin( &env, &cls )) return;
+	jmethodID m = CZM_Method( env, cls, "serverReportShow", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Z)V" );
+	if( m ) env->CallStaticVoidMethod( cls, m, env->NewStringUTF( address ), env->NewStringUTF( name ? name : "" ),
+		env->NewStringUTF( CZM_OnlineKey() ), (jboolean)CZM_IsRussian() );
+	CZM_End( env );
+}
+
+void CZM_ServerBlocksFrame( void )
+{
+	JNIEnv *env; jclass cls;
+	if( !CZM_Begin( &env, &cls )) return;
+	jmethodID m = CZM_Method( env, cls, "serverBlocksFrame", "(Ljava/lang/String;)V" );
+	if( m ) env->CallStaticVoidMethod( cls, m, env->NewStringUTF( CZM_OnlineKey() ));
+	CZM_End( env );
+}
+
+void CZM_ServerBlocksShow( void )
+{
+	if( !CZM_OnlineAccount() ) { CZM_AccountShow( CZM_OnlineKey(), EngFuncs::GetCvarString( "name" )); return; }
+	JNIEnv *env; jclass cls;
+	if( !CZM_Begin( &env, &cls )) return;
+	jmethodID m = CZM_Method( env, cls, "serverBlocksShow", "(Ljava/lang/String;Z)V" );
+	if( m ) env->CallStaticVoidMethod( cls, m, env->NewStringUTF( CZM_OnlineKey() ), (jboolean)CZM_IsRussian() );
+	CZM_End( env );
+}
+
 void CZM_ServerAuthShow( const char *address, const char *name )
 {
 	JNIEnv *env;
@@ -568,6 +617,11 @@ void CZM_UpdateState( int *state, double *done, double *total, char *error, size
 bool CZM_NetAvailable( void ) { return false; }
 bool CZM_CopyText( const char * ) { return false; }
 void CZM_ServerAuthShow( const char *, const char * ) {}
+void CZM_ServerReportShow( const char *, const char * ) {}
+bool CZM_ServerBlocked( const char * ) { return false; }
+int CZM_ServerPolicyRevision( void ) { return 0; }
+void CZM_ServerBlocksFrame( void ) {}
+void CZM_ServerBlocksShow( void ) {}
 void CZM_AccountShow( const char *, const char * ) {}
 void CZM_AccountRegister( const char *, const char * ) {}
 void CZM_AccountContext( const char *, const char * ) {}

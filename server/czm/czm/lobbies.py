@@ -260,6 +260,8 @@ def create(conn, key, title, description, visibility, capacity, server, proto, n
         raise accounts.AuthError("settings")
     if not social._valid_server(server) or proto not in ("gs", "49"):
         raise accounts.AuthError("server")
+    from . import server_moderation
+    server_moderation.require_allowed(conn, server)
     if language not in ("", "ru", "en"):
         raise accounts.AuthError("language")
     old = conn.execute("SELECT * FROM lobby_creation_ops WHERE player=? AND nonce=?", (player, nonce)).fetchone()
@@ -378,6 +380,8 @@ def change_server(conn, key, room_id, server, proto):
         raise accounts.AuthError("not_owner", 403)
     if not social._valid_server(server) or proto not in ("gs", "49"):
         raise accounts.AuthError("server")
+    from . import server_moderation
+    server_moderation.require_allowed(conn, server)
     if (server, proto) != (room["server"], room["proto"]):
         conn.execute("UPDATE lobbies SET server=?,proto=?,revision=revision+1 WHERE id=?",
                      (server, proto, room_id))
@@ -596,6 +600,7 @@ def launch_internal(conn, key, room_id, nonce, revision):
     INTERNAL ONLY: caller must first probe the actual game server. Never
     accept client-submitted occupancy/capacity as proof of free slots.
     """
+    from . import server_moderation
     player = _actor(conn, key)
     _nonce(nonce)
     previous = conn.execute("SELECT * FROM lobby_launches WHERE lobby_id=?",
@@ -605,11 +610,13 @@ def launch_internal(conn, key, room_id, nonce, revision):
             raise accounts.AuthError("not_owner", 403)
         if previous["nonce"] != nonce:
             raise accounts.AuthError("launch_already_started", 409)
+        server_moderation.require_allowed(conn, previous["server"])
         return {"launch": _launch_state(conn, previous)}
     if conn.execute("SELECT 1 FROM lobby_launches WHERE owner=? AND nonce=?",
                     (player,nonce)).fetchone():
         raise accounts.AuthError("nonce", 409)
     room = _room(conn, room_id)
+    server_moderation.require_allowed(conn, room["server"])
     if player != room["owner"]:
         raise accounts.AuthError("not_owner", 403)
     if revision != room["revision"]:
@@ -719,6 +726,7 @@ def owner_heartbeat(conn, key, room_id):
 
 def launch_snapshot(conn,key,room_id,nonce,revision):
     """Authorize and freeze a request to be checked outside the SQLite write lock."""
+    from . import server_moderation
     player=_actor(conn,key)
     _nonce(nonce)
     previous=conn.execute("SELECT * FROM lobby_launches WHERE lobby_id=?",
@@ -728,8 +736,10 @@ def launch_snapshot(conn,key,room_id,nonce,revision):
             raise accounts.AuthError("not_owner",403)
         if previous["nonce"]!=nonce:
             raise accounts.AuthError("launch_already_started",409)
+        server_moderation.require_allowed(conn,previous["server"])
         return {"previous":_launch_state(conn,previous)}
     room=_room(conn,room_id)
+    server_moderation.require_allowed(conn,room["server"])
     if player!=room["owner"]:
         raise accounts.AuthError("not_owner",403)
     if revision!=room["revision"]:
@@ -745,6 +755,8 @@ def launch_snapshot(conn,key,room_id,nonce,revision):
 
 def commit_launch_snapshot(conn,key,room_id,nonce,revision,snapshot):
     if snapshot.get("previous"):
+        from . import server_moderation
+        server_moderation.require_allowed(conn,snapshot["previous"]["server"])
         return {"launch":snapshot["previous"]}
     player=_actor(conn,key)
     # If the launch already committed while the probe was in-flight,
@@ -771,6 +783,8 @@ def acknowledge_launch(conn,key,launch_id):
         raise accounts.AuthError("launch_not_found",404)
     if entry["delivery_expires"]<=now():
         raise accounts.AuthError("launch_expired",410)
+    from . import server_moderation
+    server_moderation.require_allowed(conn,entry["server"])
     conn.execute("UPDATE launch_members SET delivered_at=CASE "
                  "WHEN delivered_at=0 THEN ? ELSE delivered_at END "
                  "WHERE launch=? AND player=?",(now(),launch_id,player))

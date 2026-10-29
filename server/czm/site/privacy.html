@@ -41,7 +41,7 @@ hr{border:0;border-top:2px solid var(--red);margin:40px 0 0;width:64px}
 <h1 class="h-game">Конфиденциальность</h1>
 <p class="muted">Редакция от 28 октября 2026 года. Касается игры Counter Zombie Mobile для Android и сайта counter-zombie.ru.</p>
 
-<p>Игре не нужны ваше настоящее имя, телефон или документы. Всё, что хранится, лежит на нашем сервере в России и нужно только для работы игры: чата, друзей, профиля и обновлений. Мы ничего не продаём и не показываем рекламу.</p>
+<p>Игре не нужны ваше настоящее имя, телефон или документы. Основная база игры хранится на нашем сервере в России и нужна для работы игры: чата, друзей, профиля и обновлений. Для почты и служебных уведомлений используются внешние сервисы, перечисленные ниже. Мы ничего не продаём и не показываем рекламу.</p>
 
 <h2>Что хранит игра</h2>
 <ul>
@@ -58,6 +58,8 @@ hr{border:0;border-top:2px solid var(--red);margin:40px 0 0;width:64px}
 <li>Проверка микрофона в лобби: запись до трёх секунд и её прослушивание выполняются только на вашем устройстве. Запись находится в оперативной памяти и удаляется при закрытии проверки, выходе из лобби или сворачивании игры. Команде и нашему серверу она не отправляется.</li>
 <li>Голос во время матча передаётся игровому серверу, к которому вы подключились, и игрокам на нём. Его владельцы определяют обработку данных на своём сервере. Микрофон можно не разрешать или выключить — играть это не мешает.</li>
 <li>Жалобы игроков и блокировки, если они были. В жалобе сохраняется копия обжалованного текста (сообщения, названия лобби или статуса): лобби и старые сообщения удаляются раньше, чем жалобу успевают проверить. Принятие <a href="/rules">правил сообщества</a> отмечается номером редакции и временем.</li>
+<li>Личный список скрытых серверов хранит адрес, название и состояние переключателя в аккаунте. Он синхронизируется между вашими устройствами; запись можно убрать в списке или удалить вместе с аккаунтом.</li>
+<li>Жалобы на серверы: адрес и порт, название, причина, необязательный комментарий, ID аккаунта автора и время. Для ограничения одной жалобы на сервер за 30 дней нужен подтверждённый адрес почты. В записи жалобы хранится только защитный хеш адреса с серверным секретом; после 30 дней он очищается при плановой очистке. Адрес почты аккаунта автоматически в карточку жалобы в Telegram не входит. Для модерации считаем число обращений автора, количество разных серверов и число разных заявителей. История ограничений и пересмотра сохраняется для безопасности. Пользователь, на которого пожаловались, и владелец сервера не получают личность заявителя.</li>
 </ul>
 
 <h2>Что хранит сайт</h2>
@@ -72,6 +74,7 @@ hr{border:0;border-top:2px solid var(--red);margin:40px 0 0;width:64px}
 <ul>
 <li>Письма с кодами отправляют почтовые сервисы Resend и SMTP.BZ. Им передаётся только адрес почты и текст письма с кодом.</li>
 <li>Игровые серверы в списке держат их владельцы. Когда вы заходите на сервер, он видит ваш ник и IP-адрес, как в любой сетевой игре.</li>
+<li>Служебный Telegram-бот доставляет модераторам жалобы на игроков с необходимым контекстом: ником и ID автора и нарушителя, обжалованным текстом, а при жалобе на аватар — изображением. В уведомлении о сервере передаются его название, адрес, число жалоб, ник и ID заявителя, число его обращений и разных серверов, выбранные причины и введённое им пояснение. Пароли и ключи входа в уведомления не входят. Доступ к боту ограничен администрацией CZM.</li>
 <li>Больше никому, кроме случаев, когда этого прямо требует закон.</li>
 </ul>
 
@@ -89,7 +92,7 @@ hr{border:0;border-top:2px solid var(--red);margin:40px 0 0;width:64px}
 <hr>
 <h2 lang="en" style="margin-top:20px">Privacy, in short (English)</h2>
 <div lang="en">
-<p>The game needs no real name, phone or documents. Data is kept on our server in Russia and used only to run the game: chat, friends, profile and updates. Nothing is sold, there are no ads. The Google Play version is intended for users aged 18 and older and is not directed at children.</p>
+<p>The game needs no real name, phone or documents. The main game database is kept on our server in Russia and used to run the game: chat, friends, profile and updates. External email and notification services are described below. Nothing is sold, there are no ads. The Google Play version is intended for users aged 18 and older and is not directed at children.</p>
 <ul>
 <li>The game keeps a hash of a random player key, a hash of the device ID (for bans), nickname, avatar or your photo, language, game version and visit times.</li>
 <li>Public chat messages are visible to everyone, including site visitors, and are kept for up to 7 days.</li>
@@ -100,8 +103,11 @@ hr{border:0;border-top:2px solid var(--red);margin:40px 0 0;width:64px}
 <li>In-match voice goes to the selected game server and its players. Third-party server owners determine their own data handling. The microphone is optional and can be disabled.</li>
 <li>With an account: login, password hash, optional email for sign-in codes, friends, follows, blocks, private messages, read/unread markers and game settings.</li>
 <li>Reports keep a copy of the reported text (a message, a lobby name or a status) and are kept with bans to protect other players. Acceptance of the <a href="/rules">community rules</a> is stored as the version number and time.</li>
+<li>Your account stores a private list of hidden server endpoints, names and enabled switches. It syncs across your devices; entries can be removed from the list or deleted with your account.</li>
+<li>Server reports store the endpoint, name, reason, optional comment, reporter account ID and time. A verified email is required to limit reporting to once per server every 30 days. Reports store only a protected email hash with a server secret; it is cleared after the period during scheduled cleanup. Server notices in Telegram do not automatically include the account email address. Moderation counts total reports by the author, different servers reported and different reporters. Restrictions and review history are kept for safety. The reported user and server owner are not given the reporter's identity.</li>
 <li>The site sets no cookies and has no analytics. To count downloads it keeps a salted hash of the IP address for two days. Server request logs are off.</li>
 <li>Sign-in codes are sent by the email services Resend and SMTP.BZ. Game servers are run by their owners and see your nickname and IP address when you join.</li>
+<li>A private Telegram bot delivers user reports to CZM administrators with the necessary context: reporter and target nicknames and IDs, reported text, and the image for avatar reports. Server notices contain the server name, endpoint, report count, reporter nickname and account ID, their total reports and different servers reported, selected reasons and the explanation they entered. No passwords or sign-in keys are sent in these notices. Only authorized CZM administrators can use the bot.</li>
 <li>To delete your account: in the game open Settings → Profile → “Account and email” → “Delete account” and enter the password. This deletes your account, email, social links, messages, photo, cloud settings, read markers, lobby participation, total playtime, ranking, rules acceptance, profile warnings and access rights, and closes rooms you own. Without the game, write to <a href="mailto:kuro.street.inc@gmail.com">kuro.street.inc@gmail.com</a> with your login, and we delete the same data within 30 days. Reports, bans and moderation history are kept to protect other players. Deleted profile IDs are not issued to new players, so they do not inherit someone else's moderation history.</li>
 </ul>
 </div>

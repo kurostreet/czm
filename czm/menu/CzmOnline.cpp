@@ -489,6 +489,8 @@ void CZM_OnlineFrame( void )
 	double now = EngFuncs::DoubleTime();
 	int status;
 	CUtlString body;
+	static double nextPolicy;
+	if( now >= nextPolicy ) { CZM_ServerPolicyRevision(); CZM_ServerBlocksFrame(); nextPolicy = now + 1.0; }
 
 	if( !s_online.started )
 	{

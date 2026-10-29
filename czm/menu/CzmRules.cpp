@@ -54,6 +54,8 @@ static const struct { int kind; const char *ru, *en; } s_text[] =
 	{ RULE_ITEM, "«Заблокировать» в профиле игрока скрывает его сообщения и голос, он больше не сможет писать вам и приглашать вас.",
 		"\"Block\" in a player's profile hides their messages and voice, and they can no longer write to or invite you." },
 	{ RULE_ITEM, "Администрация никогда не спрашивает пароль и коды из писем.", "Staff never ask for your password or email codes." },
+	{ RULE_ITEM, "На сервер можно пожаловаться из его карточки или меню в игре. С подтверждённой почты — одна жалоба на один сервер раз в 30 дней. Модератор видит ваш ник, ID аккаунта и число обращений. Решение о блокировке сервера принимается после проверки; его можно пересмотреть.",
+		"Report a server from its card or the in-game menu. Verified email: one report per server every 30 days. Moderators see your nickname, account ID and report counts. A server restriction follows a review and can be reconsidered." },
 	{ RULE_HEAD, "За нарушения", "Consequences" },
 	{ RULE_ITEM, "Удаляем сообщения, сбрасываем аватар и статус, закрываем лобби.", "We delete messages, reset avatars and statuses, and close lobbies." },
 	{ RULE_ITEM, "Отключаем чат, лобби и личные сообщения на неделю, месяц или навсегда — для аккаунта и устройства.",

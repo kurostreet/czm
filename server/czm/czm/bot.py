@@ -19,7 +19,7 @@ from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.types import (BotCommand, BufferedInputFile, CallbackQuery, InlineKeyboardButton,
                            InlineKeyboardMarkup, Message)
 
-from . import service, website
+from . import service, website, accounts, server_moderation
 from .config import Settings, get_settings
 from .db import db
 
@@ -41,6 +41,8 @@ HELP = (
     "/release — что сейчас у игроков, /release <i>текст</i> — поправить «что нового»\n"
     "/ban <i>ID</i> week|month|forever <i>причина</i> — бан игрока\n"
     "/unban <i>ID</i> — разбан, /bans — кто забанен\n"
+    "/server_reports — серверы и число жалоб; /server <i>IP:порт</i> — один сервер\n"
+    "/server_ban <i>IP:порт причина</i> — блокировка в CZM; /server_unban <i>IP:порт</i> — разбан\n"
     "/tester <i>число</i> — сколько тестировщиков в бете Google Play показывает сайт, /tester — сколько сейчас\n"
     "/stats — сводка"
 )
@@ -122,6 +124,25 @@ def report_keyboard(info: dict) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def server_report_text(info: dict) -> str:
+    name = html.escape(info["name"] or "Сервер")
+    state = " · 🚫" if info["blocked"] else ""
+    text = (f"<b>{name}</b>\n<code>{html.escape(info['server'])}</code> · Жалоб: <b>{info['count']}</b>"
+            f" · Игроков: {info['reporters']}{state}")
+    if "reporter" in info:
+        text += (f"\nОт: {html.escape(info['reporter_nick'])} · ID {info['reporter']}"
+                 f"\nОт автора: {info['author_count']} жалоб · Серверов: {info['author_servers']}")
+    if info.get("reason") and "reporter" in info:
+        labels = {"sexual": "Сексуальный контент", "hate": "Нацизм / ненависть", "harassment": "Оскорбления / травля",
+                  "copyright": "Авторские права", "spam": "Спам / обман", "other": "Своя причина"}
+        text += "\nПричины: " + "; ".join(labels.get(code,"Другое") for code in info["reason"].split(","))
+    elif info.get("reason"):
+        text += "\nПричина блокировки: " + html.escape(info["reason"])
+    if info.get("comment"):
+        text += "\nСвоя причина: " + html.escape(info["comment"])
+    return text
+
+
 class OwnerBot:
     def __init__(self, bot: Bot, settings: Settings):
         self.bot = bot
@@ -148,6 +169,81 @@ class OwnerBot:
                 log.warning("could not send report %s to %s: %s", info["id"], owner, e)
 
     # commands -------------------------------------------------------------
+
+    def server_owner(self, message: Message) -> bool:
+        return self.allowed(message.from_user and message.from_user.id) and getattr(
+            getattr(message, "chat", None), "type", "private") == "private"
+
+    async def notify_server_reports(self) -> None:
+        for owner in self.owners:
+            failed_servers = set()
+            for info in await in_db(server_moderation.pending, owner):
+                if info["id"] in failed_servers:
+                    continue
+                try:
+                    await self.bot.send_message(owner, server_report_text(info))
+                except TelegramAPIError:
+                    log.warning("could not deliver server report %s", info["id"])
+                    failed_servers.add(info["id"])
+                    continue
+                await in_db(server_moderation.delivered, info["id"], owner, info["last_report"])
+
+    async def on_server_reports(self, message: Message, command: CommandObject) -> None:
+        if not self.server_owner(message):
+            return
+        arg = (command.args or "1").strip()
+        if not arg.isdigit() or not 1 <= int(arg) <= 10000:
+            await message.answer("Так: /server_reports или /server_reports 2")
+            return
+        page = int(arg) - 1
+        data = await in_db(server_moderation.listing, page)
+        lines = [f"{html.escape(s['name'][:64] or 'Сервер')}\n"
+                 f"<code>{html.escape(s['server'])}</code> — <b>{s['count']}</b> · Игроков: {s['reporters']}"
+                 + (" · 🚫" if s["blocked"] else "") for s in data["servers"]]
+        if data["more"]:
+            lines.append(f"Дальше: /server_reports {page + 2}")
+        chunk = ""
+        for line in lines:
+            candidate = (chunk + "\n\n" if chunk else "") + line
+            if chunk and len(candidate.encode("utf-16-le")) > 7000:
+                await message.answer(chunk); chunk = line
+            else:
+                chunk = candidate
+        await message.answer(chunk or "Жалоб на серверы нет.")
+
+    async def on_server(self, message: Message, command: CommandObject) -> None:
+        if not self.server_owner(message):
+            return
+        try:
+            info = await in_db(server_moderation.info, (command.args or "").strip())
+        except accounts.AuthError:
+            await message.answer("Так: /server IP:порт")
+            return
+        await message.answer(server_report_text(info))
+
+    async def on_server_ban(self, message: Message, command: CommandObject) -> None:
+        if not self.server_owner(message):
+            return
+        address, _, reason = (command.args or "").strip().partition(" ")
+        try:
+            info = await in_db(server_moderation.set_blocked, address, True,
+                               f"telegram:{message.from_user.id}", reason)
+        except accounts.AuthError:
+            await message.answer("Так: /server_ban IP:порт причина")
+            return
+        await message.answer(f"🚫 <code>{html.escape(info['server'])}</code> заблокирован в CZM.")
+
+    async def on_server_unban(self, message: Message, command: CommandObject) -> None:
+        if not self.server_owner(message):
+            return
+        try:
+            info = await in_db(server_moderation.set_blocked, (command.args or "").strip(), False,
+                               f"telegram:{message.from_user.id}")
+        except accounts.AuthError:
+            await message.answer("Так: /server_unban IP:порт")
+            return
+        await message.answer(f"✅ <code>{html.escape(info['server'])}</code> "
+                             + ("разблокирован." if info["changed"] else "не заблокирован."))
 
     async def on_start(self, message: Message) -> None:
         if not self.allowed(message.from_user and message.from_user.id):
@@ -455,6 +551,10 @@ class OwnerBot:
                 BotCommand(command="news", description="Новость в колокольчик"),
                 BotCommand(command="release", description="Что сейчас у игроков"),
                 BotCommand(command="bans", description="Кто забанен"),
+                BotCommand(command="server_reports", description="Серверы и количество жалоб"),
+                BotCommand(command="server", description="Жалобы на один сервер"),
+                BotCommand(command="server_ban", description="Заблокировать сервер в CZM"),
+                BotCommand(command="server_unban", description="Разблокировать сервер"),
                 BotCommand(command="tester", description="Тестировщики беты на сайте"),
                 BotCommand(command="unban", description="Разбан игрока"),
                 BotCommand(command="stats", description="Сводка"),
@@ -483,6 +583,10 @@ def build(settings: Settings) -> tuple[Bot, Dispatcher, OwnerBot]:
     router.message.register(owner.on_unban, Command("unban"))
     router.message.register(owner.on_bans, Command("bans"))
     router.message.register(owner.on_tester, Command("tester"))
+    router.message.register(owner.on_server_reports, Command("server_reports"))
+    router.message.register(owner.on_server, Command("server"))
+    router.message.register(owner.on_server_ban, Command("server_ban"))
+    router.message.register(owner.on_server_unban, Command("server_unban"))
     router.message.register(owner.on_message)
     router.callback_query.register(owner.on_callback)
     dispatcher = Dispatcher()
@@ -513,6 +617,7 @@ async def builds_loop(owner: OwnerBot) -> None:
             await owner.notify_builds()
             await owner.notify_play()
             await owner.notify_play_news()
+            await owner.notify_server_reports()
         except asyncio.CancelledError:
             raise
         except Exception as e:

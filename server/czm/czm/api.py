@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, FileResponse, HTML
 from PIL import Image
 from pydantic import BaseModel, Field
 
-from . import service, mappics, accounts, settings, tab, social, website, distribution, lobbies, game_probe, voice_lobby, notifications, rules, moderation, play_feed, playtime
+from . import service, mappics, accounts, settings, tab, social, website, distribution, lobbies, game_probe, voice_lobby, notifications, rules, moderation, play_feed, playtime, server_moderation
 from .config import get_settings
 from .db import db
 
@@ -330,6 +330,43 @@ async def post(room: str, body: MessageIn, x_czm_key: str | None = Header(defaul
         return await in_db(service.post_message, player, room, body.text)
     except service.ChatError as e:
         return JSONResponse({"error": e.code, **e.extra}, status_code=e.status)
+
+
+class ServerReportIn(BaseModel):
+    server: str = Field(min_length=7, max_length=64)
+    name: str = Field(default="", max_length=128)
+    reason: str = Field(default="other", max_length=20)
+    reasons: list[str] | None = Field(default=None, max_length=6)
+    comment: str = Field(default="", max_length=500)
+    nonce: str = Field(min_length=16, max_length=80)
+
+
+class ServerHiddenIn(BaseModel):
+    server: str = Field(min_length=7, max_length=64)
+    enabled: bool = True
+    remove: bool = False
+
+
+@router.get("/servers/policy")
+async def server_policy():
+    return JSONResponse(await in_db(server_moderation.policy), headers={"Cache-Control": "no-store"})
+
+
+@router.get("/servers/hidden")
+async def servers_hidden(request: Request, x_czm_key: str | None = Header(default=None)):
+    return await social_result(request, lambda c: server_moderation.hidden(c, x_czm_key or ""))
+
+
+@router.post("/servers/hidden")
+async def servers_hidden_action(body: ServerHiddenIn, request: Request, x_czm_key: str | None = Header(default=None)):
+    return await social_result(request, lambda c: server_moderation.hidden_action(
+        c, x_czm_key or "", body.server, body.enabled, body.remove))
+
+
+@router.post("/servers/report")
+async def server_report(body: ServerReportIn, request: Request, x_czm_key: str | None = Header(default=None)):
+    return await social_result(request, lambda c: server_moderation.report(
+        c, x_czm_key or "", body.server, body.name, body.reasons if body.reasons is not None else body.reason, body.comment, body.nonce))
 
 
 class ReportIn(BaseModel):

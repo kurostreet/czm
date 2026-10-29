@@ -391,6 +391,8 @@ private:
 		HIT_EMPTY_BUTTON,
 		HIT_PLAY,
 		HIT_ADMIN,
+		HIT_REPORT,
+		HIT_BLOCKS,
 		HIT_FAVORITE,
 		HIT_DETAILS,
 		HIT_DETAILS_CLOSE,
@@ -430,6 +432,13 @@ private:
 
 	// view
 	void Rebuild( void );
+	int SavedCount( int tab ) const
+	{
+		const CUtlVector<CzmListAddress> *list = tab == TAB_FAVORITES ? &m_favorites : tab == TAB_HISTORY ? &m_history : NULL;
+		int count = 0;
+		if( list ) for( int i = 0; i < list->Count(); i++ ) if( !CZM_ServerBlocked( (*list)[i].address )) count++;
+		return count;
+	}
 	bool Passes( const CzmEntry &e ) const;
 	CzmEntry *Selected( void );
 	void Select( CzmEntry *e );
@@ -515,8 +524,10 @@ private:
 	int W, H, m_iMargin;
 	CzmRect m_back, m_title, m_searchBox, m_searchClear, m_refresh, m_add;
 	CzmRect m_tabs[TAB_COUNT], m_filters[FILTER_COUNT];
+	CzmRect m_blocked;
 	CzmRect m_listHead, m_sort, m_clip, m_details, m_emptyButton;
-	CzmRect m_play, m_fav, m_admin;
+	CzmRect m_play, m_fav, m_admin, m_report;
+	int m_policyRevision;
 	CzmRect m_detailsClose, m_detailsMap, m_detailsInfo;
 	CzmRect m_dlgPanel, m_dlgField, m_dlgPaste, m_dlgOk, m_dlgCancel;
 	int m_iRowH, m_iRowStep;
@@ -536,6 +547,7 @@ CCzmServers::CCzmServers() : CMenuFramework( "CzmServers" )
 	m_bListsLoaded = false;
 	m_bDirty = m_bForceRebuild = true;
 	m_flLastRebuild = 0.0;
+	m_policyRevision = -1;
 	m_flRefreshTime = m_flPingBase = m_flDetailsTime = 0.0;
 	m_szSelected[0] = 0;
 	m_iNumPlayers = 0;
@@ -1010,7 +1022,7 @@ int CCzmServers::QuickFrame( char *name, size_t size )
 			int humans = e.players - e.bots, ping = e.ping >= 0 ? e.ping : 400;
 			float score;
 
-			if( !e.answered || IsStale( e ) || ( e.mode != MODE_ZOMBIE && e.mode != MODE_ESCAPE ))
+			if( CZM_ServerBlocked( e.address ) || !e.answered || IsStale( e ) || ( e.mode != MODE_ZOMBIE && e.mode != MODE_ESCAPE ))
 				continue;
 			if( e.password || e.maxPlayers <= 0 || e.players >= e.maxPlayers )
 				continue;
@@ -1137,6 +1149,7 @@ view: what the list shows, in which order
 */
 bool CCzmServers::Passes( const CzmEntry &e ) const
 {
+	if( CZM_ServerBlocked( e.address )) return false;
 	switch( m_iTab )
 	{
 	case TAB_ALL:
@@ -1443,12 +1456,7 @@ void CCzmServers::Layout( void )
 	for( int i = 0; i < TAB_COUNT; i++ )
 	{
 		char label[64];
-		int count = 0;
-
-		if( i == TAB_FAVORITES )
-			count = m_favorites.Count();
-		else if( i == TAB_HISTORY )
-			count = m_history.Count();
+		int count = SavedCount( i );
 
 		if( count > 0 )
 			snprintf( label, sizeof( label ), "%s  %d", CZM_T( tabKeys[i] ), count );
@@ -1458,6 +1466,9 @@ void CCzmServers::Layout( void )
 		m_tabs[i] = CZM_Rect( x, rowY, CZM_TextWidth( chipFont, label ) + chipPad * 2, rowH );
 		x += m_tabs[i].w;
 	}
+	x += H * 0.016f;
+	m_blocked = CZM_Rect( x, rowY, CZM_TextWidth( chipFont, CZM_IsRussian() ? "Заблокированные" : "Blocked" ) + chipPad * 2, rowH );
+	x += m_blocked.w;
 
 	x += H * 0.04f;
 	gap = H * 0.016f;
@@ -1469,7 +1480,18 @@ void CCzmServers::Layout( void )
 		x += w + gap;
 	}
 
-	// chips that do not fit squeeze together
+	// Long tab labels get their own row; filter labels keep readable widths.
+	int filterY = rowY;
+	if( x - gap > W - m_iMargin )
+	{
+		filterY += rowH + gap;
+		x = m_iMargin;
+		for( int i = 0; i < FILTER_COUNT; i++ )
+		{
+			m_filters[i].x = x; m_filters[i].y = filterY;
+			x += m_filters[i].w + gap;
+		}
+	}
 	if( x - gap > W - m_iMargin )
 	{
 		int extra = ( x - gap - ( W - m_iMargin ) + FILTER_COUNT ) / FILTER_COUNT;
@@ -1484,7 +1506,7 @@ void CCzmServers::Layout( void )
 	}
 
 	// One full-width list. A tapped server opens a separate details card.
-	contentY = rowY + rowH + H * 0.03f;
+	contentY = filterY + rowH + H * 0.03f;
 	bottom = H - H * 0.035f;
 	listW = W - m_iMargin * 2;
 
@@ -1522,6 +1544,7 @@ void CCzmServers::Layout( void )
 		const int bodyH = footer - gap - bodyY;
 		const int side = Q_min( bodyH - CZM_FontHeight( CZM_Font( CZMF_UI_META )) - gap, inner * 38 / 100 );
 		m_detailsClose = CZM_Rect( m_details.x + dw - pad - head, m_details.y + pad, head, head );
+		m_report = CZM_Rect( m_detailsClose.x - gap - head * 4, m_detailsClose.y, head * 4, head );
 		m_detailsMap = CZM_Rect( left, bodyY, side, side );
 		m_detailsInfo = CZM_Rect( left + side + gap * 2, bodyY, inner - side - gap * 2, bodyH );
 		const int fw = inner * 26 / 100, aw = inner * 25 / 100;
@@ -1566,6 +1589,7 @@ int CCzmServers::HitTest( void ) const
 	{
 		if( !m_details.HasCursor() ) return HIT_DETAILS_BACKDROP;
 		if( m_detailsClose.HasCursor() ) return HIT_DETAILS_CLOSE;
+		if( m_report.HasCursor() ) return HIT_REPORT;
 		if( m_admin.HasCursor() ) return HIT_ADMIN;
 		if( m_play.HasCursor() ) return HIT_PLAY;
 		if( m_fav.HasCursor() ) return HIT_FAVORITE;
@@ -1583,6 +1607,7 @@ int CCzmServers::HitTest( void ) const
 	if( m_searchBox.Grown( grow / 2 ).HasCursor( ))
 		return HIT_SEARCH;
 
+	if( m_blocked.HasCursor() ) return HIT_BLOCKS;
 	for( int i = 0; i < TAB_COUNT; i++ )
 	{
 		if( m_tabs[i].HasCursor( ))
@@ -1694,6 +1719,15 @@ void CCzmServers::Activate( int hit )
 		if( e ) CZM_ServerAuthShow( e->address, e->answered ? e->name : e->address );
 		return;
 	}
+	case HIT_REPORT:
+	{
+		CzmEntry *e = Selected();
+		if( e ) CZM_ServerReportShow( e->address, e->name );
+		return;
+	}
+	case HIT_BLOCKS:
+		CZM_ServerBlocksShow();
+		return;
 	case HIT_FAVORITE:
 	{
 		CzmEntry *e = Selected();
@@ -2020,7 +2054,7 @@ void CCzmServers::DrawFilters( void )
 	{
 		const CzmRect &r = m_tabs[i];
 		bool active = i == m_iTab;
-		int count = i == TAB_FAVORITES ? m_favorites.Count() : i == TAB_HISTORY ? m_history.Count() : 0;
+		int count = SavedCount( i );
 		const char *label = CZM_T( tabKeys[i] );
 		int textW = CZM_TextWidth( font, label ), textY = r.y + ( r.h - CZM_FontHeight( font )) / 2;
 		unsigned int color = active || IsPressed( HIT_TAB + i ) ? CZM_White() : PackRGBA( 170, 176, 186, 255 );
@@ -2039,6 +2073,11 @@ void CCzmServers::DrawFilters( void )
 		if( number[0] )
 			CZM_DrawText( font, x + textW, textY, CZM_TextWidth( font, number ) + 2, number, active ? CZM_White( 200 ) : PackRGBA( 120, 126, 136, 255 ));
 	}
+
+	CZM_DrawPill( UI_DIR "chip_lang.png", m_blocked.x, m_blocked.y, m_blocked.w, m_blocked.h,
+		IsPressed( HIT_BLOCKS ) ? PackRGBA( 190, 190, 190, 255 ) : CZM_White() );
+	CZM_DrawText( font, m_blocked.x, m_blocked.y + ( m_blocked.h - CZM_FontHeight( font )) / 2,
+		m_blocked.w, CZM_IsRussian() ? "Заблокированные" : "Blocked", CZM_White(), QM_CENTER );
 
 	// filters: tap to switch on and off
 	for( int i = 0; i < FILTER_COUNT; i++ )
@@ -2329,11 +2368,12 @@ void CCzmServers::DrawDetails( void )
 	char text[160];
 	UI_FillRect( 0, 0, W, H, PackRGBA( 3, 7, 13, 205 ));
 	CzmStyle::Surface( d, PackRGBA( 14, 20, 29, 255 ) );
-	CzmStyle::Text( CZM_Rect( d.x + pad, d.y + pad, d.w - pad * 3 - m_detailsClose.w, m_detailsClose.h ),
+	CzmStyle::Text( CZM_Rect( d.x + pad, d.y + pad, m_report.x - d.x - pad - gap, m_detailsClose.h ),
 		s_lobbyPicker ? ( CZM_IsRussian() ? "Выбор сервера" : "Select a server" ) :
 		( CZM_IsRussian() ? "Сервер" : "Server" ), CZMF_UI_ACTION );
 	CzmStyle::Button( m_detailsClose, "", true, false, IsPressed( HIT_DETAILS_CLOSE ) );
 	CzmStyle::Icon( m_detailsClose, UI_DIR "icon_close.png" );
+	CzmStyle::Button( m_report, CZM_IsRussian() ? "Заблокировать" : "Block", true, false, IsPressed( HIT_REPORT ), CZMF_SMALL );
 
 	DrawMapPicture( e, photo.x, photo.y, photo.w, photo.h );
 	if( e->badge[0] )
@@ -2485,6 +2525,12 @@ void CCzmServers::DrawDialog( void )
 void CCzmServers::Draw()
 {
 	double now = EngFuncs::DoubleTime();
+	int revision = CZM_ServerPolicyRevision();
+	if( revision != m_policyRevision )
+	{
+		m_policyRevision = revision; m_bForceRebuild = true; m_iPressed = HIT_NONE;
+		if( Selected() && CZM_ServerBlocked( Selected()->address )) m_bDetailsOpen = false;
+	}
 	if( m_szJoinAddress[0] && now - m_flJoinStarted > LIST_TIMEOUT )
 	{
 		m_szJoinAddress[0] = 0;
