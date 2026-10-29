@@ -89,6 +89,7 @@ jobs:
           python3 -m unittest discover -s tests -p test_touch_shooting.py -v
           python3 -m unittest discover -s tests -p test_left_fire.py -v
           python3 -m unittest discover -s tests -p test_wheels.py -v
+          python3 -m unittest discover -s tests -p test_hud_message_repeat.py -v
           python3 -m unittest discover -s tests -p test_touch_wheels.py -v
           python3 -m unittest discover -s tests -p test_loading_errors.py -v
           python3 -m unittest discover -s tests -p test_connection_notices.py -v

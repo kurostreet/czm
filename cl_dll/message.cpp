@@ -42,6 +42,16 @@ static int Utf8StringLen(const char *pszText)
 	return length;
 }
 
+// FNV-1a: whether a channel got another text
+static unsigned int TextHash( const char *text )
+{
+	unsigned int hash = 2166136261u;
+
+	for ( ; text && *text; text++ )
+		hash = ( hash ^ (unsigned char)*text ) * 16777619u;
+	return hash;
+}
+
 int CHudMessage::Init(void)
 {
 	HOOK_MESSAGE( gHUD.m_Message, HudText );
@@ -68,6 +78,8 @@ void CHudMessage::Reset( void )
 {
 	memset( m_pMessages, 0, sizeof( m_pMessages[0] ) * maxHUDMessages );
 	memset( m_startTime, 0, sizeof( m_startTime[0] ) * maxHUDMessages );
+	memset( m_textHash, 0, sizeof( m_textHash[0] ) * maxHUDMessages );
+	m_iLastSlot = -1;
 	
 	m_gameTitleTime = 0;
 	m_pGameTitle = NULL;
@@ -232,11 +244,9 @@ void CHudMessage::MessageScanNextChar( void )
 	m_parms.g = ((srcGreen * (255-blend)) + (destGreen * blend)) >> 8;
 	m_parms.b = ((srcBlue * (255-blend)) + (destBlue * blend)) >> 8;
 
-	if ( m_parms.pMessage->effect == 1 && m_parms.charTime != 0 )
-	{
-		if ( m_parms.x >= 0 && m_parms.y >= 0 && (m_parms.x + gHUD.GetCharWidth( m_parms.text )) <= ScreenWidth )
-			DrawUtils::TextMessageDrawChar( m_parms.x, m_parms.y, m_parms.text, m_parms.pMessage->r2, m_parms.pMessage->g2, m_parms.pMessage->b2 );
-	}
+	// effect 1, a flicker frame: the main loop draws the character once more in the second colour
+	// (here it went in byte by byte between the bytes of the main draw, and the engine could not put
+	// the letters of a UTF-8 text together: Russian letters were gone in those frames)
 }
 
 
@@ -375,12 +385,17 @@ void CHudMessage::MessageDrawScan( client_textmessage_t *pMessage, float time )
 				FillRGBABlend( m_parms.x - pad, m_parms.y, m_parms.width + pad * 2, h, 0, 0, 0, (int)( 95 * shown ));
 		}
 
+		const bool flicker = pMessage->effect == 1 && m_parms.charTime != 0;
+		int charStart = 0;
+
 		Con_UtfProcessChar( 0 );
 		for ( j = 0; j < m_parms.lineLength; j++ )
 		{
 			m_parms.text = line[j];
 			int uch = Con_UtfProcessChar( m_parms.text );
 			int next = m_parms.x + gHUD.GetCharWidth( uch ? uch : m_parms.text );
+			const int charX = m_parms.x; // the first bytes of a UTF-8 letter do not move it
+			const bool inside = m_parms.x >= 0 && m_parms.y >= 0 && next <= ScreenWidth;
 
 			float savedCharTime = m_parms.charTime;
 			MessageScanNextChar();
@@ -388,9 +403,20 @@ void CHudMessage::MessageDrawScan( client_textmessage_t *pMessage, float time )
 			if ( !uch )
 				m_parms.charTime = savedCharTime;
 			
-			if ( m_parms.x >= 0 && m_parms.y >= 0 && next <= ScreenWidth )
+			if ( inside )
 				m_parms.x += DrawUtils::TextMessageDrawChar( m_parms.x, m_parms.y, m_parms.text,
 					m_parms.r * s_frame.opacity, m_parms.g * s_frame.opacity, m_parms.b * s_frame.opacity ); // additive: darker is fainter
+
+			if ( !uch )
+				continue;
+			// the flicker: the whole letter, all its bytes in a row, once the main draw is done with it
+			if ( flicker && inside )
+			{
+				for ( int k = charStart; k <= j; k++ )
+					DrawUtils::TextMessageDrawChar( charX, m_parms.y, line[k], pMessage->r2 * s_frame.opacity,
+						pMessage->g2 * s_frame.opacity, pMessage->b2 * s_frame.opacity );
+			}
+			charStart = j + 1;
 		}
 
 		m_parms.y += gHUD.GetCharHeight();
@@ -616,10 +642,11 @@ void CHudMessage::MessageAdd( const char *pName, float time, qboolean hintMessag
 			{
 				if ( m_pMessages[j].pMessage )
 				{
-					// is this message already in the list
-					if ( !strcmp( message->pMessage, m_pMessages[j].pMessage->pMessage ) )
+					// is this message already in the list: it stays up (CZM, see MessageKeep)
+					if ( m_pMessages[j].pMessage == message || !strcmp( message->pMessage, m_pMessages[j].pMessage->pMessage ) )
 					{
-						if( !strcmp( message->pName, "Custom" ) )
+						MessageKeep( j, message, time );
+						if( !strcmp( message->pName, "Custom" ) && message != m_pMessages[j].pMessage )
 						{
 							delete[] message->pMessage;
 						}
@@ -641,9 +668,35 @@ void CHudMessage::MessageAdd( const char *pName, float time, qboolean hintMessag
 			m_pMessages[i].pMessage = message;
 			// m_pMessages[i].font = font;
 			m_startTime[i] = time;
+			m_textHash[i] = TextHash( message->pMessage );
+			m_iLastSlot = i;
 			return;
 		}
 	}
+}
+
+
+// A server sends its texts again and again: a panel of numbers every second, often with a hold time
+// of about a second. The stock code kept the first copy and dropped the others, so the text ran out
+// after its hold time and stayed away until a copy found the place free: the panel blinked, about a
+// second on and a second off. A copy now keeps the text up, held from now and shown in full, without
+// a new fade-in or write-out; another text of a write-out message on the same channel is written anew.
+void CHudMessage::MessageKeep( int slot, client_textmessage_t *message, float time )
+{
+	client_textmessage_t *shown = m_pMessages[slot].pMessage;
+	const unsigned int hash = TextHash( message->pMessage );
+
+	if ( shown->effect == 2 && hash != m_textHash[slot] )
+		m_startTime[slot] = time;
+	else
+	{
+		const float in = shown->effect == 2 ? shown->fadein * Utf8StringLen( shown->pMessage ) : shown->fadein;
+
+		if ( time - m_startTime[slot] > in )
+			m_startTime[slot] = time - in;
+	}
+	m_textHash[slot] = hash;
+	m_iLastSlot = slot;
 }
 
 
@@ -702,6 +755,7 @@ void CHudMessage::MessageAdd(client_textmessage_t * newMessage )
 		{
 			m_pMessages[i].pMessage = message;
 			m_startTime[i] = gHUD.m_flTime;
+			m_textHash[i] = TextHash( message->pMessage );
 			return;
 		}
 	}
@@ -734,17 +788,11 @@ int CHudMessage::MsgFunc_HudTextArgs( const char *pszName, int iSize, void *pbuf
 	const char *sz = reader.ReadString();
 	qboolean hintMessage = reader.ReadByte();
 
+	m_iLastSlot = -1;
 	MessageAdd( sz, gHUD.m_flTime, hintMessage/*, Newfont*/ ); // TODO
 
-	int slot = -1;
-	for ( int i = 0; i < maxHUDMessages; i++ )
-	{
-		if ( m_pMessages[i].pMessage && m_startTime[i] == gHUD.m_flTime )
-		{
-			slot = i;
-			break;
-		}
-	}
+	// the slot it went to, or the one that already showed it (the arguments may be new)
+	int slot = m_iLastSlot >= 0 && m_pMessages[m_iLastSlot].pMessage ? m_iLastSlot : -1;
 
 	if ( slot != -1 )
 	{

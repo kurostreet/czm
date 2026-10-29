@@ -701,6 +701,7 @@ public:
 
 	void MessageAdd( const char *pName, float time, qboolean hintMessage = 0/*, unsigned int font = 0 */ );
 	void MessageAdd( client_textmessage_t *newMessage );
+	void MessageKeep( int slot, client_textmessage_t *message, float time );
 	void MessageDrawScan( client_textmessage_t *pMessage, float time );
 	void MessageScanStart( void );
 	void MessageScanNextChar( void );
@@ -711,6 +712,8 @@ public:
 private:
 	hud_message_t				m_pMessages[maxHUDMessages];
 	float						m_startTime[maxHUDMessages];
+	unsigned int				m_textHash[maxHUDMessages]; // CZM: the text a slot was given last
+	int							m_iLastSlot; // CZM: the slot the last MessageAdd filled or kept, -1 none
 	message_parms_t				m_parms;
 	float						m_gameTitleTime;
 	client_textmessage_t		*m_pGameTitle;
