@@ -1531,12 +1531,12 @@ void CCzmSettings::DrawRow( int i )
 	if( row.get == GetDiagnostics )
 		hint = CZM_T( GetDiagnostics() == 0 ? "diag_off_hint" : GetDiagnostics() == 1 ? "diag_basic_hint" : "diag_detailed_hint" );
 
-	// the shooting rows tell what the chosen way does
+	// the shooting rows tell what the chosen way does (an unknown key would come back as itself)
+	char hintKey[40];
 	if( row.get == GetScopeMode || row.get == GetFireRelease || row.get == GetFireLeft )
 	{
-		char key[40];
-		snprintf( key, sizeof( key ), "%s_hint%d", row.label, (int)row.get( ));
-		hint = CZM_T( key );
+		snprintf( hintKey, sizeof( hintKey ), "%s_hint%d", row.label, (int)row.get( ));
+		hint = CZM_T( hintKey );
 	}
 
 	// the gyroscope row explains why it is off
