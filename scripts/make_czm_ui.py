@@ -107,6 +107,47 @@ def make_dot(name, size=64):
     save(big.resize((size, size), Image.LANCZOS), name)
 
 
+def make_ripple(name, size=256):
+    ripple = Image.new("RGBA", (size, size), (255, 255, 255, 0))
+    px = ripple.load()
+    c = (size - 1) / 2
+    for y in range(size):
+        for x in range(size):
+            d = math.hypot(x - c, y - c) / c
+            # a ring at 94% of the radius, 4% wide, with soft edges
+            a = max(0.0, 1.0 - abs(d - 0.94) / 0.04)
+            px[x, y] = (255, 255, 255, int(255 * a * a * (3 - 2 * a)))
+    save(ripple, name)
+
+
+def make_touch_wheel(path, size=256):
+    """The touch button of the weapon wheel in the style of the other touch buttons: their dark
+    disc and light ring (taken from the "last weapon" button), a wheel of five parts on it."""
+    base = Image.open(OUTPUT.parent / "touch/lastinv.png").convert("RGBA").resize((size, size), Image.LANCZOS)
+    px = base.load()
+    c = (size - 1) / 2
+    for y in range(size):
+        for x in range(size):
+            t = math.hypot(x - c, y - c) / c
+            if t < 0.85:  # the disc without the old picture, its colour from the centre to the ring
+                k = t / 0.85
+                px[x, y] = (round(35 - 15 * k), round(39 - 16 * k), round(47 - 18 * k), 168)
+    S = size * SS
+    glyph = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    d = ImageDraw.Draw(glyph)
+    white = (255, 255, 255, 255)
+    outer, inner = S * .27, S * .12
+    d.ellipse([S / 2 - outer, S / 2 - outer, S / 2 + outer, S / 2 + outer], fill=white)
+    d.ellipse([S / 2 - inner, S / 2 - inner, S / 2 + inner, S / 2 + inner], fill=(0, 0, 0, 0))
+    for i in range(5):
+        a = math.radians(-90 + 36 + i * 72)
+        d.line([S / 2, S / 2, S / 2 + math.cos(a) * S * .32, S / 2 + math.sin(a) * S * .32], fill=(0, 0, 0, 0), width=int(S * .03))
+    d.ellipse([S / 2 - S * .055, S / 2 - S * .055, S / 2 + S * .055, S / 2 + S * .055], fill=white)
+    base.alpha_composite(glyph.resize((size, size), Image.LANCZOS))
+    base.save(path, "PNG", optimize=True)
+    print(path.relative_to(ROOT), base.size, path.stat().st_size, "bytes")
+
+
 def make_glow(name, size=96):
     # soft light for sparks: white, alpha falls off like a gaussian, no hard edge
     import math
@@ -208,6 +249,19 @@ def icon(kind, size=128, color=(255, 255, 255, 255)):
         d.line([S * .14 + lw, S * .56, S * .58 - lw, S * .56], fill=c, width=int(lw * .7))
         for x, y, r in ((.76, .16, .055), (.90, .10, .045), (.80, .32, .05), (.94, .26, .04)):
             d.ellipse([S * (x - r), S * (y - r), S * (x + r), S * (y + r)], fill=c)
+    elif kind == "knife":
+        # a combat knife, the blade up and to the right
+        blade = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+        b = ImageDraw.Draw(blade)
+        b.polygon([(S * .43, S * .64), (S * .43, S * .20), (S * .52, S * .04), (S * .59, S * .18), (S * .57, S * .64)], fill=c)
+        b.rounded_rectangle([S * .33, S * .63, S * .67, S * .69], radius=S * .02, fill=c)
+        b.rounded_rectangle([S * .44, S * .69, S * .56, S * .95], radius=S * .04, fill=c)
+        im.alpha_composite(blade.rotate(-42, resample=Image.BICUBIC, center=(S / 2, S / 2)))
+    elif kind == "cart":
+        d.line([(S * .06, S * .20), (S * .20, S * .20), (S * .32, S * .64), (S * .80, S * .64)], fill=c, width=lw, joint="curve")
+        d.polygon([(S * .24, S * .30), (S * .92, S * .30), (S * .82, S * .56), (S * .31, S * .56)], fill=c)
+        for x in (.38, .74):
+            d.ellipse([S * (x - .075), S * .74, S * (x + .075), S * .89], fill=c)
     elif kind in ("star", "star_on"):
         pts = []
         for i in range(10):
@@ -365,6 +419,16 @@ def main():
     OUTPUT.mkdir(parents=True, exist_ok=True)
     if "--support" in sys.argv:
         save(icon("shield"), "icon_shield.png")
+        return
+    if "--wheels" in sys.argv:
+        # the touch wheels: knife and shop slots, the weapon wheel button
+        save(icon("knife"), "icon_knife.png")
+        save(icon("cart"), "icon_cart.png")
+        make_touch_wheel(OUTPUT.parent / "touch/wheel.png")
+        return
+    if "--touchfx" in sys.argv:
+        # the press animation of the touch buttons: a thin soft ring that runs out of a pressed button
+        make_ripple("touch_ripple.png")
         return
     if "--radio" in sys.argv:
         # the radio wheel: the spray slot

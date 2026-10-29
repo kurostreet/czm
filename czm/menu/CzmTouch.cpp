@@ -87,6 +87,7 @@ static const CzmAction s_actions[] =
 	{ "knife", "Нож", "Knife", "slot3", GROUP_COMBAT },
 	{ "grenade", "Граната", "Grenade", "slot4", GROUP_COMBAT },
 	{ "lastinv", "Прошлое оружие", "Last weapon", "lastinv", GROUP_COMBAT },
+	{ "wheel", "Колесо оружия", "Weapon wheel", "_czmwheel weapons", GROUP_COMBAT },
 	{ "invnext", "Следующее оружие", "Next weapon", "invnext", GROUP_COMBAT },
 	{ "invprev", "Предыдущее оружие", "Previous weapon", "invprev", GROUP_COMBAT },
 	{ "drop", "Выбросить", "Drop", "drop", GROUP_COMBAT },
@@ -162,7 +163,7 @@ static const char *s_icons[] =
 	"left", "right", "buy", "ammo1", "ammo2", "armor", "autobuy", "rebuy", "chat", "teamchat", "voice", "radio",
 	"radio1", "radio2", "radio3", "score", "zpmenu", "servermenu", "unstuck", "rs", "rtv", "top", "rank", "vip",
 	"timeleft", "nextmap", "more", "numbers", "num1", "num2", "num3", "num4", "num5", "num6", "num7", "num8", "num9",
-	"num0", "cancel", "team", "screenshot", "edit", "custom", "ddrun", "kill",
+	"num0", "cancel", "team", "screenshot", "edit", "custom", "ddrun", "kill", "wheel",
 };
 
 #define CZM_ICONS ( (int)( sizeof( s_icons ) / sizeof( s_icons[0] )))

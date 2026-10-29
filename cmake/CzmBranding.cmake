@@ -31,7 +31,7 @@ target_sources(menu PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/czm/menu/CzmSettings.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/czm/menu/CzmTouch.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/czm/menu/CzmShop.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/czm/menu/CzmRadio.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/czm/menu/CzmWheels.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/czm/menu/CzmServerMenu.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/czm/menu/CzmServers.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/czm/menu/CzmJson.cpp"

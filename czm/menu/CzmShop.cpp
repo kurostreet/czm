@@ -372,6 +372,51 @@ static void DrawSilhouette( const char *image, int x, int y, int w, int h, unsig
 
 /*
 =================
+the weapon wheel (CzmWheels.cpp): what the player carries, as the shop draws it
+=================
+*/
+bool CZM_ShopCarried( unsigned int weaponBits, int slot, const char **name, const char **image )
+{
+	// the grenade slot shows the strongest grenade carried
+	static const int grenades[] = { 4, 25, 9 }; // HE, flashbang, smoke (weapon ids)
+
+	for( int k = 0; slot == 2 && k < 3; k++ )
+	{
+		for( int i = 0; i < CZM_SHOP_ITEMS; i++ )
+		{
+			if( s_items[i].weapon == grenades[k] && ( weaponBits & ( 1u << grenades[k] )))
+			{
+				*name = ItemName( s_items[i] );
+				*image = s_items[i].image;
+				return true;
+			}
+		}
+	}
+
+	for( int i = 0; slot != 2 && i < CZM_SHOP_ITEMS; i++ )
+	{
+		const CzmShopItem &item = s_items[i];
+		const bool pistol = item.category == CAT_PISTOLS;
+
+		if( !item.weapon || item.category == CAT_EQUIPMENT || pistol != ( slot == 1 ))
+			continue;
+		if( weaponBits & ( 1u << item.weapon ))
+		{
+			*name = ItemName( item );
+			*image = item.image;
+			return true;
+		}
+	}
+	return false;
+}
+
+void CZM_ShopDrawSilhouette( const char *image, int x, int y, int w, int h, unsigned int color )
+{
+	DrawSilhouette( image, x, y, w, h, color );
+}
+
+/*
+=================
 CCzmShop
 =================
 */

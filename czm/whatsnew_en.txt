@@ -1,1 +1,1 @@
-New controls: scope mode (Tap, Hold, Mixed), AWP and Scout fire on release, and a choice of when to show the left Fire button. The Radio button opens a quick command wheel. The Controls and Game settings are grouped into sections.
+New controls: scope mode (Tap, Hold, Mixed), AWP and Scout fire on release, and when to show the left Fire button. Weapon and radio wheels: hold the button and slide to a choice. On-screen buttons now animate when pressed. The Controls and Game settings are grouped into sections.

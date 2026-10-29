@@ -1,0 +1,475 @@
+diff --git a/engine/client/input/in_touch.c b/engine/client/input/in_touch.c
+--- a/engine/client/input/in_touch.c
++++ b/engine/client/input/in_touch.c
+@@ -28,7 +28,8 @@ typedef enum
+ 	touch_joy,     // like a joystick stick, centered
+ 	touch_dpad,    // only two directions
+ 	touch_look,    // like a touchpad
+-	touch_wheel    // scroll-like
++	touch_wheel,   // scroll-like
++	touch_czmwheel // Counter Zombie Mobile: a wheel of choices, see Touch_CzmWheelEvent
+ } touchButtonType;
+ 
+ typedef enum
+@@ -65,6 +66,8 @@ typedef struct touch_button_s
+ 	float aspect;
+ 	float stick_x, stick_y; // transient thumb displacement inside the ring
+ 	qboolean latched; // TOUCH_FL_COMMAND_LATCH button sent +command
++	double czm_down, czm_up; // Counter Zombie Mobile: when it was pressed and let go, for the press animation
++	float czm_depth;         // how far it went down before it was let go
+ 
+ 	// Double-linked list
+ 	struct touch_button_s *next;
+@@ -144,12 +147,19 @@ static struct touch_s
+ // private to the engine flags
+ #define TOUCH_FL_UNPRIVILEGED BIT( 10 )
+ 
++// Counter Zombie Mobile: wheels on touch buttons, see Touch_CzmWheelEvent
++static void Touch_CzmWheelClose( void );
++static void Touch_CzmWheelFrame( void );
++static void Touch_CzmWheelForget( const touch_button_t *button );
++
+ static touchdefaultbutton_t *g_DefaultButtons;
+ static size_t g_DefaultButtonsLength;
+ 
+ static CVAR_DEFINE_AUTO( touch_in_menu, "0", FCVAR_PRIVILEGED, "draw touch in menu (for internal use only)" );
+ // Counter Zombie Mobile: the client keeps "clip reserve full" here while the weapon has a clip
+ static CVAR_DEFINE_AUTO( czm_ammo_state, "", FCVAR_PRIVILEGED, "clip, reserve and full clip shown on the reload button" );
++static CVAR_DEFINE( czm_wheel_state, "czm_wheel", "", FCVAR_PRIVILEGED, "the touch wheel on screen, drawn by the menu" );
++static CVAR_DEFINE_AUTO( czm_touch_press, "1", FCVAR_ARCHIVE, "press animation of the touch buttons" );
+ static CVAR_DEFINE_AUTO( touch_forwardzone, "0.06", FCVAR_FILTERABLE, "forward touch zone" );
+ static CVAR_DEFINE_AUTO( touch_sidezone, "0.06", FCVAR_FILTERABLE, "side touch zone" );
+ static CVAR_DEFINE_AUTO( touch_pitch, "90", FCVAR_FILTERABLE, "touch pitch sensitivity" );
+@@ -660,6 +670,7 @@ void Touch_ResetLoadingInput( void )
+ 	}
+ 
+ 	Touch_ResetSticks();
++	Touch_CzmWheelClose();
+ 	touch.move_finger = touch.resize_finger = touch.look_finger = touch.wheel_finger = -1;
+ }
+ 
+@@ -682,6 +693,7 @@ static void Touch_RemoveButtonFromList( touchbuttonlist_t *list, const char *nam
+ 
+ 		Touch_ReleaseStick( button );
+ 		Touch_ReleaseLatch( button );
++		Touch_CzmWheelForget( button );
+ 		Mem_Free( button );
+ 	}
+ }
+@@ -710,6 +722,7 @@ static void Touch_ClearList( touchbuttonlist_t *list )
+ 		list->first = list->first->next;
+ 		Touch_ReleaseStick( remove );
+ 		Touch_ReleaseLatch( remove );
++		Touch_CzmWheelForget( remove );
+ 		Mem_Free( remove );
+ 	}
+ 	list->first = list->last = NULL;
+@@ -755,6 +768,8 @@ static void Touch_SetCommand( touch_button_t *button, const char *command )
+ 		button->type = touch_dpad;
+ 	else if( !Q_strncmp( "_wheel ", command, 7 ) || !Q_strncmp( "_hwheel ", command, 8 ))
+ 		button->type = touch_wheel;
++	else if( !Q_strncmp( "_czmwheel ", command, 10 ) || !Q_strcmp( command, "showvguimenu 38" ))
++		button->type = touch_czmwheel; // the stock radio button opens the radio wheel
+ 	else
+ 		button->type = touch_command;
+ }
+@@ -1243,6 +1258,8 @@ void Touch_Init( void )
+ 	// not saved, just runtime state for scripting
+ 	Cvar_RegisterVariable( &touch_in_menu );
+ 	Cvar_RegisterVariable( &czm_ammo_state );
++	Cvar_RegisterVariable( &czm_wheel_state );
++	Cvar_RegisterVariable( &czm_touch_press );
+ 
+ 	// sensitivity configuration
+ 	Cvar_RegisterVariable( &touch_forwardzone );
+@@ -1567,6 +1584,99 @@ static void Touch_DrawStickThumb( const touch_button_t *button, byte *color )
+ 		cx + width * 0.18f, cy + height * 0.18f, touch.sticktexture, color );
+ }
+ 
++/*
++============
++Counter Zombie Mobile: the press animation (czm_touch_press)
++
++A pressed round button sinks by 8% and its disc lights up, a thin ring runs out of it and
++fades (red for fire), and when it is let go it springs back a little past its size.
++Instead of the stock highlight colour; the editors and text buttons stay as they were.
++============
++*/
++static int Touch_CzmTexture( int *texture, const char *path );
++static int czm_fx_dot, czm_fx_ring; // 0 not loaded yet, -1 missing
++
++#define CZM_PRESS_IN 0.07f  // seconds to sink
++#define CZM_PRESS_OUT 0.22f // seconds to come back
++#define CZM_RIPPLE 0.38f    // seconds of the ring
++
++static float Touch_CzmEase( float t )
++{
++	t = bound( 0.0f, t, 1.0f );
++	return t * t * ( 3.0f - 2.0f * t );
++}
++
++static qboolean Touch_CzmAnimated( const touch_button_t *b )
++{
++	return czm_touch_press.value && touch.state == state_none && b->texture[0] && b->texture[0] != '#'
++		&& !FBitSet( b->flags, TOUCH_FL_CLIENT )
++		&& ( b->type == touch_command || b->type == touch_czmwheel || b->type == touch_wheel );
++}
++
++static float Touch_CzmDepth( const touch_button_t *b )
++{
++	if( b->finger != -1 || b->latched )
++		return Touch_CzmEase(( host.realtime - b->czm_down ) / CZM_PRESS_IN );
++	if( b->czm_up > 0.0 && host.realtime - b->czm_up < CZM_PRESS_OUT )
++		return b->czm_depth * ( 1.0f - Touch_CzmEase(( host.realtime - b->czm_up ) / CZM_PRESS_OUT ));
++	return 0.0f;
++}
++
++// the finger left the button: remember how deep it was for the way back
++static void Touch_CzmLetGo( touch_button_t *b )
++{
++	b->czm_depth = Touch_CzmDepth( b );
++	b->czm_up = host.realtime;
++	b->finger = -1;
++}
++
++static void Touch_CzmDrawPressed( touch_button_t *b, const byte *color )
++{
++	const float cx = ( b->x1 + b->x2 ) * 0.5f, cy = ( b->y1 + b->y2 ) * 0.5f;
++	const float hw = ( b->x2 - b->x1 ) * 0.5f, hh = ( b->y2 - b->y1 ) * 0.5f;
++	const qboolean down = b->finger != -1 || b->latched;
++	const float depth = Touch_CzmDepth( b );
++	const double age = host.realtime - b->czm_down;
++	float scale = 1.0f - 0.08f * depth;
++	rgba_t c;
++
++	// a small spring past the rest size after letting go
++	if( !down && b->czm_up > 0.0 && host.realtime - b->czm_up < 0.3 )
++	{
++		const float t = ( host.realtime - b->czm_up ) / 0.3f;
++		scale += 0.03f * b->czm_depth * sinf( t * M_PI_F ) * ( 1.0f - t );
++	}
++
++	Vector4Copy( color, c );
++	Touch_DrawTexture( cx - hw * scale, cy - hh * scale, cx + hw * scale, cy + hh * scale, b->gl_texturenum, c );
++
++	// pressed: the disc lights up (additive, so the colour carries the strength)
++	if( depth > 0.0f && Touch_CzmTexture( &czm_fx_dot, "gfx/czm/ui/dot.png" ))
++	{
++		const byte light = 50 * depth * color[3] / 255;
++
++		c[0] = c[1] = c[2] = light;
++		c[3] = 255;
++		ref.dllFuncs.GL_SetRenderMode( kRenderTransAdd );
++		Touch_DrawTexture( cx - hw * scale * 0.92f, cy - hh * scale * 0.92f, cx + hw * scale * 0.92f, cy + hh * scale * 0.92f, czm_fx_dot, c );
++		ref.dllFuncs.GL_SetRenderMode( kRenderTransTexture );
++	}
++
++	// the ring that runs out of the button when it goes down
++	if( b->czm_down > 0.0 && age >= 0.0 && age < CZM_RIPPLE && Touch_CzmTexture( &czm_fx_ring, "gfx/czm/ui/touch_ripple.png" ))
++	{
++		const float t = age / CZM_RIPPLE;
++		const float grow = 1.0f + 0.42f * ( 1.0f - ( 1.0f - t ) * ( 1.0f - t ));
++		const qboolean fire = !Q_strcmp( b->command, "+attack" );
++
++		c[0] = 255;
++		c[1] = fire ? 72 : 255;
++		c[2] = fire ? 84 : 255;
++		c[3] = 210 * ( 1.0f - t ) * ( 1.0f - t ) * color[3] / 255;
++		Touch_DrawTexture( cx - hw * grow, cy - hh * grow, cx + hw * grow, cy + hh * grow, czm_fx_ring, c );
++	}
++}
++
+ static void Touch_DrawButtons( touchbuttonlist_t *list )
+ {
+ 	for( touch_button_t *b = list->first; b; b = b->next )
+@@ -1591,7 +1701,7 @@ static void Touch_DrawButtons( touchbuttonlist_t *list )
+ 				}
+ 			}
+ 
+-			if(( b->finger != -1 || b->latched ) && !FBitSet( b->flags, TOUCH_FL_CLIENT ))
++			if(( b->finger != -1 || b->latched ) && !FBitSet( b->flags, TOUCH_FL_CLIENT ) && !Touch_CzmAnimated( b ))
+ 			{
+ 				color[0] = bound( 0, color[0] * touch_highlight_r.value, 255 );
+ 				color[1] = bound( 0, color[1] * touch_highlight_g.value, 255 );
+@@ -1618,7 +1728,10 @@ static void Touch_DrawButtons( touchbuttonlist_t *list )
+ 				else
+ 					ref.dllFuncs.GL_SetRenderMode( kRenderTransTexture );
+ 
+-				Touch_DrawTexture( b->x1, b->y1, b->x2, b->y2, b->gl_texturenum, color );
++				if( Touch_CzmAnimated( b ))
++					Touch_CzmDrawPressed( b, color );
++				else
++					Touch_DrawTexture( b->x1, b->y1, b->x2, b->y2, b->gl_texturenum, color );
+ 				if( FBitSet( b->flags, TOUCH_FL_STICK ) && b->type == touch_joy)
+ 					Touch_DrawStickThumb( b, color );
+ 			}
+@@ -1846,6 +1959,8 @@ static void Touch_CzmDrawAmmo( touchbuttonlist_t *list )
+ 
+ void Touch_Draw( void )
+ {
++	Touch_CzmWheelFrame();
++
+ 	if( !touch.initialized || ( !touch_enable.value && !touch.clientonly ))
+ 		return;
+ 
+@@ -2135,6 +2250,219 @@ static void Touch_Motion( int fingerID, float x, float y, float dx, float dy )
+ 	}
+ }
+ 
++/*
++============
++Counter Zombie Mobile: wheels on touch buttons ("_czmwheel weapons", "_czmwheel radio";
++the stock radio button "showvguimenu 38" is the radio wheel)
++
++The engine follows the finger, the menu draws the wheel and runs what was picked
++(czm/menu/CzmWheels.cpp). While a wheel is up, czm_wheel is
++"<kind> <mode> <cx> <cy> <radius> <dx> <dy> <pointing> <shown>" in screen pixels, "" otherwise;
++a choice runs "czm_wheel_pick <kind> <mode> <dx> <dy> <radius>".
++Held (mode 1): the finger that pressed the button slides, the direction from where it went
++down chooses and letting go picks; other fingers keep walking and looking. A quick tap: the
++weapon wheel switches to the last weapon (a pick of 0 0), other wheels stay open; the weapon
++wheel held up and let go without a slide picks nothing.
++Open (mode 2): the next finger picks what it is let go on (dx dy from the centre); a tap on
++the hub or outside closes it, so does a quiet while.
++============
++*/
++#define CZM_WHEEL_RADIUS 0.30f // of the screen height
++#define CZM_WHEEL_SLIDE 0.06f  // of the screen height: a shorter move is a tap
++#define CZM_WHEEL_HUB 0.30f    // of the radius
++#define CZM_WHEEL_EDGE 1.12f   // of the radius
++#define CZM_WHEEL_SHOW 0.2     // seconds: a quick tap never shows the wheel
++#define CZM_WHEEL_IDLE 6.0     // seconds an open wheel waits for a tap
++
++enum { CZM_WHEEL_NONE, CZM_WHEEL_HELD, CZM_WHEEL_OPEN };
++
++static struct
++{
++	int mode;
++	char kind[16];
++	int finger;             // the finger that slides or picks, -1 none
++	touch_button_t *button; // the button held for the wheel
++	float cx, cy, r;        // the wheel on the screen, pixels
++	float sx, sy, fx, fy;   // where the held finger went down and where the finger is, pixels
++	qboolean slid;
++	double down, active;
++} czm_wheel = { .mode = CZM_WHEEL_NONE, .finger = -1 };
++
++static void Touch_CzmWheelPublish( void )
++{
++	char value[128] = "";
++
++	if( czm_wheel.mode != CZM_WHEEL_NONE )
++	{
++		const qboolean held = czm_wheel.mode == CZM_WHEEL_HELD;
++		const float dx = czm_wheel.fx - ( held ? czm_wheel.sx : czm_wheel.cx );
++		const float dy = czm_wheel.fy - ( held ? czm_wheel.sy : czm_wheel.cy );
++		const int pointing = held ? czm_wheel.slid : czm_wheel.finger != -1;
++		const int shown = !held || czm_wheel.slid || host.realtime - czm_wheel.down >= CZM_WHEEL_SHOW;
++
++		Q_snprintf( value, sizeof( value ), "%s %d %d %d %d %d %d %d %d", czm_wheel.kind, czm_wheel.mode,
++			(int)czm_wheel.cx, (int)czm_wheel.cy, (int)czm_wheel.r, (int)dx, (int)dy, pointing, shown );
++	}
++
++	if( Q_strcmp( value, czm_wheel_state.string ))
++		Cvar_DirectSet( &czm_wheel_state, value );
++}
++
++static void Touch_CzmWheelClose( void )
++{
++	if( czm_wheel.mode == CZM_WHEEL_NONE )
++		return;
++	if( czm_wheel.button && czm_wheel.button->finger == czm_wheel.finger && czm_wheel.finger != -1 )
++		Touch_CzmLetGo( czm_wheel.button );
++	czm_wheel.mode = CZM_WHEEL_NONE;
++	czm_wheel.finger = -1;
++	czm_wheel.button = NULL;
++	Touch_CzmWheelPublish();
++}
++
++// a button goes away: the wheel must not touch it any more
++static void Touch_CzmWheelForget( const touch_button_t *button )
++{
++	if( czm_wheel.button == button )
++		czm_wheel.button = NULL;
++}
++
++static void Touch_CzmWheelPick( float dx, float dy )
++{
++	Cbuf_AddText( va( "czm_wheel_pick %s %d %d %d %d\n", czm_wheel.kind, czm_wheel.mode, (int)dx, (int)dy, (int)czm_wheel.r ));
++}
++
++static void Touch_CzmWheelOpen( touch_button_t *button, int fingerID, float x, float y )
++{
++	const float r = refState.height * CZM_WHEEL_RADIUS, margin = r * CZM_WHEEL_EDGE;
++	const char *kind = "radio";
++	size_t n;
++
++	if( !Q_strncmp( button->command, "_czmwheel ", 10 ))
++		kind = button->command + 10;
++	for( n = 0; kind[n] && kind[n] != ' ' && n < sizeof( czm_wheel.kind ) - 1; n++ )
++		czm_wheel.kind[n] = kind[n];
++	czm_wheel.kind[n] = 0;
++
++	// round about the button, moved in from the edges to fit the screen
++	czm_wheel.r = r;
++	czm_wheel.cx = bound( margin, TO_SCRN_X(( button->x1 + button->x2 ) * 0.5f ), refState.width - margin );
++	czm_wheel.cy = bound( margin, TO_SCRN_Y(( button->y1 + button->y2 ) * 0.5f ), refState.height - margin );
++	czm_wheel.sx = czm_wheel.fx = TO_SCRN_X( x );
++	czm_wheel.sy = czm_wheel.fy = TO_SCRN_Y( y );
++	czm_wheel.mode = CZM_WHEEL_HELD;
++	czm_wheel.finger = fingerID;
++	czm_wheel.button = button;
++	czm_wheel.slid = false;
++	czm_wheel.down = czm_wheel.active = host.realtime;
++	Touch_CzmWheelPublish();
++}
++
++static qboolean Touch_CzmWheelEvent( touchEventType type, int fingerID, float x, float y )
++{
++	const float px = TO_SCRN_X( x ), py = TO_SCRN_Y( y );
++	float dx, dy, d;
++
++	if( czm_wheel.mode == CZM_WHEEL_NONE )
++		return false;
++
++	if( czm_wheel.mode == CZM_WHEEL_HELD )
++	{
++		if( fingerID != czm_wheel.finger )
++			return false; // other fingers keep walking and looking
++
++		czm_wheel.fx = px;
++		czm_wheel.fy = py;
++		czm_wheel.active = host.realtime;
++		dx = px - czm_wheel.sx;
++		dy = py - czm_wheel.sy;
++		if( dx * dx + dy * dy > refState.height * CZM_WHEEL_SLIDE * refState.height * CZM_WHEEL_SLIDE )
++			czm_wheel.slid = true;
++
++		if( type != event_up )
++		{
++			Touch_CzmWheelPublish();
++			return true;
++		}
++
++		if( czm_wheel.button )
++			Touch_CzmLetGo( czm_wheel.button );
++		czm_wheel.button = NULL;
++
++		if( czm_wheel.slid )
++		{
++			Touch_CzmWheelPick( dx, dy );
++			Touch_CzmWheelClose();
++		}
++		else if( !Q_strcmp( czm_wheel.kind, "weapons" ))
++		{
++			// a tap: the last weapon; held up and let go without a slide: changed one's mind
++			if( host.realtime - czm_wheel.down < CZM_WHEEL_SHOW )
++				Touch_CzmWheelPick( 0, 0 );
++			Touch_CzmWheelClose();
++		}
++		else
++		{
++			// a tap: the wheel stays up for a tap on a choice
++			czm_wheel.mode = CZM_WHEEL_OPEN;
++			czm_wheel.finger = -1;
++			czm_wheel.active = host.realtime;
++			Touch_CzmWheelPublish();
++		}
++		return true;
++	}
++
++	// open: the next finger picks what it is let go on
++	dx = px - czm_wheel.cx;
++	dy = py - czm_wheel.cy;
++	d = sqrtf( dx * dx + dy * dy );
++
++	if( type == event_down )
++	{
++		if( czm_wheel.finger != -1 )
++			return true; // one finger picks at a time
++		if( d > czm_wheel.r * CZM_WHEEL_EDGE || d < czm_wheel.r * CZM_WHEEL_HUB )
++		{
++			Touch_CzmWheelClose(); // outside or the hub: closed, nothing picked
++			return true;
++		}
++		czm_wheel.finger = fingerID;
++	}
++	else if( fingerID != czm_wheel.finger )
++		return false;
++
++	czm_wheel.fx = px;
++	czm_wheel.fy = py;
++	czm_wheel.active = host.realtime;
++
++	if( type == event_up )
++	{
++		if( d <= czm_wheel.r * CZM_WHEEL_EDGE && d >= czm_wheel.r * CZM_WHEEL_HUB )
++			Touch_CzmWheelPick( dx, dy );
++		Touch_CzmWheelClose();
++		return true;
++	}
++
++	Touch_CzmWheelPublish();
++	return true;
++}
++
++// every frame: the wheel shows itself after a moment of holding, closes outside the match
++static void Touch_CzmWheelFrame( void )
++{
++	if( czm_wheel.mode == CZM_WHEEL_NONE )
++		return;
++
++	if( cls.key_dest != key_game || touch.state != state_none || cls.state != ca_active
++		|| ( czm_wheel.mode == CZM_WHEEL_OPEN && czm_wheel.finger == -1 && host.realtime - czm_wheel.active > CZM_WHEEL_IDLE ))
++	{
++		Touch_CzmWheelClose();
++		return;
++	}
++
++	Touch_CzmWheelPublish();
++}
++
+ static qboolean Touch_ButtonPress( touchbuttonlist_t *list, touchEventType type, int fingerID, float x, float y )
+ {
+ 	qboolean result = false;
+@@ -2172,6 +2500,14 @@ static qboolean Touch_ButtonPress( touchbuttonlist_t *list, touchEventType type,
+ 			if( czm_on_swipe && button->type == touch_look )
+ 				continue;
+ 			button->finger = fingerID;
++			button->czm_down = host.realtime;
++
++			if( button->type == touch_czmwheel )
++			{
++				// the finger belongs to the wheel: it neither walks nor looks
++				Touch_CzmWheelOpen( button, fingerID, x, y );
++				return true;
++			}
+ 
+ 			if( button->type == touch_command )
+ 			{
+@@ -2327,7 +2663,7 @@ static qboolean Touch_ButtonPress( touchbuttonlist_t *list, touchEventType type,
+ 			if( fingerID != button->finger )
+ 				continue;
+ 
+-			button->finger = -1;
++			Touch_CzmLetGo( button ); // finger -1, the press animation springs back
+ 
+ 			if( button->type == touch_command )
+ 			{
+@@ -2461,6 +2797,8 @@ static int Touch_ControlsEvent( touchEventType type, int fingerID, float x, floa
+ 
+ 	if( touch.state == state_edit && Touch_ButtonEdit( type, fingerID, x, y ))
+ 		return true;
++	if( touch.state == state_none && Touch_CzmWheelEvent( type, fingerID, x, y ))
++		return true;
+ 	if( Touch_ButtonPress( &touch.list_user, type, fingerID, x, y ))
+ 		return true;
+ 	if( type == event_motion )
+@@ -2505,6 +2843,7 @@ int IN_TouchEvent( touchEventType type, int fingerID, float x, float y, float dx
+ 	if( cls.key_dest != key_game && !touch_in_menu.value )
+ 	{
+ 		Touch_ResetSticks();
++		Touch_CzmWheelClose();
+ 		touch.move_finger = touch.resize_finger = touch.look_finger = touch.wheel_finger = -1;
+ 		// Hack for keyboard, hope it help
+ 		// a1ba: this is absolutely horrible
