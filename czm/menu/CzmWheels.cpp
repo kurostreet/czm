@@ -70,6 +70,40 @@ static const CzmWheelSlot s_radio[] =
 	{ "icon_flag", "Держим позицию", "Hold position", "holdpos", KIND_RADIO, 0 },
 };
 
+// the three stock radio menus (radio1..radio3), in their order, clockwise from the top
+static const CzmWheelSlot s_radioCommands[] =
+{
+	{ "icon_shield", "Прикрой меня", "Cover me", "coverme", KIND_RADIO, 0 },
+	{ "icon_go", "Иди первым", "Take the point", "takepoint", KIND_RADIO, 0 },
+	{ "icon_flag", "Держи позицию", "Hold position", "holdpos", KIND_RADIO, 0 },
+	{ "icon_refresh", "Сбор", "Regroup", "regroup", KIND_RADIO, 0 },
+	{ "icon_users", "За мной", "Follow me", "followme", KIND_RADIO, 0 },
+	{ "icon_plus", "Под огнём!", "Taking fire", "takingfire", KIND_RADIO, 0 },
+};
+
+static const CzmWheelSlot s_radioGroup[] =
+{
+	{ "icon_go", "Вперёд!", "Go, go, go", "go", KIND_RADIO, 0 },
+	{ "icon_back", "Отходим", "Fall back", "fallback", KIND_RADIO, 0 },
+	{ "icon_users", "Держимся вместе", "Stick together", "sticktog", KIND_RADIO, 0 },
+	{ "icon_flag", "По позициям", "Get in position", "getinpos", KIND_RADIO, 0 },
+	{ "icon_target", "Штурмуем", "Storm the front", "stormfront", KIND_RADIO, 0 },
+	{ "icon_info", "Доложите", "Report in", "report", KIND_RADIO, 0 },
+};
+
+static const CzmWheelSlot s_radioReplies[] =
+{
+	{ "icon_check", "Так точно", "Affirmative", "roger", KIND_RADIO, 0 },
+	{ "icon_target", "Враг замечен", "Enemy spotted", "enemyspot", KIND_RADIO, 0 },
+	{ "icon_plus", "Нужна помощь", "Need backup", "needbackup", KIND_RADIO, 0 },
+	{ "icon_shield", "Чисто", "Sector clear", "sectorclear", KIND_RADIO, 0 },
+	{ "icon_flag", "На позиции", "In position", "inposition", KIND_RADIO, 0 },
+	{ "icon_info", "Докладываю", "Reporting in", "reportingin", KIND_RADIO, 0 },
+	{ "icon_bomb", "Рванёт!", "Gonna blow!", "getout", KIND_RADIO, 0 },
+	{ "icon_close", "Никак нет", "Negative", "negative", KIND_RADIO, 0 },
+	{ "icon_skull", "Враг убит", "Enemy down", "enemydown", KIND_RADIO, 0 },
+};
+
 static const CzmWheelSlot s_weapons[] =
 {
 	{ "ak47", "Основное", "Primary", "slot1", KIND_WEAPON, 0 },
@@ -92,6 +126,9 @@ static const CzmWheel s_wheels[] =
 {
 	{ "weapons", s_weapons, sizeof( s_weapons ) / sizeof( s_weapons[0] ), "lastinv", "icon_refresh" },
 	{ "radio", s_radio, sizeof( s_radio ) / sizeof( s_radio[0] ), NULL, "icon_close" },
+	{ "radio1", s_radioCommands, sizeof( s_radioCommands ) / sizeof( s_radioCommands[0] ), NULL, "icon_close" },
+	{ "radio2", s_radioGroup, sizeof( s_radioGroup ) / sizeof( s_radioGroup[0] ), NULL, "icon_close" },
+	{ "radio3", s_radioReplies, sizeof( s_radioReplies ) / sizeof( s_radioReplies[0] ), NULL, "icon_close" },
 };
 
 static const CzmWheel *FindWheel( const char *name )
@@ -217,7 +254,7 @@ static void DrawWheel( const CzmWheel &wheel, int cx, int cy, int r, int hover, 
 		const int sx = cx + cosf( angle ) * r * 0.64f;
 		const int sy = cy + sinf( angle ) * r * 0.64f;
 		const int picH = r * 0.17f, picW = slot.kind == KIND_WEAPON ? r * 0.44f : picH;
-		const int textW = r * ( wheel.count > 6 ? 0.52f : 0.6f );
+		const int textW = r * ( wheel.count > 8 ? 0.46f : wheel.count > 6 ? 0.52f : 0.6f );
 		const int nameH = CZM_FontHeight( nameFont ), whereH = CZM_FontHeight( whereFont );
 		const int top = sy - ( picH + nameH + whereH + H * 0.012f ) / 2;
 		const char *label = SlotLabel( slot ), *where = SlotWhere( slot );

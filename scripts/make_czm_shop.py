@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 """Build the images of the Counter Zombie Mobile shop wheel.
 
-For every number of sectors N (1..8): wheelN.png is the whole wheel (dark sectors,
+For every number of sectors N (1..9): wheelN.png is the whole wheel (dark sectors,
 thin borders, outer ring and the hub), wheelN_I.png is sector I highlighted
 (transparent elsewhere, drawn over the wheel). Sector 0 is centred at the top,
 the others follow clockwise. Geometry, shared with czm/menu/CzmShop.cpp:
 canvas 640 x 640, centre 320, outer radius 300, sectors start at radius 88,
 the hub circle has radius 80.
 
-usage: make_czm_shop.py   (needs Playwright with Chromium; the output is committed)
+usage: make_czm_shop.py [N ...]   (only these numbers of sectors; needs Playwright with Chromium;
+       the output is committed)
 """
 import math
+import sys
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright
@@ -63,7 +65,7 @@ def highlight(n, i):
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     jobs = []
-    for n in range(1, 9):
+    for n in [int(a) for a in sys.argv[1:]] or range(1, 10):
         jobs.append((f"wheel{n}.png", wheel(n)))
         for i in range(n):
             jobs.append((f"wheel{n}_{i}.png", highlight(n, i)))

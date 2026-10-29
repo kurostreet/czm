@@ -64,16 +64,17 @@ diff --git a/engine/client/input/in_touch.c b/engine/client/input/in_touch.c
  		Mem_Free( remove );
  	}
  	list->first = list->last = NULL;
-@@ -755,6 +768,8 @@ static void Touch_SetCommand( touch_button_t *button, const char *command )
+@@ -755,6 +768,9 @@ static void Touch_SetCommand( touch_button_t *button, const char *command )
  		button->type = touch_dpad;
  	else if( !Q_strncmp( "_wheel ", command, 7 ) || !Q_strncmp( "_hwheel ", command, 8 ))
  		button->type = touch_wheel;
-+	else if( !Q_strncmp( "_czmwheel ", command, 10 ) || !Q_strcmp( command, "showvguimenu 38" ))
-+		button->type = touch_czmwheel; // the stock radio button opens the radio wheel
++	else if( !Q_strncmp( "_czmwheel ", command, 10 ) || !Q_strcmp( command, "showvguimenu 38" )
++		|| ( !Q_strncmp( "radio", command, 5 ) && command[5] >= '1' && command[5] <= '3' && !command[6] ))
++		button->type = touch_czmwheel; // the stock radio buttons open the radio wheels
  	else
  		button->type = touch_command;
  }
-@@ -1243,6 +1258,8 @@ void Touch_Init( void )
+@@ -1243,6 +1259,8 @@ void Touch_Init( void )
  	// not saved, just runtime state for scripting
  	Cvar_RegisterVariable( &touch_in_menu );
  	Cvar_RegisterVariable( &czm_ammo_state );
@@ -82,7 +83,7 @@ diff --git a/engine/client/input/in_touch.c b/engine/client/input/in_touch.c
  
  	// sensitivity configuration
  	Cvar_RegisterVariable( &touch_forwardzone );
-@@ -1567,6 +1584,99 @@ static void Touch_DrawStickThumb( const touch_button_t *button, byte *color )
+@@ -1567,6 +1585,99 @@ static void Touch_DrawStickThumb( const touch_button_t *button, byte *color )
  		cx + width * 0.18f, cy + height * 0.18f, touch.sticktexture, color );
  }
  
@@ -182,7 +183,7 @@ diff --git a/engine/client/input/in_touch.c b/engine/client/input/in_touch.c
  static void Touch_DrawButtons( touchbuttonlist_t *list )
  {
  	for( touch_button_t *b = list->first; b; b = b->next )
-@@ -1591,7 +1701,7 @@ static void Touch_DrawButtons( touchbuttonlist_t *list )
+@@ -1591,7 +1702,7 @@ static void Touch_DrawButtons( touchbuttonlist_t *list )
  				}
  			}
  
@@ -191,7 +192,7 @@ diff --git a/engine/client/input/in_touch.c b/engine/client/input/in_touch.c
  			{
  				color[0] = bound( 0, color[0] * touch_highlight_r.value, 255 );
  				color[1] = bound( 0, color[1] * touch_highlight_g.value, 255 );
-@@ -1618,7 +1728,10 @@ static void Touch_DrawButtons( touchbuttonlist_t *list )
+@@ -1618,7 +1729,10 @@ static void Touch_DrawButtons( touchbuttonlist_t *list )
  				else
  					ref.dllFuncs.GL_SetRenderMode( kRenderTransTexture );
  
@@ -203,7 +204,7 @@ diff --git a/engine/client/input/in_touch.c b/engine/client/input/in_touch.c
  				if( FBitSet( b->flags, TOUCH_FL_STICK ) && b->type == touch_joy)
  					Touch_DrawStickThumb( b, color );
  			}
-@@ -1846,6 +1959,8 @@ static void Touch_CzmDrawAmmo( touchbuttonlist_t *list )
+@@ -1846,6 +1960,8 @@ static void Touch_CzmDrawAmmo( touchbuttonlist_t *list )
  
  void Touch_Draw( void )
  {
@@ -212,14 +213,15 @@ diff --git a/engine/client/input/in_touch.c b/engine/client/input/in_touch.c
  	if( !touch.initialized || ( !touch_enable.value && !touch.clientonly ))
  		return;
  
-@@ -2135,6 +2250,219 @@ static void Touch_Motion( int fingerID, float x, float y, float dx, float dy )
+@@ -2135,6 +2251,222 @@ static void Touch_Motion( int fingerID, float x, float y, float dx, float dy )
  	}
  }
  
 +/*
 +============
 +Counter Zombie Mobile: wheels on touch buttons ("_czmwheel weapons", "_czmwheel radio";
-+the stock radio button "showvguimenu 38" is the radio wheel)
++the stock radio button "showvguimenu 38" is the radio wheel, "radio1".."radio3" are the
++wheels of the three radio menus)
 +
 +The engine follows the finger, the menu draws the wheel and runs what was picked
 +(czm/menu/CzmWheels.cpp). While a wheel is up, czm_wheel is
@@ -306,6 +308,8 @@ diff --git a/engine/client/input/in_touch.c b/engine/client/input/in_touch.c
 +
 +	if( !Q_strncmp( button->command, "_czmwheel ", 10 ))
 +		kind = button->command + 10;
++	else if( !Q_strncmp( button->command, "radio", 5 ))
++		kind = button->command; // radio1..radio3: the stock radio menus
 +	for( n = 0; kind[n] && kind[n] != ' ' && n < sizeof( czm_wheel.kind ) - 1; n++ )
 +		czm_wheel.kind[n] = kind[n];
 +	czm_wheel.kind[n] = 0;
@@ -432,7 +436,7 @@ diff --git a/engine/client/input/in_touch.c b/engine/client/input/in_touch.c
  static qboolean Touch_ButtonPress( touchbuttonlist_t *list, touchEventType type, int fingerID, float x, float y )
  {
  	qboolean result = false;
-@@ -2172,6 +2500,14 @@ static qboolean Touch_ButtonPress( touchbuttonlist_t *list, touchEventType type,
+@@ -2172,6 +2504,14 @@ static qboolean Touch_ButtonPress( touchbuttonlist_t *list, touchEventType type,
  			if( czm_on_swipe && button->type == touch_look )
  				continue;
  			button->finger = fingerID;
@@ -447,7 +451,7 @@ diff --git a/engine/client/input/in_touch.c b/engine/client/input/in_touch.c
  
  			if( button->type == touch_command )
  			{
-@@ -2327,7 +2663,7 @@ static qboolean Touch_ButtonPress( touchbuttonlist_t *list, touchEventType type,
+@@ -2327,7 +2667,7 @@ static qboolean Touch_ButtonPress( touchbuttonlist_t *list, touchEventType type,
  			if( fingerID != button->finger )
  				continue;
  
@@ -456,7 +460,7 @@ diff --git a/engine/client/input/in_touch.c b/engine/client/input/in_touch.c
  
  			if( button->type == touch_command )
  			{
-@@ -2461,6 +2797,8 @@ static int Touch_ControlsEvent( touchEventType type, int fingerID, float x, floa
+@@ -2461,6 +2801,8 @@ static int Touch_ControlsEvent( touchEventType type, int fingerID, float x, floa
  
  	if( touch.state == state_edit && Touch_ButtonEdit( type, fingerID, x, y ))
  		return true;
@@ -465,7 +469,7 @@ diff --git a/engine/client/input/in_touch.c b/engine/client/input/in_touch.c
  	if( Touch_ButtonPress( &touch.list_user, type, fingerID, x, y ))
  		return true;
  	if( type == event_motion )
-@@ -2505,6 +2843,7 @@ int IN_TouchEvent( touchEventType type, int fingerID, float x, float y, float dx
+@@ -2505,6 +2847,7 @@ int IN_TouchEvent( touchEventType type, int fingerID, float x, float y, float dx
  	if( cls.key_dest != key_game && !touch_in_menu.value )
  	{
  		Touch_ResetSticks();

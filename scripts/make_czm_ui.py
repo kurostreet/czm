@@ -262,6 +262,31 @@ def icon(kind, size=128, color=(255, 255, 255, 255)):
         d.polygon([(S * .24, S * .30), (S * .92, S * .30), (S * .82, S * .56), (S * .31, S * .56)], fill=c)
         for x in (.38, .74):
             d.ellipse([S * (x - .075), S * .74, S * (x + .075), S * .89], fill=c)
+    elif kind == "go":
+        # two chevrons up: forward
+        for top in (.16, .44):
+            d.line([(S * .20, S * (top + .30)), (S * .50, S * top), (S * .80, S * (top + .30))], fill=c, width=lw, joint="curve")
+            r = lw / 2
+            for x, y in ((.20, top + .30), (.50, top), (.80, top + .30)):
+                d.ellipse([S * x - r, S * y - r, S * x + r, S * y + r], fill=c)
+    elif kind == "bomb":
+        # a round bomb, its fuse burning
+        d.ellipse([S * .10, S * .30, S * .76, S * .96], outline=c, width=lw)
+        d.polygon([(S * .52, S * .30), (S * .66, S * .22), (S * .76, S * .38), (S * .64, S * .44)], fill=c)
+        d.arc([S * .68, S * .06, S * .96, S * .40], 190, 280, fill=c, width=int(lw * .8))
+        for a in range(0, 360, 60):
+            x, y = .86 + .07 * math.cos(math.radians(a)), .10 + .07 * math.sin(math.radians(a))
+            d.line([S * .86, S * .10, S * x, S * y], fill=c, width=int(lw * .5))
+        d.arc([S * .22, S * .46, S * .50, S * .74], 190, 260, fill=c, width=int(lw * .7))
+    elif kind == "skull":
+        # enemy down
+        d.ellipse([S * .16, S * .06, S * .84, S * .70], fill=c)
+        d.rounded_rectangle([S * .30, S * .52, S * .70, S * .90], radius=S * .06, fill=c)
+        d.ellipse([S * .28, S * .30, S * .46, S * .48], fill=clear)
+        d.ellipse([S * .54, S * .30, S * .72, S * .48], fill=clear)
+        d.polygon([(S * .50, S * .50), (S * .45, S * .60), (S * .55, S * .60)], fill=clear)
+        for x in (.43, .57):
+            d.rectangle([S * x - lw * .3, S * .70, S * x + lw * .3, S * .90], fill=clear)
     elif kind in ("star", "star_on"):
         pts = []
         for i in range(10):
@@ -433,6 +458,11 @@ def main():
     if "--radio" in sys.argv:
         # the radio wheel: the spray slot
         save(icon("spray"), "icon_spray.png")
+        return
+    if "--radio-menus" in sys.argv:
+        # the wheels of the three radio menus: go, it's gonna blow, enemy down
+        for kind in ("go", "bomb", "skull"):
+            save(icon(kind), f"icon_{kind}.png")
         return
     if "--top" in sys.argv:
         # Top 100: the crowns of the first three and of the rest

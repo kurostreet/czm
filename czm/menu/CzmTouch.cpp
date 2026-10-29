@@ -264,8 +264,10 @@ struct CzmTouchButton
 
 static bool ButtonEditable( const CzmTouchButton &b )
 {
-	// _move and _look are the walk and look zones, _wheel is a swipe button the player may own
-	if( b.command[0] == '_' && strncmp( b.command, "_wheel ", 7 ) && strncmp( b.command, "_hwheel ", 8 ))
+	// _move and _look are the walk and look zones; _wheel is a swipe button and _czmwheel a wheel of
+	// choices, both the player's own
+	if( b.command[0] == '_' && strncmp( b.command, "_wheel ", 7 ) && strncmp( b.command, "_hwheel ", 8 )
+		&& strncmp( b.command, "_czmwheel ", 10 ))
 		return false;
 	return b.texture[0] && b.texture[0] != '#' && !( b.flags & TOUCH_FLAG_NOEDIT );
 }

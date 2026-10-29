@@ -52,6 +52,7 @@ static float Touch_AspectRatio( void ) { return (float)refState.height / refStat
 @@WHEEL@@
 static touch_button_t weapons = { touch_czmwheel, .80f, .60f, .86f, .73f, "gfx/czm/touch/wheel", "_czmwheel weapons", -1 };
 static touch_button_t radio = { touch_czmwheel, .28f, .08f, .32f, .16f, "gfx/czm/touch/radio", "showvguimenu 38", -1 };
+static touch_button_t replies = { touch_czmwheel, .40f, .08f, .44f, .16f, "gfx/czm/touch/radio3", "radio3", -1 };
 static void press( touch_button_t *b, int finger, float x, float y ) { b->finger = finger; b->czm_down = host.realtime; Touch_CzmWheelOpen( b, finger, x, y ); }
 static int field( int n ) { int v = 0; const char *s = wheelText; for( int i = 0; i < n; i++ ) s = strchr( s, ' ' ) + 1; sscanf( s, "%d", &v ); return v; }
 int main( void ) {
@@ -93,6 +94,12 @@ int main( void ) {
 		assert( Touch_CzmWheelEvent( event_up, 5, x, y ));
 		assert( !strcmp( cbuf, "czm_wheel_pick radio 2 200 0 279\n" ) && !wheelText[0] );
 	}
+	// the stock radio menus are wheels of their own: a slide picks from the "radio3" wheel
+	cbuf[0] = 0; press( &replies, 4, .42f, .12f ); assert( !strncmp( wheelText, "radio3 1 ", 9 ));
+	Touch_CzmWheelEvent( event_motion, 4, .50f, .12f ); Touch_CzmWheelEvent( event_up, 4, .50f, .12f );
+	assert( !strncmp( cbuf, "czm_wheel_pick radio3 1 ", 24 ) && !wheelText[0] );
+	cbuf[0] = 0; press( &replies, 4, .42f, .12f ); Touch_CzmWheelEvent( event_up, 4, .42f, .12f );
+	assert( !cbuf[0] && !strncmp( wheelText, "radio3 2 ", 9 )); Touch_CzmWheelClose();
 	// open: a tap on the hub or outside closes it without a pick; so does a quiet while or a menu
 	cbuf[0] = 0; press( &radio, 4, .30f, .12f ); Touch_CzmWheelEvent( event_up, 4, .30f, .12f );
 	{ const float x = field( 2 ) / 2000.0f, y = field( 3 ) / 932.0f; assert( Touch_CzmWheelEvent( event_down, 7, x, y )); }
@@ -127,7 +134,9 @@ class TouchWheelsTests(unittest.TestCase):
 
     def test_hooks_in_the_touch_code(self):
         added = added_lines()
-        for hook in ('else if( !Q_strncmp( "_czmwheel ", command, 10 ) || !Q_strcmp( command, "showvguimenu 38" ))',
+        for hook in ('else if( !Q_strncmp( "_czmwheel ", command, 10 ) || !Q_strcmp( command, "showvguimenu 38" )\n'
+                     "\t\t|| ( !Q_strncmp( \"radio\", command, 5 ) && command[5] >= '1' && command[5] <= '3' && !command[6] ))\n"
+                     "\t\tbutton->type = touch_czmwheel;",
                      "\tif( touch.state == state_none && Touch_CzmWheelEvent( type, fingerID, x, y ))\n\t\treturn true;",
                      "\tTouch_CzmWheelFrame();\n",
                      "\t\t\t\tTouch_CzmWheelOpen( button, fingerID, x, y );\n\t\t\t\treturn true;",

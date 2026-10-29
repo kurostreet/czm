@@ -191,6 +191,15 @@ int main( int argc, char **argv ) {
 	russian = false; pick( "radio 1 -60 60 200" ); assert( sent( "say \"Thanks!\"\n" )); russian = true;
 	pick( "radio 2 0 0 200" ); assert( commands.empty()); // a tap on the radio wheel picks nothing
 	pick( "nothing 1 0 -90 200" ); assert( commands.empty());
+	// the stock radio menus as wheels: up is the first phrase, then clockwise; a tap leaves them open
+	pick( "radio1 1 0 -90 200" ); assert( sent( "coverme\n" ));
+	pick( "radio1 1 -80 -30 200" ); assert( sent( "takingfire\n" ));
+	pick( "radio2 2 0 -120 200" ); assert( sent( "go\n" ));
+	pick( "radio2 2 0 120 200" ); assert( sent( "sticktog\n" ) == false && sent( "getinpos\n" ));
+	pick( "radio3 1 0 -90 200" ); assert( sent( "roger\n" ));
+	pick( "radio3 1 -64 -77 200" ); assert( sent( "enemydown\n" ));
+	pick( "radio3 1 34 94 200" ); assert( sent( "inposition\n" ));
+	pick( "radio3 1 0 0 200" ); assert( commands.empty());
 
 	// drawn over the game from czm_wheel; nothing while it is empty, not shown yet or a menu is up
 	wheel( "" ); assert( drawn.empty());
@@ -204,13 +213,21 @@ int main( int argc, char **argv ) {
 	uiStatic.menu.active = true; wheel( "weapons 1 700 400 214 90 -30 1 1" ); assert( drawn.empty()); uiStatic.menu.active = false;
 	wheel( "radio 2 700 400 214 0 -150 1 1" );
 	assert( saw( "gfx/czm/shop/wheel8.png" ) && saw( "gfx/czm/shop/wheel8_0.png" ) && saw( "Враг замечен" ) && saw( "Нажми на фразу. Мимо колеса — закрыть" ));
+	wheel( "radio3 2 700 400 214 0 -150 1 1" );
+	assert( saw( "gfx/czm/shop/wheel9.png" ) && saw( "gfx/czm/shop/wheel9_0.png" ) && saw( "Рванёт!" ) && saw( "gfx/czm/ui/icon_skull.png" ));
+	wheel( "radio1 1 700 400 214 0 0 0 1" ); assert( saw( "gfx/czm/shop/wheel6.png" ) && saw( "Иди первым" ) && saw( "gfx/czm/ui/icon_go.png" ));
+	wheel( "radio2 1 700 400 214 0 0 0 1" ); assert( saw( "Вперёд!" ));
 	// it grows in during a tenth of a second
 	wheel( "" ); uiStatic.realTime = 5000; wheel( "radio 2 700 400 214 0 0 0 1" ); uiStatic.realTime = 5200; wheel( "radio 2 700 400 214 0 0 0 1" );
 	// near the bottom the hint goes above the wheel
 	for( auto size : { std::pair<int,int>{ 1536, 716 }, { 2000, 932 }, { 800, 360 } }) {
 		ScreenWidth = size.first; ScreenHeight = size.second; int r = ScreenHeight * 0.3f, m = r * 1.12f;
-		char v[96]; snprintf( v, sizeof( v ), "radio 2 %d %d %d 0 0 0 1", ScreenWidth - m, ScreenHeight - m, r ); wheel( v );
-		snprintf( v, sizeof( v ), "radio 2 %d %d %d 0 0 0 1", m, m, r ); wheel( v );
+		for( const char *kind : { "radio", "radio1", "radio2", "radio3" }) for( int lang = 0; lang < 2; lang++ ) {
+			char v[96]; russian = lang == 0;
+			snprintf( v, sizeof( v ), "%s 2 %d %d %d 0 0 0 1", kind, ScreenWidth - m, ScreenHeight - m, r ); wheel( v );
+			snprintf( v, sizeof( v ), "%s 2 %d %d %d 0 0 0 1", kind, m, m, r ); wheel( v );
+		}
+		russian = true;
 	}
 	ScreenWidth = 1536; ScreenHeight = 716;
 
@@ -315,8 +332,33 @@ class WheelsTests(unittest.TestCase):
         self.assertIn('{ "wheel", "Колесо оружия", "Weapon wheel", "_czmwheel weapons", GROUP_COMBAT },', touch)
         self.assertIn('"_czmwheel weapons"', (ROOT / "czm/settings_schema.json").read_text())
         for picture in ("ui/icon_spray.png", "ui/icon_knife.png", "ui/icon_cart.png", "ui/touch_ripple.png", "touch/wheel.png",
-                        "shop/wheel5.png", "shop/wheel8.png"):
+                        "shop/wheel5.png", "shop/wheel8.png", "shop/wheel6.png", "shop/wheel9.png", "shop/wheel9_8.png",
+                        "ui/icon_go.png", "ui/icon_bomb.png", "ui/icon_skull.png"):
             self.assertTrue((ROOT / "3rdparty/cs16client-extras/gfx/czm" / picture).is_file(), picture)
+        # every picture a wheel names is there
+        import re
+        source = (ROOT / "czm/menu/CzmWheels.cpp").read_text()
+        for name in set(re.findall(r'\{ "(icon_[a-z_]+)", "', source)):
+            self.assertTrue((ROOT / "3rdparty/cs16client-extras/gfx/czm/ui" / (name + ".png")).is_file(), name)
+
+    def test_the_editor_shows_wheel_buttons(self):
+        # the touch editor draws and moves only the buttons the player owns: a wheel is one of them
+        touch = (ROOT / "czm/menu/CzmTouch.cpp").read_text()
+        start = touch.index("struct CzmTouchButton\n")
+        end = touch.index("\n}\n", touch.index("static bool ButtonEditable(")) + 3
+        program = ("#include <cassert>\n#include <cstdio>\n#include <cstring>\n#define TOUCH_FLAG_NOEDIT 4\n" + touch[start:end] + r'''
+static bool editable( const char *command ) { CzmTouchButton b = {}; strcpy( b.texture, "gfx/czm/touch/x" ); strcpy( b.command, command ); return ButtonEditable( b ); }
+int main() {
+	assert( editable( "_czmwheel weapons" ) && editable( "radio1" ) && editable( "showvguimenu 38" ) && editable( "_wheel czm_dd czm_dd" ));
+	assert( !editable( "_move" ) && !editable( "_look" ) && !editable( "_czmwheelx" ));
+	puts( "EDITOR_OK" );
+}
+''')
+        with tempfile.TemporaryDirectory() as folder:
+            p = Path(folder)
+            (p / "main.cpp").write_text(program)
+            subprocess.run(["g++", "-std=c++11", "-Wall", "-Werror", str(p / "main.cpp"), "-o", str(p / "editor")], check=True)
+            self.assertIn("EDITOR_OK", subprocess.run([str(p / "editor")], check=True, capture_output=True, text=True).stdout)
 
 
 if __name__ == "__main__":
