@@ -30,7 +30,7 @@ struct TopRow
 {
 	int place, id, seconds;
 	bool online, support;
-	char nick[100], avatar[32];
+	char nick[100], avatar[32], role[16], project[132];
 };
 
 unsigned Fade( unsigned color, int alpha )
@@ -143,7 +143,9 @@ void CCzmTop::Poll()
 			r.id = j.Int( j.Get( item, "id" ));
 			r.seconds = j.Int( j.Get( item, "seconds" ));
 			r.online = j.Bool( j.Get( item, "online" ));
-			r.support = !strcmp( j.String( j.Get( item, "role" )), "support" );
+			Q_strncpy(r.role,j.String(j.Get(item,"role")),sizeof(r.role));
+			Q_strncpy(r.project,j.String(j.Get(item,"project")),sizeof(r.project));
+			r.support = r.role[0] != 0;
 			Q_strncpy( r.nick, j.String( j.Get( item, "nick" )), sizeof( r.nick ));
 			Q_strncpy( r.avatar, j.String( j.Get( item, "avatar" )), sizeof( r.avatar ));
 		}
@@ -390,11 +392,11 @@ void CCzmTop::DrawPodium( int i, double rise )
 	CZM_DrawImage( CZM_TopCrown( p.place ), ax + ( av - crown ) / 2, ay - crown * ( i ? 74 : 72 ) / 100, crown, crown, Fade( color, alpha ));
 	{
 		// the nick and, for the official account, its SUPPORT tag: one centred group
-		const int tagH = Q_max( 12, CZM_FontHeight( meta ) + 4 ), tagW = p.support ? CZM_SupportTagWidth( tagH ) + gap / 2 : 0;
+		const int tagH = Q_max( 12, CZM_FontHeight( meta ) + 4 ), tagW = p.support ? CZM_RoleTagWidth(p.role,tagH,p.project,r.w/3) + gap / 2 : 0;
 		const int nickW = Q_max( 0, Q_min( CZM_TextWidth( label, p.nick ) + 2, r.w - gap * 2 - tagW ));
 		const int x = r.x + ( r.w - nickW - tagW ) / 2;
 		CZM_DrawText( label, x, nickY, nickW, p.nick, Fade( Ink(), alpha ));
-		if( p.support ) CZM_DrawSupportTag( x + nickW + gap / 2, nickY + ( CZM_FontHeight( label ) - tagH ) / 2, tagH );
+		if( p.support ) CZM_DrawRoleTag( x + nickW + gap / 2, nickY + ( CZM_FontHeight( label ) - tagH ) / 2, tagH,p.role,p.project,r.w/3 );
 	}
 	char time[48];
 	CZM_FormatPlaytime( p.seconds, time, sizeof( time ));
@@ -423,10 +425,10 @@ void CCzmTop::DrawRow( int i, const CzmRect &r )
 	const int timeW = CZM_TextWidth( label, text ) + 2, right = band.x + band.w - gap;
 	CZM_DrawText( label, right - timeW, mid - CZM_FontHeight( label ) / 2, timeW, text, Ink() );
 	const int x = ax + av + gap, tagH = Q_max( 12, CZM_FontHeight( meta ) + 4 );
-	const int tagW = p.support ? CZM_SupportTagWidth( tagH ) + gap / 2 : 0;
+	const int tagW = p.support ? CZM_RoleTagWidth(p.role,tagH,p.project,band.w/4) + gap / 2 : 0;
 	const int nickW = Q_max( 0, Q_min( CZM_TextWidth( label, p.nick ) + 2, right - timeW - gap * 2 - x - tagW ));
 	CZM_DrawText( label, x, mid - CZM_FontHeight( label ) / 2, nickW, p.nick, Ink() );
-	if( p.support && nickW > 0 ) CZM_DrawSupportTag( x + nickW + gap / 2, mid - tagH / 2, tagH );
+	if( p.support && nickW > 0 ) CZM_DrawRoleTag( x + nickW + gap / 2, mid - tagH / 2, tagH,p.role,p.project,band.w/4 );
 }
 
 // the own place, always at the bottom: a calm strip, not a warning

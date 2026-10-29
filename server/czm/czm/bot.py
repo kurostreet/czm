@@ -14,12 +14,12 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.client.telegram import TelegramAPIServer
 from aiogram.enums import ParseMode
-from aiogram.exceptions import TelegramAPIError
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.types import (BotCommand, BufferedInputFile, CallbackQuery, InlineKeyboardButton,
                            InlineKeyboardMarkup, Message)
 
-from . import service, website, accounts, server_moderation
+from . import service, website, accounts, server_moderation, community, moderator_guard
 from .config import Settings, get_settings
 from .db import db
 
@@ -43,6 +43,10 @@ HELP = (
     "/unban <i>ID</i> — разбан, /bans — кто забанен\n"
     "/server_reports — серверы и число жалоб; /server <i>IP:порт</i> — один сервер\n"
     "/server_ban <i>IP:порт причина</i> — блокировка в CZM; /server_unban <i>IP:порт</i> — разбан\n"
+    "/role <i>ID moderator|tester|server_owner [Проект]</i> — назначить роль; /unrole <i>ID роль</i> — снять\n"
+    "/moderators — модераторы; /moderator <i>ID</i> — действия и причины\n"
+    "/mod_pause <i>ID</i> — приостановить; /mod_resume <i>ID</i> — проверить и вернуть права\n"
+    "/mod_undo <i>ID [all]</i> — отмена текущей серии или всей истории с подтверждением\n"
     "/tester <i>число</i> — сколько тестировщиков в бете Google Play показывает сайт, /tester — сколько сейчас\n"
     "/stats — сводка"
 )
@@ -143,6 +147,31 @@ def server_report_text(info: dict) -> str:
     return text
 
 
+def moderation_event_text(info: dict) -> str:
+    labels = {"ban": "Блокировка", "mute_text": "Отключение чата", "mute_voice": "Отключение голоса",
+              "warn": "Предупреждение", "delete_message": "Удаление сообщения", "dismiss": "Отклонение жалобы",
+              "lift": "Снятие ограничения", "remove_avatar": "Сброс аватара", "restrict_photo": "Запрет фото", "close_lobby": "Закрытие лобби"}
+    stamp = datetime.fromtimestamp(info["created"], MSK).strftime("%d.%m %H:%M:%S МСК")
+    text = (f"<b>{labels.get(info['action'], 'Модерация')}</b> · {stamp}\n"
+            f"Модератор: {html.escape(info['moderator_nick'] or 'Удалённый аккаунт')} · ID {info['moderator']}\n"
+            f"Игрок: {html.escape(info['target_nick'] or 'Удалённый аккаунт')} · ID {info['target']}\n"
+            f"Причина: {html.escape(info['reason'] or 'Не указана')}")
+    if info["paused"]:
+        text += (f"\n<b>10 действий: права приостановлены до твоей проверки.</b>\n"
+                 f"/moderator {info['moderator']} · /mod_undo {info['moderator']}")
+    return text
+
+
+def moderator_status_text(info: dict) -> str:
+    period = "—"
+    if info["first"]:
+        period = datetime.fromtimestamp(info["first"], MSK).strftime("%d.%m %H:%M:%S") + " — " + datetime.fromtimestamp(info["last"], MSK).strftime("%d.%m %H:%M:%S МСК")
+    return (f"<b>{html.escape(info['nick'])} · ID {info['player']}</b>\n"
+            f"Права: {'приостановлены' if info['paused'] else 'активны'}\n"
+            f"На проверку: {info['count']}/10 · Всего действий: {info['total']}\n"
+            f"Банов: {info['bans_total']} · За 24 часа: {info['bans_day']}\nПериод: {period}")
+
+
 class OwnerBot:
     def __init__(self, bot: Bot, settings: Settings):
         self.bot = bot
@@ -173,6 +202,136 @@ class OwnerBot:
     def server_owner(self, message: Message) -> bool:
         return self.allowed(message.from_user and message.from_user.id) and getattr(
             getattr(message, "chat", None), "type", "private") == "private"
+
+    async def _chunks(self, message, lines):
+        chunk = ""
+        for line in lines:
+            candidate = (chunk + "\n\n" if chunk else "") + line
+            if chunk and len(candidate.encode("utf-16-le")) > 7000:
+                await message.answer(chunk); chunk = line
+            else:
+                chunk = candidate
+        if chunk:
+            await message.answer(chunk)
+
+    async def on_role(self, message: Message, command: CommandObject) -> None:
+        if not self.server_owner(message):
+            return
+        args = (command.args or "").split(maxsplit=2)
+        if len(args) < 2 or not args[0].isdigit():
+            await message.answer("Так: /role ID moderator|tester|server_owner [Проект]"); return
+        try:
+            info = await in_db(community.grant, int(args[0]), args[1].lower(), args[2] if len(args) > 2 else "", f"telegram:{message.from_user.id}")
+        except accounts.AuthError as exc:
+            await message.answer("Аккаунт не найден или роль неверна. Роли: moderator, tester, server_owner."); return
+        await message.answer(f"{html.escape(info['nick'])} · ID {info['id']}\nРоль: <b>{info['role']}</b>"
+                             + (f" · {html.escape(info['project'])}" if info['project'] else ""))
+
+    async def on_unrole(self, message: Message, command: CommandObject) -> None:
+        if not self.server_owner(message):
+            return
+        args = (command.args or "").split()
+        if len(args) != 2 or not args[0].isdigit() or args[1].lower() not in community.ROLES:
+            await message.answer("Так: /unrole ID moderator|tester|server_owner"); return
+        await in_db(community.revoke, int(args[0]), args[1].lower(), f"telegram:{message.from_user.id}")
+        await message.answer(f"Роль {args[1].lower()} снята у ID {args[0]}. Журнал сохранён.")
+
+    async def on_moderators(self, message: Message, command: CommandObject) -> None:
+        if not self.server_owner(message):
+            return
+        people = await in_db(moderator_guard.moderators)
+        await self._chunks(message, [moderator_status_text(p) for p in people] or ["Модераторов пока нет."])
+
+    async def on_moderator(self, message: Message, command: CommandObject) -> None:
+        if not self.server_owner(message):
+            return
+        args = (command.args or "").split()
+        if not 1 <= len(args) <= 2 or not all(a.isdigit() for a in args) or (len(args)>1 and not 1<=int(args[1])<=10000):
+            await message.answer("Так: /moderator ID или /moderator ID 2"); return
+        await self._moderator_details(message, int(args[0]), int(args[1])-1 if len(args)>1 else 0)
+
+    async def _moderator_details(self, message, player, page=0):
+        try:
+            info = await in_db(moderator_guard.status, player)
+        except accounts.AuthError:
+            await message.answer("Аккаунт не найден."); return
+        lines = [moderator_status_text(info)]
+        actions = await in_db(moderator_guard.history, player, page)
+        states = {"pending": "на проверке", "approved": "проверено", "reverted": "отменено"}
+        for action in actions:
+            stamp = datetime.fromtimestamp(action["created"], MSK).strftime("%d.%m %H:%M:%S")
+            lines.append(f"{stamp} · {html.escape(action['action'])} · ID {action['target']} · {states.get(action['state'],'')}\n{html.escape(action['reason'])}")
+        if len(actions)==10:
+            lines.append(f"Дальше: /moderator {player} {page+2}")
+        await self._chunks(message, lines)
+
+    async def on_mod_control(self, message: Message, command: CommandObject) -> None:
+        if not self.server_owner(message):
+            return
+        args = (command.args or "").split()
+        if not args or not args[0].isdigit() or len(args)>2 or (len(args)>1 and (command.command!="mod_undo" or args[1]!="all")):
+            await message.answer("Так: /mod_pause ID, /mod_resume ID или /mod_undo ID"); return
+        player = int(args[0])
+        try:
+            if command.command == "mod_undo":
+                await in_db(moderator_guard.pause, player, f"telegram:{message.from_user.id}")
+                info = await in_db(moderator_guard.status, player)
+                all_batches = len(args)>1
+                scope = await in_db(moderator_guard.reviewable, player) if all_batches else {"count":info["count"],"last_log":info["batch"]}
+                if not scope["count"]:
+                    await message.answer("Непроверенных действий нет."); return
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(
+                    text=f"Отменить {scope['count']} действий", callback_data=f"{'ma' if all_batches else 'mu'}:{player}:{scope['last_log']}")]])
+                label = "всю историю этого модератора" if all_batches else "эту серию"
+                await message.answer(moderator_status_text(info) + f"\n\nОтменить {label} ({scope['count']} действий)? Более поздние решения сохранятся. Права останутся приостановлены.", reply_markup=keyboard)
+                return
+            operation = moderator_guard.resume if command.command == "mod_resume" else moderator_guard.pause
+            info = await in_db(operation, player, f"telegram:{message.from_user.id}")
+            await message.answer(moderator_status_text(info))
+        except accounts.AuthError:
+            await message.answer("Не найден модератор для этого действия.")
+
+    async def notify_moderation(self):
+        for owner in self.owners:
+            for event in await in_db(moderator_guard.pending, owner):
+                keyboard = None
+                if event["paused"]:
+                    keyboard = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(
+                        text="Статистика и причины", callback_data=f"ms:{event['moderator']}")]])
+                try:
+                    await self.bot.send_message(owner, moderation_event_text(event), reply_markup=keyboard)
+                except TelegramAPIError:
+                    break
+                await in_db(moderator_guard.delivered, event["log"], owner)
+
+    async def notify_tickets(self):
+        for owner in self.owners:
+            for receipt in await in_db(community.ticket_cleanup_pending, owner):
+                try:
+                    await self.bot.delete_message(owner, receipt["message"])
+                except TelegramBadRequest as exc:
+                    if "not found" not in str(exc).lower():
+                        await self.bot.send_message(owner, f"Тикет #{receipt['ticket']} удалён из CZM. Удали оставшиеся копии этого тикета в переписке: Telegram не разрешил автоматическое удаление.")
+                except TelegramAPIError:
+                    break
+                await in_db(community.ticket_cleanup_done, owner, receipt["message"])
+            for ticket in await in_db(community.tickets_pending, owner):
+                title = f"<b>Тикет #{ticket['id']}: {html.escape(ticket['subject'])}</b>"
+                author = f"{html.escape(ticket['nick'])} · ID {ticket['player']}"
+                try:
+                    if not ticket["parts"] & 1:
+                        for start in range(0, len(ticket["text"]), 1600):
+                            sent = await self.bot.send_message(owner, title + "\n" + author + "\n\n" + html.escape(ticket["text"][start:start+1600]))
+                            await in_db(community.ticket_receipt, ticket["id"], owner, sent.message_id)
+                        await in_db(community.ticket_delivered, ticket["id"], owner, 1)
+                    if ticket["photo"] is not None and not ticket["parts"] & 2:
+                        sent = await self.bot.send_photo(owner, BufferedInputFile(ticket["photo"], f"ticket-{ticket['id']}.jpg"), caption=title + "\nФото")
+                        await in_db(community.ticket_delivered, ticket["id"], owner, 2, sent.message_id)
+                    if ticket["text_file"] is not None and not ticket["parts"] & 4:
+                        sent = await self.bot.send_document(owner, BufferedInputFile(ticket["text_file"], ticket["file_name"]), caption=title + "\nТекстовый файл")
+                        await in_db(community.ticket_delivered, ticket["id"], owner, 4, sent.message_id)
+                except TelegramAPIError:
+                    break
 
     async def notify_server_reports(self) -> None:
         for owner in self.owners:
@@ -503,6 +662,21 @@ class OwnerBot:
             await query.answer()
             return
         parts = (query.data or "").split(":")
+        if parts[0] in ("ms", "mu", "ma"):
+            if not query.message or getattr(query.message.chat, "type", "") != "private":
+                await query.answer(); return
+            if parts[0] == "ms" and len(parts) == 2 and parts[1].isdigit():
+                await self._moderator_details(query.message, int(parts[1])); await query.answer(); return
+            if parts[0] in ("mu", "ma") and len(parts) == 3 and all(p.isdigit() for p in parts[1:]):
+                try:
+                    operation = moderator_guard.undo_all if parts[0] == "ma" else moderator_guard.undo
+                    result = await in_db(operation, int(parts[1]), int(parts[2]), f"telegram:{query.from_user.id}")
+                    await query.message.answer(f"Серия отменена. Восстановлено записей: {result['restored']}; пропущено из-за последующих изменений: {result['skipped']}.\nПрава модератора остаются приостановлены.")
+                    await query.message.edit_reply_markup(reply_markup=None)
+                except accounts.AuthError:
+                    await query.message.answer("Серия уже проверена или больше недоступна.")
+                await query.answer(); return
+            await query.answer(); return
         if len(parts) < 2 or not parts[1].isdigit():
             await query.answer()
             return
@@ -555,6 +729,13 @@ class OwnerBot:
                 BotCommand(command="server", description="Жалобы на один сервер"),
                 BotCommand(command="server_ban", description="Заблокировать сервер в CZM"),
                 BotCommand(command="server_unban", description="Разблокировать сервер"),
+                BotCommand(command="role", description="Назначить роль аккаунту"),
+                BotCommand(command="unrole", description="Снять роль аккаунта"),
+                BotCommand(command="moderators", description="Модераторы и состояние прав"),
+                BotCommand(command="moderator", description="Действия модератора и причины"),
+                BotCommand(command="mod_pause", description="Приостановить модератора"),
+                BotCommand(command="mod_resume", description="Проверить и вернуть права"),
+                BotCommand(command="mod_undo", description="Отменить непроверенную серию"),
                 BotCommand(command="tester", description="Тестировщики беты на сайте"),
                 BotCommand(command="unban", description="Разбан игрока"),
                 BotCommand(command="stats", description="Сводка"),
@@ -583,6 +764,11 @@ def build(settings: Settings) -> tuple[Bot, Dispatcher, OwnerBot]:
     router.message.register(owner.on_unban, Command("unban"))
     router.message.register(owner.on_bans, Command("bans"))
     router.message.register(owner.on_tester, Command("tester"))
+    router.message.register(owner.on_role, Command("role"))
+    router.message.register(owner.on_unrole, Command("unrole"))
+    router.message.register(owner.on_moderators, Command("moderators"))
+    router.message.register(owner.on_moderator, Command("moderator"))
+    router.message.register(owner.on_mod_control, Command("mod_pause", "mod_resume", "mod_undo"))
     router.message.register(owner.on_server_reports, Command("server_reports"))
     router.message.register(owner.on_server, Command("server"))
     router.message.register(owner.on_server_ban, Command("server_ban"))
@@ -618,6 +804,8 @@ async def builds_loop(owner: OwnerBot) -> None:
             await owner.notify_play()
             await owner.notify_play_news()
             await owner.notify_server_reports()
+            await owner.notify_moderation()
+            await owner.notify_tickets()
         except asyncio.CancelledError:
             raise
         except Exception as e:

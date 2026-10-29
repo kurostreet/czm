@@ -52,6 +52,7 @@ struct CzmChatMessage
 	int player;
 	int time;
 	bool support;         // the official SUPPORT account
+	char role[16], project[132];
 	int place;            // the place in the Top 100, 0 outside it
 	char nick[48];
 	char avatar[24];
@@ -292,7 +293,9 @@ void CCzmChat::ReadMessages( CzmChatRoom &room, const char *body )
 		Q_strncpy( m.nick, j.String( j.Get( item, "n" )), sizeof( m.nick ));
 		Q_strncpy( m.avatar, j.String( j.Get( item, "a" )), sizeof( m.avatar ));
 		Q_strncpy( m.text, j.String( j.Get( item, "t" )), sizeof( m.text ));
-		m.support = !strcmp( j.String( j.Get( item, "r" )), "support" );
+		Q_strncpy(m.role,j.String(j.Get(item,"r")),sizeof(m.role));
+		Q_strncpy(m.project,j.String(j.Get(item,"rp")),sizeof(m.project));
+		m.support = m.role[0] != 0;
 		m.place = j.Int( j.Get( item, "k" ));
 		room.messages.AddToTail( m );
 		room.lastId = id;
@@ -882,10 +885,13 @@ void CCzmChat::DrawMessages( void )
 		CZM_DrawImage( CZM_AvatarFor( m.avatar, m.player ), m_clip.x, top, m_iAvatar, m_iAvatar );
 
 		// nick and time
-		nickW = Q_min( CZM_TextWidth( nameFont, m.nick ), m_iTextW * 2 / 3 );
+		FormatTime( m.time, when, sizeof( when ));
+		const int tagH=CZM_FontHeight(nameFont)+2, roleW=m.support?CZM_RoleTagWidth(m.role,tagH,m.project,m_iTextW*2/5):0;
+		const int topW=CZM_TopTagWidth(m.place,tagH),timeW=CZM_TextWidth(timeFont,when)+H*.04f;
+		nickW = Q_max(0,Q_min( CZM_TextWidth( nameFont, m.nick ), m_iTextW-roleW-topW-timeW-H*.05f ));
 		CZM_DrawText( nameFont, m_iTextX, top, nickW + 2, m.nick, NickColor( m.player, mine ));
 		if( m.support )
-			nickW += H * 0.012f + CZM_DrawSupportTag( m_iTextX + nickW + H * 0.012f, top - 1, CZM_FontHeight( nameFont ) + 2 );
+			nickW += H * 0.012f + CZM_DrawRoleTag( m_iTextX + nickW + H * 0.012f, top - 1, tagH, m.role,m.project,roleW );
 		if( m.place >= 1 && m.place <= 100 )
 			nickW += H * 0.012f + CZM_DrawTopTag( m_iTextX + nickW + H * 0.012f, top - 1, CZM_FontHeight( nameFont ) + 2, m.place );
 		FormatTime( m.time, when, sizeof( when ));

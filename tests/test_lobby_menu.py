@@ -4,6 +4,7 @@ import os
 import subprocess
 import tempfile
 import unittest
+from native_community_stub import HARNESS as COMMUNITY_HARNESS
 from test_social_menu import STUB as SOCIAL_STUB
 from test_tab_avatars import VECTOR, STRING
 from test_loading_errors import function
@@ -81,6 +82,7 @@ bool CZM_OnlineLimited(int k,char*t,size_t n){
 void CZM_ModerationOpen(){}
 void CZM_ModerationTarget(int id,const char*,int,int lobbyMessage,const char*quote){moderationTarget=id;moderationLobbyMessage=lobbyMessage;moderationQuote=quote?quote:"";}
 '''
+HARNESS += COMMUNITY_HARNESS
 SCENARIOS = r'''
 static void clear(CCzmLobby&w){w.m_request=0;w.m_kind=0;w.m_busy=false;}
 static bool inside(const CzmRect&a,const CzmRect&b){return a.x>=b.x&&a.y>=b.y&&a.w>0&&a.h>0&&a.x+a.w<=b.x+b.w&&a.y+a.h<=b.y+b.h;}
@@ -217,7 +219,7 @@ int main(int argc,char**argv){
  support=true;requests=nextRequest;
  w.m_selectedMemberId=8;w.Layout();w.Action(w.MODAL_REPORT);assert(moderationTarget==8&&!w.m_selectedMemberId&&nextRequest==requests);
  w.Action(w.MESSAGE);w.Action(w.SHEET);assert(moderationTarget==8&&moderationLobbyMessage==41&&moderationQuote=="bad words"&&nextRequest==requests);
- w.m_members[1].support=true;supportTags=0;w.Draw();assert(supportTags==1);w.m_members[1].support=false;support=false;
+ w.m_members[1].support=true;strcpy(w.m_members[1].role,"support");supportTags=0;w.Draw();assert(supportTags==1);w.m_members[1].support=false;w.m_members[1].role[0]=0;support=false;
  // A moderator's limits: the voice stays off and the chat explains itself.
  voiceLimited=true;assert(w.VoiceBlocked());micOn=false;w.Action(w.VOICE_MIC);assert(!micOn&&strstr(w.m_notice,"Голос ограничен"));voiceLimited=false;
  textLimited=true;w.FinishRequest(403,"{\"error\":\"muted\"}",w.POST_CHAT);assert(strstr(w.m_notice,"Чат ограничен модератором навсегда"));textLimited=false;

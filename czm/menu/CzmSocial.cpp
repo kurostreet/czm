@@ -78,6 +78,9 @@ struct Person
 	int togetherCount, togetherSize, lobbyCount, lobbyCapacity;
     char lobbyId[64];
 	bool account, online, playing, support;
+	bool serverOwner; int ownedCount;
+	char role[16], project[132], telegram[104];
+	struct { char address[64], name[388]; } owned[5];
 	int topPlace, topSeconds; // the Top 100: the exact place and the time on servers (0: no time yet)
 	char nick[100], avatar[32], status[404], relation[24], server[64], map[65], last[1604];
 };
@@ -107,6 +110,19 @@ void ReadPerson( Person &p, const CzmJson &j, int item )
 	memset( &p, 0, sizeof( p ));
 	p.id = j.Int( j.Get( item, "id" )); p.created = j.Int( j.Get( item, "created" )); p.lastSeen = j.Int( j.Get( item, "last_seen" ));
 	p.support = !strcmp( j.String( j.Get( item, "role" )), "support" );
+	Q_strncpy(p.role,j.String(j.Get(item,"role")),sizeof(p.role));
+	Q_strncpy(p.project,j.String(j.Get(item,"project")),sizeof(p.project));
+	if(!p.role[0])Q_strncpy(p.telegram,j.String(j.Get(item,"telegram")),sizeof(p.telegram));
+	p.serverOwner=!strcmp(p.role,"server_owner");
+	const int roles=j.Get(item,"roles");
+	for(int i=0;i<j.Count(roles);i++)if(!strcmp(j.String(j.At(roles,i)),"server_owner"))p.serverOwner=true;
+	if(j.Count(roles))p.telegram[0]=0;
+	const int servers=j.Get(item,"servers");
+	for(int i=0;i<j.Count(servers)&&p.ownedCount<5;i++){
+		const int server=j.At(servers,i),index=p.ownedCount++;
+		Q_strncpy(p.owned[index].address,j.String(j.Get(server,"server")),sizeof(p.owned[index].address));
+		Q_strncpy(p.owned[index].name,j.String(j.Get(server,"name")),sizeof(p.owned[index].name));
+	}
 	p.topPlace = j.Int( j.Get( j.Get( item, "top" ), "place" ));
 	p.topSeconds = j.Int( j.Get( j.Get( item, "top" ), "seconds" ));
 	p.account = j.Bool( j.Get( item, "account" )); p.online = j.Bool( j.Get( item, "online" )); p.playing = j.Bool( j.Get( item, "playing" ));
@@ -204,7 +220,7 @@ public:
 	void Frame();
 private:
 	enum { LIST, PROFILE, DIALOG };
-	enum { BACK=1, MINE, BLOCKED, REFRESH, FIELD, SEARCH, SEND, PREVIOUS, NEXT, PRIMARY, SECONDARY, BLOCK, REPORT, COPY, EDIT, SETTINGS, JOIN, CANCEL, CONFIRM, PEER, LOGIN, REPORT_CHAT, BACKDROP, INVITE, PARTY_INVITE, MODERATE, MORE, MORE_CLOSE, TAB=100, PICK=200, MORE_ROW=300, COUNT=400, ROW=1000 };
+	enum { BACK=1, MINE, BLOCKED, REFRESH, FIELD, SEARCH, SEND, PREVIOUS, NEXT, PRIMARY, SECONDARY, BLOCK, REPORT, COPY, EDIT, SETTINGS, JOIN, CANCEL, CONFIRM, PEER, LOGIN, REPORT_CHAT, BACKDROP, INVITE, PARTY_INVITE, MODERATE, MORE, MORE_CLOSE, TELEGRAM, PROJECT_MANAGE, TAB=100, PICK=200, MORE_ROW=300, COUNT=400, PROJECT=500, ROW=1000 };
 	enum { MORE_ROWS = 4 };
 	enum { MAX_PICKS = 4 };
 	enum { READ_LIST=1, READ_PROFILE, READ_DIALOG, WRITE_ACTION, WRITE_STATUS, WRITE_MESSAGE, WRITE_REPORT };
@@ -228,6 +244,7 @@ private:
 	CzmRect m_panel, m_back, m_mine, m_blocked, m_refresh, m_tabs[4], m_field, m_search, m_clip, m_prev, m_next;
 	CzmRect m_primary, m_secondary, m_block, m_report, m_copy, m_edit, m_settings, m_join, m_peer, m_confirmPanel, m_confirmYes, m_confirmNo;
 	CzmRect m_hero, m_profileStatus, m_profileInfo, m_profileCounts[3], m_profileHint, m_profileServer, m_reportChat;
+	CzmRect m_telegram, m_projectPanel, m_projectTitle, m_projectManage, m_projectRows[5];
 	// "invite to game": the server I play on now and the servers pinned with a heart
 	bool m_pickOpen; int m_pickCount;
 	char m_pickAddress[MAX_PICKS][64], m_pickProto[MAX_PICKS][4], m_pickName[MAX_PICKS][64];
@@ -400,15 +417,18 @@ void CCzmSocial::LayoutProfile()
 {
 	// the personal card: header, the player, the status, three counters, the actions, "in CZM since"
 	pad=Q_max(10,(int)(H*.026f));
-	const int width=Q_min((int)(W*.92f),(int)(H*1.08f));
+	const bool project=m_loaded&&m_profile.serverOwner;
+	const int width=Q_min((int)(W*(project?.94f:.92f)),(int)(H*(project?1.78f:1.08f)));
 	const int gap=Q_max(6,(int)(H*.014f)),bh=Q_max(34,(int)(H*.068f));
-	const int inner=width-pad*2;
+	const int leftWidth=project?width*56/100:width,inner=leftWidth-pad*2;
 	const HFont meta=CZM_Font(CZMF_UI_META),body=CZM_Font(CZMF_PANEL_TEXT);
 	const bool self=m_profile.id==CZM_OnlinePlayer();
 	CzmRect empty=CZM_Rect(0,0,0,0);
 	m_primary=m_secondary=m_block=m_report=m_edit=m_settings=m_join=m_field=m_search=empty;
 	m_copy=m_hero=m_profileStatus=m_profileInfo=m_profileHint=m_profileServer=m_partyInvite=empty;
 	m_more=m_moderate=m_refresh=empty;
+	m_telegram=m_projectPanel=m_projectTitle=m_projectManage=empty;
+	for(int i=0;i<5;i++)m_projectRows[i]=empty;
 	for(int i=0;i<3;i++)m_profileCounts[i]=empty;
 	m_moreCount=0;m_moreSheet=empty;for(int i=0;i<MORE_ROWS;i++)m_moreRows[i]=empty;
 	int y=pad,right=width-pad;
@@ -416,17 +436,19 @@ void CCzmSocial::LayoutProfile()
 	if(m_loaded&&self){m_settings=CZM_Rect(right-bh,y,bh,bh);right-=bh+gap;}
 	// SUPPORT: the shield sits next to the gear and does something else
 	if(CZM_OnlineSupport()&&m_loaded&&m_profile.id>0&&!(m_profile.support&&!self)){m_moderate=CZM_Rect(right-bh,y,bh,bh);right-=bh+gap;}
+	if(m_loaded&&m_profile.telegram[0]&&!m_profile.role[0]){const int tw=bh*12/5;m_telegram=CZM_Rect(right-tw,y,tw,bh);right-=tw+gap;}
 	m_peer=CZM_Rect(pad+bh+gap,y,right-(pad+bh+gap),bh);
 	y+=bh+gap;
 	const int contentY=y;
 	if(!m_loaded)y+=H*.18f;
 	else{
 		const int avatar=Q_max(56,(int)(H*.165f));
+		const int nickH=CZM_FontHeight(CZM_Font(CZMF_NICK));
 		m_hero=CZM_Rect(pad,y,inner,avatar+gap*2);
 		const int tx=pad+gap*2+avatar+gap*2;
 		char id[32];snprintf(id,sizeof(id),"ID %d",m_profile.id);
 		const int chipH=CZM_FontHeight(meta)+gap,icon=chipH*62/100;
-		m_copy=CZM_Rect(tx,y+gap+CZM_FontHeight(CZM_Font(CZMF_NICK))+gap/2,CZM_TextWidth(meta,id)+icon+gap*2+gap/2,chipH);
+		m_copy=CZM_Rect(tx,y+gap+nickH+gap/2,CZM_TextWidth(meta,id)+icon+gap*2+gap/2,chipH);
 		y+=m_hero.h+gap;
 		if(m_editStatus){
 			const int half=(inner-gap)/2;
@@ -479,6 +501,17 @@ void CCzmSocial::LayoutProfile()
 		}
 		m_profileInfo=CZM_Rect(pad,y,inner,CZM_FontHeight(meta)+gap/2);y+=m_profileInfo.h;
 	}
+	if(project){
+		const int count=Q_max(1,m_profile.ownedCount),titleH=CZM_FontHeight(CZM_Font(CZMF_UI_LABEL))+gap;
+		y=Q_max(y,contentY+gap+titleH+gap+count*24+(count-1)*gap+(self?bh+gap*2:gap));
+		m_projectPanel=CZM_Rect(leftWidth,contentY,width-leftWidth-pad,y-contentY);
+		m_projectTitle=CZM_Rect(m_projectPanel.x+gap,contentY+gap,m_projectPanel.w-gap*2,CZM_FontHeight(CZM_Font(CZMF_UI_LABEL))+gap);
+		const int rowsY=m_projectTitle.y+m_projectTitle.h+gap;
+		const int bottom=y-gap-(self?bh+gap:0);
+		const int rowH=Q_min(bh+gap*2,Q_max(24,(bottom-rowsY-gap*(count-1))/count));
+		for(int i=0;i<m_profile.ownedCount;i++)m_projectRows[i]=CZM_Rect(m_projectPanel.x+gap,rowsY+i*(rowH+gap),m_projectPanel.w-gap*2,rowH);
+		if(self)m_projectManage=CZM_Rect(m_projectPanel.x+gap,y-gap-bh,m_projectPanel.w-gap*2,bh);
+	}
 	m_clip=CZM_Rect(pad,contentY,inner,y-contentY);
 	const int height=y+pad;
 	// the card rises into place once its data is there
@@ -486,7 +519,8 @@ void CCzmSocial::LayoutProfile()
 	m_panel=CZM_Rect((W-width)/2,(H-height)/2+(int)(( 1.0-ease )*H*.035f),width,height);
 	CzmRect *rects[]={&m_back,&m_moderate,&m_peer,&m_hero,&m_copy,&m_profileStatus,&m_profileInfo,
 		&m_profileCounts[0],&m_profileCounts[1],&m_profileCounts[2],&m_profileHint,&m_profileServer,
-		&m_primary,&m_secondary,&m_block,&m_report,&m_edit,&m_settings,&m_join,&m_partyInvite,&m_more,&m_field,&m_clip};
+		&m_primary,&m_secondary,&m_block,&m_report,&m_edit,&m_settings,&m_join,&m_partyInvite,&m_more,&m_field,&m_clip,
+		&m_telegram,&m_projectPanel,&m_projectTitle,&m_projectManage,&m_projectRows[0],&m_projectRows[1],&m_projectRows[2],&m_projectRows[3],&m_projectRows[4]};
 	for(unsigned i=0;i<sizeof(rects)/sizeof(rects[0]);i++)if(rects[i]->w&&rects[i]->h){rects[i]->x+=m_panel.x;rects[i]->y+=m_panel.y;}
 	if(m_moreOpen&&!self&&m_loaded){
 		// ⋯: report, block or unblock, end the friendship or the request, close
@@ -559,6 +593,9 @@ int CCzmSocial::Hit()
 		if(m_moderate.w&&m_moderate.HasCursor())return MODERATE;
 		if(m_settings.w&&m_settings.HasCursor())return SETTINGS;
 		if(m_copy.HasCursor())return COPY;
+		if(m_telegram.w&&m_telegram.HasCursor())return TELEGRAM;
+		if(m_projectManage.w&&m_projectManage.HasCursor())return PROJECT_MANAGE;
+		for(int i=0;i<m_profile.ownedCount;i++)if(m_projectRows[i].w&&m_projectRows[i].HasCursor()&&!CZM_ServerBlocked(m_profile.owned[i].address))return PROJECT+i;
 		if(m_editStatus){if(m_field.HasCursor())return FIELD;if(m_primary.HasCursor())return SEND;if(m_secondary.HasCursor())return CANCEL;return 0;}
 		if(self){
 			if(m_edit.w&&m_edit.HasCursor())return EDIT;
@@ -588,6 +625,9 @@ void CCzmSocial::Activate( int hit )
 	if(hit==BACKDROP){Hide();return;}
 	if(hit==BACK){if(m_mode==PROFILE&&!m_outside){Navigate(m_returnMode);return;}if(m_mode==DIALOG){Navigate(LIST);return;}Hide();return;}
 	CZM_PlayClick();
+	if(hit==TELEGRAM){CZM_CommunityShow("telegram",m_profile.id);return;}
+	if(hit==PROJECT_MANAGE){CZM_CommunityShow("servers",m_profile.id);return;}
+	if(hit>=PROJECT&&hit<PROJECT+5){const int i=hit-PROJECT;if(i<m_profile.ownedCount&&!CZM_ServerBlocked(m_profile.owned[i].address)){char address[64];Q_strncpy(address,m_profile.owned[i].address,sizeof(address));Hide();CZM_JoinAddress(address);}return;}
 	if(hit==REFRESH){m_nextFetch=0;return;}
 	if(hit==CANCEL&&m_pickOpen){m_pickOpen=false;return;}
 	if(hit==CANCEL){m_confirm[0]=0;m_editStatus=false;EndInput();m_input[0]=0;return;}
@@ -725,12 +765,12 @@ void CCzmSocial::DrawList()
 		UI_FillRect(r.x,r.y,r.w,r.h,Pressed(ROW+i)?PackRGBA(69,30,41,245):PackRGBA(17,26,37,240));
 		int av=r.h-pad;CZM_DrawImage(CZM_AvatarFor(p.avatar,p.id),r.x+pad/2,r.y+pad/2,av,av);
 		char text[180];int tx=r.x+av+pad,tw=r.w-av-pad*2;
-		if(p.support){
+		if(p.role[0]){
 			// nick, the tag, then the ID: the tag must not be cut away by a long nick
-			const int fh=CZM_FontHeight(CZM_Font(CZMF_LANG)),tagH=fh,tagW=CZM_SupportTagWidth(tagH);
+			const int fh=CZM_FontHeight(CZM_Font(CZMF_LANG)),tagH=fh,tagW=CZM_RoleTagWidth(p.role,tagH,p.project,tw/2);
 			const int nw=Q_min(CZM_TextWidth(CZM_Font(CZMF_LANG),p.nick)+2,tw/2);
 			Label(CZM_Rect(tx,r.y+pad/4,nw,r.h/2),p.nick,CZMF_LANG);
-			CZM_DrawSupportTag(tx+nw+pad/2,r.y+pad/4+(r.h/2-tagH)/2,tagH);
+			CZM_DrawRoleTag(tx+nw+pad/2,r.y+pad/4+(r.h/2-tagH)/2,tagH,p.role,p.project,tagW);
 			snprintf(text,sizeof(text),"·  ID %d%s",p.id,p.unread?"  +":"");
 			const int ix=tx+nw+pad/2+tagW+pad/2;Label(CZM_Rect(ix,r.y+pad/4,tx+tw-ix,r.h/2),text,CZMF_LANG);
 		}else{snprintf(text,sizeof(text),"%s  ·  ID %d%s",p.nick,p.id,p.unread?"  +":"");Label(CZM_Rect(tx,r.y+pad/4,tw,r.h/2),text,CZMF_LANG);}
@@ -760,19 +800,20 @@ void CCzmSocial::DrawProfile()
 	const HFont meta=CZM_Font(CZMF_UI_META),body=CZM_Font(CZMF_PANEL_TEXT),nickFont=CZM_Font(CZMF_NICK);
 	// header: back, "Profile", the moderation shield and the gear
 	Chip(m_back,UI_DIR "icon_back.png",Pressed(BACK));
-	Text(m_peer,T("Профиль","Profile"),CZMF_UI_TITLE);
+	if(p.role[0]&&!p.support)CZM_DrawRoleTag(m_peer.x,m_peer.y+m_peer.h/6,m_peer.h*2/3,p.role,p.project,m_peer.w);
+	else Text(m_peer,T("Профиль","Profile"),CZMF_UI_TITLE);
 	if(m_moderate.w)Chip(m_moderate,UI_DIR "icon_shield.png",Pressed(MODERATE),AccentGold());
 	if(m_settings.w)Chip(m_settings,UI_DIR "icon_gear.png",Pressed(SETTINGS));
 	if(!m_loaded){Text(m_clip,T("Загружаем профиль…","Loading profile…"),CZMF_PANEL_TEXT,Muted(),QM_CENTER);return;}
 
 	// the player: a soft red light behind the picture, a thin frame that slowly breathes
-	Surface(m_hero,PackRGBA(22,26,34,255),PackRGBA(48,55,68,255));
-	const int av=m_hero.h-gap*2,ax=m_hero.x+gap*2,ay=m_hero.y+gap;
-	CZM_DrawImage(UI_DIR "glow.png",ax-av*45/100,ay-av*45/100,av*190/100,av*190/100,PackRGBA(229,40,58,95));
+	Surface(m_hero,PackRGBA(22,26,34,255),p.role[0]?CZM_RoleColor(p.role,110):PackRGBA(48,55,68,255));
+	const int av=Q_max(56,(int)(H*.165f)),ax=m_hero.x+gap*2,ay=m_hero.y+(m_hero.h-av)/2;
+	CZM_DrawImage(UI_DIR "glow.png",ax-av*45/100,ay-av*45/100,av*190/100,av*190/100,p.role[0]?CZM_RoleColor(p.role,95):PackRGBA(229,40,58,95));
 	CZM_DrawImage(CZM_AvatarFor(p.avatar,p.id),ax,ay,av,av);
 	const double wave=0.5+0.5*sin(EngFuncs::DoubleTime()*2.0*M_PI/3.2);
 	const int ring=Q_max(2,av/30);
-	CZM_DrawImage(UI_DIR "icon_ring.png",ax-ring,ay-ring,av+ring*2,av+ring*2,PackRGBA(236,72,86,(int)(150+70*wave)));
+	CZM_DrawImage(UI_DIR "icon_ring.png",ax-ring,ay-ring,av+ring*2,av+ring*2,CZM_RoleColor(p.role,(int)(150+70*wave)));
 	const int tx=m_copy.x,tw=m_hero.x+m_hero.w-gap*2-tx;
 	{
 		// the nick, then the official role and the current Top 100 rank: both, independent
@@ -831,6 +872,20 @@ void CCzmSocial::DrawProfile()
 		if(self){const int icon=Q_min(m_back.h/2,m_profileStatus.h-gap);CZM_DrawImage(UI_DIR "icon_pencil.png",m_profileStatus.x+m_profileStatus.w-gap-icon,m_profileStatus.y+(m_profileStatus.h-icon)/2,icon,icon,p.status[0]?Muted():AccentRed());}
 	}
 	// friends, followers, following: a clear number, a calm caption; the own lists open
+	if(m_telegram.w)ActionButton(m_telegram,UI_DIR "icon_chat.png","Telegram",false,Pressed(TELEGRAM),true,AccentBlue());
+	if(m_projectPanel.w){
+		Surface(m_projectPanel,PackRGBA(18,29,34,255),CZM_RoleColor("server_owner",100));
+		Text(m_projectTitle,p.project[0]?p.project:T("Серверы проекта","Project servers"),CZMF_UI_LABEL,CZM_RoleColor("server_owner"));
+		for(int i=0;i<p.ownedCount;i++){
+			const CzmRect &r=m_projectRows[i];const bool available=!CZM_ServerBlocked(p.owned[i].address);
+			Surface(r,Pressed(PROJECT+i)?PackRGBA(33,65,61,255):PackRGBA(23,36,43,255),Border());
+			const int lh=CZM_FontHeight(CZM_Font(CZMF_UI_META)),inset=Q_max(4,gap/2),cw=r.w-inset*2-gap;
+			CZM_DrawText(meta,r.x+inset,r.y+(r.h-lh*2-2)/2,cw,p.owned[i].name[0]?p.owned[i].name:p.owned[i].address,available?Ink():Muted());
+			CZM_DrawText(meta,r.x+inset,r.y+(r.h-lh*2-2)/2+lh+2,cw,p.owned[i].address,available?CZM_RoleColor("server_owner"):Muted());
+		}
+		if(!p.ownedCount)Text(CZM_Rect(m_projectTitle.x,m_projectTitle.y+m_projectTitle.h+gap,m_projectTitle.w,m_back.h),T("Серверы пока не добавлены","No servers added yet"),CZMF_UI_META,Muted());
+		if(m_projectManage.w)ActionButton(m_projectManage,UI_DIR "icon_gear.png",T("Управлять","Manage"),false,Pressed(PROJECT_MANAGE));
+	}
 	{
 		const char *names[]={T("Друзья","Friends"),T("Подписчики","Followers"),T("Подписки","Following")};
 		const int values[]={p.friends,p.followers,p.following};

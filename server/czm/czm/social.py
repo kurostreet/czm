@@ -82,6 +82,9 @@ def profile(conn, viewer, target, compact=False):
     staff = moderation.role(conn, target)
     if staff:
         result["role"] = staff
+    if not hidden:
+        from . import community
+        result.update(community.profile(conn, target))
     from . import playtime
     if not compact:
         standing = playtime.standing(conn, target)

@@ -122,11 +122,12 @@ def messages(conn: sqlite3.Connection, room: str, after: int, viewer: int = 0) -
         "ORDER BY m.id DESC LIMIT ?",
         (room, after, viewer, limit),
     ).fetchall()
-    from . import playtime
+    from . import playtime, community
     places = playtime.places(conn) if rows else {}
+    roles = community.role_map(conn, [r["player"] for r in rows])
     return [
         {"id": r["id"], "p": r["player"], "n": r["nick"], "a": avatar_ref(r), "t": profanity.clean(r["text"]), "ts": r["created"],
-         **({"r": r["role"]} if r["role"] else {}),
+         **({"r": roles[r["player"]][0], "rp": roles[r["player"]][1]} if r["player"] in roles else {}),
          **({"k": places[r["player"]]} if r["player"] in places else {})}   # the place in the Top 100
         for r in reversed(rows)
     ]

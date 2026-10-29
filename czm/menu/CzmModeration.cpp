@@ -152,7 +152,9 @@ const char *ActionDone( const char *code )
 
 const char *ErrorText( const char *code, int status )
 {
-	if( !strcmp( code, "forbidden" )) return T( "У этого аккаунта нет роли SUPPORT", "This account has no SUPPORT role" );
+	if( !strcmp( code, "forbidden" )) return T( "У аккаунта нет доступа к этому действию", "This account cannot perform this action" );
+	if( !strcmp( code, "moderator_paused" )) return T( "Права приостановлены до проверки главным администратором", "The main administrator must review your suspended permissions" );
+	if( !strcmp( code, "moderator_action" )) return T( "Это действие доступно только SUPPORT", "Only SUPPORT can perform this action" );
 	if( !strcmp( code, "staff" )) return T( "Нельзя применить к сотруднику", "Staff cannot be moderated" );
 	if( !strcmp( code, "self" )) return T( "Нельзя применить к себе", "Not on yourself" );
 	if( !strcmp( code, "target" )) return T( "Жалоба или сообщение о другом игроке", "The report or message is about someone else" );
@@ -378,7 +380,7 @@ void CCzmModeration::Back()
 
 bool CCzmModeration::NeedsReason() const
 {
-	return Current().sanction || !strcmp( Current().code, "warn" );
+	return Current().sanction || !strcmp( Current().code, "warn" ) || !strcmp( CZM_OnlineRole(), "moderator" );
 }
 
 bool CCzmModeration::ForeverAllowed() const
@@ -394,6 +396,7 @@ void CCzmModeration::Visible()
 	if( m_targetStaff ) return;
 	for( int i = 0; i < MOD_ACTIONS; i++ )
 	{
+		if( !strcmp( CZM_OnlineRole(), "moderator" ) && ( !strcmp( s_actions[i].code, "remove_avatar" ) || !strcmp( s_actions[i].code, "restrict_photo" ) || !strcmp( s_actions[i].code, "close_lobby" ))) continue;
 		const int need = s_actions[i].need;
 		if(( need & NEED_MESSAGE ) && !message ) continue;
 		if(( need & NEED_REPORT ) && !m_report ) continue;
@@ -529,7 +532,7 @@ void CCzmModeration::Poll()
 			ModPerson p;
 			ReadModPerson( p, j, j.Get( 0, "target" ));
 			if( p.id == m_target.id ) m_target = p;
-			m_targetStaff = j.String( j.Get( 0, "role" ))[0] != 0;
+			m_targetStaff = j.Get( 0, "protected" ) >= 0 ? j.Bool( j.Get( 0, "protected" )) : j.String( j.Get( 0, "role" ))[0] != 0;
 			m_reportsWeek = j.Int( j.Get( 0, "reports_week" ));
 			const int quote = j.Get( 0, "quote" );
 			if( j.Type( quote ) == CzmJson::T_OBJECT )
@@ -775,7 +778,7 @@ void CCzmModeration::Activate( int hit )
 		m_action = m_visible[hit - ACTION];
 		m_minutes = -1; m_reasonIndex = -1; m_reason[0] = 0;
 		if( Current().sanction ) Go( PAGE_DURATION );
-		else if( !strcmp( Current().code, "dismiss" )) Go( PAGE_CONFIRM );
+		else if( !strcmp( Current().code, "dismiss" ) && !NeedsReason() ) Go( PAGE_CONFIRM );
 		else Go( PAGE_REASON );
 		return;
 	}

@@ -373,10 +373,12 @@ def init() -> None:
                         except sqlite3.OperationalError as e:  # the other process was first
                             if "duplicate column" not in str(e):
                                 raise
-            from . import notifications, play_feed, playtime, server_moderation
+            from . import notifications, play_feed, playtime, server_moderation, community, moderator_guard
             conn.executescript(notifications.SCHEMA)
             conn.executescript(playtime.SCHEMA)
             conn.executescript(server_moderation.SCHEMA)
+            conn.executescript(community.SCHEMA)
+            conn.executescript(moderator_guard.SCHEMA)
             play_feed.migrate(conn)
             # Preserve existing unviewed incoming requests on upgrade.
             conn.execute("INSERT OR IGNORE INTO social_notices(player,peer,kind,created) "
@@ -395,8 +397,9 @@ def cleanup(conn: sqlite3.Connection, keep_days: int, room_history: int, rooms: 
     conn.execute("DELETE FROM lobby_creation_ops WHERE created < ?", (now() - 7*86400,))
     conn.execute("DELETE FROM lobby_moderation_ops WHERE created < ?", (now() - 30*86400,))
     conn.execute("DELETE FROM lobby_invites WHERE expires < ?", (now() - 86400,))
-    from . import server_moderation
+    from . import server_moderation, community
     server_moderation.cleanup(conn)
+    community.cleanup(conn)
     for room in rooms:
         conn.execute(
             "DELETE FROM messages WHERE room = ? AND id NOT IN "

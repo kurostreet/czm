@@ -362,6 +362,7 @@ enum ERowType
 	ROW_SPECSTYLE, // three looks of the spectator overlay as cards
 	ROW_MIC,      // microphone test: level meter and a start/stop button
 	ROW_ABOUT,    // "About": min is the item (contacts, group, site, rules, source, version, date, engine)
+	ROW_COMMUNITY,
 	ROW_SECTION,
 };
 
@@ -469,6 +470,7 @@ const CzmRow s_hud[] =
 const CzmRow s_profile[] =
 {
 	{ ROW_ACCOUNT, "s_account", "s_account_hint", NULL, NULL, NULL, 0, 0, 0, 0, {}, 0, 0 },
+	{ ROW_COMMUNITY, "s_community", "s_community_hint", NULL, NULL, NULL, 0, 0, 0, 0, {}, 0, 0 },
 	{ ROW_NICK, "s_nick", "s_nick_hint", NULL, NULL, NULL, 0, 0, 0, 0, {}, 0, 0 },
 	{ ROW_AVATARS, "s_avatar", "s_avatar_hint", NULL, NULL, NULL, 0, 0, 0, 0, {}, 0, 0 },
 	{ ROW_SPRAYS, "s_spray", "s_spray_hint", NULL, NULL, NULL, 0, 0, 0, 0, {}, 0, 0 },
@@ -901,6 +903,7 @@ void CCzmSettings::Layout( void )
 		case ROW_HUDEDIT:
 		case ROW_ACCOUNT:
 		case ROW_NICK:
+		case ROW_COMMUNITY:
 		{
 			int fh = H * 0.07f;
 			l.control = CZM_Rect( l.control.x, l.rect.y + ( h - fh ) / 2, controlW, fh );
@@ -991,6 +994,7 @@ int CCzmSettings::HitTest( void ) const
 		case ROW_HUDEDIT:
 		case ROW_ACCOUNT:
 		case ROW_NICK:
+		case ROW_COMMUNITY:
 			if( l.control.Grown( grow ).Contains( x, y ))
 				return HIT_ROW + i * 20;
 			break;
@@ -1140,6 +1144,9 @@ void CCzmSettings::Activate( int hit )
 			break;
 		case ROW_ACCOUNT:
 			CZM_AccountShow( CZM_OnlineKey(), EngFuncs::GetCvarString( "name" ));
+			break;
+		case ROW_COMMUNITY:
+			CZM_CommunityShow( "hub", CZM_OnlinePlayer() );
 			break;
 		case ROW_NICK:
 		{
@@ -1710,6 +1717,7 @@ void CCzmSettings::DrawRow( int i )
 	case ROW_LAYOUTS:
 	case ROW_HUDEDIT:
 	case ROW_ACCOUNT:
+	case ROW_COMMUNITY:
 		CZM_DrawButton( UI_DIR "button_secondary.png", l.control, CZM_T( "s_account_open" ), CZM_White(),
 			IsPressed( HIT_ROW + i * 20 ), CZMF_TILE_STATUS );
 		break;

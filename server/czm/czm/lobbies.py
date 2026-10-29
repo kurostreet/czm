@@ -165,6 +165,7 @@ def _map_for_server(conn, address):
 
 
 def _state(conn, room):
+    from . import community
     people = conn.execute(
         "SELECT m.player, m.ready_revision, p.nick, p.avatar, s.role FROM lobby_members m "
         "JOIN players p ON p.id=m.player LEFT JOIN staff s ON s.player=m.player "
@@ -173,6 +174,7 @@ def _state(conn, room):
     voice_muted=conn.execute(
         "SELECT player FROM lobby_voice_mutes WHERE lobby=? AND host_muted=1",
         (room["id"],)).fetchall()
+    roles = community.role_map(conn, [p["player"] for p in people])
     return {"id": room["id"], "title": room["title"], "description": room["description"],
             "visibility": room["visibility"], "owner": room["owner"],
             "language": room["language"],
@@ -183,7 +185,7 @@ def _state(conn, room):
             "revision": room["revision"], "members": [
                 {"id": p["player"], "nick": p["nick"], "avatar": p["avatar"],
                  "ready": p["ready_revision"] == room["revision"],
-                 **({"role": p["role"]} if p["role"] else {})} for p in people]}
+                 **({"role": roles[p["player"]][0], "project": roles[p["player"]][1]} if p["player"] in roles else {})} for p in people]}
 
 
 def _current(conn, player):

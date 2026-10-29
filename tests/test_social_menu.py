@@ -4,6 +4,7 @@ import os
 import subprocess
 import tempfile
 import unittest
+from native_community_stub import STUB as COMMUNITY_STUB, HARNESS as COMMUNITY_HARNESS
 from test_tab_avatars import VECTOR, STRING
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -54,6 +55,7 @@ bool CZM_OnlineLimited(int,char* =nullptr,size_t=0);void CZM_ModerationOpen();
 unsigned CZM_TopColor(int);const char*CZM_TopCrown(int);int CZM_TopTagWidth(int,int);int CZM_DrawTopTag(int,int,int,int);void CZM_FormatPlaytime(int,char*,size_t);void CZM_ModerationTarget(int,const char*,int=0,int=0,const char* ="");
 struct CzmServer{char address[64];char prot[8];char name[64];};int CZM_ServerCount();CzmServer *CZM_Server(int);void CZM_CleanName(const char*,char*,size_t);void CZM_DrawSliced(const char*,int,int,int,int,int,int,unsigned=0xffffffff);
 '''
+STUB += COMMUNITY_STUB + '\nbool CZM_ServerBlocked(const char*);\n'
 HARNESS = r'''
 #include "stub.h"
 #include <map>
@@ -77,7 +79,7 @@ void CZM_DrawButton(const char*p,const CzmRect&r,const char*s,unsigned c,bool,in
 bool CZM_OnlineReady(){return true;}bool CZM_OnlineAccount(){return authenticated;}int CZM_OnlineIdentity(){return identity;}const char*CZM_OnlineKey(){return key.c_str();}int CZM_OnlinePlayer(){return me;}const char*CZM_OnlineUrl(const char*p){return p;}const char*CZM_AvatarFor(const char*,int){return "gfx/czm/ui/avatar.png";}
 int CZM_NetRequest(const char*,const char*url,const char*,const char*body){requests.push_back({++ids,url,body});return ids;}
 bool CZM_NetPoll(int id,int*status,CUtlString&body){auto i=replies.find(id);if(i==replies.end())return false;*status=i->second.first;body.Set(i->second.second.c_str());replies.erase(i);return true;}
-void CZM_NetNewKey(char*out,size_t size){Q_strncpy(out,"0123456789abcdef0123456789abcdef",size);}int CZM_ServerCount(){return 0;}CzmServer *CZM_Server(int){return 0;}void CZM_CleanName(const char*in,char*out,size_t size){Q_strncpy(out,in,size);}void CZM_DrawSliced(const char*,int x,int y,int w,int h,int,int radius,unsigned c){if(drawTrace)printf("S\t%d\t%d\t%d\t%d\t%u\t%d\n",x,y,w,h,c,radius);}void CZM_OpenSettings(int){}void CZM_AccountShow(const char*,const char*){logins++;}bool CZM_CopyText(const char*){return true;}void CZM_JoinAddress(const char*){}void CZM_PlayClick(){}
+void CZM_NetNewKey(char*out,size_t size){Q_strncpy(out,"0123456789abcdef0123456789abcdef",size);}int CZM_ServerCount(){return 0;}CzmServer *CZM_Server(int){return 0;}void CZM_CleanName(const char*in,char*out,size_t size){Q_strncpy(out,in,size);}void CZM_DrawSliced(const char*,int x,int y,int w,int h,int,int radius,unsigned c){if(drawTrace)printf("S\t%d\t%d\t%d\t%d\t%u\t%d\n",x,y,w,h,c,radius);}void CZM_OpenSettings(int){}void CZM_AccountShow(const char*,const char*){logins++;}bool CZM_CopyText(const char*){return true;}static std::string joinedCommunityServer;void CZM_JoinAddress(const char*address){joinedCommunityServer=address;}void CZM_PlayClick(){}
 bool CZM_LobbyCanInvite(){return false;}
 void CZM_LobbyInviteFriend(int){}
 void CZM_OpenLobbyById(const char*){}
@@ -96,6 +98,9 @@ const char*CZM_TopCrown(int){return "gfx/czm/ui/icon_crown_top.png";}
 int CZM_TopTagWidth(int place,int h){return place>=1&&place<=100?h*4:0;}
 int CZM_DrawTopTag(int x,int y,int h,int place){if(place<1||place>100)return 0;topTags++;UI_FillRect(x,y,h*4,h,CZM_TopColor(place));return h*4;}
 void CZM_FormatPlaytime(int seconds,char*out,size_t n){snprintf(out,n,"%d ч %d мин",seconds/3600,seconds/60%60);}void CZM_ModerationTarget(int id,const char*,int message,int,const char*){moderationTarget=id;moderationMessage=message;}
+'''
+HARNESS += COMMUNITY_HARNESS + r'''
+static std::string communityBlocked;bool CZM_ServerBlocked(const char*address){return communityBlocked==address;}
 '''
 SCENARIOS = r'''
 int main(int argc,char**argv){
@@ -149,6 +154,38 @@ int main(int argc,char**argv){
    }
   }
  }
+
+ // Role cards keep project rows reachable; ordinary cards alone can show Telegram.
+ for(auto resolution:{std::pair<int,int>{640,320},{800,360},{960,540},{1536,716},{2960,1440}}){
+  ScreenWidth=resolution.first;ScreenHeight=resolution.second;
+  for(const char*role:{"support","moderator","tester","server_owner"})for(bool self:{false,true}){
+   w.OpenProfile(8,true);w.Read(j,w.READ_PROFILE);strcpy(w.m_profile.role,role);w.m_profile.support=!strcmp(role,"support");
+   strcpy(w.m_profile.telegram,"https://t.me/CzmPlayer");
+   if(self){w.m_profile.id=me;strcpy(w.m_profile.relation,"self");}
+   if(!strcmp(role,"server_owner")){
+    w.m_profile.serverOwner=true;w.m_profile.ownedCount=5;strcpy(w.m_profile.project,"Project CZM");
+    for(int i=0;i<5;i++){snprintf(w.m_profile.owned[i].address,64,"8.8.8.8:%d",27015+i);snprintf(w.m_profile.owned[i].name,388,"Project server %d",i+1);}
+   }
+   w.Draw();assert(w.m_panel.x>=0&&w.m_panel.y>=0&&w.m_panel.y+w.m_panel.h<=ScreenHeight);
+   assert(!w.m_telegram.w);
+   for(int i=0;i<w.m_profile.ownedCount;i++){
+    const CzmRect&r=w.m_projectRows[i];assert(r.w>0&&r.h>=24);
+    assert(r.x>=w.m_projectPanel.x&&r.x+r.w<=w.m_projectPanel.x+w.m_projectPanel.w);
+    assert(r.y>w.m_back.y+w.m_back.h&&r.y+r.h<=w.m_panel.y+w.m_panel.h);
+    cursorX=r.x+r.w/2;cursorY=uiStatic.cursorY=r.y+r.h/2;assert(w.Hit()==w.PROJECT+i);
+    if(w.m_projectManage.w)assert(r.y+r.h<=w.m_projectManage.y);
+   }
+  }
+ }
+ ScreenWidth=1536;ScreenHeight=716;w.OpenProfile(8,true);w.Read(j,w.READ_PROFILE);
+ strcpy(w.m_profile.telegram,"https://t.me/CzmPlayer");w.Draw();assert(w.m_telegram.w);
+ cursorX=w.m_telegram.x+w.m_telegram.w/2;cursorY=uiStatic.cursorY=w.m_telegram.y+w.m_telegram.h/2;assert(w.Hit()==w.TELEGRAM);
+ w.Activate(w.TELEGRAM);assert(communityMode=="telegram"&&communityPlayer==8);
+ w.m_profile.telegram[0]=0;w.m_profile.serverOwner=true;w.m_profile.ownedCount=1;
+ strcpy(w.m_profile.owned[0].address,"8.8.8.8:27015");w.Draw();
+ communityBlocked="8.8.8.8:27015";joinedCommunityServer.clear();w.Activate(w.PROJECT);assert(joinedCommunityServer.empty()&&w.m_open);
+ communityBlocked.clear();w.Activate(w.PROJECT);assert(joinedCommunityServer=="8.8.8.8:27015");
+
  // Native account state is public metadata: the legacy key never contains the session.
  assert(Account()&&key=="legacy-device-key");
  w.OpenProfile(me,false);w.Read(j,w.READ_PROFILE);w.m_profile.id=me;w.Layout();

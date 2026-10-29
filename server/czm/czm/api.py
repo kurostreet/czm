@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, FileResponse, HTML
 from PIL import Image
 from pydantic import BaseModel, Field
 
-from . import service, mappics, accounts, settings, tab, social, website, distribution, lobbies, game_probe, voice_lobby, notifications, rules, moderation, play_feed, playtime, server_moderation
+from . import service, mappics, accounts, settings, tab, social, website, distribution, lobbies, game_probe, voice_lobby, notifications, rules, moderation, play_feed, playtime, server_moderation, community
 from .config import get_settings
 from .db import db
 
@@ -114,6 +114,7 @@ async def hello(body: HelloIn, request: Request):
             "distribution": {"development": distribution.allowed(conn, player)},
             "rules": rules.state(player),
             "role": moderation.role(conn, player["id"]),
+            "capabilities": community.capabilities(conn, player["id"]),
             "moderation": moderation.state(conn, player),
             # the bell shows the notes of the code Google Play offers this player
             "play": play_feed.latest(conn),
@@ -339,6 +340,74 @@ class ServerReportIn(BaseModel):
     reasons: list[str] | None = Field(default=None, max_length=6)
     comment: str = Field(default="", max_length=500)
     nonce: str = Field(min_length=16, max_length=80)
+
+
+class CommunityContactIn(BaseModel):
+    telegram: str = Field(default="", max_length=100)
+
+
+class OwnerServerIn(BaseModel):
+    server: str = Field(min_length=7, max_length=64)
+    remove: bool = False
+
+
+class TesterTicketIn(BaseModel):
+    subject: str = Field(min_length=1, max_length=100)
+    text: str = Field(min_length=1, max_length=2000)
+    photo: str = Field(default="", max_length=5592408)
+    text_file: str = Field(default="", max_length=87384)
+    file_name: str = Field(default="", max_length=100)
+    nonce: str = Field(min_length=16, max_length=80)
+
+
+@router.post("/community/contact")
+async def community_contact(body: CommunityContactIn, request: Request, x_czm_key: str | None = Header(default=None)):
+    return await social_result(request, rules.guarded(x_czm_key, lambda c: community.contact(c, x_czm_key or "", body.telegram)))
+
+
+@router.get("/community/me")
+async def community_me(request: Request, x_czm_key: str | None = Header(default=None)):
+    def run(c):
+        player = social.actor(c, x_czm_key or "")
+        return {"id": player["id"], **community.profile(c, player["id"]), "capabilities": community.capabilities(c, player["id"])}
+    return await social_result(request, run)
+
+
+@router.get("/community/servers")
+async def community_servers(request: Request, x_czm_key: str | None = Header(default=None)):
+    return await social_result(request, lambda c: community.owner_list(c, x_czm_key or ""))
+
+
+@router.post("/community/servers")
+async def community_server_change(body: OwnerServerIn, request: Request, x_czm_key: str | None = Header(default=None)):
+    key = x_czm_key or ""
+    # Authenticate and restrict the destination before any UDP request. Recheck
+    # the role and capacity in the committing transaction after the probe.
+    def prepare(c):
+        player = community.owner_actor(c, key)
+        address = community.public_endpoint(body.server)
+        if not body.remove:
+            accounts.rate(c, "project-server-probe", str(player["id"]), 8, 60)
+            server_moderation.require_allowed(c, address)
+        return address
+    try:
+        address = await in_db(prepare)
+    except accounts.AuthError as error:
+        return JSONResponse({"error": error.code}, status_code=error.status, headers={"Cache-Control": "no-store"})
+    name = address
+    if not body.remove:
+        try:
+            result = await asyncio.to_thread(game_probe.probe, address)
+            name = result.get("name", address)
+        except game_probe.ProbeError:
+            pass  # an offline server remains editable; its endpoint is the fallback label
+    return await social_result(request, lambda c: community.owner_change(c, key, address, body.remove, name))
+
+
+@router.post("/community/tickets")
+async def community_ticket(body: TesterTicketIn, request: Request, x_czm_key: str | None = Header(default=None)):
+    return await social_result(request, lambda c: community.ticket(c, x_czm_key or "", body.subject, body.text,
+        body.photo, body.text_file, body.file_name, body.nonce))
 
 
 class ServerHiddenIn(BaseModel):

@@ -54,6 +54,8 @@ static const struct { int kind; const char *ru, *en; } s_text[] =
 	{ RULE_ITEM, "«Заблокировать» в профиле игрока скрывает его сообщения и голос, он больше не сможет писать вам и приглашать вас.",
 		"\"Block\" in a player's profile hides their messages and voice, and they can no longer write to or invite you." },
 	{ RULE_ITEM, "Администрация никогда не спрашивает пароль и коды из писем.", "Staff never ask for your password or email codes." },
+	{ RULE_ITEM, "Роли назначает главный администратор. Moderator управляет чатом; Tester отправляет обращения; Server owner показывает до пяти серверов проекта. За действия модератора отвечает отдельная проверка. Роль не означает, что CZM владеет указанным сервером.",
+		"The head administrator assigns roles. Moderators manage chat, testers submit tickets, and server owners list up to five project servers. Moderator actions are reviewed. A role does not mean CZM owns the listed server." },
 	{ RULE_ITEM, "На сервер можно пожаловаться из его карточки или меню в игре. С подтверждённой почты — одна жалоба на один сервер раз в 30 дней. Модератор видит ваш ник, ID аккаунта и число обращений. Решение о блокировке сервера принимается после проверки; его можно пересмотреть.",
 		"Report a server from its card or the in-game menu. Verified email: one report per server every 30 days. Moderators see your nickname, account ID and report counts. A server restriction follows a review and can be reconsidered." },
 	{ RULE_HEAD, "За нарушения", "Consequences" },

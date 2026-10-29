@@ -58,7 +58,8 @@ static struct
 	int banUntil;
 	char banReason[128];
 
-	bool support;         // the official SUPPORT account
+	bool support;         // current in-game moderation capability; the API checks every action
+	char role[16];
 	struct { bool active, forever; int until; char reason[128]; } limits[CZM_LIMIT_COUNT];
 	int warning;          // the newest moderator warning not yet shown, its text
 	char warningReason[220];
@@ -149,6 +150,8 @@ bool CZM_OnlineSupport( void )
 {
 	return s_online.ready && s_online.support;
 }
+
+const char *CZM_OnlineRole( void ) { return s_online.ready ? s_online.role : ""; }
 
 void CZM_OnlineSetLimit( int kind, const CzmJson &j, int node )
 {
@@ -313,7 +316,9 @@ static void OnHello( int status, const char *body )
 	s_online.player = j.Int( j.Get( 0, "id" ));
 	Q_strncpy( s_online.myAvatar, j.String( j.Get( 0, "avatar" )), sizeof( s_online.myAvatar ));
 	ReadBan( j, j.Get( 0, "ban" ));
-	s_online.support = !strcmp( j.String( j.Get( 0, "role" )), "support" );
+	Q_strncpy( s_online.role, j.String( j.Get( 0, "role" )), sizeof( s_online.role ));
+	const int capabilities = j.Get( 0, "capabilities" );
+	s_online.support = j.Type( capabilities ) == CzmJson::T_OBJECT ? j.Bool( j.Get( capabilities, "moderate" )) : !strcmp( s_online.role, "support" );
 	{
 		int moderation = j.Get( 0, "moderation" ), warning = j.Get( moderation, "warning" );
 		static const char *kinds[CZM_LIMIT_COUNT] = { "text", "voice", "photo" };

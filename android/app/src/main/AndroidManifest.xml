@@ -32,6 +32,7 @@
         <activity android:name=".CzmWidgetConfigure" android:exported="true" android:theme="@android:style/Theme.Translucent.NoTitleBar"><intent-filter><action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" /></intent-filter></activity>
         <provider android:name=".CzmLayoutProvider" android:authorities="${applicationId}.layouts" android:exported="false" android:grantUriPermissions="true" />
         <activity android:name=".CzmLayoutActivity" android:exported="false" android:theme="@android:style/Theme.Translucent.NoTitleBar" android:screenOrientation="sensorLandscape" />
+        <activity android:name=".CzmTicketPickerActivity" android:exported="false" android:excludeFromRecents="true" android:theme="@android:style/Theme.Translucent.NoTitleBar" android:screenOrientation="sensorLandscape" />
         <!-- the player's own avatar from the gallery, the menu opens czmavatar://pick?file=... -->
         <activity
             android:name=".AvatarPickerActivity"

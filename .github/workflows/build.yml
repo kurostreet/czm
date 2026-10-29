@@ -38,7 +38,14 @@ jobs:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
       - name: Install Android build tools
-        run: sdkmanager --install 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
+        run: |
+          for attempt in 1 2 3; do
+            if sdkmanager --install 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'; then
+              exit 0
+            fi
+            [ "$attempt" = 3 ] || sleep 15
+          done
+          exit 1
       - name: Check archive extraction
         run: |
           javac --release 11 -d /tmp/czm-java-check android/app/src/main/java/ru/kurostreet/counterzombiemobile/ArchiveExtractor.java tests/ArchiveExtractorTest.java
@@ -133,7 +140,7 @@ jobs:
                            "gfx/czm/shop/wheel1.png", "gfx/czm/shop/wheel6.png", "gfx/czm/shop/wheel8_7.png", "gfx/czm/ui/editor_bg.png", "touch_presets/czm_scheme1.cfg",
                            "touch_presets/czm_scheme2.cfg", "touch_presets/czm_scheme3.cfg",
                            "userconfig.d/czm_touch.cfg", "gfx/czm/ui/icon_globe.png", "gfx/czm/ui/icon_star_on.png",
-                           "gfx/czm/ui/white.png", "gfx/czm/ui/surface.png", "gfx/czm/ui/icon_crown.png", "gfx/czm/maps/_zombie.png", "gfx/czm/maps/_classic.png",
+                           "gfx/czm/ui/white.png", "gfx/czm/ui/surface.png", "gfx/czm/ui/icon_crown.png", "gfx/czm/ui/icon_tools.png", "gfx/czm/maps/_zombie.png", "gfx/czm/maps/_classic.png",
                            "gfx/czm/maps/zm_3rooms.png", "gfx/czm/avatars/avatar_01.png", "gfx/czm/avatars/avatar_10.png",
                            "gfx/czm/radar/radar_classic.png", "gfx/czm/radar/radar_tactical.png", "gfx/czm/radar/mark_dot.png"]:
                   assert apk.read("assets/" + name) == Path("3rdparty/cs16client-extras", name).read_bytes(), name

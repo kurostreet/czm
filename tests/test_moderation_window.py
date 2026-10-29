@@ -4,6 +4,7 @@ import os
 import subprocess
 import tempfile
 import unittest
+from native_community_stub import STUB as COMMUNITY_STUB, HARNESS as COMMUNITY_HARNESS
 from test_rules_window import STUB as RULES_STUB, HARNESS as RULES_HARNESS
 from test_tab_avatars import VECTOR, STRING
 from test_loading_errors import function
@@ -12,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 STUB = RULES_STUB + r'''
 void CZM_ModerationFrame();
 '''
+STUB += COMMUNITY_STUB
 HARNESS = RULES_HARNESS.replace("static void then(){thenCalls++;}", "") + r'''
 static bool support=true,ready=true;static int me=9,tags;
 bool CZM_OnlineSupport(){return support;}bool CZM_OnlineReady(){return ready;}int CZM_OnlinePlayer(){return me;}
@@ -23,6 +25,7 @@ int CZM_CountBadgeWidth(int count,int h){return count>0?h*(count>9?2:1):0;}
 void CZM_DrawCountBadge(const CzmRect&r,int){UI_FillRect(r.x,r.y,r.w,r.h,PackRGBA(229,63,77,255));}
 static bool typing;void UI_EnableTextInput(bool on){typing=on;}
 '''
+HARNESS += COMMUNITY_HARNESS
 SCENARIOS = r'''
 static bool inside(const CzmRect&a,const CzmRect&b){return a.w>0&&a.h>0&&a.x>=b.x&&a.y>=b.y&&a.x+a.w<=b.x+b.w&&a.y+a.h<=b.y+b.h;}
 static bool overlap(const CzmRect&a,const CzmRect&b){return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y;}
@@ -120,8 +123,22 @@ int main(int argc,char**argv){
  assert(w.m_rows.Count()==2&&w.Rows()==3&&!strcmp(w.m_rows[1].text,"Чат отключён")&&!strcmp(w.m_rows[0].moderator,"Kuro"));
  w.Draw();tap(w,w.RowRect(2));assert(lastUrl=="/api/v1/moderation/history?offset=30");reply(w,200,"{\"history\":[],\"next\":-1}");assert(w.Rows()==2);
  // Errors speak plainly; the role went away: the window closes itself.
- w.Activate(w.REFRESH);reply(w,403,"{\"error\":\"forbidden\"}");assert(w.m_toastError&&strstr(w.m_toast,"SUPPORT"));
+ w.Activate(w.REFRESH);reply(w,403,"{\"error\":\"forbidden\"}");assert(w.m_toastError&&strstr(w.m_toast,"доступа"));
  support=false;w.Draw();assert(!w.m_open);support=true;
+
+ // A moderator has reversible chat actions, requires a reason even for dismissals,
+ // and can act on cosmetic role holders when the API says they are not protected.
+ actorRole="moderator";
+ w.Hide();CZM_ModerationTarget(8,"Tester",71,0,"message");
+ reply(w,200,"{\"target\":{\"id\":8,\"nick\":\"Tester\"},\"role\":\"tester\",\"protected\":false,\"quote\":{\"message\":71,\"text\":\"message\",\"context\":\"global\"},\"moderation\":{}}");
+ assert(!w.m_targetStaff&&action(w,"delete_message")>=0&&action(w,"ban")>=0);
+ assert(action(w,"remove_avatar")<0&&action(w,"restrict_photo")<0&&action(w,"close_lobby")<0);
+ w.Activate(w.ACTION+action(w,"delete_message"));assert(w.m_page==PAGE_REASON&&w.NeedsReason());
+ w.m_report=102;strcpy(w.m_reportKind,"lobby");w.Go(PAGE_TARGET);w.Visible();
+ w.Activate(w.ACTION+action(w,"dismiss"));assert(w.m_page==PAGE_REASON&&w.NeedsReason());
+ assert(strstr(ErrorText("moderator_paused",403),"приостановлены"));
+ w.Hide();actorRole="support";
+
  // An answer that comes after closing is still collected.
  CZM_ModerationOpen();int pending=w.m_read;w.Hide();replies[pending]={200,"{}"};CZM_ModerationFrame();assert(!w.m_read&&!w.m_open);
  if(argc>1){

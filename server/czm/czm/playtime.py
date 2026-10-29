@@ -100,9 +100,11 @@ def board(conn: sqlite3.Connection, viewer: int = 0) -> dict:
         f"EXISTS(SELECT 1 FROM staff s WHERE s.player=t.player) AS support "
         f"FROM playtime t JOIN players p ON p.id=t.player WHERE {_ELIGIBLE} "
         f"ORDER BY t.seconds DESC, t.player LIMIT ?", (t - social.PRESENCE_TTL, t, LIMIT)).fetchall()
-    from . import service
+    from . import service, community
+    roles = community.role_map(conn, [r["player"] for r in rows])
     top = [{"place": i + 1, "id": r["player"], "nick": r["nick"], "avatar": service.avatar_ref(r), "seconds": r["seconds"],
-            "online": bool(r["online"]), "tier": tier(i + 1), **({"role": "support"} if r["support"] else {})}
+            "online": bool(r["online"]), "tier": tier(i + 1),
+            **({"role": roles[r["player"]][0], "project": roles[r["player"]][1]} if r["player"] in roles else {})}
            for i, r in enumerate(rows)]
     result = {"top": top, "players": conn.execute(f"SELECT COUNT(*) FROM playtime t WHERE {_ELIGIBLE}", (t,)).fetchone()[0]}
     if viewer:

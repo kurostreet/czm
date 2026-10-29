@@ -196,6 +196,22 @@ void CZM_ServerBlocksShow( void )
 	CZM_End( env );
 }
 
+static void CZM_CommunityHubAfterRules() { CZM_CommunityShow("hub",0); }
+static void CZM_CommunityServersAfterRules() { CZM_CommunityShow("servers",0); }
+
+void CZM_CommunityShow( const char *mode, int player )
+{
+	if( strcmp( mode, "telegram" ) && !CZM_OnlineAccount() ) { CZM_AccountShow( CZM_OnlineKey(), EngFuncs::GetCvarString( "name" )); return; }
+	if( !strcmp(mode,"hub") && !CZM_RulesAllow(CZM_CommunityHubAfterRules) ) return;
+	if( !strcmp(mode,"servers") && !CZM_RulesAllow(CZM_CommunityServersAfterRules) ) return;
+	JNIEnv *env; jclass cls;
+	if( !CZM_Begin( &env, &cls )) return;
+	jmethodID m = CZM_Method( env, cls, "communityShow", "(Ljava/lang/String;ILjava/lang/String;Z)V" );
+	if( m ) env->CallStaticVoidMethod( cls, m, env->NewStringUTF( mode ), (jint)player,
+		env->NewStringUTF( CZM_OnlineKey() ), (jboolean)CZM_IsRussian() );
+	CZM_End( env );
+}
+
 void CZM_ServerAuthShow( const char *address, const char *name )
 {
 	JNIEnv *env;
@@ -622,6 +638,7 @@ bool CZM_ServerBlocked( const char * ) { return false; }
 int CZM_ServerPolicyRevision( void ) { return 0; }
 void CZM_ServerBlocksFrame( void ) {}
 void CZM_ServerBlocksShow( void ) {}
+void CZM_CommunityShow( const char *, int ) {}
 void CZM_AccountShow( const char *, const char * ) {}
 void CZM_AccountRegister( const char *, const char * ) {}
 void CZM_AccountContext( const char *, const char * ) {}

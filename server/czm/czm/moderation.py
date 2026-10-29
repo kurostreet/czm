@@ -10,7 +10,7 @@ Sanctions share the bans table with the bot's bans: kind 'ban' closes everything
 """
 import sqlite3
 
-from . import accounts, service, social
+from . import accounts, service, social, community, moderator_guard
 from .db import now
 
 ROLE = "support"
@@ -27,8 +27,7 @@ PAGE = 30
 # the role ----------------------------------------------------------------------
 
 def role(conn: sqlite3.Connection, player_id: int) -> str:
-    row = conn.execute("SELECT role FROM staff WHERE player=?", (player_id,)).fetchone()
-    return row["role"] if row else ""
+    return community.primary(conn, player_id)
 
 
 def grant(conn: sqlite3.Connection, player_id: int) -> dict:
@@ -45,10 +44,14 @@ def revoke(conn: sqlite3.Connection, player_id: int) -> bool:
     return conn.execute("DELETE FROM staff WHERE player=?", (player_id,)).rowcount > 0
 
 
-def support_actor(conn: sqlite3.Connection, key: str) -> sqlite3.Row:
+def support_actor(conn: sqlite3.Connection, key: str, allow_paused=False) -> sqlite3.Row:
     player = social.actor(conn, key)
-    if role(conn, player["id"]) != ROLE:
+    if community.has(conn, player["id"], ROLE):
+        return player
+    if not community.has(conn, player["id"], "moderator"):
         raise accounts.AuthError("forbidden", 403)
+    if not allow_paused:
+        moderator_guard.require_active(conn, player["id"])
     return player
 
 
@@ -130,19 +133,21 @@ def reports(conn: sqlite3.Connection, key: str, offset: int = 0) -> dict:
 
 
 def sanctions(conn: sqlite3.Connection, key: str) -> dict:
-    support_actor(conn, key)
+    actor = support_actor(conn, key)
+    chief = community.has(conn, actor["id"], ROLE)
     rows = conn.execute(
-        "SELECT * FROM bans WHERE lifted IS NULL AND (until IS NULL OR until > ?) ORDER BY id DESC LIMIT 60",
-        (now(),)).fetchall()
+        "SELECT * FROM bans WHERE lifted IS NULL AND (until IS NULL OR until > ?) AND (? OR moderator=?) ORDER BY id DESC LIMIT 60",
+        (now(), int(chief), actor["id"])).fetchall()
     return {"sanctions": [{"id": r["id"], "kind": r["kind"], "target": _person(conn, r["player"]),
                            "until": r["until"] or 0, "forever": r["until"] is None, "reason": r["reason"],
                            "created": r["created"], "moderator": r["moderator"]} for r in rows]}
 
 
 def history(conn: sqlite3.Connection, key: str, offset: int = 0) -> dict:
-    support_actor(conn, key)
-    rows = conn.execute("SELECT * FROM moderation_log ORDER BY id DESC LIMIT ? OFFSET ?",
-                        (PAGE + 1, max(0, offset))).fetchall()
+    actor = support_actor(conn, key)
+    owner = community.has(conn, actor["id"], ROLE)
+    rows = conn.execute("SELECT * FROM moderation_log WHERE (? OR moderator=?) ORDER BY id DESC LIMIT ? OFFSET ?",
+                        (int(owner), actor["id"], PAGE + 1, max(0, offset))).fetchall()
     return {"history": [{"id": r["id"], "action": r["action"], "target": _person(conn, r["target"]),
                          "moderator": _person(conn, r["moderator"]), "reason": r["reason"],
                          "until": r["until"] or 0, "evidence": r["evidence"], "created": r["created"]}
@@ -152,7 +157,7 @@ def history(conn: sqlite3.Connection, key: str, offset: int = 0) -> dict:
 
 def player(conn: sqlite3.Connection, key: str, target: int, message: int = 0, lobby_message: int = 0) -> dict:
     """The card a moderator acts from: who it is, what he is under, the message in question."""
-    support_actor(conn, key)
+    actor = support_actor(conn, key)
     row = _player(conn, target)
     if row is None:
         raise accounts.AuthError("not_found", 404)
@@ -165,7 +170,8 @@ def player(conn: sqlite3.Connection, key: str, target: int, message: int = 0, lo
         m = conn.execute("SELECT m.id, m.text, l.title FROM lobby_messages m JOIN lobbies l ON l.id=m.lobby "
                          "WHERE m.id=? AND m.sender=? AND m.deleted=0", (lobby_message, target)).fetchone()
         quoted = {"lobby_message": m["id"], "text": m["text"], "context": m["title"]} if m else None
-    return {"target": _person(conn, target), "role": role(conn, target), "quote": quoted,
+    protected = community.has(conn, target, ROLE) or (community.has(conn, target, "moderator") and not community.has(conn, actor["id"], ROLE))
+    return {"target": _person(conn, target), "role": role(conn, target), "protected": protected, "quote": quoted,
             "ban": ban, "moderation": {k: v for k, v in state(conn, row).items() if k != "warning"},
             "reports_week": conn.execute("SELECT COUNT(*) FROM reports WHERE target=? AND created>?",
                                          (target, now() - 7 * 86400)).fetchone()[0]}
@@ -183,7 +189,8 @@ def _logged(conn, moderator, nonce):
 def act(conn: sqlite3.Connection, key: str, target: int, action: str, minutes: int | None, reason: str,
         report: int | None = None, message: int | None = None, lobby_message: int | None = None,
         nonce: str = "") -> dict:
-    moderator = support_actor(conn, key)
+    moderator = support_actor(conn, key, allow_paused=True)
+    guarded = not community.has(conn, moderator["id"], ROLE)
     if action not in ACTIONS:
         raise accounts.AuthError("action")
     reason = service.clean_text(reason or "", 200)
@@ -192,12 +199,18 @@ def act(conn: sqlite3.Connection, key: str, target: int, action: str, minutes: i
         if previous["target"] != target or previous["action"] != action:
             raise accounts.AuthError("nonce", 409)
         return {"ok": True, "log": previous["id"], "repeated": True}
+    if guarded:
+        moderator_guard.require_active(conn, moderator["id"])
+        if action not in {"warn", "mute_text", "mute_voice", "ban", "delete_message", "dismiss"}:
+            raise accounts.AuthError("moderator_action", 403)
+        if not reason:
+            raise accounts.AuthError("reason")
     row = _player(conn, target)
     if row is None:
         raise accounts.AuthError("not_found", 404)
     if target == moderator["id"]:
         raise accounts.AuthError("self")
-    if role(conn, target):
+    if community.has(conn, target, ROLE) or (guarded and community.has(conn, target, "moderator")):
         raise accounts.AuthError("staff", 403)
 
     info = None
@@ -206,6 +219,7 @@ def act(conn: sqlite3.Connection, key: str, target: int, action: str, minutes: i
         # the complaint must be about this very player: never punish a neighbour by mistake
         if info is None or info["target"] != target:
             raise accounts.AuthError("target", 409)
+    before = moderator_guard.capture(conn, target, report, message, lobby_message)
     evidence = info["evidence"] if info else ""
     t = now()
     until = None
@@ -222,7 +236,7 @@ def act(conn: sqlite3.Connection, key: str, target: int, action: str, minutes: i
             (target, row["device_hash"], until, reason, t, SANCTIONS[action], moderator["id"])).lastrowid
         if action == "restrict_photo":
             service.reset_avatar(conn, target)
-        if action == "ban" and info and info["kind"] in service.MESSAGE_REPORTS + ("lobby", "profile"):
+        if action == "ban" and not guarded and info and info["kind"] in service.MESSAGE_REPORTS + ("lobby", "profile"):
             service.remove_report_content(conn, info)
     elif action == "warn":
         if not reason:
@@ -263,20 +277,29 @@ def act(conn: sqlite3.Connection, key: str, target: int, action: str, minutes: i
         "INSERT INTO moderation_log(moderator, target, action, reason, until, sanction, report, evidence, created, nonce) "
         "VALUES(?,?,?,?,?,?,?,?,?,?)",
         (moderator["id"], target, action, reason, until, sanction_id, report, evidence[:2000], t, nonce or None)).lastrowid
-    return {"ok": True, "log": log, "until": until or 0, "forever": action in SANCTIONS and until is None}
+    guard = moderator_guard.record(conn, log, moderator["id"], guarded, before,
+                                   moderator_guard.capture(conn, target, report, message, lobby_message))
+    return {"ok": True, "log": log, "until": until or 0, "forever": action in SANCTIONS and until is None, "guard": guard}
 
 
 def lift(conn: sqlite3.Connection, key: str, sanction_id: int, nonce: str = "") -> dict:
-    moderator = support_actor(conn, key)
+    moderator = support_actor(conn, key, allow_paused=True)
+    guarded = not community.has(conn, moderator["id"], ROLE)
     previous = _logged(conn, moderator["id"], nonce)
     if previous is not None:
         return {"ok": True, "log": previous["id"], "repeated": True}
+    if guarded:
+        moderator_guard.require_active(conn, moderator["id"])
     s = conn.execute("SELECT * FROM bans WHERE id=?", (sanction_id,)).fetchone()
     if s is None:
         raise accounts.AuthError("not_found", 404)
+    if guarded and s["moderator"] != moderator["id"]:
+        raise accounts.AuthError("forbidden", 403)
+    before = moderator_guard.capture(conn, s["player"])
     if s["lifted"] is None:
         conn.execute("UPDATE bans SET lifted=? WHERE id=?", (now(), sanction_id))
     log = conn.execute(
         "INSERT INTO moderation_log(moderator, target, action, reason, sanction, created, nonce) VALUES(?,?,?,?,?,?,?)",
         (moderator["id"], s["player"], "lift", s["kind"], sanction_id, now(), nonce or None)).lastrowid
-    return {"ok": True, "log": log}
+    guard = moderator_guard.record(conn, log, moderator["id"], guarded, before, moderator_guard.capture(conn, s["player"]))
+    return {"ok": True, "log": log, "guard": guard}

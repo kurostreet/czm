@@ -316,6 +316,8 @@ static const struct { const char *key, *ru, *en; } s_strings[] =
 	{ "s_account", "Аккаунт и почта", "Account and email" },
 	{ "s_account_hint", "Вход, привязка почты и настройки облака", "Sign in, link email and manage cloud settings" },
 	{ "s_account_open", "Открыть", "Open" },
+	{ "s_community", "Сообщество", "Community" },
+	{ "s_community_hint", "Контакт и возможности вашего аккаунта", "Contact and tools for your account" },
 	{ "s_nick_hint", "Так тебя видят другие игроки", "How other players see you" },
 	{ "nick_placeholder", "Твой ник", "Your nickname" },
 	{ "nick_bad", "Введи свой ник, от 2 символов", "Enter your nickname, 2 characters or more" },
@@ -845,6 +847,59 @@ int CZM_DrawSupportTag( int x, int y, int h )
 			const int alpha = 46 - abs( i * 2 - band ) * 46 / Q_max( 1, band );
 			UI_FillRect( bx + i, y, 1, h, PackRGBA( 255, 236, 190, Q_max( 0, alpha )));
 		}
+		UI::Scissor::PopScissor();
+	}
+	return w;
+}
+
+static const char *CZM_RoleLabel( const char *role, const char *project )
+{
+	if( !strcmp( role, "support" )) return "SUPPORT";
+	if( !strcmp( role, "moderator" )) return "Moderator";
+	if( !strcmp( role, "tester" )) return "Official Tester CZM";
+	if( !strcmp( role, "server_owner" )) {
+		static char label[180];
+		snprintf( label, sizeof( label ), "Server owner [%s]", project && project[0] ? project : "Project" );
+		return label;
+	}
+	return "";
+}
+
+unsigned int CZM_RoleColor( const char *role, int alpha )
+{
+	if( !strcmp( role, "support" )) return PackRGBA( 231, 187, 96, alpha );
+	if( !strcmp( role, "moderator" )) return PackRGBA( 89, 174, 255, alpha );
+	if( !strcmp( role, "tester" )) return PackRGBA( 185, 137, 255, alpha );
+	if( !strcmp( role, "server_owner" )) return PackRGBA( 78, 216, 177, alpha );
+	return PackRGBA( 236, 72, 86, alpha );
+}
+
+int CZM_RoleTagWidth( const char *role, int h, const char *project, int maxWidth )
+{
+	if( !strcmp( role, "support" )) return maxWidth > 0 ? Q_min(CZM_SupportTagWidth(h),maxWidth) : CZM_SupportTagWidth( h );
+	const char *label = CZM_RoleLabel( role, project );
+	if( !label[0] ) return 0;
+	const int raw = h * 68 / 100 + h * 13 / 15 + CZM_TextWidth( CZM_Font( CZM_SupportFont( h )), label );
+	const int bounded = Q_min( raw, Q_max( h * 5, (int)( ScreenHeight * .55f )));
+	return maxWidth > 0 ? Q_min(raw,maxWidth) : bounded;
+}
+
+int CZM_DrawRoleTag( int x, int y, int h, const char *role, const char *project, int maxWidth )
+{
+	if( !strcmp( role, "support" ) && (maxWidth <= 0 || CZM_SupportTagWidth(h) <= maxWidth)) return CZM_DrawSupportTag( x, y, h );
+	const int w = CZM_RoleTagWidth( role, h, project, maxWidth );
+	if( !w ) return 0;
+	const int line = Q_max( 1, ScreenHeight / 720 ), icon = h * 68 / 100, radius = Q_max( 2, h / 3 );
+	const HFont font = CZM_Font( CZM_SupportFont( h ));
+	CZM_DrawSliced( "gfx/czm/ui/surface.png", x, y, w, h, radius, radius, CZM_RoleColor( role, 210 ));
+	CZM_DrawSliced( "gfx/czm/ui/surface.png", x+line, y+line, w-line*2, h-line*2, radius, radius, PackRGBA( 19, 25, 35, 255 ));
+	const char *image = !strcmp( role, "moderator" ) || !strcmp(role,"support") ? "gfx/czm/ui/icon_shield.png" : !strcmp( role, "tester" ) ? "gfx/czm/ui/icon_tools.png" : "gfx/czm/ui/icon_crown.png";
+	CZM_DrawImage( image, w<h*2?x+(w-icon)/2:x+h/3, y+(h-icon)/2, icon, icon, CZM_RoleColor( role ));
+	if(w>=h*2)CZM_DrawText( font, x+h/3+icon+h/5, y+(h-CZM_FontHeight(font))/2, w-h*2/3-icon-h/5, CZM_RoleLabel(role,project), CZM_RoleColor(role) );
+	const double phase = fmod( uiStatic.realTime * .001, 7.0 );
+	if( phase < .7 ) {
+		UI::Scissor::PushScissor( x+line, y+line, w-line*2, h-line*2 );
+		UI_FillRect( x+(int)(w*phase/.7), y, Q_max(2,h/5), h, CZM_RoleColor(role,35) );
 		UI::Scissor::PopScissor();
 	}
 	return w;

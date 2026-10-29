@@ -319,6 +319,7 @@ bool CZM_ServerBlocked( const char *address );
 int CZM_ServerPolicyRevision( void );
 void CZM_ServerBlocksFrame( void );
 void CZM_ServerBlocksShow( void );
+void CZM_CommunityShow( const char *mode, int player = 0 );
 void CZM_AccountShow( const char *key, const char *nick );
 void CZM_AccountRegister( const char *key, const char *nick );
 void CZM_AccountContext( const char *key, const char *nick );
@@ -410,8 +411,12 @@ bool CZM_OnlineBan( int *until, bool *forever, const char **reason );
 // SUPPORT and what a moderator limited for this player
 enum { CZM_LIMIT_TEXT = 0, CZM_LIMIT_VOICE, CZM_LIMIT_PHOTO, CZM_LIMIT_COUNT };
 bool CZM_OnlineSupport( void );
+const char *CZM_OnlineRole( void );
 int CZM_SupportTagWidth( int h );
 int CZM_DrawSupportTag( int x, int y, int h ); // returns its width
+int CZM_RoleTagWidth( const char *role, int h, const char *project = "", int maxWidth = 0 );
+int CZM_DrawRoleTag( int x, int y, int h, const char *role, const char *project = "", int maxWidth = 0 );
+unsigned int CZM_RoleColor( const char *role, int alpha = 255 );
 bool CZM_OnlineLimited( int kind, char *text = NULL, size_t size = 0 ); // text: what to tell the player
 // the Top 100 by time on game servers (czm/menu/CzmTop.cpp): 1-3 own crowns, gold to 10, silver to 50, bronze to 100
 void CZM_OpenTop( void );

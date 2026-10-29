@@ -49,6 +49,7 @@ public final class CzmNet {
     public static void serverBlocksFrame(String key){ServerBlocks.context(key);}
     public static void serverBlocksShow(String key,boolean ru){ServerBlocks.show(key,ru);}
     public static void serverReportShow(String address,String name,String key,boolean ru){CzmServerReport.show(address,name,key,ru);}
+    public static void communityShow(String mode,int player,String key,boolean ru){CzmCommunity.show(mode,player,key,ru);}
 
     public static void lobbyVoiceStart(String url,String key,int player){CzmLobbyVoiceDialog.loadPreferences();CzmLobbyVoice.start(url,key,player);}
     public static void lobbyVoiceTest(){CzmLobbyVoiceDialog.show();}

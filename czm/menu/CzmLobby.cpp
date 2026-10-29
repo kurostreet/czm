@@ -23,7 +23,7 @@
 namespace {
 const char *L( const char *ru, const char *en ) { return CZM_IsRussian() ? ru : en; }
 struct RoomCard { char id[64], title[128], address[64], proto[8], map[64]; int count,capacity; };
-struct Member { int id; bool ready,support; char nick[100],avatar[32]; };
+struct Member { int id; bool ready,support; char nick[100],avatar[32],role[16],project[132]; };
 struct ChatLine { int id,sender; char nick[52],text[440]; };
 bool SafeAddress(const char *p) {
     if(!p || !*p || strlen(p)>=64 || !strchr(p,':')) return false;
@@ -454,7 +454,9 @@ void CCzmLobby::ReadRoom(const CzmJson &j,int n){
     for(int i=0;i<j.Count(members)&&m_memberCount<CZM_LOBBY_MEMBERS;i++){
         int item=j.At(members,i);Member &m=m_members[m_memberCount++];
         m.id=j.Int(j.Get(item,"id"));m.ready=j.Bool(j.Get(item,"ready"));
-        m.support=!strcmp(j.String(j.Get(item,"role")),"support");
+        Q_strncpy(m.role,j.String(j.Get(item,"role")),sizeof(m.role));
+        Q_strncpy(m.project,j.String(j.Get(item,"project")),sizeof(m.project));
+        m.support=m.role[0]!=0;
         Q_strncpy(m.nick,j.String(j.Get(item,"nick")),sizeof(m.nick));
         Q_strncpy(m.avatar,j.String(j.Get(item,"avatar")),sizeof(m.avatar));
     }
@@ -1148,9 +1150,9 @@ void CCzmLobby::Draw(){
                 const int tx=ax+av+gap,icon=Q_max(14,(int)(H*.027f));
                 const int right=r.x+r.w-inset,tw=Q_max(10,right-tx-icon-gap/2);
                 if(member.support){
-                    const int tagH=label,nw=Q_min(CZM_TextWidth(CZM_Font(CZMF_UI_LABEL),member.nick)+2,tw-CZM_SupportTagWidth(tagH)-gap/2);
+                    const int tagH=label,tagW=CZM_RoleTagWidth(member.role,tagH,member.project,tw/2),nw=Q_min(CZM_TextWidth(CZM_Font(CZMF_UI_LABEL),member.nick)+2,tw-tagW-gap/2);
                     CzmStyle::Text(CZM_Rect(tx,r.y+r.h/2-label-2,Q_max(0,nw),label+4),member.nick,CZMF_UI_LABEL);
-                    CZM_DrawSupportTag(tx+Q_max(0,nw)+gap/2,r.y+r.h/2-label,tagH);
+                    CZM_DrawRoleTag(tx+Q_max(0,nw)+gap/2,r.y+r.h/2-label,tagH,member.role,member.project,tagW);
                 }else CzmStyle::Text(CZM_Rect(tx,r.y+r.h/2-label-2,tw,label+4),member.nick,CZMF_UI_LABEL);
                 const char *state=member.ready?L("Готов","Ready"):L("Не готов","Not ready");
                 CzmStyle::Text(CZM_Rect(tx,r.y+r.h/2+2,right-tx,label),state,CZMF_UI_META,member.ready?CzmStyle::Success():CzmStyle::Muted());

@@ -8,7 +8,7 @@ import sqlite3
 from . import accounts, service
 from .db import now
 
-VERSION = 2
+VERSION = 3
 URL = "https://counter-zombie.ru/rules"
 
 
