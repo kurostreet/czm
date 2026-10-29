@@ -35,6 +35,7 @@ final class CzmDialog extends Dialog {
     final Button cancel, submit;
     final TextView error;
     private final LinearLayout root;
+    private final ScrollView scroll;
     private final boolean russian;
     private final ArrayList<Runnable> hidePasswords = new ArrayList<>();
 
@@ -64,7 +65,7 @@ final class CzmDialog extends Dialog {
         View line = new View(a); line.setBackgroundColor(RED);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(a, 36), dp(a, 2));
         lp.topMargin = dp(a, 9); lp.bottomMargin = dp(a, 6); root.addView(line, lp);
-        ScrollView scroll = new ScrollView(a) {
+        scroll = new ScrollView(a) {
             @Override protected void onMeasure(int widthSpec, int heightSpec) {
                 android.graphics.Rect visible=new android.graphics.Rect();
                 root.getWindowVisibleDisplayFrame(visible);
@@ -160,7 +161,10 @@ final class CzmDialog extends Dialog {
         note(label);CzmCodeInput code=new CzmCodeInput(activity,russian);
         body.addView(code,new LinearLayout.LayoutParams(-1,dp(activity,52)));return code;
     }
-    void fail(String message) { error.setText(message); error.setVisibility(View.VISIBLE); }
+    void fail(String message) {
+        error.setText(message); error.setVisibility(View.VISIBLE);
+        scroll.post(() -> scroll.smoothScrollTo(0, 0));
+    }
     void busy(boolean value) { submit.setEnabled(!value); cancel.setEnabled(!value); setCancelable(!value); }
 
     private void maskPasswords() { for (Runnable hide : hidePasswords) hide.run(); }
