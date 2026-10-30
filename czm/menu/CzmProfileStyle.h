@@ -21,7 +21,7 @@ inline const char *ThemeName(int index) {
     static const char *en[]={"Ember front","Frozen frontier","Abandoned city","Infected laboratory"};
     return (CZM_IsRussian()?ru:en)[bound(0,index,ThemeCount-1)];
 }
-inline unsigned Alpha(unsigned color,int opacity) { return (color&0x00ffffffu)|((unsigned)bound(0,opacity,255)<<24); }
+inline unsigned WithOpacity(unsigned color,int opacity) { return (color&0x00ffffffu)|((unsigned)bound(0,opacity,255)<<24); }
 inline unsigned ThemeColor(int index) {
     static const unsigned colors[]={PackRGBA(244,89,60,255),PackRGBA(99,192,255,255),PackRGBA(230,166,101,255),PackRGBA(82,216,169,255)};
     return colors[bound(0,index,ThemeCount-1)];
@@ -31,7 +31,7 @@ inline unsigned RoleAccent(const char *role) {
 }
 inline void Frame(const CzmRect &r,unsigned accent,double time) {
     const int line=Q_max(1,ScreenHeight/600),cut=Q_max(5,ScreenHeight/85);
-    const unsigned left=PackRGBA(143,180,196,200),right=Alpha(accent,180+(int)(35*sin(time*1.25)));
+    const unsigned left=PackRGBA(143,180,196,200),right=WithOpacity(accent,180+(int)(35*sin(time*1.25)));
     UI_FillRect(r.x+cut,r.y,r.w/2-cut,line,left);
     UI_FillRect(r.x+r.w/2,r.y,r.w/2-cut,line,right);
     UI_FillRect(r.x+cut,r.y+r.h-line,r.w/2-cut,line,left);
@@ -46,7 +46,7 @@ inline void Frame(const CzmRect &r,unsigned accent,double time) {
         UI_FillRect(r.x+cut-i-1,r.y+r.h-i-1,line,1,left);UI_FillRect(r.x+r.w-cut+i,r.y+r.h-i-1,line,1,right);
     }
     const int length=Q_max(18,r.w/12);
-    UI_FillRect(r.x+r.w-cut-length,r.y+line,length,line,Alpha(accent,90));
+    UI_FillRect(r.x+r.w-cut-length,r.y+line,length,line,WithOpacity(accent,90));
 }
 inline void Background(const CzmRect &r,int theme,double time,bool particles=true) {
     UI::Scissor::PushScissor(r.x,r.y,r.w,r.h);
@@ -60,7 +60,7 @@ inline void Background(const CzmRect &r,int theme,double time,bool particles=tru
             const int side=Q_max(2,ScreenHeight/300)+(i%2);
             const int x=r.x+(int)(r.w*(.66+.31*fmod(i*.37,1.0)))+(int)(sin(time*.28+i)*r.w*.006);
             const int y=r.y+(int)(r.h*(1.0-phase));
-            CZM_DrawImage("gfx/czm/ui/dot.png",x,y,side,side,Alpha(ThemeColor(theme),(int)(95*sin(phase*M_PI))));
+            CZM_DrawImage("gfx/czm/ui/dot.png",x,y,side,side,WithOpacity(ThemeColor(theme),(int)(95*sin(phase*M_PI))));
         }
     }
     UI::Scissor::PopScissor();
@@ -71,7 +71,7 @@ inline int BadgeWidth(const char *label,int height) {
 inline int Badge(int x,int y,int height,const char *label,const char *icon,unsigned color,int cap) {
     const int width=Q_min(cap,BadgeWidth(label,height));if(width<height*2)return 0;
     const CzmRect r=CZM_Rect(x,y,width,height);
-    CzmStyle::Surface(r,PackRGBA(9,16,25,255),Alpha(color,190),Q_max(3,height/5));
+    CzmStyle::Surface(r,PackRGBA(9,16,25,255),WithOpacity(color,190),Q_max(3,height/5));
     const int side=height*60/100;
     CZM_DrawImage(icon,x+height/5,y+(height-side)/2,side,side,color);
     CZM_DrawText(CZM_Font(CZMF_UI_META),x+height,y+(height-CZM_FontHeight(CZM_Font(CZMF_UI_META)))/2,width-height*6/5,label,color);
@@ -115,15 +115,15 @@ template<class Profile> inline void Banner(const CzmRect &r,const CzmRect &copy,
     Background(r,theme,time);
     const int footer=CZM_FontHeight(small)+gap*2,upper=r.h-footer;
     UI_FillRect(r.x,r.y+upper,r.w,footer,PackRGBA(3,8,15,180));
-    UI_FillRect(r.x+gap,r.y+upper,r.w-gap*2,1,Alpha(accent,70));
+    UI_FillRect(r.x+gap,r.y+upper,r.w-gap*2,1,WithOpacity(accent,70));
     const bool compact=p.serverOwner&&ScreenHeight<480;
     const int av=Q_min(upper-gap*2,Q_max(44,(int)(ScreenHeight*(compact?.18f:.22f))));
     const int ax=r.x+gap*2,ay=r.y+(upper-av)/2,ring=Q_max(2,av/32);
-    CZM_DrawImage("gfx/czm/ui/glow.png",ax-av/3,ay-av/3,av*5/3,av*5/3,Alpha(accent,55+(int)(20*wave)));
+    CZM_DrawImage("gfx/czm/ui/glow.png",ax-av/3,ay-av/3,av*5/3,av*5/3,WithOpacity(accent,55+(int)(20*wave)));
     CZM_DrawImage("gfx/czm/ui/dot.png",ax-3,ay-3,av+6,av+6,PackRGBA(9,16,25,255));
     CZM_DrawImage(CZM_AvatarFor(p.avatar,p.id),ax,ay,av,av);
     CZM_DrawImage("gfx/czm/ui/icon_ring.png",ax-ring-2,ay-ring-2,av+ring*2+4,av+ring*2+4,PackRGBA(139,157,172,100));
-    CZM_DrawImage("gfx/czm/ui/icon_ring.png",ax-ring,ay-ring,av+ring*2,av+ring*2,Alpha(accent,155+(int)(35*wave)));
+    CZM_DrawImage("gfx/czm/ui/icon_ring.png",ax-ring,ay-ring,av+ring*2,av+ring*2,WithOpacity(accent,155+(int)(35*wave)));
     const int tx=ax+av+gap*2,tw=Q_max(0,r.w*69/100-(tx-r.x));
     const int nh=CZM_FontHeight(nick),pencil=self?Q_max(10,nh*3/5):0;
     const int nameY=NameY(r,p);

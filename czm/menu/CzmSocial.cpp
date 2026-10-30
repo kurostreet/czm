@@ -899,7 +899,7 @@ void CCzmSocial::DrawProfile()
 			const CzmRect &r=m_profileCounts[i];
 			Surface(r,self&&Pressed(COUNT+i)?PackRGBA(29,43,61,255):PackRGBA(13,24,36,255),PackRGBA(51,72,92,220));
 			const int side=Q_max(11,r.h*36/100),inset=gap*3/2;
-			UI_FillRect(r.x+inset,r.y+1,r.w-inset*2,1,CzmProfileStyle::Alpha(accent,45));
+			UI_FillRect(r.x+inset,r.y+1,r.w-inset*2,1,CzmProfileStyle::WithOpacity(accent,45));
 			CZM_DrawImage(icons[i],r.x+inset,r.y+(r.h-side)/2,side,side,PackRGBA(158,187,212,235));
 			char text[24];snprintf(text,sizeof(text),"%d",values[i]);
 			const int nx=r.x+inset+side+gap,nw=r.w-(nx-r.x)-gap;

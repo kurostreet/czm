@@ -17,6 +17,8 @@ STUB = r'''
 #include <string>
 #include "utlvector.h"
 #include "utlstring.h"
+// mainui Utils.h defines this macro before the profile presentation header.
+#define Alpha(x) (((x) & 0xFF000000) >> 24)
 using HFont=int;
 enum{CZMF_PANEL_TEXT,CZMF_LANG,CZMF_SMALL,CZMF_PANEL_TITLE,CZMF_NICK,QM_CENTER=1,QM_RIGHT=2,CZM_TAB_PROFILE=5,K_MWHEELUP=30,K_MWHEELDOWN=31};
 template<class T> T Q_min(T a,T b){return std::min(a,b);}template<class T>T Q_max(T a,T b){return std::max(a,b);}
