@@ -65,6 +65,7 @@ jobs:
           javac --release 11 -cp /tmp/czm-json.jar -d /tmp/czm-java-check android/app/src/git/java/ru/kurostreet/counterzombiemobile/ApkUpdate.java tests/ApkUpdateTest.java
           CZM_JAVA_CLASSES=/tmp/czm-java-check CZM_JSON_JAR=/tmp/czm-json.jar python3 -m unittest discover -s tests -p test_apk_update.py -v
           CZM_JSON_JAR=/tmp/czm-json.jar python3 -m unittest discover -s tests -p test_account_client.py -v
+          CZM_JSON_JAR=/tmp/czm-json.jar python3 -m unittest discover -s tests -p test_translation_client.py -v
           CZM_JSON_JAR=/tmp/czm-json.jar python3 -m unittest discover -s tests -p test_settings_data.py -v
           CZM_JSON_JAR=/tmp/czm-json.jar python3 -m unittest discover -s tests -p test_server_policy.py -k async -v
           python3 -m venv /tmp/czm-server-check

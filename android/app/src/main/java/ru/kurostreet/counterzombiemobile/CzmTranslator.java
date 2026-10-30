@@ -24,7 +24,7 @@ final class CzmTranslator {
     private static final ArrayList<Job> JOBS=new ArrayList<>();
     private static Translator toRussian,toEnglish;
     private static CzmDialog prompt;
-    private static boolean ready,preparing;
+    private static boolean initialized,ready,preparing;
     private static int lifecycle;
     private static final Runnable RELEASE=()->{
         if(!JOBS.isEmpty())return;
@@ -50,7 +50,12 @@ final class CzmTranslator {
             if(!(context instanceof Activity)||((Activity)context).isFinishing()){done.complete("499\n");return;}
             if(JOBS.size()>=4){done.complete("429\n");return;}
             MAIN.removeCallbacks(RELEASE);
-            MlKit.initialize(context.getApplicationContext());
+            // The SDK context lives for the process, independently of the clients.
+            // initialize() throws if called again, including after activity recreation.
+            if(!initialized){
+                try{MlKit.initialize(context.getApplicationContext());initialized=true;}
+                catch(RuntimeException error){done.complete("0\n");return;}
+            }
             Job job=new Job(text,russian,generation,done);JOBS.add(job);
             MAIN.postDelayed(()->{
                 job.finish("0\n");
