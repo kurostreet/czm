@@ -31,6 +31,7 @@ class AccountClientTests(unittest.TestCase):
             sources = {
                 "SDLActivity": "package org.libsdl.app; public class SDLActivity { public static android.content.Context getContext(){return null;} }",
                 "CzmGameActivity": "package ru.kurostreet.counterzombiemobile; public class CzmGameActivity extends android.app.Activity { public void menuReady(){} void prepareBackgroundDownload(){} }",
+                "CzmTranslator": "package ru.kurostreet.counterzombiemobile;final class CzmTranslator{interface Done{void complete(String r);}static boolean available(){return true;}static void translate(android.content.Context c,byte[] t,boolean r,int g,Done d){d.complete(\"499\\n\");}}",
                 "CzmDownloadService": "package ru.kurostreet.counterzombiemobile; public class CzmDownloadService {}",
                 "SystemClock": "package android.os; public class SystemClock { public static long elapsedRealtime(){return 1000;} }",
                 "BuildConfig": "package ru.kurostreet.counterzombiemobile; public class BuildConfig { public static final boolean IS_GOOGLE_PLAY_BUILD=false; }",
@@ -61,7 +62,7 @@ class AccountClientTests(unittest.TestCase):
             files = [str(JAVA / (name + ".java")) for name in ("CzmNet", "CzmAccount", "EmailLoginState", "CzmDialog", "CzmServerAuth", "ServerAuthData", "CzmColorPicker", "ColorWheelData", "CzmCodeInput", "CzmCloud", "SettingsData", "SettingsSchema", "CzmLayoutActivity", "CzmLayoutProvider", "ServerQuery")]
             files += [str(JAVA / "CzmDownloads.java"),str(JAVA / "PasswordChangeState.java"),
                       str(JAVA / "ServerPolicy.java"),str(JAVA / "ServerOwners.java"),str(JAVA / "CzmServerReport.java"),str(JAVA / "ServerBlocks.java"),
-                      str(JAVA / "CzmCommunity.java"),str(JAVA / "CzmAdmin.java"),str(JAVA / "CzmTicketPickerActivity.java")]
+                      str(JAVA / "CzmCommunity.java"),str(JAVA / "CzmAdmin.java"),str(JAVA / "CzmAdminDialog.java"),str(JAVA / "CzmTicketPickerActivity.java")]
             # the site build's flavor classes (the Google Play StoreUpdates needs the Play library)
             git = ROOT / "android/app/src/git/java/ru/kurostreet/counterzombiemobile"
             files += [str(git / (name + ".java")) for name in ("StoreUpdates", "SelfUpdate", "InstallStatusReceiver", "ApkUpdate", "DistributionAccess", "DevelopmentInvite")]

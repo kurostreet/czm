@@ -107,6 +107,7 @@ public final class CzmGameActivity extends XashActivity implements AudioManager.
     @Override protected void onStop(){CzmLobbyVoice.stop();backgroundIntent=false;super.onStop();}
 
     @Override public void onDestroy() {
+        CzmTranslator.close();
         CzmLobbyVoice.stop();
         CzmAccount.destroy(this);
         ui.removeCallbacksAndMessages(null);

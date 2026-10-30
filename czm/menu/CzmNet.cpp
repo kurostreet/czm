@@ -20,6 +20,7 @@ GNU General Public License for more details.
 #include "extdll_menu.h"
 #include "BaseMenu.h"
 #include "CzmMenu.h"
+#include "CzmTranslation.h"
 
 /*
 The menu has no HTTPS of its own. Android does it: CzmNet.java runs the requests on
@@ -142,9 +143,22 @@ bool CZM_CopyText( const char *text )
 {
 	JNIEnv *env; jclass cls;
 	if( !CZM_Begin( &env, &cls )) return false;
-	jmethodID m = CZM_Method( env, cls, "copyText", "(Ljava/lang/String;)Z" );
-	bool copied = m && env->CallStaticBooleanMethod( cls, m, env->NewStringUTF( text ? text : "" ));
+	jmethodID m = CZM_Method( env, cls, "copyUtf8", "([B)Z" );
+	bool copied = m && env->CallStaticBooleanMethod( cls, m, CZM_Bytes(env,text));
 	CZM_End( env ); return copied;
+}
+
+bool CZM_TranslationAvailable(){
+	static int available=-1;if(available>=0)return available!=0;
+	JNIEnv *env;jclass cls;if(!CZM_Begin(&env,&cls))return false;
+	jmethodID m=CZM_Method(env,cls,"translationAvailable","()Z");
+	available=m&&env->CallStaticBooleanMethod(cls,m);CZM_End(env);return available!=0;
+}
+int CZM_TranslationStart(const char *text,bool russian){
+	JNIEnv *env;jclass cls;if(!CZM_Begin(&env,&cls))return 0;
+	jmethodID m=CZM_Method(env,cls,"translate","([BZ)I");
+	const int id=m?env->CallStaticIntMethod(cls,m,CZM_Bytes(env,text),(jboolean)russian):0;
+	CZM_End(env);return id;
 }
 
 bool CZM_ServerBlocked( const char *address )
@@ -648,6 +662,8 @@ void CZM_UpdateState( int *state, double *done, double *total, char *error, size
 
 bool CZM_NetAvailable( void ) { return false; }
 bool CZM_CopyText( const char * ) { return false; }
+bool CZM_TranslationAvailable() { return false; }
+int CZM_TranslationStart(const char *,bool) { return 0; }
 void CZM_ServerAuthShow( const char *, const char * ) {}
 void CZM_ServerReportShow( const char *, const char * ) {}
 bool CZM_ServerBlocked( const char * ) { return false; }

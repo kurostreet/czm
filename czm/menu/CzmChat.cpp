@@ -43,6 +43,8 @@ card with friendship, messages and a contextual complaint; the owner moderates i
 #define POLL_EVERY 2.5
 #define INPUT_CHARS 200
 
+#include "CzmConversationStyle.h"
+
 static const char *s_roomIds[ROOMS] = { "global", "ru", "en" };
 static const char *s_roomNames[ROOMS] = { "Global", "RU", "EN" };
 
@@ -54,9 +56,9 @@ struct CzmChatMessage
 	bool support;         // the official SUPPORT account
 	char role[16], project[132];
 	int place;            // the place in the Top 100, 0 outside it
-	char nick[48];
+	char nick[100];
 	char avatar[24];
-	char text[512];
+	char text[1604];
 
 	// wrapping for the width it was last drawn at
 	int wrapWidth;
@@ -104,6 +106,7 @@ private:
 		HIT_INPUT = HIT_ROOM + ROOMS,
 		HIT_SEND,
 		HIT_HANDLE,
+		HIT_POPUP_COPY,
 		HIT_POPUP_MESSAGE,
 		HIT_POPUP_AVATAR,
 		HIT_POPUP_CANCEL,
@@ -111,6 +114,8 @@ private:
 		HIT_BACKDROP,
 		HIT_MESSAGE = 1000,          // + index
 		HIT_PROFILE = 2000,          // tap on a player's avatar or name
+		HIT_OPTIONS = 3000,
+		HIT_TRANSLATE = 4000,
 	};
 
 	void Layout( void );
@@ -136,6 +141,7 @@ private:
 	void EndInput( void );
 
 	int MessageHeight( CzmChatMessage &m );
+	int RowHeight(int index);bool DateBefore(int index)const;
 	void DrawMessages( void );
 	void DrawInput( void );
 	void DrawPopup( void );
@@ -151,6 +157,7 @@ private:
 	bool m_bTyping;
 
 	int m_iPopup;                // message index, -1 none
+	int m_popupId;bool m_reportConfirm;
 	char m_szToast[160];
 	double m_flToastTime;
 
@@ -168,7 +175,7 @@ private:
 	int W, H;
 	CzmRect m_sheet, m_handle;
 	CzmRect m_back, m_rooms_[ROOMS], m_panel, m_clip, m_input, m_send;
-	CzmRect m_popup, m_popupMessage, m_popupAvatar, m_popupCancel;
+	CzmRect m_popup, m_popupMessage, m_popupAvatar, m_popupCancel,m_popupCopy;
 	int m_iAvatar, m_iTextX, m_iTextW, m_iGap;
 };
 
@@ -179,6 +186,7 @@ CCzmChat::CCzmChat() : CMenuFramework( "CzmChat" )
 	m_szSending[0] = m_szInput[0] = 0;
 	m_bTyping = false;
 	m_iPopup = -1;
+	m_popupId=0;m_reportConfirm=false;
 	m_szToast[0] = 0;
 	m_flToastTime = 0.0;
 	m_iPressed = HIT_NONE;
@@ -309,7 +317,7 @@ void CCzmChat::ReadMessages( CzmChatRoom &room, const char *body )
 	if( added && m_flScroll > 0.0f && &room == &m_rooms[m_iRoom] )
 	{
 		for( int i = room.messages.Count() - added; i < room.messages.Count(); i++ )
-			m_flScroll += MessageHeight( room.messages[i] );
+			m_flScroll += RowHeight(i);
 	}
 
 	room.loaded = true;
@@ -453,20 +461,14 @@ void CCzmChat::Report( bool avatar )
 layout and input
 =================
 */
-int CCzmChat::MessageHeight( CzmChatMessage &m )
-{
-	HFont nameFont = CZM_Font( CZMF_SMALL );
-	HFont textFont = CZM_Font( CZMF_TILE_TEXT );
-	int lineH = CZM_FontHeight( textFont ) * 115 / 100;
 
-	if( m.wrapWidth != m_iTextW )
-	{
-		m.numLines = CZM_WrapText( textFont, m.text, m_iTextW, m.starts, MAX_LINES );
-		m.wrapWidth = m_iTextW;
-	}
-
-	return Q_max( m_iAvatar, CZM_FontHeight( nameFont ) + H / 160 + m.numLines * lineH ) + m_iGap;
+bool CCzmChat::DateBefore(int index)const{
+ const CzmChatRoom &room=m_rooms[m_iRoom];return index==0||!CzmConversation::SameDay(room.messages[index-1].time,room.messages[index].time);
 }
+int CCzmChat::MessageHeight(CzmChatMessage&m){
+ const bool mine=m.player==CZM_OnlinePlayer();return CzmConversation::Layout(m_clip,0,m.text,mine?(CZM_IsRussian()?"Вы":"You"):m.nick,mine,false,m.role,m.project,m.place).height;
+}
+int CCzmChat::RowHeight(int index){return MessageHeight(m_rooms[m_iRoom].messages[index])+(DateBefore(index)?CzmConversation::DateHeight():0);}
 
 int CCzmChat::ContentHeight( void )
 {
@@ -474,7 +476,7 @@ int CCzmChat::ContentHeight( void )
 	int total = 0;
 
 	for( int i = 0; i < room.messages.Count(); i++ )
-		total += MessageHeight( room.messages[i] );
+		total += RowHeight(i);
 	return total;
 }
 
@@ -522,15 +524,23 @@ void CCzmChat::Layout( void )
 	m_iTextW = m_clip.x + m_clip.w - m_iTextX;
 	if( m_bTyping ) EngFuncs::SetTextInputRect( m_input.x, m_input.y, m_input.w, m_input.h );
 
-	// complaint window
-	{
-		int pw = Q_min( (int)( H * 0.9f ), W - margin * 2 ), ph = H * ( PopupHasAvatar() ? 0.43f : 0.34f ), bh = H * 0.07f, bw = pw - pad * 2 * 2;
 
-		m_popup = CZM_Rect(( W - pw ) / 2, ( H - ph ) / 2, pw, ph );
-		m_popupMessage = CZM_Rect( m_popup.x + pad * 2, m_popup.y + H * 0.14f, bw, bh );
-		m_popupAvatar = CZM_Rect( m_popupMessage.x, m_popupMessage.y + bh + H * 0.015f, bw, bh );
-		m_popupCancel = CZM_Rect( m_popupMessage.x, ( PopupHasAvatar() ? m_popupAvatar.y : m_popupMessage.y ) + bh + H * 0.015f, bw, bh );
-	}
+ // Resolve a menu by message ID: polling or pruning must not change its target.
+ if(m_iPopup>=0){
+  m_iPopup=-1;for(int i=0;i<m_rooms[m_iRoom].messages.Count();i++)if(m_rooms[m_iRoom].messages[i].id==m_popupId){m_iPopup=i;break;}
+ }
+ {
+  const bool mine=m_iPopup>=0&&m_rooms[m_iRoom].messages[m_iPopup].player==CZM_OnlinePlayer();
+  const int rows=m_reportConfirm?2:mine?3:4,bh=Q_max(28,(int)(H*.063f)),gap=Q_max(5,H/100),inset=Q_max(8,H/45);
+  const int width=Q_min((int)(W*.90f),(int)(H*.96f)),title=Q_max(64,(int)(H*.16f)),height=inset*2+title+rows*(bh+gap);
+  m_popup=CZM_Rect((W-width)/2,(H-height)/2,width,height);
+  const int x=m_popup.x+inset,w=width-inset*2;int y=m_popup.y+inset+title;
+  m_popupCopy=m_popupAvatar=m_popupMessage=CZM_Rect(0,0,0,0);
+  if(!m_reportConfirm){m_popupCopy=CZM_Rect(x,y,w,bh);y+=bh+gap;m_popupAvatar=CZM_Rect(x,y,w,bh);y+=bh+gap;}
+  if(m_reportConfirm||!mine){m_popupMessage=CZM_Rect(x,y,w,bh);y+=bh+gap;}
+  m_popupCancel=CZM_Rect(x,y,w,bh);
+ }
+
 }
 
 int CCzmChat::HitTest( void ) const
@@ -538,16 +548,14 @@ int CCzmChat::HitTest( void ) const
 	const int grow = ScreenHeight * 0.012f;
 	int x = uiStatic.cursorX, y = uiStatic.cursorY;
 
-	if( m_iPopup >= 0 )
-	{
-		if( m_popupMessage.HasCursor( ))
-			return HIT_POPUP_MESSAGE;
-		if( PopupHasAvatar() && m_popupAvatar.HasCursor( ))
-			return HIT_POPUP_AVATAR;
-		if( m_popupCancel.HasCursor( ))
-			return HIT_POPUP_CANCEL;
-		return m_popup.HasCursor() ? HIT_POPUP_PANEL : HIT_BACKDROP;
-	}
+
+ if(m_iPopup>=0){
+  if(!m_reportConfirm&&m_popupCopy.HasCursor())return HIT_POPUP_COPY;
+  if(!m_reportConfirm&&m_popupAvatar.HasCursor())return HIT_POPUP_AVATAR;
+  if(m_popupMessage.w&&m_popupMessage.HasCursor())return HIT_POPUP_MESSAGE;
+  if(m_popupCancel.HasCursor())return HIT_POPUP_CANCEL;
+  return m_popup.HasCursor()?HIT_POPUP_PANEL:HIT_BACKDROP;
+ }
 
 	if( m_back.Grown( grow ).HasCursor( ))
 		return HIT_BACK;
@@ -565,25 +573,19 @@ int CCzmChat::HitTest( void ) const
 	if( m_input.HasCursor( ))
 		return HIT_INPUT;
 
-	if( m_clip.Contains( x, y ))
-	{
-		// messages are laid out from the bottom
-		const CzmChatRoom &room = m_rooms[m_iRoom];
-		int bottom = m_clip.y + m_clip.h + (int)m_flScroll;
 
-		for( int i = room.messages.Count() - 1; i >= 0 && bottom > m_clip.y; i-- )
-		{
-			int h = ((CCzmChat *)this )->MessageHeight( ((CCzmChat *)this )->m_rooms[m_iRoom].messages[i] );
-
-			if( y >= bottom - h && y < bottom )
-			{
-				if( x < m_iTextX || y < bottom - h + CZM_FontHeight( CZM_Font( CZMF_SMALL )) + H * 0.014f )
-					return HIT_PROFILE + i;
-				return HIT_MESSAGE + i;
-			}
-			bottom -= h;
-		}
-	}
+ if(m_clip.Contains(x,y)){
+  const CzmChatRoom&room=m_rooms[m_iRoom];int bottom=m_clip.y+m_clip.h+(int)m_flScroll;
+  for(int i=room.messages.Count()-1;i>=0&&bottom>m_clip.y;i--){
+   const int height=((CCzmChat*)this)->RowHeight(i);bottom-=height;if(y<bottom||y>=bottom+height)continue;
+   const CzmChatMessage&m=room.messages[i];const bool mine=m.player==CZM_OnlinePlayer();
+   const CzmConversation::Bubble b=CzmConversation::Layout(m_clip,bottom+(DateBefore(i)?CzmConversation::DateHeight():0),m.text,mine?(CZM_IsRussian()?"Вы":"You"):m.nick,mine,false,m.role,m.project,m.place);
+   if(b.menu.HasCursor())return HIT_OPTIONS+i;
+   if(b.canTranslate&&b.translate.HasCursor())return HIT_TRANSLATE+i;
+   if(b.avatar.HasCursor()||(b.header.HasCursor()&&x<b.menu.x-CZM_TextWidth(CZM_Font(CZMF_UI_META),"00:00")))return HIT_PROFILE+i;
+   return HIT_NONE;
+  }
+ }
 
 	return HIT_NONE;
 }
@@ -592,6 +594,13 @@ void CCzmChat::Activate( int hit )
 {
 	if( m_bClosing || hit == HIT_NONE || hit == HIT_POPUP_PANEL )
 		return;
+
+ if(hit>=HIT_TRANSLATE&&hit<HIT_TRANSLATE+MAX_MESSAGES){
+  const int index=hit-HIT_TRANSLATE;if(index<m_rooms[m_iRoom].messages.Count())CZM_Translate(m_rooms[m_iRoom].messages[index].text);return;
+ }
+ if(hit>=HIT_OPTIONS&&hit<HIT_OPTIONS+MAX_MESSAGES){
+  const int index=hit-HIT_OPTIONS;if(index<m_rooms[m_iRoom].messages.Count()){EndInput();m_iPopup=index;m_popupId=m_rooms[m_iRoom].messages[index].id;m_reportConfirm=false;}return;
+ }
 
 	// The base window plays its closing sound when the slide finishes.
 	bool closes = hit == HIT_BACK || hit == HIT_HANDLE
@@ -612,11 +621,19 @@ void CCzmChat::Activate( int hit )
 	case HIT_SEND:
 		Send();
 		return;
-	case HIT_POPUP_MESSAGE:
-	case HIT_POPUP_AVATAR:
-		Report( hit == HIT_POPUP_AVATAR );
-		m_iPopup = -1;
-		return;
+
+ case HIT_POPUP_COPY:
+  if(m_iPopup>=0&&m_iPopup<m_rooms[m_iRoom].messages.Count()){
+   if(CZM_CopyText(m_rooms[m_iRoom].messages[m_iPopup].text))Toast(CZM_IsRussian()?"Сообщение скопировано":"Message copied");
+  }m_iPopup=-1;return;
+ case HIT_POPUP_AVATAR:
+  if(m_iPopup>=0&&m_iPopup<m_rooms[m_iRoom].messages.Count()){
+   const CzmChatMessage&m=m_rooms[m_iRoom].messages[m_iPopup];EndInput();CZM_OpenProfile(m.player,m.id);
+  }m_iPopup=-1;return;
+ case HIT_POPUP_MESSAGE:
+  if(!m_reportConfirm){m_reportConfirm=true;return;}
+  Report(false);m_iPopup=-1;m_reportConfirm=false;return;
+
 	case HIT_POPUP_CANCEL:
 	case HIT_BACKDROP:
 		if( m_iPopup >= 0 ) m_iPopup = -1;
@@ -634,18 +651,12 @@ void CCzmChat::Activate( int hit )
 		return;
 	}
 
-	// The avatar, name and message all lead to the same player card.
-	// Keep the message ID so a complaint from the card includes its actual text.
-	if( hit >= HIT_MESSAGE )
-	{
-		int index = hit >= HIT_PROFILE ? hit - HIT_PROFILE : hit - HIT_MESSAGE;
-		CzmChatRoom &room = m_rooms[m_iRoom];
-		if( index >= 0 && index < room.messages.Count() )
-		{
-			EndInput();
-			CZM_OpenProfile( room.messages[index].player, room.messages[index].id );
-		}
-	}
+
+ // Only the avatar/name opens a profile; body taps leave the conversation in place.
+ if(hit>=HIT_PROFILE&&hit<HIT_PROFILE+MAX_MESSAGES){
+  const int index=hit-HIT_PROFILE;CzmChatRoom&room=m_rooms[m_iRoom];
+  if(index>=0&&index<room.messages.Count()){EndInput();CZM_OpenProfile(room.messages[index].player,room.messages[index].id);}
+ }
 
 }
 
@@ -827,87 +838,27 @@ static void FormatTime( int t, char *out, size_t size )
 		strftime( out, size, "%d.%m %H:%M", &a );
 }
 
-void CCzmChat::DrawMessages( void )
+
+void CCzmChat::DrawMessages(void)
 {
-	CzmChatRoom &room = m_rooms[m_iRoom];
-	HFont nameFont = CZM_Font( CZMF_SMALL );
-	HFont timeFont = CZM_Font( CZMF_SMALL );
-	HFont textFont = CZM_Font( CZMF_TILE_TEXT );
-	HFont infoFont = CZM_Font( CZMF_PANEL_TEXT );
-	int lineH = CZM_FontHeight( textFont ) * 115 / 100;
-	int me = CZM_OnlinePlayer();
-	int bottom, maxScroll;
-
-	if( !CZM_NetAvailable() || ( !CZM_OnlineReady() && !room.loaded ))
-	{
-		const char *text = CZM_NetAvailable() ? CZM_T( "chat_connecting" ) : CZM_T( "chat_offline" );
-		CZM_DrawText( infoFont, m_panel.x, m_panel.y + m_panel.h / 2 - CZM_FontHeight( infoFont ) / 2, m_panel.w, text,
-			PackRGBA( 165, 172, 182, 255 ), QM_CENTER );
-		return;
-	}
-
-	if( !room.loaded || !room.messages.Count( ))
-	{
-		int icon = H * 0.10f;
-		int y = m_panel.y + m_panel.h / 2 - icon;
-
-		CZM_DrawImage( UI_DIR "icon_chat.png", m_panel.x + ( m_panel.w - icon ) / 2, y, icon, icon, CZM_White( 60 ));
-		CZM_DrawText( infoFont, m_panel.x, y + icon + H * 0.025f, m_panel.w, CZM_T( room.loaded ? "chat_empty" : "chat_loading" ),
-			PackRGBA( 165, 172, 182, 255 ), QM_CENTER );
-		return;
-	}
-
-	maxScroll = Q_max( 0, ContentHeight() - m_clip.h );
-	if( m_flScroll > maxScroll )
-		m_flScroll = maxScroll, m_flVelocity = 0.0f;
-	if( m_flScroll < 0.0f )
-		m_flScroll = 0.0f, m_flVelocity = 0.0f;
-
-	UI::Scissor::PushScissor( m_clip.x, m_clip.y, m_clip.w, m_clip.h );
-	bottom = m_clip.y + m_clip.h + (int)m_flScroll;
-	for( int i = room.messages.Count() - 1; i >= 0 && bottom > m_clip.y; i-- )
-	{
-		CzmChatMessage &m = room.messages[i];
-		int h = MessageHeight( m );
-		int top = bottom - h;
-		bool mine = m.player == me;
-		bool pressed = m_iPressed == HIT_MESSAGE + i && IsPressed( m_iPressed );
-		char when[32], line[512];
-		int y, nickW;
-
-		bottom = top;
-		if( top > m_clip.y + m_clip.h )
-			continue;
-
-		if( pressed || m_iPopup == i )
-			CZM_DrawSliced( UI_DIR "card.png", m_clip.x - H * 0.01f, top - H * 0.008f, m_clip.w + H * 0.02f, h - m_iGap + H * 0.016f, 30, (int)( H * 0.02f ));
-
-		CZM_DrawImage( CZM_AvatarFor( m.avatar, m.player ), m_clip.x, top, m_iAvatar, m_iAvatar );
-
-		// nick and time
-		FormatTime( m.time, when, sizeof( when ));
-		const int tagH=CZM_FontHeight(nameFont)+2, roleW=m.support?CZM_RoleTagWidth(m.role,tagH,m.project,m_iTextW*2/5):0;
-		const int topW=CZM_TopTagWidth(m.place,tagH),timeW=CZM_TextWidth(timeFont,when)+H*.04f;
-		nickW = Q_max(0,Q_min( CZM_TextWidth( nameFont, m.nick ), m_iTextW-roleW-topW-timeW-H*.05f ));
-		CZM_DrawText( nameFont, m_iTextX, top, nickW + 2, m.nick, NickColor( m.player, mine ));
-		if( m.support )
-			nickW += H * 0.012f + CZM_DrawRoleTag( m_iTextX + nickW + H * 0.012f, top - 1, tagH, m.role,m.project,roleW );
-		if( m.place >= 1 && m.place <= 100 )
-			nickW += H * 0.012f + CZM_DrawTopTag( m_iTextX + nickW + H * 0.012f, top - 1, CZM_FontHeight( nameFont ) + 2, m.place );
-		FormatTime( m.time, when, sizeof( when ));
-		CZM_DrawText( timeFont, m_iTextX + nickW + H * 0.018f, top + CZM_FontHeight( nameFont ) - CZM_FontHeight( timeFont ), m_iTextW / 3, when,
-			PackRGBA( 120, 126, 136, 255 ));
-
-		// the text, wrapped
-		y = top + CZM_FontHeight( nameFont ) + H / 160;
-		for( int l = 0; l < m.numLines; l++ )
-		{
-			CZM_WrapLine( m.text, m.starts, l, line, sizeof( line ));
-			CZM_DrawText( textFont, m_iTextX, y, m_iTextW, line, PackRGBA( 226, 230, 236, 255 ));
-			y += lineH;
-		}
-	}
-	UI::Scissor::PopScissor();
+ CzmChatRoom&room=m_rooms[m_iRoom];using namespace CzmStyle;
+ if(!CZM_NetAvailable()||(!CZM_OnlineReady()&&!room.loaded)){
+  Text(m_panel,CZM_T(CZM_NetAvailable()?"chat_connecting":"chat_offline"),CZMF_CHAT_TEXT,Muted(),QM_CENTER);return;
+ }
+ if(!room.loaded||!room.messages.Count()){
+  Text(m_panel,CZM_T(room.loaded?"chat_empty":"chat_loading"),CZMF_CHAT_TEXT,Muted(),QM_CENTER);return;
+ }
+ const int maxScroll=Q_max(0,ContentHeight()-m_clip.h);m_flScroll=bound(0.0f,m_flScroll,(float)maxScroll);
+ UI::Scissor::PushScissor(m_clip.x,m_clip.y,m_clip.w,m_clip.h);
+ int bottom=m_clip.y+m_clip.h+(int)m_flScroll;
+ for(int i=room.messages.Count()-1;i>=0&&bottom>m_clip.y;i--){
+  CzmChatMessage&m=room.messages[i];bottom-=RowHeight(i);int top=bottom;if(top>m_clip.y+m_clip.h)continue;
+  if(DateBefore(i)){CzmConversation::Date(m_clip,top,m.time);top+=CzmConversation::DateHeight();}
+  const bool mine=m.player==CZM_OnlinePlayer();const char*nick=mine?(CZM_IsRussian()?"Вы":"You"):m.nick;
+  const CzmConversation::Bubble bubble=CzmConversation::Layout(m_clip,top,m.text,nick,mine,false,m.role,m.project,m.place);
+  CzmConversation::Draw(bubble,m.text,nick,CZM_AvatarFor(m.avatar,m.player),m.time,mine,false,IsPressed(HIT_OPTIONS+i),m.role,m.project,m.place);
+ }
+ UI::Scissor::PopScissor();
 }
 
 void CCzmChat::DrawInput( void )
@@ -976,26 +927,22 @@ void CCzmChat::DrawInput( void )
 	}
 }
 
-void CCzmChat::DrawPopup( void )
+
+void CCzmChat::DrawPopup(void)
 {
-	CzmChatRoom &room = m_rooms[m_iRoom];
-	HFont titleFont = CZM_Font( CZMF_NICK );
-	char text[160];
-
-	if( m_iPopup >= room.messages.Count( ))
-	{
-		m_iPopup = -1;
-		return;
-	}
-
-	UI_FillRect( 0, 0, W, H, PackRGBA( 0, 0, 0, 170 ));
-	CZM_DrawPanel( m_popup );
-	snprintf( text, sizeof( text ), CZM_T( "chat_report_title" ), room.messages[m_iPopup].nick );
-	CZM_DrawText( titleFont, m_popup.x + H * 0.04f, m_popup.y + m_popup.h * 0.13f, m_popup.w - H * 0.08f, text, CZM_White(), QM_CENTER );
-	CZM_DrawButton( UI_DIR "button_danger.png", m_popupMessage, CZM_T( "chat_report_message" ), PackRGBA( 255, 170, 170, 255 ), IsPressed( HIT_POPUP_MESSAGE ));
-	if( PopupHasAvatar( ))
-		CZM_DrawButton( UI_DIR "button_danger.png", m_popupAvatar, CZM_T( "chat_report_avatar" ), PackRGBA( 255, 170, 170, 255 ), IsPressed( HIT_POPUP_AVATAR ));
-	CZM_DrawButton( UI_DIR "button_secondary.png", m_popupCancel, CZM_T( "cancel" ), CZM_White(), IsPressed( HIT_POPUP_CANCEL ));
+ if(m_iPopup<0||m_iPopup>=m_rooms[m_iRoom].messages.Count()){m_iPopup=-1;return;}
+ using namespace CzmStyle;const CzmChatMessage&m=m_rooms[m_iRoom].messages[m_iPopup];
+ UI_FillRect(0,0,W,H,PackRGBA(0,0,0,185));Surface(m_popup,PackRGBA(16,22,32,255));
+ const int inset=Q_max(8,H/45),x=m_popup.x+inset,y=m_popup.y+inset,w=m_popup.w-inset*2;
+ Text(CZM_Rect(x,y,w,CZM_FontHeight(CZM_Font(CZMF_LANG))),m_reportConfirm?(CZM_IsRussian()?"Пожаловаться на сообщение?":"Report this message?"):m.nick,CZMF_LANG);
+ const int quoteY=y+CZM_FontHeight(CZM_Font(CZMF_LANG))+inset/2;
+ TextLines(CZM_Rect(x,quoteY,w,Q_max(0,(m_reportConfirm?m_popupMessage.y:m_popupCopy.y)-quoteY-inset/2)),m.text,CZMF_UI_LABEL,Muted());
+ if(!m_reportConfirm){
+  Button(m_popupCopy,CZM_IsRussian()?"Скопировать":"Copy",true,false,IsPressed(HIT_POPUP_COPY));
+  Button(m_popupAvatar,CZM_IsRussian()?"Открыть профиль":"View profile",true,false,IsPressed(HIT_POPUP_AVATAR));
+ }
+ if(m_popupMessage.w)Button(m_popupMessage,m_reportConfirm?(CZM_IsRussian()?"Отправить жалобу":"Send report"):(CZM_IsRussian()?"Пожаловаться":"Report message"),true,m_reportConfirm,IsPressed(HIT_POPUP_MESSAGE));
+ Button(m_popupCancel,CZM_IsRussian()?"Отмена":"Cancel",true,false,IsPressed(HIT_POPUP_CANCEL));
 }
 
 void CCzmChat::Draw()
@@ -1017,6 +964,7 @@ void CCzmChat::Draw()
 	}
 	Layout();
 	Poll();
+	Layout(); // polling may prune the selected message; resolve its ID before drawing
 
 	// fling
 	if( !m_bScrolling && fabsf( m_flVelocity ) > 1.0f )
@@ -1029,8 +977,7 @@ void CCzmChat::Draw()
 
 	// the menu behind goes dark and the sheet is solid: tiles and the logo must not show through
 	UI_FillRect( 0, 0, W, H, PackRGBA( 0, 0, 0, (int)( 185 * m_flOpen )));
-	CZM_DrawPanel( m_sheet );
-	CZM_DrawPanel( m_sheet );
+	CzmStyle::Surface(m_sheet,PackRGBA(13,19,28,255),PackRGBA(58,69,86,255),Q_max(8,H/45));
 	CZM_DrawPill( UI_DIR "button_secondary.png", W / 2 - H * 0.055f, m_sheet.y + H * 0.018f, H * 0.11f, H * 0.008f, PackRGBA( 210, 216, 228, 210 ));
 
 	// header: back, title, rooms

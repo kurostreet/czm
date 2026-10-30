@@ -36,6 +36,7 @@ target_sources(menu PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/czm/menu/CzmServers.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/czm/menu/CzmJson.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/czm/menu/CzmNet.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/czm/menu/CzmTranslation.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/czm/menu/CzmOnline.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/czm/menu/CzmTab.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/czm/menu/CzmMapPics.cpp"

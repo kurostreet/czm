@@ -67,6 +67,15 @@ class HeadAdminTests(unittest.TestCase):
         self.assertEqual(exact[0]["id"],self.ids[0])
         self.assertEqual(self.request("GET","admin/players?query=%25%27%20OR%201%3D1").json()["players"],[])
 
+    def test_player_cards_share_the_actual_avatar_reference(self):
+        with db.db() as c:
+            c.execute("UPDATE players SET avatar='photo',avatar_rev=7 WHERE id=?",(self.ids[2],))
+        result=self.request("GET",f"admin/players?query={self.ids[2]}").json()["players"][0]
+        self.assertEqual(result["avatar"],"photo:7")
+        self.assertNotIn("avatar_rev",result)
+        detail=self.request("GET",f"admin/player?target={self.ids[2]}").json()
+        self.assertEqual(detail["avatar"],"photo:7")
+
     def test_server_control_requires_a_reason_and_preserves_report_cooldowns(self):
         address="8.8.8.8:27015"
         self.assertEqual(self.change("server_ban",server=address).status_code,400)

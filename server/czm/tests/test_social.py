@@ -26,6 +26,20 @@ class SocialTests(unittest.TestCase):
             self.guest = "social-guest-legacy-key-123"
             self.guest_id = service.hello(c, self.guest, "guest", "Guest", "", "en", "test")["id"]
 
+    def test_online_friends_lead_all_pages_and_ignore_revoked_sessions(self):
+        with db.db() as c:
+            for other in (1,2):
+                social.action(c,self.keys[0],self.ids[other],"follow")
+                social.action(c,self.keys[other],self.ids[0],"follow")
+            social.heartbeat(c,self.keys[1],"","")
+            result=social.people(c,self.keys[0],"friends")
+            self.assertEqual(result["people"][0]["id"],self.ids[1])
+            self.assertEqual(result["online"],1)
+            c.execute("DELETE FROM account_sessions WHERE player=?",(self.ids[1],))
+            result=social.people(c,self.keys[0],"friends")
+            self.assertEqual(result["online"],0)
+            self.assertTrue(all(not p["online"] for p in result["people"]))
+
     def test_profile_theme_is_public_persistent_and_only_changes_the_actor(self):
         with db.db() as c:
             social.update_status(c, self.keys[0], "My status")

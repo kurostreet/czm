@@ -132,6 +132,9 @@ android {
 }
 
 dependencies {
+	// Message text remains on-device; RU/EN models are downloaded after a user action.
+	implementation "com.google.mlkit:translate:17.0.3"
+	implementation platform("org.jetbrains.kotlin:kotlin-bom:1.8.22")
 	// Compact, TLS-based pre-match voice transport; not used for in-game voice.
 	implementation "org.java-websocket:Java-WebSocket:1.6.0"
 	// Keep Play's transitive Kotlin runtime and its JDK shims on the same version.

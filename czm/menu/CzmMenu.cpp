@@ -617,6 +617,9 @@ void CZM_CreateFonts( float scale )
 		{ "CZM Semibold", 26, 600 },    // CZMF_UI_ACTION
 		{ "CZM Semibold", 20, 600 },    // CZMF_UI_LABEL
 		{ "CZM Medium", 15, 500 },      // CZMF_UI_META
+		{ "CZM Semibold", 40, 600 },    // CZMF_PROFILE_NAME
+		{ "CZM Medium", 24, 500 },      // CZMF_PROFILE_TEXT
+		{ "CZM Medium", 23, 500 },      // CZMF_CHAT_TEXT
 	};
 
 	for( int i = 0; i < CZMF_COUNT; i++ )

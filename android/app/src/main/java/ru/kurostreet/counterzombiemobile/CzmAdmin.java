@@ -30,10 +30,11 @@ import org.libsdl.app.SDLActivity;
 
 final class CzmAdmin {
     private static final ExecutorService WORK=Executors.newSingleThreadExecutor();
+    private static final ExecutorService IMAGES=Executors.newFixedThreadPool(2);
     private static final String BASE="https://counter-zombie.ru/api/v1/";
     private static CzmAdmin opened;
     private final Activity activity;private final String key;private final boolean ru;private final int generation;
-    private final CzmDialog dialog;private Screen screen=new Screen("overview",0,"",0);private int serial;
+    private final CzmAdminDialog dialog;private Screen screen=new Screen("overview",0,"",0);private volatile int serial;private volatile boolean disposed;
     private static final class Screen {
         final String page,query;final int target,offset;
         Screen(String p,int t,String q,int o){page=p;target=t;query=q;offset=o;}
@@ -51,8 +52,8 @@ final class CzmAdmin {
     private String stamp(long seconds){if(seconds<=0)return "—";SimpleDateFormat f=new SimpleDateFormat("dd.MM HH:mm",Locale.ROOT);f.setTimeZone(TimeZone.getTimeZone("Europe/Moscow"));return f.format(new Date(seconds*1000));}
     private CzmAdmin(Activity a,String k,boolean r){
         activity=a;key=k;ru=r;generation=CzmAccount.generation();
-        dialog=new CzmDialog(a,L("Админ-панель","Admin panel"),"CZM",L("Обновить","Refresh"),L("Закрыть","Close"),r,false);
-        dialog.setOnDismissListener(d->{if(opened==this)opened=null;});
+        dialog=new CzmAdminDialog(a,r);
+        dialog.setOnDismissListener(d->{disposed=true;if(opened==this)opened=null;});
     }
     static void show(String mode,String key,boolean ru){
         Context context=SDLActivity.getContext();if(!(context instanceof Activity))return;Activity activity=(Activity)context;
@@ -64,14 +65,15 @@ final class CzmAdmin {
     }
     private boolean live(){if(!dialog.isShowing())return false;if(generation!=CzmAccount.generation()){dialog.dismiss();return false;}return true;}
     private static void enabled(View view,boolean value){view.setEnabled(value);if(view instanceof ViewGroup){ViewGroup group=(ViewGroup)view;for(int i=0;i<group.getChildCount();i++)enabled(group.getChildAt(i),value);}}
-    private void clear(){dialog.body.removeAllViews();dialog.body.addView(dialog.error);dialog.error.setVisibility(View.GONE);}
+    private void clear(){dialog.clear();}
     private void back(Runnable run){dialog.cancel.setText(L("Назад","Back"));dialog.cancel.setOnClickListener(v->run.run());}
     private void link(String text,Runnable run){dialog.link(text,v->{if(live())run.run();});}
     private void pair(String first,Runnable one,String second,Runnable two){
         Button a=dialog.link(first,v->{if(live())one.run();});Button b=dialog.link(second,v->{if(live())two.run();});
         dialog.body.removeView(a);dialog.body.removeView(b);LinearLayout row=new LinearLayout(activity);row.setOrientation(LinearLayout.HORIZONTAL);
-        LinearLayout.LayoutParams left=new LinearLayout.LayoutParams(0,CzmDialog.dp(activity,48),1);left.setMargins(0,0,CzmDialog.dp(activity,6),0);
-        row.addView(a,left);row.addView(b,new LinearLayout.LayoutParams(0,CzmDialog.dp(activity,48),1));dialog.body.addView(row);
+        LinearLayout.LayoutParams left=new LinearLayout.LayoutParams(0,-2,1);left.setMargins(0,0,CzmDialog.dp(activity,8),0);
+        row.addView(a,left);row.addView(b,new LinearLayout.LayoutParams(0,-2,1));
+        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(-1,-2);params.bottomMargin=CzmDialog.dp(activity,8);dialog.body.addView(row,params);
     }
     private String failure(String response){
         String code="";try{code=new JSONObject(response.substring(response.indexOf('\n')+1)).optString("error");}catch(Exception ignored){}
@@ -102,6 +104,9 @@ final class CzmAdmin {
     private void server(String endpoint){open(new Screen("server",0,endpoint,0));}
     private void open(Screen next){
         if(!live())return;screen=next;clear();dialog.note(L("Загружаем…","Loading…"));
+        String section=next.page.equals("player")?"players":next.page.equals("server")?"servers":next.page.equals("moderator")?"moderators":next.page.endsWith("history")?"history":next.page;
+        dialog.navigation(section,new String[]{"overview","players","servers","reports","moderators","sanctions","history"},
+            new String[]{L("Обзор","Overview"),L("Игроки и роли","Players and roles"),L("Серверы","Servers"),L("Жалобы","Reports"),L("Модераторы","Moderators"),L("Наказания","Sanctions"),L("История","History")},this::go);
         dialog.submit.setText(L("Обновить","Refresh"));dialog.submit.setOnClickListener(v->open(screen));
         if(next.page.equals("overview")){dialog.cancel.setText(L("Закрыть","Close"));dialog.cancel.setOnClickListener(v->dialog.dismiss());}
         else back(()->go("overview"));
@@ -128,13 +133,9 @@ final class CzmAdmin {
         }
     }
     private void overview(JSONObject v){
-        dialog.note(L("Аккаунты: ","Accounts: ")+v.optInt("accounts")+L(" · Игроки: "," · Players: ")+v.optInt("players")+
-            L("\nЗа последние 2 минуты: ","\nSeen in the last 2 minutes: ")+v.optInt("recent_players")+
-            L("\nЖалобы на игроков: ","\nPlayer reports: ")+v.optInt("reports_open")+L(" · Ограничения: "," · Sanctions: ")+v.optInt("sanctions_active")+
-            L("\nЗаблокировано серверов: ","\nRestricted servers: ")+v.optInt("servers_blocked")+L(" · Модераторов на паузе: "," · Paused moderators: ")+v.optInt("moderators_paused"));
-        pair(L("Игроки и роли","Players and roles"),()->go("players"),L("Серверы","Servers"),()->go("servers"));
-        pair(L("Жалобы на игроков","Player reports"),()->go("reports"),L("Модераторы","Moderators"),()->go("moderators"));
-        pair(L("Действующие наказания","Active sanctions"),()->go("sanctions"),L("История действий","Action history"),()->go("history"));
+        dialog.stats(new String[]{L("Аккаунты","Accounts"),L("Игроки","Players"),L("За 2 минуты","Last 2 minutes"),L("Открытые жалобы","Open reports"),L("Наказания","Sanctions"),L("Серверы ограничены","Restricted servers")},
+            new int[]{v.optInt("accounts"),v.optInt("players"),v.optInt("recent_players"),v.optInt("reports_open"),v.optInt("sanctions_active"),v.optInt("servers_blocked")});
+        dialog.note(L("Модераторов на паузе: ","Paused moderators: ")+v.optInt("moderators_paused"));
         JSONObject development=object(v,"development");JSONArray play=array(v,"play");
         dialog.note("DEV: "+development.optString("version","—")+" · "+development.optInt("code")+
             "\nGoogle Play: "+(play.length()>0?objectAt(play,0).optInt("code"):"—"));
@@ -142,19 +143,19 @@ final class CzmAdmin {
     }
     private static JSONObject objectAt(JSONArray list,int index){JSONObject value=list.optJSONObject(index);return value==null?new JSONObject():value;}
     private void players(Screen current,JSONObject v){
-        EditText query=dialog.field(L("Ник, логин или ID","Nickname, login or ID"),false,100);query.setText(current.query);
+        EditText query=dialog.search(L("Ник, логин или ID","Nickname, login or ID"),current.query,100);
         dialog.submit.setText(L("Найти","Search"));dialog.submit.setOnClickListener(button->open(new Screen("players",0,query.getText().toString().trim(),0)));
         JSONArray list=array(v,"players");if(list.length()==0)dialog.note(L("Игроки не найдены","No players found"));
         for(int i=0;i<list.length();i++){
             JSONObject p=objectAt(list,i);int id=p.optInt("id");String role=roles(array(p,"roles"));
-            link(p.optString("nick")+" · ID "+id+(role.isEmpty()?"":"\n"+role),()->player(id));
+            ImageView image=dialog.person(p.optString("nick"),id,role,p.optBoolean("account"),button->{if(live())player(id);});avatar(image,p);
         }
         pages(current,v.optInt("next",-1));
     }
     private void playerCard(JSONObject p){
         int id=p.optInt("id");JSONObject state=object(p,"moderation");
-        dialog.note(p.optString("nick")+" · ID "+id+"\n"+roles(array(p,"roles"))+
-            (p.optBoolean("account")?"\n"+p.optString("login"):L("\nГость","\nGuest")));
+        avatar(dialog.person(p.optString("nick"),id,roles(array(p,"roles")),p.optBoolean("account"),v->{}),p);
+        if(p.optBoolean("account"))dialog.note(L("Логин: ","Login: ")+p.optString("login"));
         if(p.optBoolean("account")){
             String[] names={"moderator","tester","server_owner"};String[] labels={"Moderator","Official Tester CZM","Server owner"};
             JSONArray active=array(p,"roles");
@@ -235,7 +236,7 @@ final class CzmAdmin {
         request("POST","admin/action",body,result->{ServerOwners.INSTANCE.invalidate();Toast.makeText(activity,L("Выполнено","Done"),Toast.LENGTH_SHORT).show();open(previous);});
     }
     private void servers(Screen current,JSONObject v){
-        EditText address=dialog.field("IP:port",false,64);address.setText(current.query);
+        EditText address=dialog.search("IP:port",current.query,64);
         dialog.submit.setText(L("Открыть","Open"));dialog.submit.setOnClickListener(button->server(address.getText().toString().trim()));
         JSONArray cases=array(v,"servers");dialog.note(L("Жалобы и ограничения","Reports and restrictions"));
         for(int i=0;i<cases.length();i++){
@@ -264,7 +265,7 @@ final class CzmAdmin {
         }
     }
     private void moderators(JSONObject v){
-        EditText id=dialog.field(L("ID модератора, включая удалённого","Moderator ID, including deleted accounts"),false,10);
+        EditText id=dialog.search(L("ID модератора, включая удалённого","Moderator ID, including deleted accounts"),"",10);
         dialog.submit.setText(L("Открыть","Open"));dialog.submit.setOnClickListener(button->{try{open(new Screen("moderator",Integer.parseInt(id.getText().toString().trim()),"",0));}catch(Exception ignored){dialog.fail(L("Укажите ID","Enter an ID"));}});
         JSONArray list=array(v,"moderators");if(list.length()==0)dialog.note(L("Модераторов пока нет","No moderators yet"));
         for(int i=0;i<list.length();i++){
@@ -329,6 +330,36 @@ final class CzmAdmin {
             }catch(Exception|OutOfMemoryError ignored){}finally{if(connection!=null)connection.disconnect();}
             final Bitmap result=image;activity.runOnUiThread(()->{if(!live()||version!=serial){if(result!=null)result.recycle();return;}if(result!=null)preview.setImageBitmap(result);});
         });
+    }
+    private void avatar(ImageView preview,JSONObject person){
+        final int version=serial,id=person.optInt("id");final String ref=person.optString("avatar");
+        IMAGES.execute(()->{
+            if(disposed||version!=serial||generation!=CzmAccount.generation())return;
+            Bitmap image=null;HttpURLConnection connection=null;
+            try{
+                if(ref.startsWith("photo:")){
+                    int revision=Integer.parseInt(ref.substring(6));
+                    java.io.File cached=new java.io.File(CzmNet.gameDir(),"czm_cache/av_"+id+"_"+revision+".png");
+                    byte[] raw;
+                    if(cached.isFile()&&cached.length()<=1048576){try(InputStream input=new java.io.FileInputStream(cached)){raw=bounded(input);}}
+                    else{
+                        connection=(HttpURLConnection)new URL("https://counter-zombie.ru/avatars/"+id+".png?v="+revision).openConnection();
+                        connection.setConnectTimeout(8000);connection.setReadTimeout(8000);connection.setInstanceFollowRedirects(false);
+                        if(connection.getResponseCode()!=200)throw new java.io.IOException();try(InputStream input=connection.getInputStream()){raw=bounded(input);}
+                    }
+                    BitmapFactory.Options size=new BitmapFactory.Options();size.inJustDecodeBounds=true;BitmapFactory.decodeByteArray(raw,0,raw.length,size);
+                    if(size.outWidth>0&&size.outHeight>0&&(long)size.outWidth*size.outHeight<=4000000){size.inJustDecodeBounds=false;size.inSampleSize=Math.max(1,Math.max(size.outWidth,size.outHeight)/128);image=BitmapFactory.decodeByteArray(raw,0,raw.length,size);}
+                }else{
+                    int index=0;try{index=Integer.parseInt(ref);}catch(Exception ignored){}
+                    String path=index>=1&&index<=10?String.format(Locale.ROOT,"gfx/czm/avatars/avatar_%02d.png",index):"gfx/czm/ui/avatar.png";
+                    try(InputStream input=activity.getAssets().open(path)){image=BitmapFactory.decodeStream(input);}
+                }
+            }catch(Exception|OutOfMemoryError ignored){}finally{if(connection!=null)connection.disconnect();}
+            final Bitmap result=image;activity.runOnUiThread(()->{if(!live()||version!=serial){if(result!=null)result.recycle();return;}if(result!=null)preview.setImageBitmap(result);});
+        });
+    }
+    private static byte[] bounded(InputStream input)throws java.io.IOException{
+        ByteArrayOutputStream bytes=new ByteArrayOutputStream();byte[] buffer=new byte[8192];int n;while((n=input.read(buffer))!=-1){if(bytes.size()+n>1048576)throw new java.io.IOException();bytes.write(buffer,0,n);}return bytes.toByteArray();
     }
     private void sanctions(Screen current,JSONObject v){
         JSONArray list=array(v,"sanctions");if(list.length()==0)dialog.note(L("Действующих наказаний нет","No active sanctions"));

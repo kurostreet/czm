@@ -66,7 +66,7 @@ inline void Background(const CzmRect &r,int theme,double time,bool particles=tru
     UI::Scissor::PopScissor();
 }
 inline int BadgeWidth(const char *label,int height) {
-    return CZM_TextWidth(CZM_Font(CZMF_UI_META),label)+height*7/4;
+    return CZM_TextWidth(CZM_Font(CZMF_UI_LABEL),label)+height*7/4;
 }
 inline int Badge(int x,int y,int height,const char *label,const char *icon,unsigned color,int cap) {
     const int width=Q_min(cap,BadgeWidth(label,height));if(width<height*2)return 0;
@@ -74,7 +74,7 @@ inline int Badge(int x,int y,int height,const char *label,const char *icon,unsig
     CzmStyle::Surface(r,PackRGBA(9,16,25,255),WithOpacity(color,190),Q_max(3,height/5));
     const int side=height*60/100;
     CZM_DrawImage(icon,x+height/5,y+(height-side)/2,side,side,color);
-    CZM_DrawText(CZM_Font(CZMF_UI_META),x+height,y+(height-CZM_FontHeight(CZM_Font(CZMF_UI_META)))/2,width-height*6/5,label,color);
+    CZM_DrawText(CZM_Font(CZMF_UI_LABEL),x+height,y+(height-CZM_FontHeight(CZM_Font(CZMF_UI_LABEL)))/2,width-height*6/5,label,color);
     return width;
 }
 
@@ -97,11 +97,11 @@ inline int TagRows(const Tag *tags,int count,int width,int height,int space) {
     return rows;
 }
 template<class Profile> inline int NameY(const CzmRect &r,const Profile &p) {
-    const int gap=Q_max(4,(int)(ScreenHeight*.012f)),footer=CZM_FontHeight(CZM_Font(CZMF_SMALL))+gap*2;
+    const int gap=Q_max(4,(int)(ScreenHeight*.012f)),footer=CZM_FontHeight(CZM_Font(CZMF_UI_LABEL))+gap*2;
     const int av=Q_min(r.h-footer-gap*2,Q_max(44,(int)(ScreenHeight*(p.serverOwner&&ScreenHeight<480?.18f:.22f))));
-    const int width=Q_max(0,r.w*69/100-(av+gap*4)),bh=CZM_FontHeight(CZM_Font(CZMF_UI_META))+Q_max(5,gap),space=Q_max(3,gap/2);
+    const int width=Q_max(0,r.w*78/100-(av+gap*4)),bh=CZM_FontHeight(CZM_Font(CZMF_UI_LABEL))+Q_max(5,gap),space=Q_max(3,gap/2);
     Tag tags[5];const int count=Tags(p,tags),rows=TagRows(tags,count,width,bh,space);
-    const int group=CZM_FontHeight(CZM_Font(CZMF_NICK))+gap+CZM_FontHeight(CZM_Font(CZMF_SMALL))+(rows?rows*(bh+space)-space+gap:0);
+    const int group=CZM_FontHeight(CZM_Font(CZMF_PROFILE_NAME))+gap+CZM_FontHeight(CZM_Font(CZMF_UI_LABEL))+(rows?rows*(bh+space)-space+gap:0);
     return r.y+Q_max(gap,(r.h-footer-group)/2);
 }
 
@@ -111,7 +111,7 @@ template<class Profile> inline void Banner(const CzmRect &r,const CzmRect &copy,
     const int gap=Q_max(4,(int)(ScreenHeight*.012f)),theme=ThemeIndex(p.theme);
     const unsigned accent=p.role[0]?RoleAccent(p.role):ThemeColor(theme);
     const double time=EngFuncs::DoubleTime(),wave=.5+.5*sin(time*1.25);
-    const HFont meta=CZM_Font(CZMF_UI_META),nick=CZM_Font(CZMF_NICK),small=CZM_Font(CZMF_SMALL);
+    const HFont meta=CZM_Font(CZMF_UI_LABEL),nick=CZM_Font(CZMF_PROFILE_NAME),small=CZM_Font(CZMF_UI_LABEL);
     Background(r,theme,time);
     const int footer=CZM_FontHeight(small)+gap*2,upper=r.h-footer;
     UI_FillRect(r.x,r.y+upper,r.w,footer,PackRGBA(3,8,15,180));
@@ -124,7 +124,7 @@ template<class Profile> inline void Banner(const CzmRect &r,const CzmRect &copy,
     CZM_DrawImage(CZM_AvatarFor(p.avatar,p.id),ax,ay,av,av);
     CZM_DrawImage("gfx/czm/ui/icon_ring.png",ax-ring-2,ay-ring-2,av+ring*2+4,av+ring*2+4,PackRGBA(139,157,172,100));
     CZM_DrawImage("gfx/czm/ui/icon_ring.png",ax-ring,ay-ring,av+ring*2,av+ring*2,WithOpacity(accent,155+(int)(35*wave)));
-    const int tx=ax+av+gap*2,tw=Q_max(0,r.w*69/100-(tx-r.x));
+    const int tx=ax+av+gap*2,tw=Q_max(0,r.w*78/100-(tx-r.x));
     const int nh=CZM_FontHeight(nick),pencil=self?Q_max(10,nh*3/5):0;
     const int nameY=NameY(r,p);
     CZM_DrawText(nick,tx,nameY,tw-(self?pencil+gap:0),p.nick,Ink());

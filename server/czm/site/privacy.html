@@ -75,6 +75,7 @@ hr{border:0;border-top:2px solid var(--red);margin:40px 0 0;width:64px}
 
 <h2>Кому передаются данные</h2>
 <ul>
+<li>Перевод сообщений RU ↔ EN выполняется на телефоне средствами Google Translate (ML Kit). Текст сообщения и результат перевода не отправляются в Google; результат хранится только в памяти приложения. При первом использовании предлагается скачать языковой пакет около 30 МБ. SDK Google может передавать по HTTPS сведения об устройстве и версии приложения, идентификаторы установки, настройки языков, события загрузки моделей, размеры входных и выходных данных, показатели производительности и коды ошибок для диагностики и аналитики использования. SDK переводчика запускается после нажатия кнопки перевода. Подробнее: <a href="https://developers.google.com/ml-kit/android-data-disclosure" rel="noopener">данные ML Kit</a> и <a href="https://cloud.google.com/translate" rel="noopener">Google Translate</a>.</li>
 <li>Письма с кодами отправляют почтовые сервисы Resend и SMTP.BZ. Им передаётся только адрес почты и текст письма с кодом.</li>
 <li>Игровые серверы в списке держат их владельцы. Когда вы заходите на сервер, он видит ваш ник и IP-адрес, как в любой сетевой игре.</li>
 <li>Служебный Telegram-бот доставляет модераторам жалобы на игроков с необходимым контекстом: ником и ID автора и нарушителя, обжалованным текстом, а при жалобе на аватар — изображением. В уведомлении о сервере передаются его название, адрес, число жалоб, ник и ID заявителя, число его обращений и разных серверов, выбранные причины и введённое им пояснение. Пароли и ключи входа в уведомления не входят. Доступ к боту ограничен администрацией CZM.</li>
@@ -97,6 +98,7 @@ hr{border:0;border-top:2px solid var(--red);margin:40px 0 0;width:64px}
 
 <hr>
 <h2 lang="en" style="margin-top:20px">Privacy, in short (English)</h2>
+<p lang="en">RU ↔ EN message translation uses Google Translate (ML Kit) on your phone. Message text and translation results are not sent to Google. Results are cached only in app memory. First use offers a language pack download of about 30 MB. The SDK starts after a translation action and may transmit device and app information, installation identifiers, language configuration, model events, input/output sizes, performance and error diagnostics over HTTPS. See <a href="https://developers.google.com/ml-kit/android-data-disclosure" rel="noopener">ML Kit data disclosure</a> and <a href="https://cloud.google.com/translate" rel="noopener">Google Translate</a>.</p>
 <p lang="en">Your selected built-in profile background is saved with your game account and is visible to other players on your profile card. Profile backgrounds use bundled artwork; this feature does not upload arbitrary files.</p>
 <div lang="en">
 <p class="muted">Updated 30 October 2026.</p>

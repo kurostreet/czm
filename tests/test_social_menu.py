@@ -45,7 +45,7 @@ int CZM_CountBadgeWidth(int,int);void CZM_DrawCountBadge(const CzmRect&,int);
 int CZM_ChatUnread(int room=-1);int CZM_SocialNotifications();void CZM_ChatMarkRead(int,int);
 bool CZM_OnlineReady();bool CZM_OnlineAccount();int CZM_OnlineIdentity();const char*CZM_OnlineKey();int CZM_OnlinePlayer();const char*CZM_OnlineUrl(const char*);const char*CZM_AvatarFor(const char*,int);
 int CZM_NetRequest(const char*,const char*,const char*,const char*);bool CZM_NetPoll(int,int*,CUtlString&);void CZM_NetNewKey(char*,size_t);
-void CZM_OpenSettings(int);void CZM_AccountShow(const char*,const char*);bool CZM_CopyText(const char*);void CZM_JoinAddress(const char*);void CZM_PlayClick();
+const char*CZM_CurrentAvatarImage();void CZM_OpenSettings(int);void CZM_AccountShow(const char*,const char*);bool CZM_CopyText(const char*);void CZM_JoinAddress(const char*);void CZM_PlayClick();
 bool CZM_LobbyCanInvite();
 void CZM_LobbyInviteFriend(int);
 void CZM_OpenLobbyById(const char*);
@@ -70,9 +70,10 @@ struct Request{int id;std::string url,body;};static std::vector<Request> request
 const char*EngFuncs::GetCvarString(const char*k){return vars[k].c_str();}float EngFuncs::GetCvarFloat(const char*k){return atof(GetCvarString(k));}void EngFuncs::CvarSetString(const char*k,const char*v){vars[k]=v;}void EngFuncs::CvarSetValue(const char*k,float v){vars[k]=std::to_string(v);}double EngFuncs::DoubleTime(){return now;}
 void UI_EnableTextInput(bool){}void CZM_Init(){}bool CZM_IsRussian(){return russian;}unsigned CZM_White(){return 0xffffffff;}unsigned CZM_Grey(){return PackRGBA(150,164,184,255);}
 static std::map<int,std::string> loadedArt;
+HIMAGE CZM_MapPreview(const char*){return 0;}const char*CZM_MapModeArt(const char*,const char*){return "gfx/czm/maps/_zombie.png";}
 HIMAGE CZM_Image(const char*path){int id=(int)loadedArt.size()+1;loadedArt[id]=path;return id;}
 void CZM_DrawCover(HIMAGE image,int x,int y,int w,int h){if(drawTrace)printf("C\t%d\t%d\t%d\t%d\t%s\n",x,y,w,h,loadedArt[image].c_str());}
-HFont CZM_Font(int i){return i;}int CZM_FontHeight(HFont f){return (f==CZMF_PANEL_TITLE?42:f==CZMF_NICK?29:f==CZMF_LANG?24:f==CZMF_SMALL?17:f==CZMF_UI_TITLE?32:f==CZMF_UI_META?15:f==CZMF_UI_LABEL?20:21)*ScreenHeight/768;}
+HFont CZM_Font(int i){return i;}int CZM_FontHeight(HFont f){return (f==CZMF_PANEL_TITLE?42:f==CZMF_NICK?29:f==CZMF_LANG?24:f==CZMF_SMALL?17:f==CZMF_UI_TITLE?32:f==CZMF_UI_META?15:f==CZMF_UI_LABEL?20:f==CZMF_PROFILE_NAME?40:f==CZMF_PROFILE_TEXT?24:f==CZMF_CHAT_TEXT?23:21)*ScreenHeight/768;}
 int CZM_TextWidth(HFont f,const char*s){int n=0;for(;*s;s++)if((*s&0xc0)!=0x80)n++;return n*CZM_FontHeight(f)*62/100;}
 int CZM_WrapText(HFont f,const char*s,int w,int*starts,int max){int lines=0,i=0,last=0;starts[0]=0;for(;s[i]&&lines<max;){int from=i,n=0;while(s[i]&&(n*CZM_FontHeight(f)/2<w||!n)){i++;while((s[i]&0xc0)==0x80)i++;n++;}if(i==from)break;lines++;starts[lines]=i;last=i;}return lines;}
 void CZM_WrapLine(const char*s,const int*starts,int n,char*out,size_t size){int len=std::min((int)size-1,starts[n+1]-starts[n]);memcpy(out,s+starts[n],len);out[len]=0;}
@@ -85,7 +86,7 @@ void CZM_DrawButton(const char*p,const CzmRect&r,const char*s,unsigned c,bool,in
 bool CZM_OnlineReady(){return true;}bool CZM_OnlineAccount(){return authenticated;}int CZM_OnlineIdentity(){return identity;}const char*CZM_OnlineKey(){return key.c_str();}int CZM_OnlinePlayer(){return me;}const char*CZM_OnlineUrl(const char*p){return p;}const char*CZM_AvatarFor(const char*,int){return "gfx/czm/ui/avatar.png";}
 int CZM_NetRequest(const char*,const char*url,const char*,const char*body){requests.push_back({++ids,url,body});return ids;}
 bool CZM_NetPoll(int id,int*status,CUtlString&body){auto i=replies.find(id);if(i==replies.end())return false;*status=i->second.first;body.Set(i->second.second.c_str());replies.erase(i);return true;}
-void CZM_NetNewKey(char*out,size_t size){Q_strncpy(out,"0123456789abcdef0123456789abcdef",size);}int CZM_ServerCount(){return 0;}CzmServer *CZM_Server(int){return 0;}void CZM_CleanName(const char*in,char*out,size_t size){Q_strncpy(out,in,size);}void CZM_DrawSliced(const char*,int x,int y,int w,int h,int,int radius,unsigned c){if(drawTrace)printf("S\t%d\t%d\t%d\t%d\t%u\t%d\n",x,y,w,h,c,radius);}void CZM_OpenSettings(int){}void CZM_AccountShow(const char*,const char*){logins++;}bool CZM_CopyText(const char*){return true;}static std::string joinedCommunityServer;void CZM_JoinAddress(const char*address){joinedCommunityServer=address;}void CZM_PlayClick(){}
+void CZM_NetNewKey(char*out,size_t size){Q_strncpy(out,"0123456789abcdef0123456789abcdef",size);}int CZM_ServerCount(){return 0;}CzmServer *CZM_Server(int){return 0;}void CZM_CleanName(const char*in,char*out,size_t size){Q_strncpy(out,in,size);}void CZM_DrawSliced(const char*,int x,int y,int w,int h,int,int radius,unsigned c){if(drawTrace)printf("S\t%d\t%d\t%d\t%d\t%u\t%d\n",x,y,w,h,c,radius);}const char*CZM_CurrentAvatarImage(){return "gfx/czm/ui/avatar.png";}bool CZM_TranslationAvailable(){return true;}int CZM_TranslationStart(const char*t,bool){requests.push_back({++ids,"translation",t});return ids;}void CZM_OpenSettings(int){}void CZM_AccountShow(const char*,const char*){logins++;}bool CZM_CopyText(const char*){return true;}static std::string joinedCommunityServer;void CZM_JoinAddress(const char*address){joinedCommunityServer=address;}void CZM_PlayClick(){}
 bool CZM_LobbyCanInvite(){return false;}
 void CZM_LobbyInviteFriend(int){}
 void CZM_OpenLobbyById(const char*){}
@@ -130,7 +131,7 @@ int main(int argc,char**argv){
  int pending=w.m_read;identity++;me=9;CZM_SocialFrame();assert(!w.m_open&&w.m_messages.Count()==0);
  if(pending)replies[pending]={200,"{\"messages\":[{\"id\":55,\"t\":\"private old account\"}]}"};CZM_SocialFrame();assert(w.m_messages.Count()==0);
  authenticated=false;identity++;CZM_SocialFrame();CZM_OpenFriends();w.Layout();cursorX=w.m_prev.x+1;cursorY=w.m_prev.y+1;assert(w.Hit()==w.LOGIN);w.Activate(w.LOGIN);assert(logins==1);
- Button(CZM_Rect(0,0,ScreenHeight*.18f,ScreenHeight*.07f),"Отправить");assert(lastButtonFont!=CZMF_LANG);
+ SocialButton(CZM_Rect(0,0,ScreenHeight*.18f,ScreenHeight*.07f),"Отправить");assert(lastButtonFont!=CZMF_LANG);
  // Profiles remain compact with reachable, non-overlapping controls.
  authenticated=true;identity++;CZM_SocialFrame();CZM_OpenFriends();
  for(auto resolution:{std::pair<int,int>{1536,716},{960,540},{1024,768},{1280,720}}){
@@ -297,8 +298,25 @@ int main(int argc,char**argv){
  w.OpenProfile(8,false);w.Read(j,w.READ_PROFILE);assert(w.m_appear>0);
  w.m_appear=0;w.Layout();const int risen=w.m_panel.y;
  w.m_appear=EngFuncs::DoubleTime();w.Layout();assert(w.m_panel.y>risen);w.m_appear=0;
+
+ // A body tap is inert; separate message actions keep the original report target.
+ w.m_target=8;w.Navigate(w.DIALOG);w.Read(j,w.READ_DIALOG);strcpy(w.m_messages[0].text,"Hello, join our game!");
+ for(auto resolution:{std::pair<int,int>{640,320},{800,360},{960,540},{1536,716},{2960,1440}}){
+  ScreenWidth=resolution.first;ScreenHeight=resolution.second;w.Layout();
+  const int top=w.m_clip.y+w.m_clip.h-w.DialogRowHeight(0)+CzmConversation::DateHeight();
+  auto b=w.MessageBubble(0,top);assert(b.canTranslate);
+  cursorX=b.body.x+b.body.w/2;cursorY=uiStatic.cursorY=b.body.y+b.body.h/2;assert(w.Hit()==0);
+  cursorX=b.menu.x+b.menu.w/2;cursorY=uiStatic.cursorY=b.menu.y+b.menu.h/2;assert(w.Hit()==w.MESSAGE_MENU);
+  w.Activate(w.Hit());assert(w.m_messageMenu==1&&w.m_messageRows==3);
+  w.Activate(w.MSG_REPORT);assert(!strcmp(w.m_confirm,"report:1")&&!strcmp(w.m_reportQuote,"Hello, join our game!"));w.Activate(w.CANCEL);
+  w.m_messages[0].player=me;w.Activate(w.MESSAGE_MENU);assert(w.m_messageRows==2&&w.m_messageKinds[0]==w.MSG_COPY&&w.m_messageKinds[1]==w.MSG_CLOSE);w.Activate(w.MSG_CLOSE);w.m_messages[0].player=8;
+  russian=false;b=w.MessageBubble(0,top);assert(!b.canTranslate);russian=true;
+ }
+ ScreenWidth=1536;ScreenHeight=716;w.Layout();w.Activate(w.MESSAGE_MENU);w.Activate(w.MSG_REPORT);w.m_write=0;w.Activate(w.CONFIRM);
+ assert(requests.back().body=="{\"private_message\":1}");replies[w.m_write]={200,"{}"};w.Frame();
+ w.m_messages[0].deleted=true;w.Activate(w.MESSAGE_MENU);assert(!w.m_messageMenu);w.m_messages[0].deleted=false;
  ScreenWidth=1536;ScreenHeight=716;
- if(argc>1){drawTrace=true;if(strcmp(argv[1],"dialog")){
+ if(argc>1){drawTrace=true;if(strcmp(argv[1],"dialog")&&strcmp(argv[1],"translated")&&strcmp(argv[1],"friends")){
   w.OpenProfile(8,false);w.Read(j,w.READ_PROFILE);
   if(!strncmp(argv[1],"own",3)||!strcmp(argv[1],"themes")){w.m_profile.id=me;strcpy(w.m_profile.nick,"Kuro");strcpy(w.m_profile.status,"Help Support");strcpy(w.m_profile.role,"support");w.m_profile.support=true;w.m_profile.topPlace=5;w.m_profile.topSeconds=780;support=actorAdmin=true;}
   if(!strcmp(argv[1],"own_frost"))strcpy(w.m_profile.theme,"frost");
@@ -309,7 +327,16 @@ int main(int argc,char**argv){
   if(!strcmp(argv[1],"report")){w.m_chatMessage=71;w.Activate(w.REPORT);}
   if(!strcmp(argv[1],"more")){strcpy(w.m_profile.relation,"friend");w.Activate(w.MORE);}
   if(!strcmp(argv[1],"edit")){w.m_profile.id=me;w.m_editStatus=true;strcpy(w.m_input,"Выживаем до рассвета");}
- }else{w.m_target=8;w.Navigate(w.DIALOG);w.Read(j,w.READ_DIALOG);}w.m_appear=0;w.Draw();}
+ }else if(!strcmp(argv[1],"friends")){
+  w.Navigate(w.LIST);w.m_tab=0;w.m_loaded=true;s_friends=3;s_onlineFriends=2;
+  for(int i=0;i<3;i++){Person person={};person.id=20+i;person.account=true;person.online=i<2;strcpy(person.relation,"friend");strcpy(person.nick,i==0?"NK — Azaro":i==1?"свага":"DedSad");person.lastSeen=1792240000;
+   if(i==0){person.playing=true;strcpy(person.server,"8.8.8.8:27015");strcpy(person.map,"ze_minecraft");person.togetherCount=3;person.togetherSize=6;}w.m_people.AddToTail(person);}
+ }else{
+  w.m_target=8;w.Navigate(w.DIALOG);w.Read(j,w.READ_DIALOG);strcpy(w.m_profile.nick,"свага");w.m_messages.RemoveAll();
+  const char*texts[]={"Привет! Сегодня играем?","Да, чуть позже зайду","Can you help me on this map?","Да, присоединяйся ко мне","Хорошо, сейчас зайду"};
+  for(int i=0;i<5;i++){Message message={};message.id=100+i;message.player=i%2?me:8;message.time=1792240000+i*60;strcpy(message.text,texts[i]);w.m_messages.AddToTail(message);}
+  if(!strcmp(argv[1],"translated")){CZM_Translate(texts[2]);replies[requests.back().id]={200,"{\"text\":\"Можешь помочь мне на этой карте?\"}"};now+=.03;CZM_TranslationFrame();}
+ }w.m_appear=0;w.Draw();}
 }
 '''
 
@@ -322,24 +349,26 @@ class SocialMenuTests(unittest.TestCase):
             (p / "utlvector.h").write_text(vector)
             (p / "utlstring.h").write_text(STRING.replace("void Set(const char *v)", "void Clear(){s.clear();}void Set(const char *v)"))
             # the profile card draws with the shared CZM surfaces and their fonts
-            (p / "stub.h").write_text(STUB.replace("CZMF_NICK,QM_CENTER=1", "CZMF_NICK,CZMF_TILE_STATUS,CZMF_UI_TITLE,CZMF_UI_ACTION,CZMF_UI_LABEL,CZMF_UI_META,QM_LEFT=0,QM_CENTER=1"))
+            (p / "stub.h").write_text(STUB.replace("CZMF_NICK,QM_CENTER=1", "CZMF_NICK,CZMF_TILE_STATUS,CZMF_UI_TITLE,CZMF_UI_ACTION,CZMF_UI_LABEL,CZMF_UI_META,CZMF_PROFILE_NAME,CZMF_PROFILE_TEXT,CZMF_CHAT_TEXT,QM_LEFT=0,QM_CENTER=1"))
             for name in ["extdll_menu.h", "BaseMenu.h", "Utils.h", "Framework.h", "Scissor.h", "keydefs.h", "CzmMenu.h"]:
                 (p / name).write_text('#include "stub.h"\n')
             (p / "CzmJson.h").write_text((ROOT / "czm/menu/CzmJson.h").read_text())
             (p / "CzmDesign.h").write_text((ROOT / "czm/menu/CzmDesign.h").read_text())
             (p / "CzmProfileStyle.h").write_text((ROOT / "czm/menu/CzmProfileStyle.h").read_text())
+            for name in ["CzmConversationStyle.h", "CzmTranslation.h", "CzmTextLanguage.h", "CzmTranslation.cpp"]:
+                (p / name).write_text((ROOT / "czm/menu" / name).read_text())
             source = (ROOT / "czm/menu/CzmSocial.cpp").read_text().replace('#include "../../common/czm_tab.h"', '#include "czm_tab.h"').replace("private:\n\tenum", "public:\n\tenum")
             from test_loading_errors import function
             shared=(ROOT/'czm/menu/CzmMenu.cpp').read_text()
             badges=function(shared,'int CZM_CountBadgeWidth(')+'\n'+function(shared,'void CZM_DrawCountBadge(')
             (p / "main.cpp").write_text(HARNESS + badges + source + SCENARIOS)
             exe = p / "social"
-            subprocess.run(["g++", "-std=c++11", "-w", "-I"+folder, "-I"+str(ROOT/"common"), str(p/"main.cpp"), str(ROOT/"czm/menu/CzmJson.cpp"), "-o", str(exe)], check=True)
+            subprocess.run(["g++", "-std=c++11", "-w", "-I"+folder, "-I"+str(ROOT/"common"), str(p/"main.cpp"), str(p/"CzmTranslation.cpp"), str(ROOT/"czm/menu/CzmJson.cpp"), "-o", str(exe)], check=True)
             subprocess.run([str(exe)], check=True)
             preview = os.environ.get("CZM_SOCIAL_PREVIEW_DIR")
             if preview:
                 output = Path(preview); output.mkdir(parents=True, exist_ok=True)
-                for view in ["profile", "own", "own_frost", "themes", "add", "guest", "join", "report", "dialog", "more", "edit"]:
+                for view in ["profile", "own", "own_frost", "themes", "add", "guest", "join", "report", "dialog", "translated", "friends", "more", "edit"]:
                     result = subprocess.run([str(exe), view], check=True, capture_output=True, text=True)
                     (output/(view+".tsv")).write_text(result.stdout)
 
@@ -353,20 +382,21 @@ class SocialMenuTests(unittest.TestCase):
 #include <vector>
 #include <utility>
 #include <cstddef>
-struct Message{int player,id;};
+struct Message{int player,id;char text[1604];};using CzmChatMessage=Message;
 struct Messages:std::vector<Message>{int Count()const{return size();}};
 struct Room{Messages messages;double nextPoll;};
 using CzmChatRoom=Room;
 struct EngFuncs{static void CvarSetValue(const char*,float){}};
 static std::vector<std::pair<int,int>> opened;
 void CZM_OpenProfile(int player,int message){opened.push_back({player,message});}
-bool CZM_OnlineBan(void*,void*,void*){return false;}void CZM_PlayClick(){}
+bool CZM_OnlineBan(void*,void*,void*){return false;}void CZM_PlayClick(){}bool CZM_CopyText(const char*){return true;}void CZM_Translate(const char*){}bool CZM_IsRussian(){return true;}
 #define ROOMS 3
+#define MAX_MESSAGES 100
 class CCzmChat{public:
 ''' + hits + r'''
- bool m_bClosing=false;int m_iPopup=-1,m_iRoom=0;float m_flScroll=0,m_flVelocity=0;
+ bool m_bClosing=false,m_reportConfirm=false;int m_popupId=0,m_iPopup=-1,m_iRoom=0;float m_flScroll=0,m_flVelocity=0;
  Room m_rooms[ROOMS];bool inputEnded=false;
- void Hide(){}void BeginInput(){}void Send(){}void Report(bool){}
+ void Toast(const char*){}void Hide(){}void BeginInput(){}void Send(){}void Report(bool){}
  void EndInput(){inputEnded=true;}void Activate(int);
 };
 ''' + activate + r'''
@@ -374,7 +404,7 @@ int main(){
  CCzmChat chat;
  for(int room=0;room<ROOMS;room++){
   chat.m_rooms[room].messages.push_back({8+room,70+room});chat.m_iRoom=room;
-  for(int hit:{chat.HIT_PROFILE,chat.HIT_MESSAGE}){
+  for(int hit:{chat.HIT_PROFILE}){
    chat.inputEnded=false;chat.Activate(hit);
    assert(opened.back()==std::make_pair(8+room,70+room));
    assert(chat.inputEnded&&chat.m_iPopup==-1);

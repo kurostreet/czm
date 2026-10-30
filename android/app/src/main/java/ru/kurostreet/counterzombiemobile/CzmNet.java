@@ -108,12 +108,21 @@ public final class CzmNet {
 
     public static boolean copyText(String text) {
         Context ctx = context();
-        if (!(ctx instanceof android.app.Activity) || text == null || text.length() > 64) return false;
+        if (!(ctx instanceof android.app.Activity) || text == null || text.length() > 6400) return false;
         ((android.app.Activity) ctx).runOnUiThread(() -> {
             android.content.ClipboardManager clipboard = (android.content.ClipboardManager) ctx.getSystemService(Context.CLIPBOARD_SERVICE);
-            if (clipboard != null) clipboard.setPrimaryClip(android.content.ClipData.newPlainText("CZM ID", text));
+            if (clipboard != null) clipboard.setPrimaryClip(android.content.ClipData.newPlainText("CZM", text));
         });
         return true;
+    }
+
+    public static boolean copyUtf8(byte[] text){return text!=null&&copyText(new String(text,StandardCharsets.UTF_8));}
+    public static boolean translationAvailable(){return CzmTranslator.available();}
+    public static int translate(byte[] text,boolean russian){
+        final int id=NEXT.getAndIncrement(),generation=CzmAccount.generation();
+        GENERATIONS.put(id,generation);
+        CzmTranslator.translate(context(),text,russian,generation,result->RESULTS.put(id,result));
+        return id;
     }
 
     /** Native menu calls this only after its first complete draw. */

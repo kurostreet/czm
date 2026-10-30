@@ -22,6 +22,7 @@ GNU General Public License for more details.
 #include "BaseMenu.h"
 #include "Utils.h"
 #include "CzmMenu.h"
+#include "CzmTranslation.h"
 #include "CzmJson.h"
 
 /*
@@ -490,6 +491,7 @@ static void WarningFrame( void )
 
 void CZM_OnlineFrame( void )
 {
+	CZM_TranslationFrame();
 	CZM_SprayFrame();
 	CZM_RulesFrame();
 	CZM_ModerationFrame();

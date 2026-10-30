@@ -25,10 +25,11 @@ def actor(conn,key):
     return player
 
 def person(conn,target):
-    row=conn.execute("SELECT p.id,p.nick,p.seen,a.login,a.player AS account FROM players p "
+    row=conn.execute("SELECT p.id,p.nick,p.seen,p.avatar,p.avatar_rev,a.login,a.player AS account FROM players p "
         "LEFT JOIN accounts a ON a.player=p.id WHERE p.id=?",(target,)).fetchone()
     if row is None:raise accounts.AuthError("not_found",404)
     result=dict(row);result["account"]=row["account"] is not None
+    result["avatar"]=service.avatar_ref(row);result.pop("avatar_rev",None)
     result["roles"]=community.roles(conn,target)
     return result
 

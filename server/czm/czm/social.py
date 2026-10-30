@@ -218,25 +218,32 @@ def action(conn, key, target, action):
 def people(conn, key, kind, offset=0):
     player = actor(conn, key)
     a = player["id"]
+    parameters=[a]
+    online_friends=0
     if kind == "blocked":
         query = "SELECT b.target AS target FROM social_blocks b WHERE b.source=? ORDER BY b.target"
     else:
         mutual = "EXISTS(SELECT 1 FROM social_follows r WHERE r.source=f.target AND r.target=f.source)"
         if kind == "friends":
-            query = f"SELECT f.target AS target FROM social_follows f WHERE f.source=? AND {mutual} ORDER BY f.created DESC,f.target"
+            live=("EXISTS(SELECT 1 FROM social_presence pr JOIN account_sessions s "
+                  "ON s.player=pr.player AND s.token_hash=pr.owner WHERE pr.player=f.target "
+                  "AND pr.seen>? AND s.expires>? AND s.seen>?)")
+            parameters.extend((now()-PRESENCE_TTL,now(),now()-accounts.SESSION_IDLE))
+            query = f"SELECT f.target AS target FROM social_follows f WHERE f.source=? AND {mutual} ORDER BY {live} DESC,f.created DESC,f.target"
+            online_friends=conn.execute(f"SELECT COUNT(*) FROM social_follows f WHERE f.source=? AND {mutual} AND {live}",parameters).fetchone()[0]
         elif kind == "following":
             query = f"SELECT f.target AS target FROM social_follows f WHERE f.source=? AND NOT {mutual} ORDER BY f.created DESC,f.target"
         elif kind == "followers":
             query = f"SELECT f.source AS target FROM social_follows f WHERE f.target=? AND NOT {mutual} ORDER BY f.created DESC,f.source"
         else:
             raise accounts.AuthError("kind")
-    rows = conn.execute(query + " LIMIT ? OFFSET ?", (a, PAGE_SIZE+1, offset)).fetchall()
+    rows = conn.execute(query + " LIMIT ? OFFSET ?", (*parameters, PAGE_SIZE+1, offset)).fetchall()
     people = []
     for r in rows[:PAGE_SIZE]:
         item = profile(conn, player, r["target"], True)
         item["notice"] = notifications.event_id(conn, a, r["target"], kind)
         people.append(item)
-    return {"people": people,
+    return {"people": people,"online":online_friends,
             "next": offset+PAGE_SIZE if len(rows)>PAGE_SIZE else -1, "counts": counts(conn, a)}
 
 
