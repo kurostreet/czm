@@ -43,6 +43,8 @@ HARNESS = HARNESS.replace('void CZM_DrawText(HFont f,int x,int y,int w,const cha
     'static unsigned blockLabelColor;static int blockLabels;'
     'void CZM_DrawText(HFont f,int x,int y,int w,const char*s,unsigned c,unsigned just){'
     'if(!strcmp(s,"Заблокировать")||!strcmp(s,"Block")){blockLabelColor=c;blockLabels++;}')
+HARNESS = HARNESS.replace('void CZM_OpenProfile(int){}',
+    'static int openedOwner;void CZM_OpenProfile(int owner){openedOwner=owner;}')
 HARNESS += r'''
 #include <cmath>
 static int picked,detailsAsked,authOpened,reportsOpened,blocksOpened;static std::string pickedAddress,blockedAddress,reportedAddress;
@@ -109,6 +111,16 @@ int main(int argc,char**argv){
    for(int i=0;i<18;i++){snprintf(w.m_players[i].name,48,"Player %d",i+1);w.m_players[i].frags=65-i;}
    mapRects.clear();int oldLabels=blockLabels;w.Draw();for(auto&r:mapRects)assert(r.w==r.h);
    assert(blockLabels==oldLabels+1&&blockLabelColor==CzmStyle::Ink());
+   verifiedAddress=e.address;verifiedOwner=42;w.Layout();
+   assert(inside(w.m_verified,w.m_detailsInfo));
+   cursor(w.m_verified);assert(w.HitTest()==w.HIT_VERIFIED);w.Activate(w.HIT_VERIFIED);assert(openedOwner==42);
+   w.Draw();w.m_bDetailsOpen=false;
+   CzmRect row=w.RowRect(0);cursorY=uiStatic.cursorY=row.y+row.h/2;
+   cursorX=uiStatic.cursorX=row.x+row.w-row.h*3/2;
+   assert(w.HitTest()==w.HIT_ROW+3);openedOwner=0;w.Activate(w.HitTest());assert(openedOwner==42);
+   cursorX=uiStatic.cursorX=row.x+row.w-row.h*5/2;assert(w.HitTest()==w.HIT_ROW+2);
+   cursorX=uiStatic.cursorX=row.x+row.w-row.h/2;assert(w.HitTest()==w.HIT_ROW+1);
+   verifiedOwner=0;w.m_bDetailsOpen=true;w.Layout();assert(!w.m_verified.w);
    int beforeReport=reportsOpened;cursor(w.m_report);assert(w.HitTest()==w.HIT_REPORT);w.Activate(w.HIT_REPORT);
    assert(reportsOpened==beforeReport+1&&reportedAddress==e.address);
    cursor(w.m_play);assert(w.HitTest()==w.HIT_PLAY);

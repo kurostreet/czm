@@ -879,7 +879,10 @@ void CCzmSocial::DrawProfile()
 		for(int i=0;i<p.ownedCount;i++){
 			const CzmRect &r=m_projectRows[i];const bool available=!CZM_ServerBlocked(p.owned[i].address);
 			Surface(r,Pressed(PROJECT+i)?PackRGBA(33,65,61,255):PackRGBA(23,36,43,255),Border());
-			const int lh=CZM_FontHeight(CZM_Font(CZMF_UI_META)),inset=Q_max(4,gap/2),cw=r.w-inset*2-gap;
+			const int lh=CZM_FontHeight(CZM_Font(CZMF_UI_META)),inset=Q_max(4,gap/2);
+			const bool verified=CZM_ServerOwner(p.owned[i].address)>0;
+			const int shield=Q_min(r.h-inset*2,lh*3/2),cw=r.w-inset*2-gap-(verified?shield+gap:0);
+			if(verified)CZM_DrawImage(UI_DIR "icon_shield.png",r.x+r.w-inset-shield,r.y+(r.h-shield)/2,shield,shield,CZM_RoleColor("server_owner"));
 			CZM_DrawText(meta,r.x+inset,r.y+(r.h-lh*2-2)/2,cw,p.owned[i].name[0]?p.owned[i].name:p.owned[i].address,available?Ink():Muted());
 			CZM_DrawText(meta,r.x+inset,r.y+(r.h-lh*2-2)/2+lh+2,cw,p.owned[i].address,available?CZM_RoleColor("server_owner"):Muted());
 		}
@@ -907,6 +910,10 @@ void CCzmSocial::DrawProfile()
 	if(m_profileServer.h){
 		char text[160];int sx=m_profileServer.x,sw=m_profileServer.w;
 		if(p.map[0]){const int imageW=Q_min((int)(m_profileServer.h*1.7f),m_profileServer.w/3);CZM_DrawMapPreview(p.map,m_profileServer.x,m_profileServer.y,imageW,m_profileServer.h,p.server);sx+=imageW+gap;sw-=imageW+gap;}
+		if(CZM_ServerOwner(p.server)){
+			const int side=Q_min(m_profileServer.h,CZM_FontHeight(CZM_Font(CZMF_SMALL))*2);
+			CZM_DrawImage(UI_DIR "icon_shield.png",sx+sw-side,m_profileServer.y,side,side,CZM_RoleColor("server_owner"));sw-=side+gap;
+		}
 		snprintf(text,sizeof(text),"%s %s",T("Сервер:","Server:"),p.server);
 		const int sh=CZM_FontHeight(CZM_Font(CZMF_SMALL))+2;
 		CZM_DrawText(CZM_Font(CZMF_SMALL),sx,m_profileServer.y,sw,text,Muted());

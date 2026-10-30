@@ -1068,6 +1068,11 @@ void CCzmLobby::Draw(){
         const int th=CZM_FontHeight(CZM_Font(CZMF_UI_LABEL));
         char summary[160];ServerSummary(summary,sizeof(summary));
         CzmStyle::MapPreview(m_createMapRect,m_pickedMap,m_pickedName);
+        if(CZM_ServerOwner(m_serverAddress)){
+            const int vh=Q_max(12,label),vw=CzmStyle::VerifiedWidth(vh);
+            const bool full=vw+gap*2<=m_createMapRect.w;
+            CzmStyle::Verified(CZM_Rect(m_createMapRect.x+gap,m_createMapRect.y+gap,full?vw:vh,vh),full);
+        }
         CzmStyle::Text(CZM_Rect(info.x,info.y,info.w,label),L("ВЫБРАННЫЙ СЕРВЕР","SELECTED SERVER"),CZMF_UI_META,accent);
         CzmStyle::TextLines(CZM_Rect(info.x,info.y+label,info.w,th*2),
             m_pickedName[0]?m_pickedName:L("Выбери игровой сервер","Select a game server"),CZMF_UI_LABEL);
@@ -1105,6 +1110,10 @@ void CCzmLobby::Draw(){
             CzmStyle::Surface(r,PackRGBA(22,31,43,255),m_pressed==SELECT+i?accent:0);
             const int inset=Q_max(4,gap/2),media=r.h-inset*2;
             CzmStyle::MapPreview(CZM_Rect(r.x+inset,r.y+inset,media,r.h-inset*2),room.map,room.address);
+            if(CZM_ServerOwner(room.address)){
+                const int vh=Q_max(12,media/3);
+                CzmStyle::Verified(CZM_Rect(r.x+inset,r.y+inset,vh,vh),false);
+            }
             const int tx=r.x+media+inset+gap;
             const int joinW=Q_max(64,(int)(H*.17f));
             const int joinX=r.x+r.w-joinW-gap;
@@ -1127,6 +1136,10 @@ void CCzmLobby::Draw(){
         CzmStyle::Surface(sr,PackRGBA(22,31,43,255));
         const int media=sr.h-gap;
         CzmStyle::MapPreview(CZM_Rect(sr.x+gap/2,sr.y+gap/2,media,sr.h-gap),m_pickedMap,m_pickedName);
+        if(CZM_ServerOwner(m_serverAddress)){
+            const int vh=Q_max(12,media/3);
+            CzmStyle::Verified(CZM_Rect(sr.x+gap/2,sr.y+gap/2,vh,vh),false);
+        }
         const int sx=sr.x+media+gap*2,sw=sr.w-(sx-sr.x)-gap;
         CzmStyle::Text(CZM_Rect(sx,sr.y,sw,sr.h/2),m_pickedName[0]?m_pickedName:m_serverAddress[0]?m_serverAddress:L("Выбранный игровой сервер","Selected game server"),CZMF_UI_LABEL);
         CzmStyle::Text(CZM_Rect(sx,sr.y+sr.h/2,sw,sr.h/2),summary,CZMF_UI_META,CzmStyle::Muted());

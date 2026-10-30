@@ -68,6 +68,17 @@ inline void Switch(const CzmRect &r,bool on,bool dim=false) {
     CZM_DrawImage("gfx/czm/ui/dot.png",on?r.x+r.w-inset-knob:r.x+inset,
         r.y+inset,knob,knob,dim?PackRGBA(150,150,150,120):Ink());
 }
+inline int VerifiedWidth(int h) {
+    return h*3/2+CZM_TextWidth(CZM_Font(CZMF_UI_META),CZM_IsRussian()?"Проверенный":"Verified");
+}
+inline void Verified(const CzmRect &r,bool label=true) {
+    if(r.w<=0||r.h<=0)return;
+    if(label)Round(r,PackRGBA(20,52,46,245));
+    const int side=r.h*7/10;
+    CZM_DrawImage("gfx/czm/ui/icon_shield.png",r.x+(r.h-side)/2,r.y+(r.h-side)/2,side,side,Success());
+    if(label)Text(CZM_Rect(r.x+r.h,r.y,r.w-r.h-r.h/5,r.h),
+        CZM_IsRussian()?"Проверенный":"Verified",CZMF_UI_META,Success());
+}
 inline void MapPreview(const CzmRect &r,const char *map,const char *server="") {
     const HIMAGE photo=CZM_MapPreview(map);
     // Cover scales an image beyond the destination on one axis. Clip it so a

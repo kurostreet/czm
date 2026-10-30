@@ -156,6 +156,15 @@ bool CZM_ServerBlocked( const char *address )
 	CZM_End( env ); return blocked;
 }
 
+int CZM_ServerOwner( const char *address )
+{
+	JNIEnv *env; jclass cls;
+	if( !CZM_Begin( &env, &cls )) return 0;
+	jmethodID m = CZM_Method( env, cls, "serverOwner", "(Ljava/lang/String;)I" );
+	int owner = m ? env->CallStaticIntMethod( cls, m, env->NewStringUTF( address ? address : "" )) : 0;
+	CZM_End( env ); return owner;
+}
+
 int CZM_ServerPolicyRevision( void )
 {
 	JNIEnv *env; jclass cls;
@@ -635,6 +644,7 @@ bool CZM_CopyText( const char * ) { return false; }
 void CZM_ServerAuthShow( const char *, const char * ) {}
 void CZM_ServerReportShow( const char *, const char * ) {}
 bool CZM_ServerBlocked( const char * ) { return false; }
+int CZM_ServerOwner( const char * ) { return 0; }
 int CZM_ServerPolicyRevision( void ) { return 0; }
 void CZM_ServerBlocksFrame( void ) {}
 void CZM_ServerBlocksShow( void ) {}

@@ -182,6 +182,19 @@ def owner_list(conn, key):
         "LEFT JOIN server_cases s ON s.server=o.server WHERE o.player=? ORDER BY o.updated,o.server", (player["id"],))]}
 
 
+def server_owners(conn):
+    """Public association to an administrator-assigned owner, never a safety guarantee."""
+    entries = conn.execute(
+        "SELECT s.server,s.player FROM owner_servers s JOIN community_roles r "
+        "ON r.player=s.player AND r.role='server_owner' JOIN accounts a ON a.player=s.player "
+        "LEFT JOIN server_cases c ON c.server=s.server WHERE COALESCE(c.blocked,0)=0 "
+        "ORDER BY r.granted,s.player,s.server")
+    owners = {}
+    for row in entries:
+        owners.setdefault(row["server"], row["player"])
+    return {"owners": [{"server": server, "owner": owner} for server, owner in owners.items()]}
+
+
 def owner_change(conn, key, address, remove=False, name=""):
     player = owner_actor(conn, key)
     from . import rules

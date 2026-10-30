@@ -981,6 +981,8 @@ void CCzmMainMenu::DrawTile( int index, CzmRect r )
 	// pinned heart in the top-right corner
 	{
 		int hs = r.h * 0.20f;
+		if( CZM_ServerOwner( server->address ) )
+			CzmStyle::Verified( CZM_Rect( r.x + r.w - hs * 2 - rad, r.y + rad * 0.4f, hs, hs ), false );
 
 		CZM_DrawImage( UI_DIR "icon_heart_on.png", r.x + r.w - hs - rad * 0.5f, r.y + rad * 0.4f, hs, hs, PackRGBA( 244, 63, 94, 255 ));
 	}

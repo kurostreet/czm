@@ -316,6 +316,7 @@ bool CZM_NetAvailable( void );
 void CZM_ServerAuthShow( const char *address, const char *name );
 void CZM_ServerReportShow( const char *address, const char *name );
 bool CZM_ServerBlocked( const char *address );
+int CZM_ServerOwner( const char *address );
 int CZM_ServerPolicyRevision( void );
 void CZM_ServerBlocksFrame( void );
 void CZM_ServerBlocksShow( void );

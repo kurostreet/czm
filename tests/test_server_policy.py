@@ -17,10 +17,16 @@ class ServerPolicyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             subprocess.run(["javac", "--release", "11", "-cp", str(jar), "-d", temp,
                 str(ROOT/"android/app/src/main/java/ru/kurostreet/counterzombiemobile/ServerPolicy.java"),
+                str(ROOT/"android/app/src/main/java/ru/kurostreet/counterzombiemobile/ServerOwners.java"),
+                str(ROOT/"tests/ServerOwnersTest.java"),
                 str(ROOT/"tests/ServerPolicyTest.java")], check=True)
             result = subprocess.run(["java", "-cp", temp+os.pathsep+str(jar),
                 "ru.kurostreet.counterzombiemobile.ServerPolicyTest"], check=True, capture_output=True, text=True)
             self.assertIn("SERVER_POLICY_OK", result.stdout)
+            result = subprocess.run(["java", "-cp", temp+os.pathsep+str(jar),
+                "ru.kurostreet.counterzombiemobile.ServerOwnersTest"], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("SERVER_OWNERS_OK", result.stdout)
 
     def test_common_guard_waits_without_sending_and_explains_denials(self):
         source = (ROOT/"3rdparty/xash3d-fwgs/engine/client/cl_main.c").read_text()

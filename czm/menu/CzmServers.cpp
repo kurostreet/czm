@@ -392,6 +392,7 @@ private:
 		HIT_PLAY,
 		HIT_ADMIN,
 		HIT_REPORT,
+		HIT_VERIFIED,
 		HIT_BLOCKS,
 		HIT_FAVORITE,
 		HIT_DETAILS,
@@ -403,7 +404,8 @@ private:
 		HIT_DIALOG_CANCEL,
 		HIT_DIALOG_PANEL,
 		HIT_BACKDROP,
-		HIT_ROW = 1000,                  // + index * 2, + 1 for the star
+		ROW_HITS = 4,
+		HIT_ROW = 1000,                  // row, star, heart, verified owner
 	};
 
 	enum EDialog
@@ -526,7 +528,7 @@ private:
 	CzmRect m_tabs[TAB_COUNT], m_filters[FILTER_COUNT];
 	CzmRect m_blocked;
 	CzmRect m_listHead, m_sort, m_clip, m_details, m_emptyButton;
-	CzmRect m_play, m_fav, m_admin, m_report;
+	CzmRect m_play, m_fav, m_admin, m_report, m_verified;
 	int m_policyRevision;
 	CzmRect m_detailsClose, m_detailsMap, m_detailsInfo;
 	CzmRect m_dlgPanel, m_dlgField, m_dlgPaste, m_dlgOk, m_dlgCancel;
@@ -1547,6 +1549,15 @@ void CCzmServers::Layout( void )
 		m_report = CZM_Rect( m_detailsClose.x - gap - head * 4, m_detailsClose.y, head * 4, head );
 		m_detailsMap = CZM_Rect( left, bodyY, side, side );
 		m_detailsInfo = CZM_Rect( left + side + gap * 2, bodyY, inner - side - gap * 2, bodyH );
+		m_verified = CZM_Rect( 0, 0, 0, 0 );
+		CzmEntry *selected = Selected();
+		if( selected && CZM_ServerOwner( selected->address ) )
+		{
+			const int vh = CZM_FontHeight( CZM_Font( CZMF_UI_LABEL )) + gap / 2;
+			const int vw = CzmStyle::VerifiedWidth( vh );
+			m_verified = CZM_Rect( m_detailsInfo.x + m_detailsInfo.w - vw,
+				bodyY + CZM_FontHeight( CZM_Font( CZMF_UI_ACTION )) * 2 + gap, vw, vh );
+		}
 		const int fw = inner * 26 / 100, aw = inner * 25 / 100;
 		m_fav = CZM_Rect( left, footer, fw, bh );
 		m_admin = CZM_Rect( left + fw + gap, footer, aw, bh );
@@ -1590,6 +1601,7 @@ int CCzmServers::HitTest( void ) const
 		if( !m_details.HasCursor() ) return HIT_DETAILS_BACKDROP;
 		if( m_detailsClose.HasCursor() ) return HIT_DETAILS_CLOSE;
 		if( m_report.HasCursor() ) return HIT_REPORT;
+		if( m_verified.HasCursor() ) return HIT_VERIFIED;
 		if( m_admin.HasCursor() ) return HIT_ADMIN;
 		if( m_play.HasCursor() ) return HIT_PLAY;
 		if( m_fav.HasCursor() ) return HIT_FAVORITE;
@@ -1637,9 +1649,13 @@ int CCzmServers::HitTest( void ) const
 
 				if( x >= r.x + r.w - r.h )
 					col = 1; // the star
-				else if( x >= r.x + r.w - r.h * 2 )
-					col = 2; // the heart (pin to the main screen)
-				return HIT_ROW + index * 3 + col;
+				else if( CZM_ServerOwner( m_entries[m_view[index]].address ) )
+				{
+					if( x >= r.x + r.w - r.h * 2 ) col = 3;
+					else if( x >= r.x + r.w - r.h * 3 ) col = 2;
+				}
+				else if( x >= r.x + r.w - r.h * 2 ) col = 2;
+				return HIT_ROW + index * ROW_HITS + col;
 			}
 		}
 
@@ -1725,6 +1741,13 @@ void CCzmServers::Activate( int hit )
 		if( e ) CZM_ServerReportShow( e->address, e->name );
 		return;
 	}
+	case HIT_VERIFIED:
+	{
+		CzmEntry *e = Selected();
+		int owner = e ? CZM_ServerOwner( e->address ) : 0;
+		if( owner ) CZM_OpenProfile( owner );
+		return;
+	}
 	case HIT_BLOCKS:
 		CZM_ServerBlocksShow();
 		return;
@@ -1793,14 +1816,20 @@ void CCzmServers::Activate( int hit )
 
 	if( hit >= HIT_ROW )
 	{
-		int index = ( hit - HIT_ROW ) / 3;
-		int col = ( hit - HIT_ROW ) % 3;
+		int index = ( hit - HIT_ROW ) / ROW_HITS;
+		int col = ( hit - HIT_ROW ) % ROW_HITS;
 		CzmEntry *e;
 
 		if( index >= ViewCount( ))
 			return;
 
 		e = &m_entries[m_view[index]];
+		if( col == 3 )
+		{
+			int owner = CZM_ServerOwner( e->address );
+			if( owner ) CZM_OpenProfile( owner );
+			return;
+		}
 		if( col == 1 ) // the star: favorites
 		{
 			bool on = !( e->sources & SRC_FAVORITE );
@@ -2107,7 +2136,7 @@ void CCzmServers::DrawRow( int index, const CzmRect &r )
 	HFont statFont = CZM_Font( CZMF_TILE_STATUS );
 	HFont badgeFont = CZM_Font( CZMF_SHOP_PRICE );
 	bool selected = !strcmp( e.address, m_szSelected );
-	bool pressed = m_iPressed == HIT_ROW + index * 3 && IsPressed( m_iPressed );
+	bool pressed = m_iPressed == HIT_ROW + index * ROW_HITS && IsPressed( m_iPressed );
 	int pad = r.h * 0.12f, x, right, statsW, starSize, textW, textX, y;
 	unsigned int dim = PackRGBA( 154, 163, 175, 255 );
 	char text[128];
@@ -2145,18 +2174,25 @@ void CCzmServers::DrawRow( int index, const CzmRect &r )
 	right = r.x + r.w - r.h;
 	{
 		bool fav = ( e.sources & SRC_FAVORITE ) != 0;
-		bool starPressed = m_iPressed == HIT_ROW + index * 3 + 1 && IsPressed( m_iPressed );
+		bool starPressed = m_iPressed == HIT_ROW + index * ROW_HITS + 1 && IsPressed( m_iPressed );
 
 		CZM_DrawImage( fav ? UI_DIR "icon_star_on.png" : UI_DIR "icon_star.png", right + ( r.h - starSize ) / 2, r.y + ( r.h - starSize ) / 2,
 			starSize, starSize, fav ? PackRGBA( 250, 204, 21, 255 ) : starPressed ? CZM_White() : PackRGBA( 110, 116, 126, 255 ));
 	}
 
-	// heart to the left of the star: pin to the main screen (max 3)
+	// Verified owner sits between the heart and favorite star.
+	if( CZM_ServerOwner( e.address ) )
+	{
+		right -= r.h;
+		const int shield = Q_max( 14, r.h * 52 / 100 );
+		CzmStyle::Verified( CZM_Rect( right + ( r.h - shield ) / 2, r.y + ( r.h - shield ) / 2, shield, shield ), false );
+	}
+	// heart to the left of the shield/star: pin to the main screen (max 3)
 	{
 		int heartSize = r.h * 0.34f;
 		int heartX = right - r.h;
 		bool pinned = CZM_HomePinned( e.address );
-		bool heartPressed = m_iPressed == HIT_ROW + index * 3 + 2 && IsPressed( m_iPressed );
+		bool heartPressed = m_iPressed == HIT_ROW + index * ROW_HITS + 2 && IsPressed( m_iPressed );
 
 		CZM_DrawImage( pinned ? UI_DIR "icon_heart_on.png" : UI_DIR "icon_heart.png",
 			heartX + ( r.h - heartSize ) / 2, r.y + ( r.h - heartSize ) / 2, heartSize, heartSize,
@@ -2390,6 +2426,7 @@ void CCzmServers::DrawDetails( void )
 	const int nameH = CZM_FontHeight( nameFont ) * 2;
 	CzmStyle::TextLines( CZM_Rect( x, info.y, w, nameH ), e->answered ? e->name : e->address, CZMF_UI_ACTION );
 	int y = info.y + nameH + gap;
+	if( m_verified.w ) CzmStyle::Verified( m_verified );
 	const int icon = CZM_FontHeight( statFont );
 	if( e->answered )
 	{
@@ -2404,7 +2441,7 @@ void CCzmServers::DrawDetails( void )
 			CZM_DrawImage( UI_DIR "dot.png", sx, y + ( icon - dot ) / 2, dot, dot, CZM_PingColor( e->ping ) );
 			sx += dot + gap / 2;
 			snprintf( text, sizeof( text ), "%d %s", e->ping, CZM_T( "ms" ) );
-			CZM_DrawText( statFont, sx, y, Q_max( 0, x + w - sx ), text, CZM_PingColor( e->ping ) );
+			CZM_DrawText( statFont, sx, y, Q_max( 0, x + w - sx - ( m_verified.w ? m_verified.w + gap : 0 )), text, CZM_PingColor( e->ping ) );
 		}
 	}
 	else

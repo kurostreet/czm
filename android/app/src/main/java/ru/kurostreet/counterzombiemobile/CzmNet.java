@@ -45,7 +45,8 @@ public final class CzmNet {
     public static void serverPolicyBegin(){ServerPolicy.INSTANCE.beginConnection();ServerBlocks.refresh(true);}
     public static int serverPolicyState(String address){int state=ServerPolicy.INSTANCE.connectionState(address);return state==1?ServerBlocks.connectionState(address):state;}
     public static boolean serverPolicyBlocked(String address){return ServerPolicy.INSTANCE.blocked(address)||ServerBlocks.hidden(address);}
-    public static int serverPolicyRevision(){return ServerPolicy.INSTANCE.revision()+ServerBlocks.revision();}
+    public static int serverPolicyRevision(){return ServerPolicy.INSTANCE.revision()+ServerBlocks.revision()+ServerOwners.INSTANCE.revision();}
+    public static int serverOwner(String address){return ServerOwners.INSTANCE.owner(address);}
     public static void serverBlocksFrame(String key){ServerBlocks.context(key);}
     public static void serverBlocksShow(String key,boolean ru){ServerBlocks.show(key,ru);}
     public static void serverReportShow(String address,String name,String key,boolean ru){CzmServerReport.show(address,name,key,ru);}

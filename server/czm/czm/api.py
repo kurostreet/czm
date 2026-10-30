@@ -421,6 +421,11 @@ async def server_policy():
     return JSONResponse(await in_db(server_moderation.policy), headers={"Cache-Control": "no-store"})
 
 
+@router.get("/servers/owners")
+async def servers_owners():
+    return JSONResponse(await in_db(community.server_owners), headers={"Cache-Control": "no-store"})
+
+
 @router.get("/servers/hidden")
 async def servers_hidden(request: Request, x_czm_key: str | None = Header(default=None)):
     return await social_result(request, lambda c: server_moderation.hidden(c, x_czm_key or ""))

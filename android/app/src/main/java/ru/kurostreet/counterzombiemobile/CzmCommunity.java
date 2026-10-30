@@ -66,7 +66,10 @@ final class CzmCommunity {
             activity.runOnUiThread(() -> {
                 if(!live(dialog,generation))return;
                 dialog.busy(false);controls(dialog.body,true);
-                if(response.startsWith("200\n"))try{done.run(new JSONObject(response.substring(4)));return;}catch(Exception ignored){}
+                if(response.startsWith("200\n"))try{
+                    if(method.equals("POST")&&path.equals("community/servers"))ServerOwners.INSTANCE.invalidate();
+                    done.run(new JSONObject(response.substring(4)));return;
+                }catch(Exception ignored){}
                 dialog.fail(error(response,ru));
             });
         });
