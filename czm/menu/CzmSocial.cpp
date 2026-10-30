@@ -435,7 +435,10 @@ void CCzmSocial::LayoutProfile()
 	m_back=CZM_Rect(pad,y,bh,bh);
 	if(m_loaded&&self){m_settings=CZM_Rect(right-bh,y,bh,bh);right-=bh+gap;}
 	// SUPPORT: the shield sits next to the gear and does something else
-	if(CZM_OnlineSupport()&&m_loaded&&m_profile.id>0&&!(m_profile.support&&!self)){m_moderate=CZM_Rect(right-bh,y,bh,bh);right-=bh+gap;}
+	if(CZM_OnlineSupport()&&m_loaded&&m_profile.id>0&&!(m_profile.support&&!self)){
+		const int mw=self&&CZM_OnlineAdmin()?bh*4:bh;
+		m_moderate=CZM_Rect(right-mw,y,mw,bh);right-=mw+gap;
+	}
 	if(m_loaded&&m_profile.telegram[0]&&!m_profile.role[0]){const int tw=bh*12/5;m_telegram=CZM_Rect(right-tw,y,tw,bh);right-=tw+gap;}
 	m_peer=CZM_Rect(pad+bh+gap,y,right-(pad+bh+gap),bh);
 	y+=bh+gap;
@@ -642,7 +645,9 @@ void CCzmSocial::Activate( int hit )
 	if(hit>=COUNT&&hit<COUNT+3){static const int tabs[]={0,2,3};m_tab=tabs[hit-COUNT];Navigate(LIST);return;}
 	if(hit==MODERATE){
 		EndInput();
-		if(m_profile.id==CZM_OnlinePlayer())CZM_ModerationOpen();
+		if(m_profile.id==CZM_OnlinePlayer()){
+			if(CZM_OnlineAdmin())CZM_CommunityShow("admin",0);else CZM_ModerationOpen();
+		}
 		else CZM_ModerationTarget(m_profile.id,m_profile.nick,m_chatMessage,0,"");
 		return;
 	}
@@ -802,7 +807,10 @@ void CCzmSocial::DrawProfile()
 	Chip(m_back,UI_DIR "icon_back.png",Pressed(BACK));
 	if(p.role[0]&&!p.support)CZM_DrawRoleTag(m_peer.x,m_peer.y+m_peer.h/6,m_peer.h*2/3,p.role,p.project,m_peer.w);
 	else Text(m_peer,T("Профиль","Profile"),CZMF_UI_TITLE);
-	if(m_moderate.w)Chip(m_moderate,UI_DIR "icon_shield.png",Pressed(MODERATE),AccentGold());
+	if(m_moderate.w){
+		if(self&&CZM_OnlineAdmin())ActionButton(m_moderate,UI_DIR "icon_shield.png",T("Админ-панель","Admin panel"),false,Pressed(MODERATE),true,AccentGold());
+		else Chip(m_moderate,UI_DIR "icon_shield.png",Pressed(MODERATE),AccentGold());
+	}
 	if(m_settings.w)Chip(m_settings,UI_DIR "icon_gear.png",Pressed(SETTINGS));
 	if(!m_loaded){Text(m_clip,T("Загружаем профиль…","Loading profile…"),CZMF_PANEL_TEXT,Muted(),QM_CENTER);return;}
 

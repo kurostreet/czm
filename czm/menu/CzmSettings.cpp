@@ -1146,7 +1146,7 @@ void CCzmSettings::Activate( int hit )
 			CZM_AccountShow( CZM_OnlineKey(), EngFuncs::GetCvarString( "name" ));
 			break;
 		case ROW_COMMUNITY:
-			CZM_CommunityShow( "hub", CZM_OnlinePlayer() );
+			CZM_CommunityShow( CZM_OnlineAdmin() ? "admin" : "hub", CZM_OnlinePlayer() );
 			break;
 		case ROW_NICK:
 		{
@@ -1524,6 +1524,8 @@ void CCzmSettings::DrawRow( int i )
 	HFont hintFont = CZM_Font( CZMF_SMALL );
 	bool dim = !RowActive( i );
 	const char *hint = row.hint ? CZM_T( row.hint ) : NULL;
+	if( row.type == ROW_COMMUNITY && CZM_OnlineAdmin() )
+		hint = CZM_IsRussian() ? "Игроки, роли, серверы и модераторы" : "Players, roles, servers and moderators";
 	bool cards = row.type == ROW_SPRAYS || row.type == ROW_AVATARS || row.type == ROW_TABPREVIEW || row.type == ROW_RADAR || row.type == ROW_MSGSTYLE || row.type == ROW_SPECSTYLE;
 	int labelW = ( cards ? l.rect.w : l.control.x - l.rect.x - H * 0.03f );
 	int labelH = CZM_FontHeight( labelFont ), hintH = CZM_FontHeight( hintFont );
@@ -1564,7 +1566,9 @@ void CCzmSettings::DrawRow( int i )
 	if( l.rect.y + l.rect.h < m_clip.y || l.rect.y > m_clip.y + m_clip.h )
 		return;
 
-	CZM_DrawText( labelFont, l.rect.x, labelY, labelW, CZM_T( row.label ), dim ? CZM_Grey() : CZM_White());
+	const char *rowLabel = row.type == ROW_COMMUNITY && CZM_OnlineAdmin() ?
+		( CZM_IsRussian() ? "Админ-панель" : "Admin panel" ) : CZM_T( row.label );
+	CZM_DrawText( labelFont, l.rect.x, labelY, labelW, rowLabel, dim ? CZM_Grey() : CZM_White());
 	if( hint )
 		CZM_DrawText( hintFont, l.rect.x, labelY + labelH + H * 0.008f, labelW, hint, PackRGBA( 140, 146, 156, 255 ));
 

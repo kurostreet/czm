@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     bot_token: str = ""
     bot_api_url: str = ""                      # relay for the Bot API, Telegram is blocked from the server
     bot_owner_ids: str = ""                    # comma-separated Telegram user IDs
+    admin_player_ids: str = ""                 # registered SUPPORT accounts allowed to manage CZM in game
     bot_polling_timeout_seconds: int = 25
 
     # world server list from Steam (IGameServersService/GetServerList, appid 10)
@@ -85,6 +86,11 @@ class Settings(BaseSettings):
             if part.lstrip("-").isdigit():
                 ids.add(int(part))
         return ids
+
+    @property
+    def admin_ids(self) -> set[int]:
+        return {int(value) for value in self.admin_player_ids.replace(" ", "").split(",")
+                if value.isdigit() and int(value)>0}
 
     @property
     def room_list(self) -> list[str]:

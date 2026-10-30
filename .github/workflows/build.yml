@@ -126,6 +126,9 @@ jobs:
           from pathlib import Path
           from zipfile import ZipFile
           with ZipFile(os.environ["APK_PATH"]) as apk:
+              dex = b"".join(apk.read(name) for name in apk.namelist() if name.startswith("classes") and name.endswith(".dex"))
+              for marker in [b"CzmAdmin", b"ServerOwners", b"CzmCommunity", b"CzmTicketPickerActivity"]:
+                  assert marker in dex, marker
               for name in ["gfx/vgui/czm_logo.tga", "gfx/shell/strings.lst", "touch/buy.cfg",
                            "gfx/czm/menu_bg.png", "gfx/czm/title.png", "gfx/czm/fade_left.png", "gfx/czm/fade_bottom.png", "gfx/czm/hud_glyphs.tga",
                            "gfx/czm/menu_environment.png", "gfx/czm/menu_ct.png", "gfx/czm/menu_zombies.png",
@@ -162,6 +165,7 @@ jobs:
                   assert b"menu_czmtouch" in menu and b"czm_touch_scheme" in menu, abi
                   assert b"menu_czmshop" in menu and b"czm_menu_cards" in menu and b"czm_shop_auto" in menu, abi
                   assert b"menu_czmservers" in menu and b"czm_srv_filters" in menu and b"favorite_servers.lst" in menu, abi
+                  assert b"serverOwner" in menu and b"admin-server/%s" in menu, abi
                   assert b"czmavatar://pick?file=%s" in menu and b"czm_avatar_photo" in menu, abi
                   assert b"menu_czmchat" in menu and b"/api/v1/hello" in menu and b"ru/kurostreet/counterzombiemobile/CzmNet" in menu, abi
                   assert b"czm/tapscroll.wav" in menu and b"https://counter-zombie.ru%s" in menu, abi

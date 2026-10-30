@@ -7,11 +7,15 @@ int CZM_DrawRoleTag(int,int,int,const char*,const char* = "",int = 0);
 unsigned CZM_RoleColor(const char*,int = 255);
 const char*CZM_OnlineRole();void CZM_CommunityShow(const char*,int);
 int CZM_ServerOwner(const char*);
+bool CZM_OnlineAdmin();void CZM_AdminServerShow(const char*);
 #endif
 '''
 HARNESS = r'''
 static std::string actorRole="support",communityMode;static int communityPlayer;
 static std::string verifiedAddress;static int verifiedOwner;
+static bool actorAdmin=false;static std::string managedServer;
+bool CZM_OnlineAdmin(){return actorAdmin;}
+void CZM_AdminServerShow(const char*address){managedServer=address;}
 int CZM_ServerOwner(const char*address){return address&&verifiedAddress==address?verifiedOwner:0;}
 const char*CZM_OnlineRole(){return actorRole.c_str();}
 void CZM_CommunityShow(const char*mode,int player){communityMode=mode;communityPlayer=player;}

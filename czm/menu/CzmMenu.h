@@ -317,6 +317,7 @@ void CZM_ServerAuthShow( const char *address, const char *name );
 void CZM_ServerReportShow( const char *address, const char *name );
 bool CZM_ServerBlocked( const char *address );
 int CZM_ServerOwner( const char *address );
+void CZM_AdminServerShow( const char *address );
 int CZM_ServerPolicyRevision( void );
 void CZM_ServerBlocksFrame( void );
 void CZM_ServerBlocksShow( void );
@@ -412,6 +413,7 @@ bool CZM_OnlineBan( int *until, bool *forever, const char **reason );
 // SUPPORT and what a moderator limited for this player
 enum { CZM_LIMIT_TEXT = 0, CZM_LIMIT_VOICE, CZM_LIMIT_PHOTO, CZM_LIMIT_COUNT };
 bool CZM_OnlineSupport( void );
+bool CZM_OnlineAdmin( void );
 const char *CZM_OnlineRole( void );
 int CZM_SupportTagWidth( int h );
 int CZM_DrawSupportTag( int x, int y, int h ); // returns its width

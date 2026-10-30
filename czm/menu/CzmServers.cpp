@@ -377,6 +377,7 @@ public:
 	double m_flQuickStart;
 
 private:
+	enum { ROW_HITS = 4 };
 	enum EHit
 	{
 		HIT_NONE = 0,
@@ -393,6 +394,7 @@ private:
 		HIT_ADMIN,
 		HIT_REPORT,
 		HIT_VERIFIED,
+		HIT_MANAGE,
 		HIT_BLOCKS,
 		HIT_FAVORITE,
 		HIT_DETAILS,
@@ -404,7 +406,6 @@ private:
 		HIT_DIALOG_CANCEL,
 		HIT_DIALOG_PANEL,
 		HIT_BACKDROP,
-		ROW_HITS = 4,
 		HIT_ROW = 1000,                  // row, star, heart, verified owner
 	};
 
@@ -528,7 +529,7 @@ private:
 	CzmRect m_tabs[TAB_COUNT], m_filters[FILTER_COUNT];
 	CzmRect m_blocked;
 	CzmRect m_listHead, m_sort, m_clip, m_details, m_emptyButton;
-	CzmRect m_play, m_fav, m_admin, m_report, m_verified;
+	CzmRect m_play, m_fav, m_admin, m_report, m_verified, m_manage;
 	int m_policyRevision;
 	CzmRect m_detailsClose, m_detailsMap, m_detailsInfo;
 	CzmRect m_dlgPanel, m_dlgField, m_dlgPaste, m_dlgOk, m_dlgCancel;
@@ -1547,6 +1548,7 @@ void CCzmServers::Layout( void )
 		const int side = Q_min( bodyH - CZM_FontHeight( CZM_Font( CZMF_UI_META )) - gap, inner * 38 / 100 );
 		m_detailsClose = CZM_Rect( m_details.x + dw - pad - head, m_details.y + pad, head, head );
 		m_report = CZM_Rect( m_detailsClose.x - gap - head * 4, m_detailsClose.y, head * 4, head );
+		m_manage = CZM_OnlineAdmin() ? CZM_Rect( m_report.x - gap - head * 3, m_report.y, head * 3, head ) : CZM_Rect( 0, 0, 0, 0 );
 		m_detailsMap = CZM_Rect( left, bodyY, side, side );
 		m_detailsInfo = CZM_Rect( left + side + gap * 2, bodyY, inner - side - gap * 2, bodyH );
 		m_verified = CZM_Rect( 0, 0, 0, 0 );
@@ -1601,6 +1603,7 @@ int CCzmServers::HitTest( void ) const
 		if( !m_details.HasCursor() ) return HIT_DETAILS_BACKDROP;
 		if( m_detailsClose.HasCursor() ) return HIT_DETAILS_CLOSE;
 		if( m_report.HasCursor() ) return HIT_REPORT;
+		if( m_manage.HasCursor() ) return HIT_MANAGE;
 		if( m_verified.HasCursor() ) return HIT_VERIFIED;
 		if( m_admin.HasCursor() ) return HIT_ADMIN;
 		if( m_play.HasCursor() ) return HIT_PLAY;
@@ -1748,6 +1751,9 @@ void CCzmServers::Activate( int hit )
 		if( owner ) CZM_OpenProfile( owner );
 		return;
 	}
+	case HIT_MANAGE:
+		if( Selected() && CZM_OnlineAdmin() ) CZM_AdminServerShow( Selected()->address );
+		return;
 	case HIT_BLOCKS:
 		CZM_ServerBlocksShow();
 		return;
@@ -2404,12 +2410,13 @@ void CCzmServers::DrawDetails( void )
 	char text[160];
 	UI_FillRect( 0, 0, W, H, PackRGBA( 3, 7, 13, 205 ));
 	CzmStyle::Surface( d, PackRGBA( 14, 20, 29, 255 ) );
-	CzmStyle::Text( CZM_Rect( d.x + pad, d.y + pad, m_report.x - d.x - pad - gap, m_detailsClose.h ),
+	CzmStyle::Text( CZM_Rect( d.x + pad, d.y + pad, ( m_manage.w ? m_manage.x : m_report.x ) - d.x - pad - gap, m_detailsClose.h ),
 		s_lobbyPicker ? ( CZM_IsRussian() ? "Выбор сервера" : "Select a server" ) :
 		( CZM_IsRussian() ? "Сервер" : "Server" ), CZMF_UI_ACTION );
 	CzmStyle::Button( m_detailsClose, "", true, false, IsPressed( HIT_DETAILS_CLOSE ) );
 	CzmStyle::Icon( m_detailsClose, UI_DIR "icon_close.png" );
 	CzmStyle::Button( m_report, CZM_IsRussian() ? "Заблокировать" : "Block", true, false, IsPressed( HIT_REPORT ), 0, CZMF_SMALL );
+	if( m_manage.w ) CzmStyle::Button( m_manage, CZM_IsRussian() ? "Управлять" : "Manage", true, false, IsPressed( HIT_MANAGE ), 0, CZMF_SMALL );
 
 	DrawMapPicture( e, photo.x, photo.y, photo.w, photo.h );
 	if( e->badge[0] )

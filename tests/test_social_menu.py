@@ -236,6 +236,9 @@ int main(int argc,char**argv){
  // the own card: the shield next to the gear, each with its own action
  assert(w.m_moderate.w&&w.m_settings.w&&w.m_moderate.x+w.m_moderate.w<=w.m_settings.x&&w.m_peer.x+w.m_peer.w<=w.m_moderate.x);
  w.Activate(w.MODERATE);assert(moderationOpened==1);
+ actorAdmin=true;w.Layout();assert(w.m_moderate.w>w.m_moderate.h);
+ assert(w.m_peer.x+w.m_peer.w<=w.m_moderate.x&&w.m_moderate.x+w.m_moderate.w<=w.m_settings.x);
+ communityMode.clear();w.Activate(w.MODERATE);assert(communityMode=="admin");w.Draw();actorAdmin=false;
  // another staff member has no actions: the service refuses them anyway
  w.OpenProfile(12,true);w.Read(staff,w.READ_PROFILE);w.Layout();assert(!w.m_moderate.w);
  support=false;

@@ -77,6 +77,7 @@ final class CzmCommunity {
     static void show(String mode,int target,String key,boolean ru) {
         Context context=SDLActivity.getContext();if(!(context instanceof Activity))return;
         Activity activity=(Activity)context;final int generation=CzmAccount.generation();
+        if(mode.equals("admin")||mode.startsWith("admin-server/")){CzmAdmin.show(mode,key,ru);return;}
         if(mode.equals("telegram")){
             WORK.execute(() -> {
                 String response=CzmAccount.call(generation,"GET",BASE+"social/profile/"+target,key,null,"application/json");
@@ -120,6 +121,7 @@ final class CzmCommunity {
             dialog.note(ru?"Оставьте поле пустым, чтобы убрать кнопку":"Leave empty to remove the button");
         }else{contact=null;dialog.note(ru?"Возможности аккаунта":"Account tools");dialog.submit.setText(ru?"Готово":"Done");}
         JSONObject capabilities=me.optJSONObject("capabilities");
+        if(capabilities!=null&&capabilities.optBoolean("admin"))dialog.link(ru?"Админ-панель":"Admin panel",v -> {if(live(dialog,generation)){dialog.dismiss();show("admin",0,key,ru);}});
         if(capabilities!=null&&capabilities.optBoolean("tester"))dialog.link(ru?"Передать тикет тестировщика":"Submit tester ticket",v -> {if(live(dialog,generation)){dialog.dismiss();show("ticket",0,key,ru);}});
         if(capabilities!=null&&capabilities.optBoolean("server_owner"))dialog.link(ru?"Мои серверы проекта":"My project servers",v -> {if(live(dialog,generation)){dialog.dismiss();show("servers",0,key,ru);}});
         dialog.submit.setOnClickListener(v -> {

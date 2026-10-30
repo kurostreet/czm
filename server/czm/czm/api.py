@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, FileResponse, HTML
 from PIL import Image
 from pydantic import BaseModel, Field
 
-from . import service, mappics, accounts, settings, tab, social, website, distribution, lobbies, game_probe, voice_lobby, notifications, rules, moderation, play_feed, playtime, server_moderation, community
+from . import service, mappics, accounts, settings, tab, social, website, distribution, lobbies, game_probe, voice_lobby, notifications, rules, moderation, play_feed, playtime, server_moderation, community, admin
 from .config import get_settings
 from .db import db
 
@@ -344,6 +344,35 @@ class ServerReportIn(BaseModel):
 
 class CommunityContactIn(BaseModel):
     telegram: str = Field(default="", max_length=100)
+
+
+class AdminActionIn(BaseModel):
+    action: str = Field(min_length=1,max_length=32)
+    target: int = Field(default=0,ge=0,le=2147483647)
+    role: str = Field(default="",max_length=16)
+    project: str = Field(default="",max_length=32)
+    server: str = Field(default="",max_length=64)
+    reason: str = Field(default="",max_length=200)
+    minutes: int | None = Field(default=None,ge=0,le=365*24*60)
+    sanction: int = Field(default=0,ge=0)
+    report: int | None = Field(default=None,gt=0)
+    message: int | None = Field(default=None,gt=0)
+    lobby_message: int | None = Field(default=None,gt=0)
+    batch: int = Field(default=0,ge=0)
+    all_history: bool = False
+    expected_log: int = Field(default=0,ge=0)
+    nonce: str = Field(pattern=r"^[A-Za-z0-9_-]{12,64}$")
+
+
+@router.get("/admin/{section}")
+async def admin_view(section: str,request: Request,target: int=0,query: str="",offset: int=0,x_czm_key: str | None=Header(default=None)):
+    if len(query)>100 or offset<0 or offset>100000 or target<0:return JSONResponse({"error":"request"},status_code=400)
+    return await social_result(request,lambda c: admin.view(c,x_czm_key or "",section,target,query,offset))
+
+
+@router.post("/admin/action")
+async def admin_action(body: AdminActionIn,request: Request,x_czm_key: str | None=Header(default=None)):
+    return await social_result(request,lambda c: admin.action(c,x_czm_key or "",body.model_dump()))
 
 
 class OwnerServerIn(BaseModel):

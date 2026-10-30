@@ -66,7 +66,7 @@ int CZM_SprayCount(){return 5;}int AvatarCards(){return 12;}
 void CZM_PlayClick(){}void CZM_SetTouchScheme(int,bool){}int CZM_TouchScheme(){return 1;}void CZM_TouchResetHud(){}
 void CZM_OpenTouchEditor(){}void CZM_LayoutsShow(){}const char*CZM_OnlineKey(){return "test";}
 void CZM_AccountShow(const char*,const char*){}void CZM_SetSpray(int){}void CZM_SetAvatar(int){}
-void CZM_CommunityShow(const char*,int){}int CZM_OnlinePlayer(){return 7;}
+void CZM_CommunityShow(const char*,int){}int CZM_OnlinePlayer(){return 7;}bool CZM_OnlineAdmin(){return false;}
 void CZM_OnlineAvatarChanged(){}const char*CZM_AvatarPhoto(){return "";}int CZM_CurrentAvatar(){return 0;}void CZM_PickAvatarPhoto(){}
 void CZM_CleanName(const char*in,char*out,size_t n){snprintf(out,n,"%s",in);}bool CZM_NickIsValid(const char*){return true;}
 void CZM_ColorPickerShow(int,int,int){}

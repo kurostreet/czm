@@ -82,9 +82,10 @@ def role_map(conn, players):
 
 def capabilities(conn, player):
     from . import moderator_guard
+    from . import admin
     values = roles(conn, player)
     return {"moderate": "support" in values or ("moderator" in values and not moderator_guard.paused(conn, player)),
-            "tester": "tester" in values, "server_owner": "server_owner" in values}
+            "tester": "tester" in values, "server_owner": "server_owner" in values,"admin":admin.allowed(conn,player)}
 
 
 def grant(conn, player, role, project="", actor="owner"):

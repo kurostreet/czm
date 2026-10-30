@@ -208,6 +208,13 @@ void CZM_ServerBlocksShow( void )
 static void CZM_CommunityHubAfterRules() { CZM_CommunityShow("hub",0); }
 static void CZM_CommunityServersAfterRules() { CZM_CommunityShow("servers",0); }
 
+void CZM_AdminServerShow( const char *address )
+{
+	if( !CZM_OnlineAdmin() || !address || !address[0] ) return;
+	char mode[96]; snprintf( mode, sizeof( mode ), "admin-server/%s", address );
+	CZM_CommunityShow( mode, 0 );
+}
+
 void CZM_CommunityShow( const char *mode, int player )
 {
 	if( strcmp( mode, "telegram" ) && !CZM_OnlineAccount() ) { CZM_AccountShow( CZM_OnlineKey(), EngFuncs::GetCvarString( "name" )); return; }
@@ -645,6 +652,7 @@ void CZM_ServerAuthShow( const char *, const char * ) {}
 void CZM_ServerReportShow( const char *, const char * ) {}
 bool CZM_ServerBlocked( const char * ) { return false; }
 int CZM_ServerOwner( const char * ) { return 0; }
+void CZM_AdminServerShow( const char * ) {}
 int CZM_ServerPolicyRevision( void ) { return 0; }
 void CZM_ServerBlocksFrame( void ) {}
 void CZM_ServerBlocksShow( void ) {}

@@ -121,6 +121,9 @@ int main(int argc,char**argv){
    cursorX=uiStatic.cursorX=row.x+row.w-row.h*5/2;assert(w.HitTest()==w.HIT_ROW+2);
    cursorX=uiStatic.cursorX=row.x+row.w-row.h/2;assert(w.HitTest()==w.HIT_ROW+1);
    verifiedOwner=0;w.m_bDetailsOpen=true;w.Layout();assert(!w.m_verified.w);
+   actorAdmin=true;w.Layout();assert(inside(w.m_manage,w.m_details)&&!overlap(w.m_manage,w.m_report));
+   cursor(w.m_manage);assert(w.HitTest()==w.HIT_MANAGE);w.Activate(w.HIT_MANAGE);assert(managedServer==e.address);
+   w.Draw();actorAdmin=false;w.Layout();assert(!w.m_manage.w);
    int beforeReport=reportsOpened;cursor(w.m_report);assert(w.HitTest()==w.HIT_REPORT);w.Activate(w.HIT_REPORT);
    assert(reportsOpened==beforeReport+1&&reportedAddress==e.address);
    cursor(w.m_play);assert(w.HitTest()==w.HIT_PLAY);
