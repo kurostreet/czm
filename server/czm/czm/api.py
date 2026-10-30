@@ -576,6 +576,15 @@ async def social_status(body: SocialStatusIn, request: Request, x_czm_key: str |
     return await social_result(request, rules.guarded(x_czm_key, lambda c: social.update_status(c, x_czm_key or "", body.text)))
 
 
+class ProfileThemeIn(BaseModel):
+    theme: str = Field(pattern=r"^(ember|frost|city|lab)$")
+
+
+@router.post("/social/theme")
+async def social_theme(body: ProfileThemeIn, request: Request, x_czm_key: str | None = Header(default=None)):
+    return await social_result(request, lambda c: social.update_theme(c, x_czm_key or "", body.theme))
+
+
 @router.post("/social/action")
 async def social_action(body: SocialActionIn, request: Request, x_czm_key: str | None = Header(default=None)):
     return await social_result(request, lambda c: social.action(c, x_czm_key or "", body.target, body.action))

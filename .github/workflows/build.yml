@@ -132,6 +132,7 @@ jobs:
               for name in ["gfx/vgui/czm_logo.tga", "gfx/shell/strings.lst", "touch/buy.cfg",
                            "gfx/czm/menu_bg.png", "gfx/czm/title.png", "gfx/czm/fade_left.png", "gfx/czm/fade_bottom.png", "gfx/czm/hud_glyphs.tga",
                            "gfx/czm/menu_environment.png", "gfx/czm/menu_ct.png", "gfx/czm/menu_zombies.png",
+                           "gfx/czm/profile/ember.png", "gfx/czm/profile/frost.png", "gfx/czm/profile/city.png", "gfx/czm/profile/lab.png",
                            "gfx/czm/loading_1.png", "gfx/czm/loading_5.png", "media/czm_sound.mp3", "media/czm_music_silent.mp3", "media/czm_music_city.mp3", "media/czm_music_thoughts.mp3",
                            "sound/czm/tapscroll.wav", "gfx/fonts/czm/InterDisplay-Black.otf",
                            "gfx/fonts/czm/Inter-SemiBold.otf", "gfx/fonts/czm/Inter-Medium.otf",
@@ -166,6 +167,7 @@ jobs:
                   assert b"menu_czmshop" in menu and b"czm_menu_cards" in menu and b"czm_shop_auto" in menu, abi
                   assert b"menu_czmservers" in menu and b"czm_srv_filters" in menu and b"favorite_servers.lst" in menu, abi
                   assert b"serverOwner" in menu and b"admin-server/%s" in menu, abi
+                  assert b"/api/v1/social/theme" in menu and b"gfx/czm/profile/lab.png" in menu, abi
                   assert b"czmavatar://pick?file=%s" in menu and b"czm_avatar_photo" in menu, abi
                   assert b"menu_czmchat" in menu and b"/api/v1/hello" in menu and b"ru/kurostreet/counterzombiemobile/CzmNet" in menu, abi
                   assert b"czm/tapscroll.wav" in menu and b"https://counter-zombie.ru%s" in menu, abi

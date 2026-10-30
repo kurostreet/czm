@@ -26,6 +26,46 @@ class SocialTests(unittest.TestCase):
             self.guest = "social-guest-legacy-key-123"
             self.guest_id = service.hello(c, self.guest, "guest", "Guest", "", "en", "test")["id"]
 
+    def test_profile_theme_is_public_persistent_and_only_changes_the_actor(self):
+        with db.db() as c:
+            social.update_status(c, self.keys[0], "My status")
+        before = self.request("GET", "social/profile/%d" % self.ids[0]).json()["profile"]
+        self.assertEqual(before["theme"], "ember")
+        for theme in ("frost", "city", "ember", "lab"):
+            response = self.request("POST", "social/theme", json={"theme": theme, "target": self.ids[1]})
+            self.assertEqual(response.status_code, 200)
+            profile = self.request("GET", "social/profile/%d" % self.ids[0], 1).json()["profile"]
+            self.assertEqual(profile["theme"], theme)
+            self.assertEqual(profile["status"], "My status")
+            self.assertEqual(profile["nick"], before["nick"])
+            self.assertEqual(self.request("GET", "social/profile/%d" % self.ids[1]).json()["profile"]["theme"], "ember")
+        with db.db() as c:
+            social.update_status(c, self.keys[0], "Updated status")
+            self.assertEqual(c.execute("SELECT theme FROM social_profiles WHERE player=?", (self.ids[0],)).fetchone()[0], "lab")
+            self.assertEqual(c.execute("SELECT COUNT(*) FROM community_roles").fetchone()[0], 0)
+
+    def test_profile_theme_rejects_unknown_assets_and_requires_an_account(self):
+        for value in ("../../../file", "https://example.com/image.png", "support", ""):
+            self.assertEqual(self.request("POST", "social/theme", json={"theme": value}).status_code, 422)
+        for headers, expected in (({}, 401), ({"X-CZM-Key": self.guest}, 403)):
+            response = self.client.post("/api/v1/social/theme", headers=headers, json={"theme": "lab"})
+            self.assertEqual(response.status_code, expected)
+        self.assertEqual(self.request("GET", "social/profile/%d" % self.ids[0]).json()["profile"]["theme"], "ember")
+
+    def test_profile_theme_migration_preserves_existing_profile(self):
+        with db.db() as c:
+            social.update_status(c, self.keys[0], "Keep my status")
+            c.execute("ALTER TABLE social_profiles RENAME TO old_social_profiles")
+            c.execute("CREATE TABLE social_profiles (player INTEGER PRIMARY KEY REFERENCES players(id), status TEXT NOT NULL DEFAULT '', last_seen INTEGER NOT NULL DEFAULT 0)")
+            c.execute("INSERT INTO social_profiles SELECT player,status,last_seen FROM old_social_profiles")
+            c.execute("DROP TABLE old_social_profiles")
+        db.init()
+        profile = self.request("GET", "social/profile/%d" % self.ids[0]).json()["profile"]
+        self.assertEqual(profile["theme"], "ember")
+        self.assertEqual(profile["status"], "Keep my status")
+        with db.db() as c:
+            self.assertFalse(c.execute("PRAGMA foreign_key_check").fetchall())
+
     def request(self, method, path, actor=0, **kwargs):
         return self.client.request(method, "/api/v1/"+path, headers={"X-CZM-Key": self.keys[actor]}, **kwargs)
 

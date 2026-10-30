@@ -58,6 +58,9 @@ def counts(conn, player):
     return result
 
 
+PROFILE_THEMES = ("ember", "frost", "city", "lab")
+
+
 def profile(conn, viewer, target, compact=False):
     row = conn.execute("SELECT p.*, a.created AS registered FROM players p LEFT JOIN accounts a ON a.player=p.id WHERE p.id=?", (target,)).fetchone()
     if row is None:
@@ -76,6 +79,7 @@ def profile(conn, viewer, target, compact=False):
     result = {"id": target, "nick": row["nick"], "avatar": service.avatar_ref(row),
               "account": row["registered"] is not None, "created": row["registered"] or row["created"],
               "status": extra["status"] if extra else "", "relation": rel,
+              "theme": extra["theme"] if extra and extra["theme"] in PROFILE_THEMES else "ember",
               "online": online, "last_seen": 0 if hidden else extra["last_seen"] if extra else 0,
               "playing": online and bool(presence["server"]), "server": "", "map": ""}
     from . import moderation
@@ -152,6 +156,18 @@ def update_status(conn, key, text):
     moderation.require_text(conn, player)
     text = service.profanity.clean(service.clean_text(text, 100))
     conn.execute("INSERT INTO social_profiles(player,status) VALUES(?,?) ON CONFLICT(player) DO UPDATE SET status=excluded.status", (player["id"], text))
+    return {"profile": profile(conn, player, player["id"])}
+
+
+def update_theme(conn, key, theme):
+    player = actor(conn, key)
+    if service.active_ban(conn, player):
+        raise accounts.AuthError("banned", 403)
+    if theme not in PROFILE_THEMES:
+        raise accounts.AuthError("theme")
+    accounts.rate(conn, "profile-theme", str(player["id"]), 12, 60)
+    conn.execute("INSERT INTO social_profiles(player,theme) VALUES(?,?) "
+                 "ON CONFLICT(player) DO UPDATE SET theme=excluded.theme", (player["id"], theme))
     return {"profile": profile(conn, player, player["id"])}
 
 

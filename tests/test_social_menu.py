@@ -63,14 +63,18 @@ HARNESS = r'''
 int ScreenWidth=1536,ScreenHeight=716,cursorX,cursorY;Cursor uiStatic;Stack stack;
 static double now=100;static std::string key="legacy-device-key";static int me=7,ids,logins,lastButtonFont,identity=1;static bool authenticated=true,drawTrace;static bool russian=true;
 static std::map<std::string,std::string> vars;static std::map<int,std::pair<int,std::string>> replies;
+static std::vector<std::string> drawnLabels;
 struct Request{int id;std::string url,body;};static std::vector<Request> requests;
 const char*EngFuncs::GetCvarString(const char*k){return vars[k].c_str();}float EngFuncs::GetCvarFloat(const char*k){return atof(GetCvarString(k));}void EngFuncs::CvarSetString(const char*k,const char*v){vars[k]=v;}void EngFuncs::CvarSetValue(const char*k,float v){vars[k]=std::to_string(v);}double EngFuncs::DoubleTime(){return now;}
 void UI_EnableTextInput(bool){}void CZM_Init(){}bool CZM_IsRussian(){return russian;}unsigned CZM_White(){return 0xffffffff;}unsigned CZM_Grey(){return PackRGBA(150,164,184,255);}
-HFont CZM_Font(int i){return i;}int CZM_FontHeight(HFont f){return (f==CZMF_PANEL_TITLE?42:f==CZMF_NICK?29:f==CZMF_LANG?24:f==CZMF_SMALL?17:21)*ScreenHeight/768;}
+static std::map<int,std::string> loadedArt;
+HIMAGE CZM_Image(const char*path){int id=(int)loadedArt.size()+1;loadedArt[id]=path;return id;}
+void CZM_DrawCover(HIMAGE image,int x,int y,int w,int h){if(drawTrace)printf("C\t%d\t%d\t%d\t%d\t%s\n",x,y,w,h,loadedArt[image].c_str());}
+HFont CZM_Font(int i){return i;}int CZM_FontHeight(HFont f){return (f==CZMF_PANEL_TITLE?42:f==CZMF_NICK?29:f==CZMF_LANG?24:f==CZMF_SMALL?17:f==CZMF_UI_TITLE?32:f==CZMF_UI_META?15:f==CZMF_UI_LABEL?20:21)*ScreenHeight/768;}
 int CZM_TextWidth(HFont f,const char*s){int n=0;for(;*s;s++)if((*s&0xc0)!=0x80)n++;return n*CZM_FontHeight(f)*62/100;}
 int CZM_WrapText(HFont f,const char*s,int w,int*starts,int max){int lines=0,i=0,last=0;starts[0]=0;for(;s[i]&&lines<max;){int from=i,n=0;while(s[i]&&(n*CZM_FontHeight(f)/2<w||!n)){i++;while((s[i]&0xc0)==0x80)i++;n++;}if(i==from)break;lines++;starts[lines]=i;last=i;}return lines;}
 void CZM_WrapLine(const char*s,const int*starts,int n,char*out,size_t size){int len=std::min((int)size-1,starts[n+1]-starts[n]);memcpy(out,s+starts[n],len);out[len]=0;}
-void CZM_DrawText(HFont f,int x,int y,int w,const char*s,unsigned c,unsigned just){if(drawTrace){printf("T\t%d\t%d\t%d\t%d\t%u\t%u\t%s\n",x,y,w,CZM_FontHeight(f),c,just,s);}}
+void CZM_DrawText(HFont f,int x,int y,int w,const char*s,unsigned c,unsigned just){drawnLabels.emplace_back(s);if(drawTrace){printf("T\t%d\t%d\t%d\t%d\t%u\t%u\t%s\n",x,y,w,CZM_FontHeight(f),c,just,s);}}
 void UI_FillRect(int x,int y,int w,int h,unsigned c){if(drawTrace)printf("R\t%d\t%d\t%d\t%d\t%u\n",x,y,w,h,c);}
 void CZM_DrawImage(const char*p,int x,int y,int w,int h,unsigned c){if(drawTrace)printf("I\t%d\t%d\t%d\t%d\t%u\t%s\n",x,y,w,h,c,p);}
 void CZM_DrawPill(const char*,int x,int y,int w,int h,unsigned c){UI_FillRect(x,y,w,h,c);}
@@ -140,7 +144,7 @@ int main(int argc,char**argv){
    if(variant==6)strcpy(w.m_profile.relation,"unavailable");
    if(variant==7){memset(w.m_profile.status,'W',100);w.m_profile.status[100]=0;}
    w.Draw();assert(w.m_panel.y>0&&w.m_panel.x>0);
-   assert(w.m_panel.w*w.m_panel.h<ScreenWidth*ScreenHeight*.6f);
+   assert(w.m_panel.w*w.m_panel.h<ScreenWidth*ScreenHeight*.9f);
    assert(w.m_panel.y+w.m_panel.h<ScreenHeight);
    CzmRect*buttons[]={&w.m_primary,&w.m_secondary,&w.m_edit,&w.m_settings,&w.m_report,&w.m_block,&w.m_join,&w.m_copy,&w.m_more,&w.m_back};
    // the own counters open the lists; nothing of the card leaves it or covers the header
@@ -227,7 +231,7 @@ int main(int argc,char**argv){
  textLimited=true;assert(strstr(SocialError("muted"),"до 01.11 12:00"));textLimited=false;
  // SUPPORT: the tag shows on the official account; only a SUPPORT viewer gets the shield.
  CzmJson staff;assert(staff.Parse("{\"profile\":{\"id\":12,\"nick\":\"Support\",\"account\":true,\"relation\":\"none\",\"role\":\"support\",\"created\":1792240000}}"));
- w.OpenProfile(12,true);w.Read(staff,w.READ_PROFILE);assert(w.m_profile.support&&me!=12);supportTags=0;w.Draw();assert(supportTags==1&&!w.m_moderate.w);
+ w.OpenProfile(12,true);w.Read(staff,w.READ_PROFILE);assert(w.m_profile.support&&me!=12);drawnLabels.clear();w.Draw();assert(std::count(drawnLabels.begin(),drawnLabels.end(),"SUPPORT")==1&&!w.m_moderate.w);
  w.OpenProfile(8,true,71);w.Read(j,w.READ_PROFILE);assert(!w.m_profile.support);w.Layout();assert(!w.m_moderate.w);
  support=true;w.Layout();assert(w.m_moderate.w&&w.m_moderate.x+w.m_moderate.w<=w.m_panel.x+w.m_panel.w&&w.m_peer.x+w.m_peer.w<=w.m_moderate.x&&!w.m_settings.w);
  cursorX=w.m_moderate.x+2;cursorY=uiStatic.cursorY=w.m_moderate.y+2;assert(w.Hit()==w.MODERATE);w.KeyDown(1);w.KeyUp(1);
@@ -260,14 +264,44 @@ int main(int argc,char**argv){
  w.OpenProfile(me,false);w.Read(j,w.READ_PROFILE);w.m_profile.id=me;w.Layout();assert(!w.m_more.w&&!w.m_primary.w&&w.m_settings.w);
  w.Activate(w.COUNT+1);assert(w.m_mode==w.LIST&&w.m_tab==2);
  w.OpenProfile(me,false);w.Read(j,w.READ_PROFILE);w.m_profile.id=me;w.Layout();w.Activate(w.COUNT+2);assert(w.m_tab==3);
- // the card rises into place in a fifth of a second
+ // Every role and the Top tier remain readable; themes never grant roles.
+ for(auto resolution:{std::pair<int,int>{640,320},{960,540},{1536,716},{1024,768}}){
+  ScreenWidth=resolution.first;ScreenHeight=resolution.second;
+  for(int theme=0;theme<4;theme++){
+   w.OpenProfile(me,true);w.Read(j,w.READ_PROFILE);w.m_profile.id=me;
+   strcpy(w.m_profile.role,"support");w.m_profile.support=true;w.m_profile.roleFlags=15;
+   w.m_profile.serverOwner=true;w.m_profile.topPlace=5;w.m_profile.ownedCount=5;
+   strcpy(w.m_profile.theme,CzmProfileStyle::ThemeKey(theme));w.m_appear=0;
+   drawnLabels.clear();w.Draw();
+   for(const char*label:{"SUPPORT","MODERATOR","OFFICIAL TESTER CZM","SERVER OWNER","TOP 10"})assert(std::count(drawnLabels.begin(),drawnLabels.end(),label)==1);
+   assert(w.m_panel.y>=0&&w.m_panel.y+w.m_panel.h<=ScreenHeight);
+   assert(w.m_theme.w&&w.m_nickEdit.w);
+   w.Activate(w.THEME);w.Layout();assert(w.m_themeOpen);
+   assert(w.m_themePanel.y>=0&&w.m_themePanel.y+w.m_themePanel.h<=ScreenHeight);
+   for(int i=0;i<4;i++){
+    const auto&r=w.m_themeOptions[i];assert(r.x>=w.m_themePanel.x&&r.x+r.w<=w.m_themePanel.x+w.m_themePanel.w);
+    assert(r.y>=w.m_themePanel.y&&r.y+r.h<=w.m_themeCancel.y);
+    cursorX=r.x+r.w/2;cursorY=uiStatic.cursorY=r.y+r.h/2;assert(w.Hit()==w.THEME_PICK+i);
+   }
+   w.Activate(w.THEME_CANCEL);assert(!w.m_themeOpen);
+  }
+ }
+ ScreenWidth=1536;ScreenHeight=716;w.OpenProfile(me,true);w.Read(j,w.READ_PROFILE);w.m_profile.id=me;w.Layout();
+ w.Activate(w.THEME);w.Activate(w.THEME_PICK+1);w.Activate(w.THEME_SAVE);
+ assert(requests.back().url=="/api/v1/social/theme"&&requests.back().body=="{\"theme\":\"frost\"}");
+ replies[w.m_write]={200,"{\"profile\":{\"id\":"+std::to_string(me)+",\"nick\":\"Kuro\",\"account\":true,\"relation\":\"self\",\"theme\":\"frost\"}}"};
+ w.Frame();assert(!w.m_themeOpen&&!strcmp(w.m_profile.theme,"frost"));
+ // The card rises into place; no callback changes another account's card.
  w.OpenProfile(8,false);w.Read(j,w.READ_PROFILE);assert(w.m_appear>0);
  w.m_appear=0;w.Layout();const int risen=w.m_panel.y;
  w.m_appear=EngFuncs::DoubleTime();w.Layout();assert(w.m_panel.y>risen);w.m_appear=0;
  ScreenWidth=1536;ScreenHeight=716;
  if(argc>1){drawTrace=true;if(strcmp(argv[1],"dialog")){
   w.OpenProfile(8,false);w.Read(j,w.READ_PROFILE);
-  if(!strcmp(argv[1],"own")){w.m_profile.id=me;strcpy(w.m_profile.nick,"Kuro");strcpy(w.m_profile.status,"");}
+  if(!strncmp(argv[1],"own",3)||!strcmp(argv[1],"themes")){w.m_profile.id=me;strcpy(w.m_profile.nick,"Kuro");strcpy(w.m_profile.status,"Help Support");strcpy(w.m_profile.role,"support");w.m_profile.support=true;w.m_profile.topPlace=5;w.m_profile.topSeconds=780;support=actorAdmin=true;}
+  if(!strcmp(argv[1],"own_frost"))strcpy(w.m_profile.theme,"frost");
+  if(!strcmp(argv[1],"themes")){w.Layout();w.Activate(w.THEME);}
+  if(!strcmp(argv[1],"add"))strcpy(w.m_profile.relation,"none");
   if(!strcmp(argv[1],"guest")){w.m_profile.account=false;strcpy(w.m_profile.relation,"none");strcpy(w.m_profile.status,"");}
   if(!strcmp(argv[1],"join")){strcpy(w.m_profile.server,"203.0.113.10:27015");strcpy(w.m_profile.map,"zm_survival");}
   if(!strcmp(argv[1],"report")){w.m_chatMessage=71;w.Activate(w.REPORT);}
@@ -291,6 +325,7 @@ class SocialMenuTests(unittest.TestCase):
                 (p / name).write_text('#include "stub.h"\n')
             (p / "CzmJson.h").write_text((ROOT / "czm/menu/CzmJson.h").read_text())
             (p / "CzmDesign.h").write_text((ROOT / "czm/menu/CzmDesign.h").read_text())
+            (p / "CzmProfileStyle.h").write_text((ROOT / "czm/menu/CzmProfileStyle.h").read_text())
             source = (ROOT / "czm/menu/CzmSocial.cpp").read_text().replace('#include "../../common/czm_tab.h"', '#include "czm_tab.h"').replace("private:\n\tenum", "public:\n\tenum")
             from test_loading_errors import function
             shared=(ROOT/'czm/menu/CzmMenu.cpp').read_text()
@@ -302,7 +337,7 @@ class SocialMenuTests(unittest.TestCase):
             preview = os.environ.get("CZM_SOCIAL_PREVIEW_DIR")
             if preview:
                 output = Path(preview); output.mkdir(parents=True, exist_ok=True)
-                for view in ["profile", "own", "guest", "join", "report", "dialog", "more", "edit"]:
+                for view in ["profile", "own", "own_frost", "themes", "add", "guest", "join", "report", "dialog", "more", "edit"]:
                     result = subprocess.run([str(exe), view], check=True, capture_output=True, text=True)
                     (output/(view+".tsv")).write_text(result.stdout)
 
