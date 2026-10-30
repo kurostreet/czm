@@ -309,7 +309,9 @@ int main(int argc,char**argv){
   cursorX=b.menu.x+b.menu.w/2;cursorY=uiStatic.cursorY=b.menu.y+b.menu.h/2;assert(w.Hit()==w.MESSAGE_MENU);
   w.Activate(w.Hit());assert(w.m_messageMenu==1&&w.m_messageRows==3);
   w.Activate(w.MSG_REPORT);assert(!strcmp(w.m_confirm,"report:1")&&!strcmp(w.m_reportQuote,"Hello, join our game!"));w.Activate(w.CANCEL);
-  w.m_messages[0].player=me;w.Activate(w.MESSAGE_MENU);assert(w.m_messageRows==2&&w.m_messageKinds[0]==w.MSG_COPY&&w.m_messageKinds[1]==w.MSG_CLOSE);w.Activate(w.MSG_CLOSE);w.m_messages[0].player=8;
+  w.m_messages[0].player=me;w.Activate(w.MESSAGE_MENU);assert(w.m_messageRows==2&&w.m_messageKinds[0]==w.MSG_COPY&&w.m_messageKinds[1]==w.MSG_CLOSE);w.Activate(w.MSG_CLOSE);
+  b=w.MessageBubble(0,top);cursorX=b.avatar.x+b.avatar.w/2;cursorY=uiStatic.cursorY=b.avatar.y+b.avatar.h/2;assert(w.Hit()==0&&w.m_target==8);
+  w.m_messages[0].player=8;
   russian=false;b=w.MessageBubble(0,top);assert(!b.canTranslate);russian=true;
  }
  ScreenWidth=1536;ScreenHeight=716;w.Layout();w.Activate(w.MESSAGE_MENU);w.Activate(w.MSG_REPORT);w.m_write=0;w.Activate(w.CONFIRM);

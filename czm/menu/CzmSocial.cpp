@@ -684,7 +684,7 @@ int CCzmSocial::Hit()
 				const CzmConversation::Bubble b=MessageBubble(i,bottom+(DateBefore(i)?CzmConversation::DateHeight():0));
 				if(!message.deleted&&b.menu.HasCursor())return MESSAGE_MENU+i;
 				if(b.canTranslate&&b.translate.HasCursor())return TRANSLATE+i;
-				if(b.avatar.HasCursor())return mine?MINE:PEER;
+				if(!mine&&b.avatar.HasCursor())return PEER;
 				return 0;
 			}
 		}
