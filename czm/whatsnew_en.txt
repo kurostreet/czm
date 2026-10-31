@@ -1,1 +1,1 @@
-Fixed adding project servers to profiles: copied IP addresses and ports are now handled correctly. Updated player profiles, friends and chats, with RU/EN message translation. Improved the admin panel and role management. Added server reports and blocking, and tester tickets.
+Improved adding project servers: copied IP addresses and ports now work with extra spacing and invisible formatting marks. The address field is optimized for entering IP:port.
