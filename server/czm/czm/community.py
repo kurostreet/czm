@@ -5,6 +5,7 @@ import io
 import ipaddress
 import json
 import re
+import unicodedata
 from urllib.parse import urlsplit
 
 from PIL import Image
@@ -166,7 +167,12 @@ def owner_actor(conn, key):
 
 
 def public_endpoint(value):
-    value = value.strip()
+    # Clipboard text can carry invisible direction/format marks and spacing
+    # around separators. Canonicalize presentation before validating the IP;
+    # spaces inside a numeric group, hostnames and URLs remain invalid.
+    value = unicodedata.normalize("NFKC", value)
+    value = "".join(c for c in value if unicodedata.category(c) != "Cf").strip()
+    value = re.sub(r"\s*([.:\[\]])\s*", r"\1", value)
     if re.fullmatch(r"[0-9.]+", value):
         value += ":27015"
     address = server_address(value)

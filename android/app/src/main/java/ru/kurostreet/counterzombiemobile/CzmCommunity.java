@@ -135,6 +135,8 @@ final class CzmCommunity {
         clear(dialog);dialog.submit.setText(ru?"Добавить":"Add");
         dialog.note(ru?"До пяти серверов. Название запрашивается у сервера; если он не отвечает, показывается IP":"Up to five servers. Names come from the server; an offline server shows its IP");
         EditText address=dialog.field(ru?"IP:порт (без порта — 27015)":"IP:port (default port: 27015)",false,64);
+        address.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_URI);
+        address.setTextDirection(android.view.View.TEXT_DIRECTION_LTR);
         dialog.submit.setOnClickListener(v -> {
             try{JSONObject body=new JSONObject().put("server",address.getText().toString().trim());
                 request(activity,dialog,generation,key,"POST","community/servers",body,ru,result -> servers(activity,dialog,generation,key,ru,result));

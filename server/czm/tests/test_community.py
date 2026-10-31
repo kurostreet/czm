@@ -197,6 +197,56 @@ class CommunityTests(unittest.TestCase):
             server_moderation.set_blocked(c, "8.8.8.8:27015", True, "owner", "Review")
         self.assertEqual(len(self.request("GET", "social/profile/%d" % self.ids[3]).json()["profile"]["servers"]), 4)
 
+    def test_project_server_copied_addresses_are_canonical_and_removable(self):
+        endpoint = "131.196.196.196:27020"
+        pasted = "\u200e131.196.196.196\u00a0: 27020\u200b"
+        with patch("czm.api.game_probe.probe", return_value={"name": "Fantasy Gaming"}) as probe:
+            response = self.request("POST", "community/servers", 3, json={"server": pasted})
+            self.assertEqual(response.status_code, 200, response.text)
+            probe.assert_called_once_with(endpoint)
+            self.assertEqual(response.json()["servers"][0]["server"], endpoint)
+            response = self.request("POST", "community/servers", 3, json={"server": endpoint})
+            self.assertEqual(len(response.json()["servers"]), 1)
+        with patch("czm.api.game_probe.probe") as probe:
+            response = self.request("POST", "community/servers", 3, json={"server": pasted, "remove": True})
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(response.json()["servers"], [])
+            probe.assert_not_called()
+
+    def test_project_server_paste_cleanup_preserves_public_ip_and_port_checks(self):
+        valid = {
+            "131.196.196.196:27020": "131.196.196.196:27020",
+            "\ufeff131.196.196.196\u200f": "131.196.196.196:27015",
+            "１３１．１９６．１９６．１９６：２７０２０": "131.196.196.196:27020",
+            "[ 2606:4700:4700::1111 ] : 27015": "[2606:4700:4700::1111]:27015",
+        }
+        for value, expected in valid.items():
+            with self.subTest(value=value):
+                self.assertEqual(community.public_endpoint(value), expected)
+        invalid = (
+            "\u200e127.0.0.1 : 27015", "192.168.1.1:27015", "100.64.0.1:27015",
+            "[ ::1 ] : 27015", "131.196.196.196:0", "131.196.196.196:65536",
+            "131.196.196.196:27 020", "1 31.196.196.196:27020", "256.196.196.196:27020",
+            "https://131.196.196.196:27020", "example.com:27015", "131.196.196.196:27020/path",
+            "131.196.196.196:27020\n8.8.8.8:27015",
+        )
+        for value in invalid:
+            with self.subTest(value=value), self.assertRaises(accounts.AuthError):
+                community.public_endpoint(value)
+        with patch("czm.api.game_probe.probe") as probe:
+            response = self.request("POST", "community/servers", 3,
+                                    json={"server": "\u200e127.0.0.1 : 27015"})
+            self.assertEqual((response.status_code, response.json()["error"]), (400, "server"))
+            probe.assert_not_called()
+
+    def test_project_server_keeps_the_address_when_the_probe_times_out(self):
+        from czm.game_probe import ProbeError
+        with patch("czm.api.game_probe.probe", side_effect=ProbeError("unavailable")):
+            response = self.request("POST", "community/servers", 3,
+                                    json={"server": "\u200e131.196.196.196 : 27020"})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["servers"][0]["name"], "131.196.196.196:27020")
+
     def test_tester_ticket_accepts_only_selected_photo_and_utf8_text_and_retries_once(self):
         image = io.BytesIO(); Image.new("RGB", (16, 16), "red").save(image, format="PNG")
         body = {"subject": "Bug", "text": "Steps to reproduce", "photo": base64.b64encode(image.getvalue()).decode(),
