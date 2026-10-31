@@ -1,0 +1,48 @@
+name: CZM Server Starter
+
+on:
+  pull_request:
+    paths: ['server/server-kit/**', '.github/workflows/server-kit.yml']
+  push:
+    branches: [feature/mobile-launcher]
+    paths: ['server/server-kit/**', '.github/workflows/server-kit.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  starter:
+    name: Native zombie server (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            platform: linux
+          - os: windows-2022
+            platform: windows
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Installer behavior checks
+        run: python -m unittest discover -s server/server-kit/tests -p test_*.py -v
+      - name: Linux 32-bit server runtime
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libc6-i386 lib32gcc-s1 lib32stdc++6
+      - name: Install packaged starter and run the native zombie server
+        run: python server/server-kit/tests/smoke.py --output kit-output --work kit-smoke
+      - name: Keep tested release and sanitized receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: czm-server-${{ matrix.platform }}
+          path: kit-output/
+          if-no-files-found: warn
+          retention-days: 14
