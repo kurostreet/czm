@@ -74,7 +74,7 @@ class InstallerTests(unittest.TestCase):
             file.parent.mkdir(parents=True, exist_ok=True)
             file.write_bytes(data)
         self.assertEqual(self.kit.export_fastdl(), 2)
-        self.assertEqual({str(p.relative_to(self.root / 'fastdl')) for p in (self.root / 'fastdl').rglob('*') if p.is_file()},
+        self.assertEqual({p.relative_to(self.root / 'fastdl').as_posix() for p in (self.root / 'fastdl').rglob('*') if p.is_file()},
                          {'maps/test.bsp', 'models/test.mdl'})
 
     def test_bad_download_hash_cannot_be_used_from_cache(self):

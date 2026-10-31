@@ -14,7 +14,7 @@ FILES="requirements.txt czm/__init__.py czm/config.py czm/db.py czm/profanity.py
        deploy/czm.service deploy/czm.caddy deploy/install.sh deploy/czm-set
        deploy/czm-assemble.service deploy/czm-assemble.path deploy/czm-assemble.timer"
 # the public site (pages, pictures, fonts, script)
-SITE="site/index.html site/privacy.html site/rules.html site/assets/apple-touch-icon.png site/assets/art-3.webp
+SITE="site/index.html site/privacy.html site/rules.html site/create-server.html site/assets/server-setup.css site/assets/server-setup.js site/assets/apple-touch-icon.png site/assets/art-3.webp
       site/assets/avatar-1.png site/assets/avatar-10.png site/assets/avatar-2.png site/assets/avatar-3.png
       site/assets/avatar-4.png site/assets/avatar-5.png site/assets/avatar-6.png site/assets/avatar-7.png
       site/assets/avatar-8.png site/assets/avatar-9.png site/assets/ct.webp site/assets/env.webp
@@ -37,7 +37,9 @@ mkdir -p "$DEST/czm" "$DEST/deploy" /var/lib/czm/avatars /var/lib/czm/apk /var/l
 mkdir -p "$DEST/site/assets/fonts"
 for f in $FILES $SITE; do curl -fsSL "$REPO/$f" -o "$DEST/$f"; done
 # links to pictures and the script change with every release, so browsers fetch the new ones
-sed -i "s/__V__/${COMMIT:0:7}/g" "$DEST/site/index.html"
+for page in "$DEST/site/index.html" "$DEST/site/create-server.html"; do
+  sed -i "s/__V__/${COMMIT:0:7}/g" "$page"
+done
 
 # automatic updates sign the APK with apksigner (Java)
 if ! command -v apksigner >/dev/null 2>&1; then
@@ -90,6 +92,8 @@ chmod 750 /var/lib/czm/incoming /var/lib/czm/signing
 install -m 755 "$DEST/deploy/czm-set" /usr/local/sbin/czm-set
 
 ln -sfn "$DEST" /opt/czm/current
+# The website can also be published independently without restarting the API.
+ln -sfn "$DEST/site" /opt/czm/site-current
 for unit in czm.service czm-assemble.service czm-assemble.path czm-assemble.timer; do
   install -m 644 "$DEST/deploy/$unit" /etc/systemd/system/$unit
 done

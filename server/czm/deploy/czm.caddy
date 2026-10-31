@@ -3,6 +3,18 @@
 # The previous hostname remains available to installed clients.
 counter-zombie.ru, kontrafps.ru {
 	encode gzip
+	# Public server starters are separate from private Android releases.
+	handle_path /server-downloads/* {
+		root * /var/lib/czm/server-downloads
+		header Cache-Control "public, max-age=3600"
+		file_server
+	}
+	# Resource files for the isolated zombie network test.
+	handle_path /zm-test-files/* {
+		root * /srv/czm-zm-test/fastdl
+		header Cache-Control "public, max-age=3600"
+		file_server
+	}
 	header {
 		-Server
 		X-Content-Type-Options nosniff
@@ -65,7 +77,7 @@ counter-zombie.ru, kontrafps.ru {
 
 	# the public site from the current release: pictures, fonts and the script (links carry ?v=<commit>)
 	handle /assets/* {
-		root * /opt/czm/current/site
+		root * /opt/czm/site-current
 		header Cache-Control "public, max-age=604800"
 		file_server
 	}
@@ -77,9 +89,9 @@ counter-zombie.ru, kontrafps.ru {
 		file_server
 	}
 
-	# pages: /, /privacy and /rules; the hash allows the one inline line that applies the saved theme
+	# Public pages; the hash allows the inline line applying the saved theme.
 	handle {
-		root * /opt/czm/current/site
+		root * /opt/czm/site-current
 		header {
 			Content-Security-Policy "default-src 'self'; script-src 'self' 'sha256-PT1f7ai2CTSaZ/SGiYakcFr5/ubFfkcq3Ba8RwmnjfI='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
 			X-Frame-Options DENY
@@ -100,6 +112,11 @@ www.counter-zombie.ru {
 
 # the engine fetches the server list over plain HTTP
 http://counter-zombie.ru, http://kontrafps.ru {
+	handle_path /zm-test-files/* {
+		root * /srv/czm-zm-test/fastdl
+		header Cache-Control "public, max-age=3600"
+		file_server
+	}
 	handle_path /server-list/* {
 		root * /var/lib/czm/server-list
 		file_server

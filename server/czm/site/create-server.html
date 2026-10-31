@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="ru" data-v="__V__">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Создать зомби-сервер — Counter Zombie Mobile</title>
+<meta name="description" content="Свой сервер Counter Zombie Mobile: установочные комплекты для Windows и Linux/VDS, Zombie Plague, бот, запуск, открытие портов и быстрая загрузка файлов.">
+<meta name="theme-color" content="#09090c">
+<link rel="canonical" href="https://counter-zombie.ru/create-server">
+<link rel="icon" type="image/png" href="/assets/favicon-64.png">
+<meta property="og:title" content="Твой зомби-сервер — Counter Zombie Mobile">
+<meta property="og:description" content="Скачай комплект для Windows или Linux. Настрой, запусти и пригласи друзей.">
+<meta property="og:image" content="https://counter-zombie.ru/assets/og.jpg">
+<meta property="og:url" content="https://counter-zombie.ru/create-server">
+<script>try{if(localStorage.getItem("czm-theme")==="light")document.documentElement.classList.add("light")}catch(e){}</script>
+<link rel="stylesheet" href="/assets/server-setup.css?v=__V__">
+<script src="/assets/server-setup.js?v=__V__" defer></script>
+</head>
+<body>
+<header><div class="wrap topbar">
+<a class="brand" href="/"><img src="/assets/logo-96.png" alt="" width="38" height="38"><span>Counter<br><em>Zombie</em> Mobile</span></a>
+<a class="back" href="/">← На главную</a>
+<button class="theme" type="button" id="guide-theme" aria-label="Переключить светлую и тёмную тему">◐</button>
+</div></header>
+<main>
+<section class="guide-hero">
+<div class="wrap hero-content">
+<p class="eyebrow"><span></span> CZM SERVER · ZOMBIE PLAGUE</p>
+<h1>Твой сервер.<br><em>Твои правила.</em></h1>
+<p class="hero-lead">Запусти зомби-сервер на своём компьютере или VDS. Мы собрали установку, мод и настройки в один комплект — выбирай систему и следуй шагам.</p>
+<div class="hero-tags"><span>Зомби-мод</span><span>Бот для проверки</span><span>До 32 игроков</span><span>Windows / Linux</span></div>
+<a class="button primary" href="#downloads">Выбрать и скачать <span aria-hidden="true">↓</span></a>
+</div>
+</section>
+
+<div class="wrap content">
+<section class="downloads" id="downloads" aria-labelledby="downloads-title">
+<div class="section-head"><span class="step-label">01 / КОМПЛЕКТ</span><h2 id="downloads-title">Выбери, где будет сервер</h2><p>Оба комплекта используют 32-битный игровой сервер. Он работает и на 64-битной системе Intel/AMD. ARM-серверы и macOS этим выпуском не поддерживаются.</p></div>
+<div class="download-grid">
+<article class="download-card"><div class="platform-icon" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="m3 6 11-1.5v11H3Zm13-1.8L29 2v13.5H16ZM3 17.5h11v10L3 26Zm13 0h13V31l-13-2Z"/></svg></div><span class="card-label">ДОМАШНИЙ КОМПЬЮТЕР</span><h3>Windows</h3><p>Windows 10/11 x64. Python уже внутри комплекта; отдельно устанавливать его не нужно.</p>
+<a class="button primary" href="/server-downloads/CZM-Server-Windows-v1.0.0.zip" download>Скачать для Windows <span aria-hidden="true">↓</span></a><small data-kit-size="windows">ZIP · установочный комплект v1.0.0</small><a class="text-link" href="#windows">Как распаковать и запустить →</a></article>
+<article class="download-card"><div class="platform-icon" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none"><rect x="3" y="4" width="26" height="10" rx="2"/><rect x="3" y="18" width="26" height="10" rx="2"/><path d="M8 9h.1M8 23h.1M14 9h9M14 23h9"/></svg></div><span class="card-label">VDS ИЛИ КОМПЬЮТЕР С LINUX</span><h3>Linux / VDS</h3><p>Debian 12, Ubuntu 22.04/24.04, Intel/AMD x86-64. Установка от обычного пользователя.</p>
+<a class="button primary" href="/server-downloads/CZM-Server-Linux-v1.0.0.tar.gz" download>Скачать для Linux <span aria-hidden="true">↓</span></a><small data-kit-size="linux">TAR.GZ · установочный комплект v1.0.0</small><a class="text-link" href="#linux">Установка и автозапуск на VDS →</a></article>
+</div>
+<div class="note"><strong>Перед первым запуском:</strong> нужен интернет и минимум <strong>3 ГБ свободного места</strong>. Комплект скачает игровые данные через SteamCMD и компоненты мода из официальных источников, проверит SHA-256 и соберёт сервер в своей папке. Сам установщик небольшой — полный сервер появится после установки.</div>
+<div class="download-links"><a href="/server-downloads/SHA256SUMS.txt">Контрольные суммы SHA-256</a><a href="https://github.com/kurostreet/czm/tree/feature/mobile-launcher/server/server-kit" rel="noopener">Исходники и состав</a><a href="/server-downloads/README_RU.txt">Инструкция текстом</a></div>
+</section>
+
+<div class="guide-layout">
+<aside class="contents" aria-label="На этой странице"><p>ОТ СКАЧИВАНИЯ ДО ИГРЫ</p><a href="#setup">Установка</a><a href="#connect">Первое подключение</a><a href="#internet">Доступ из интернета</a><a href="#fastdl">Быстрая загрузка файлов</a><a href="#manage">Настройки и админка</a><a href="#problems">Если что-то не работает</a><a href="#xash">Отдельные движки Xash3D</a></aside>
+<div class="guide-body">
+<section id="setup" class="guide-section">
+<span class="step-label">02 / УСТАНОВКА</span><h2>Распакуй. Настрой. Запусти.</h2>
+<div class="platform-tabs" role="tablist" aria-label="Инструкция для системы">
+<button id="tab-windows" role="tab" aria-controls="windows" aria-selected="true" data-platform="windows">Windows</button>
+<button id="tab-linux" role="tab" aria-controls="linux" aria-selected="false" data-platform="linux">Linux / VDS</button>
+</div>
+<section id="windows" class="platform-panel" role="tabpanel" aria-labelledby="tab-windows">
+<h3 class="panel-heading">На компьютере с Windows</h3>
+<ol class="steps">
+<li><h4>Скачай и полностью распакуй архив</h4><p>Правой кнопкой по ZIP → «Извлечь всё». В качестве места выбери <code>C:\</code>. Получится папка <code>C:\CZM-Server-Windows</code>. Не запускай файлы прямо из окна архива. Путь должен быть без пробелов и кириллицы.</p></li>
+<li><h4>Открой <code>1-INSTALL.cmd</code></h4><p>Укажи название, UDP-порт, число мест и ботов. Для начала оставь порт <code>27015</code> и одного бота. Пароль входа можно оставить пустым. Администратор Windows для обычной установки не требуется.</p><p>Установщик загрузит компоненты, поставит Zombie Plague и подготовит карту <code>zm_czm_start</code>. Не закрывай окно до сообщения «Готово». Журнал установки — <code>logs\install.log</code>.</p></li>
+<li><h4>Открой <code>2-START.cmd</code></h4><p>Оставь окно сервера открытым. После запуска карты можно подключаться с телефона. Сам по себе сервер не появляется у всех игроков в общем списке: сначала добавь его вручную по IP и порту.</p></li>
+<li><h4>Остановка и повторный запуск</h4><p>Для штатной остановки нажми <kbd>Ctrl</kbd> + <kbd>C</kbd> в окне сервера. <code>4-STOP.cmd</code> — запасная кнопка аварийной остановки этого экземпляра. Для следующего запуска снова открой <code>2-START.cmd</code>; повторная установка не нужна.</p></li>
+</ol>
+<div class="callout"><strong>Что уже настроено</strong><p>Zombie Plague 4.4, классы зомби, один бот, меню AMXX и стартовая карта. Предустановленных администраторов и общего служебного пароля нет. Доступ хозяина выдаётся отдельно по его ID.</p></div>
+</section>
+
+<section id="linux" class="platform-panel" role="tabpanel" aria-labelledby="tab-linux">
+<h3 class="panel-heading">На Linux-компьютере или VDS</h3>
+<ol class="steps">
+<li><h4>Подготовь систему</h4><p>Подключись к VDS по SSH. Эти команды выполняет администратор системы. Для работы 32-битного игрового процесса на x86-64 нужны библиотеки совместимости.</p>
+<div class="codebox"><button type="button" data-copy="linux-deps">Копировать</button><pre id="linux-deps"><code>sudo apt-get update
+sudo apt-get install -y python3 ca-certificates curl libc6-i386 lib32gcc-s1 lib32stdc++6</code></pre></div>
+<p>Создай отдельного обычного пользователя, если его ещё нет. Если уже работаешь под таким пользователем, этот шаг можно пропустить.</p>
+<div class="codebox"><button type="button" data-copy="linux-user">Копировать</button><pre id="linux-user"><code>sudo adduser czmserver</code></pre></div><p>Заверши создание пользователя, затем переключись на него:</p><div class="codebox"><button type="button" data-copy="linux-switch">Копировать</button><pre id="linux-switch"><code>sudo -iu czmserver</code></pre></div></li>
+<li><h4>Скачай и распакуй комплект</h4><p>Следующие команды выполняй уже под обычным пользователем, в его домашней папке. Не распаковывай комплект поверх работающего сервера.</p>
+<div class="codebox"><button type="button" data-copy="linux-download">Копировать</button><pre id="linux-download"><code>curl -fL --retry 3 https://counter-zombie.ru/server-downloads/CZM-Server-Linux-v1.0.0.tar.gz -o CZM-Server-Linux-v1.0.0.tar.gz
+tar -xzf CZM-Server-Linux-v1.0.0.tar.gz
+cd CZM-Server-Linux
+bash install.sh</code></pre></div></li>
+<li><h4>Укажи настройки и запусти</h4><p>Установщик спросит название, порт, число игроков и ботов. Оставь окно открытым, пока SteamCMD и мод устанавливаются. После сообщения «Готово»:</p>
+<div class="codebox"><button type="button" data-copy="linux-start">Копировать</button><pre id="linux-start"><code>bash start.sh</code></pre></div><p>Для остановки — <kbd>Ctrl</kbd> + <kbd>C</kbd>. При таком запуске сервер зависит от открытой SSH-сессии. Для постоянной работы используй службу ниже.</p></li>
+<li id="linux-autostart"><h4>Включи автозапуск на VDS</h4><p>После успешной установки в папке появится <code>czm-zombie.service</code> с твоим пользователем и путём. Убедись, что служба с таким именем ещё не используется другим сервером. Команды выполняет пользователь с правом <code>sudo</code> из папки комплекта.</p>
+<div class="codebox"><button type="button" data-copy="linux-service">Копировать</button><pre id="linux-service"><code>sudo install -m 644 czm-zombie.service /etc/systemd/system/czm-zombie.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now czm-zombie
+sudo systemctl status czm-zombie</code></pre></div><p>Созданный через <code>adduser</code> пользователь обычно не имеет sudo. Можно выйти из его SSH-сессии командой <code>exit</code> и выполнить команды выше из административного аккаунта, сначала перейдя в <code>/home/czmserver/CZM-Server-Linux</code>.</p>
+<p>Перезапуск:</p><div class="codebox"><button type="button" data-copy="linux-restart">Копировать</button><pre id="linux-restart"><code>sudo systemctl restart czm-zombie</code></pre></div><p>Остановка:</p><div class="codebox"><button type="button" data-copy="linux-stop">Копировать</button><pre id="linux-stop"><code>sudo systemctl stop czm-zombie</code></pre></div><p>Последние строки журнала:</p><div class="codebox"><button type="button" data-copy="linux-journal">Копировать</button><pre id="linux-journal"><code>sudo journalctl -u czm-zombie -n 50</code></pre></div><p>Не запускай одновременно службу и <code>start.sh</code> с одним и тем же портом.</p></li>
+</ol>
+</section>
+</section>
+
+<section id="connect" class="guide-section"><span class="step-label">03 / ПРОВЕРКА</span><h2>Зайди на свой сервер</h2>
+<ol class="steps compact"><li><h4>Найди правильный адрес</h4><p><strong>Дома:</strong> подключи телефон и компьютер к одной Wi-Fi сети. В Windows команда <code>ipconfig</code> покажет IPv4 активного адаптера; на Linux используй <code>hostname -I</code>. Нужен адрес вроде <code>192.168.1.50</code>.</p><p><strong>На VDS:</strong> используй публичный IPv4 из панели хостинга. Внутренний адрес вида <code>192.168.x.x</code> не подходит для игроков из интернета.</p></li><li><h4>Добавь адрес в Counter Zombie Mobile</h4><p>Открой <strong>«Серверы → +»</strong>, введи <code>IP:порт</code>, например <code>192.168.1.50:27015</code>, и подключись. Если включён пароль входа, введи его.</p></li><li><h4>Проверь мод и бота</h4><p>Дождись загрузки карты и начала раунда. В стартовом комплекте один бот, чтобы можно было проверить заражение и бой без других игроков. Адрес <code>127.0.0.1</code> на телефоне указывает на сам телефон, а не на твой компьютер.</p></li></ol>
+<p class="small muted">Прямое подключение по адресу не требует назначения роли Server owner. Значок проверенного владельца и публичное размещение сервера — отдельные действия администрации CZM.</p>
+</section>
+
+<section id="internet" class="guide-section"><span class="step-label">04 / ДРУЗЬЯ</span><h2>Открой доступ из интернета</h2>
+<div class="comparison"><div><h3>Домашний компьютер</h3><p>Закрепи локальный IP компьютера в роутере. Создай правило перенаправления <strong>UDP 27015 → IP компьютера:27015</strong>. Если выбрал другой порт, используй его везде.</p><p>Разреши этот UDP-порт в брандмауэре ОС. Для Windows команда ниже выполняется один раз в PowerShell от администратора и относится только к серверному файлу.</p></div><div><h3>VDS</h3><p>Разреши UDP-порт в сетевом экране ОС и в панели хостинга, если там есть отдельный firewall. Если используешь UFW:</p><div class="codebox"><button type="button" data-copy="udp-linux">Копировать</button><pre id="udp-linux"><code>sudo ufw allow 27015/udp</code></pre></div><p>Не включай и не сбрасывай firewall вслепую: доступ по SSH должен сохраниться.</p></div></div>
+<div class="codebox"><button type="button" data-copy="udp-windows">Копировать</button><pre id="udp-windows"><code>New-NetFirewallRule -DisplayName "CZM Server UDP 27015" -Direction Inbound -Action Allow -Protocol UDP -LocalPort 27015 -Program "C:\CZM-Server-Windows\game\hlds.exe"</code></pre></div>
+<div class="note"><strong>Если у провайдера CGNAT:</strong> обычный проброс порта не даст вход из интернета. Нужен публичный IPv4 у провайдера или VDS. Проверяй внешний вход с телефона через мобильную сеть — домашний роутер может не поддерживать обращение к своему внешнему IP из той же Wi-Fi сети.</div>
+<p>Игра использует <strong>UDP</strong>. Открытие адреса в браузере, TCP-сканер и Windows <code>portproxy</code> не проверяют и не перенаправляют игровой UDP.</p>
+</section>
+
+<section id="fastdl" class="guide-section"><span class="step-label">05 / СКОРОСТЬ</span><h2>Файлы должны скачиваться быстро</h2><p class="section-lead">Игровой сервер и хранилище карт — разные соединения. Подготовь HTTPS FastDL перед тем, как приглашать игроков: без него крупные файлы могут передаваться через медленный игровой канал.</p>
+<ol class="steps"><li><h4>Используй готовую папку <code>fastdl</code></h4><p>Установка уже собрала туда карты, модели и звуки с нужной структурой. Конфиг сервера, плагины и пароли туда не включаются. На Windows загрузи содержимое этой папки на свой HTTPS-хостинг. Например, если файл лежит в <code>fastdl/maps/zm_czm_start.bsp</code>, его публичный адрес должен быть <code>https://files.example.com/files/maps/zm_czm_start.bsp</code>.</p></li><li><h4>Или настрой HTTPS на отдельном домене своей VDS</h4><p>В DNS направь A-запись <code>files.ТВОЙ-ДОМЕН</code> на публичный IP VDS. Для Caddy нужны входящие TCP 80 и 443. Команды ниже копируют только публичные ресурсы; выполняй их из папки установленного комплекта с правами администратора.</p>
+<div class="codebox"><button type="button" data-copy="fastdl-files">Копировать</button><pre id="fastdl-files"><code>sudo apt-get install -y caddy
+sudo install -d -m 755 /var/www/czm-fastdl
+sudo cp -a fastdl/. /var/www/czm-fastdl/
+sudo chmod -R a+rX /var/www/czm-fastdl</code></pre></div><p>В <code>/etc/caddy/Caddyfile</code> добавь блок, заменив <code>files.example.com</code> своим настоящим доменом. Если там уже настроены сайты, сохрани существующие блоки.</p>
+<div class="codebox"><button type="button" data-copy="fastdl-caddy">Копировать</button><pre id="fastdl-caddy"><code>files.example.com {
+    handle_path /files/* {
+        root * /var/www/czm-fastdl
+        file_server
+    }
+}</code></pre></div>
+<div class="codebox"><button type="button" data-copy="fastdl-reload">Копировать</button><pre id="fastdl-reload"><code>sudo caddy validate --config /etc/caddy/Caddyfile &amp;&amp; sudo systemctl reload caddy</code></pre></div></li>
+<li><h4>Укажи адрес хранилища серверу</h4><p>В <code>server.ini</code> задай свой адрес с завершающим слешем:</p><div class="codebox"><button type="button" data-copy="fastdl-url">Копировать</button><pre id="fastdl-url"><code>fastdl_url = https://files.example.com/files/</code></pre></div><p>На Windows открой <code>3-SETTINGS.cmd</code>; на Linux выполни <code>bash configure.sh</code>. Затем перезапусти игровой сервер.</p></li>
+<li><h4>Проверь с телефона без VPN</h4><p>Открой полный URL карты в браузере телефона через мобильную сеть. Должен скачаться именно BSP-файл, а не HTML-страница входа или ошибка 404. После этого проверь вход через игру. Доступность чужих провайдеров и хостингов может отличаться.</p></li>
+<li><h4>Обновляй ресурсы после добавления карт</h4><p>Снова подготовь экспорт и загрузи обновлённое содержимое на свой HTTPS-хостинг. При локальном Caddy повтори копирование в <code>/var/www/czm-fastdl</code>. На Linux:</p><div class="codebox"><button type="button" data-copy="fastdl-export-linux">Копировать</button><pre id="fastdl-export-linux"><code>python3 installer.py export-fastdl</code></pre></div><p>На Windows — из папки комплекта:</p><div class="codebox"><button type="button" data-copy="fastdl-export-windows">Копировать</button><pre id="fastdl-export-windows"><code>runtime\python.exe installer.py export-fastdl</code></pre></div></li></ol>
+</section>
+
+<section id="manage" class="guide-section"><span class="step-label">06 / УПРАВЛЕНИЕ</span><h2>Настрой сервер под себя</h2>
+<div class="table-wrap"><table><thead><tr><th>Что изменить</th><th>Где</th></tr></thead><tbody><tr><td>Название, порт, места, боты, пароль входа, HTTPS FastDL</td><td><code>server.ini</code>, затем <code>3-SETTINGS.cmd</code> или <code>bash configure.sh</code></td></tr><tr><td>Параметры зомби-мода</td><td><code>game/cstrike/addons/amxmodx/configs/zombieplague.cfg</code></td></tr><tr><td>Свои дополнительные серверные команды</td><td><code>game/cstrike/custom.cfg</code> — сохраняется при применении настроек</td></tr><tr><td>Карты и порядок смены</td><td><code>game/cstrike/maps/</code> и <code>game/cstrike/mapcycle.txt</code></td></tr><tr><td>Ошибки установки</td><td><code>logs/install.log</code></td></tr></tbody></table></div>
+<p>Меняй настройки при остановленном сервере. Обычный повторный запуск не скачивает и не переустанавливает все компоненты. Для нового комплекта используй отдельную папку и сохрани свои настройки.</p>
+<h3>Как выдать себе админку</h3><p>Зайди в игру и введи <code>status</code> в консоли серверного окна. Найди свой уникальный ID вида <code>STEAM_0:1:123456</code> или <code>VALVE_0:1:123456</code>. Останови сервер и выполни одну из команд из папки комплекта, подставив свой ID:</p>
+<p>Linux:</p><div class="codebox"><button type="button" data-copy="admin-linux">Копировать</button><pre id="admin-linux"><code>python3 installer.py admin STEAM_0:1:123456</code></pre></div><p>Windows:</p><div class="codebox"><button type="button" data-copy="admin-windows">Копировать</button><pre id="admin-windows"><code>runtime\python.exe installer.py admin STEAM_0:1:123456</code></pre></div>
+<p>После перезапуска открой консоль игры и введи <code>amxmodmenu</code>. Для службы VDS можно сначала запустить сервер вручную через <code>start.sh</code>, получить ID из его консоли и затем вернуться к службе. Не выдавай права общим идентификаторам вроде <code>STEAM_ID_LAN</code>.</p>
+<p class="small muted">Пароль входа в игру — не пароль администратора. RCON изначально выключен. Свою настроенную папку не публикуй целиком: распространяй исходный установочный архив, а для загрузки карт — только папку fastdl.</p>
+</section>
+
+<section id="problems" class="guide-section"><span class="step-label">07 / ПОМОЩЬ</span><h2>Если что-то не работает</h2>
+<details><summary>Установщик не скачивает компонент</summary><p>Проверь доступ к Steam и GitHub, свободное место и <code>logs/install.log</code>. Незавершённую установку можно повторить. При ошибке контрольной суммы не отключай проверку — скачай актуальный комплект с этой страницы.</p></details>
+<details><summary>«No such file», «не является приложением» или не хватает библиотеки</summary><p>Убедись, что архив полностью распакован и выбран под нужную ОС. На Linux установи зависимости из первого шага. ARM не поддерживается этим комплектом. Linux-архивы Xash3D нельзя запускать двойным щелчком в Windows.</p></details>
+<details><summary>Сервер работает дома, но друзья не подключаются</summary><p>Проверь UDP-порт в ОС и панели хостинга, IP назначения в роутере и наличие публичного IPv4. При CGNAT домашнего проброса недостаточно. Для внешнего теста используй мобильную сеть. Не выключай весь firewall.</p></details>
+<details><summary>Файлы висят или скачиваются по 20–30 КБ/с</summary><p>Проверь FastDL по полному URL файла с проблемного устройства. Сервер может отвечать на игровой запрос, а файловый хостинг — быть недоступным или медленным. Настрой доступный HTTPS-источник; одна только замена игрового порта не исправляет файловую загрузку.</p></details>
+<details><summary>Порт занят или сервер запускается дважды</summary><p>Останови предыдущий экземпляр. На VDS проверь <code>systemctl status czm-zombie</code>. Для двух серверов нужны отдельные папки и разные UDP-порты.</p></details>
+<details><summary>Как добавить сервер в профиль владельца CZM?</summary><p>Сначала запусти сервер и проверь доступ по публичному IP. Затем обратись в <a href="https://t.me/counter_zombie_mobile" rel="noopener">сообщество CZM</a> по вопросу роли Server owner. Роль выдаёт администрация; она позволяет перечислять адреса своего проекта в профиле, а не назначает игровую админку.</p></details>
+</section>
+
+<section id="xash" class="guide-section advanced"><span class="step-label">ДЛЯ ОПЫТНЫХ</span><h2>Отдельные движки Xash3D</h2><p>Это исходные Linux-архивы, а не готовые зомби-комплекты. Внутри — движок и файловая библиотека. Игровой модуль и плагины нужно подбирать отдельно под ту же разрядность; 64-битный движок не загружает обычные 32-битные модули. Для первого зомби-сервера используй комплекты выше.</p>
+<div class="engine-links"><a href="/server-downloads/xashds-linux-i386.tar.gz" download><strong>Linux i386 · 32 бита</strong><span>Движок Xash3D FWGS · TAR.GZ ↓</span></a><a href="/server-downloads/xashds-linux-amd64.tar.gz" download><strong>Linux amd64 · 64 бита</strong><span>Движок Xash3D FWGS · TAR.GZ ↓</span></a></div>
+<p class="small"><a href="https://github.com/FWGS/xash3d-fwgs/tree/a7becfdf8d134eb2ae5cd083a45c816e6b4e42fc" rel="noopener">Соответствующие исходники FWGS</a> · <a href="/server-downloads/XASH-LICENSE.txt">Лицензия GPLv3</a> · <a href="/server-downloads/SHA256SUMS.txt">SHA-256 архивов</a></p><p class="small muted">Для получения полного исходного дерева клонируй репозиторий, перейди на указанный коммит и выполни <code>git submodule update --init --recursive</code>. Авторство и лицензии компонентов сохранены.</p>
+</section>
+<section class="guide-section sources"><h2>Документация компонентов</h2><p>Порядок установки основан на документации разработчиков: <a href="https://rehlds.dev/docs/rehlds/install/" rel="noopener">ReHLDS</a>, <a href="https://github.com/LEISER307/Zombie-Plague-Mod-4.4" rel="noopener">Zombie Plague</a>, <a href="https://wiki.alliedmods.net/Compiling_Plugins_(AMX_Mod_X)" rel="noopener">AMX Mod X</a>, <a href="https://caddyserver.com/docs/automatic-https" rel="noopener">Caddy HTTPS</a>. Версии и хеши компонентов закреплены в <a href="https://github.com/kurostreet/czm/blob/feature/mobile-launcher/server/server-kit/packages.json" rel="noopener">packages.json</a>.</p></section>
+</div></div>
+</div>
+</main>
+<footer><div class="wrap"><a class="brand-text" href="/">Counter <em>Zombie</em> Mobile</a><a href="/rules">Правила</a><a href="/privacy">Конфиденциальность</a><a href="https://t.me/counter_zombie_mobile" rel="noopener">Помощь в Telegram</a></div></footer>
+<p id="copy-status" class="copy-status" role="status" aria-live="polite"></p>
+</body>
+</html>
