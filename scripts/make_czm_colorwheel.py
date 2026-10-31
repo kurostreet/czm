@@ -25,6 +25,6 @@ def wheel_png(size=192):
 
 
 if __name__ == '__main__':
-    output = Path(__file__).resolve().parents[1] / '3rdparty/cs16client-extras/gfx/czm/ui/color_wheel.png'
+    output = Path(__file__).resolve().parents[1] / '3rdparty/czm_project/gfx/czm/ui/color_wheel.png'
     output.write_bytes(wheel_png())
     print(output)

@@ -22,8 +22,8 @@
 | Часть | Где |
 |---|---|
 | Исходные картинки владельца | `assets/branding/menu-background.png`, `assets/branding/loading-1..5.png` |
-| Текстуры игры | `3rdparty/cs16client-extras/gfx/czm/` (создаёт `scripts/make_czm_art.py`) |
-| Шрифты Inter (OFL) | `3rdparty/cs16client-extras/gfx/fonts/czm/` |
+| Текстуры игры | `3rdparty/czm_project/gfx/czm/` (создаёт `scripts/make_czm_art.py`) |
+| Шрифты Inter (OFL) | `3rdparty/czm_project/gfx/fonts/czm/` |
 | Рисование меню и загрузки | `czm/menu/CzmMenu.cpp` (подключается через `cmake/CzmBranding.cmake`) |
 | Правки движка | `patches/xash3d-fwgs/0001-czm-loading-screen.patch` |
 

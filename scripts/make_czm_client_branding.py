@@ -6,7 +6,7 @@ import re
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 ROOT = Path(__file__).resolve().parents[1]
-ART = ROOT / "3rdparty/cs16client-extras"
+ART = ROOT / "3rdparty/czm_project"
 FONT = ART / "gfx/fonts/czm/Inter-SemiBold.otf"
 LABELS = (
     "New game", "Resume", "Training", "Settings", "Load game", "Save / load",

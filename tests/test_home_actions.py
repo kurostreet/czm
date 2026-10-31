@@ -7,7 +7,7 @@ from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
 MAIN=(ROOT/"czm/menu/CzmMain.cpp").read_text(encoding="utf-8")
-IMAGE_DIR=ROOT/"3rdparty/cs16client-extras/gfx/czm/ui"
+IMAGE_DIR=ROOT/"3rdparty/czm_project/gfx/czm/ui"
 
 def rgba(path):
     # Sparse developer checkouts may omit tracked, unchanged UI assets.

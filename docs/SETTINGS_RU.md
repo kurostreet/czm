@@ -70,7 +70,7 @@
 
 ## Спреи
 
-9 своих спреев: `3rdparty/cs16client-extras/logos/czm_*.png`, 96×96 с прозрачностью.
+9 своих спреев: `3rdparty/czm_project/logos/czm_*.png`, 96×96 с прозрачностью.
 - Создаёт их `scripts/make_czm_sprays.py`:
   - 4 из артов владельца;
   - 5 нарисованы: биоугроза, череп, когти, GG, ZM.

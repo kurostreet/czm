@@ -55,7 +55,7 @@ SDL — `98d1f3a45aae568ccd6ed5fec179330f47d4d356` (2.32.8).
 
 ### Музыка главного меню
 
-Игрок выбирает трек в «Настройки → Звук → Трек меню». Файлы в `3rdparty/cs16client-extras/media/`:
+Игрок выбирает трек в «Настройки → Звук → Трек меню». Файлы в `3rdparty/czm_project/media/`:
 
 - `czm_music_silent.mp3` (по умолчанию) — «The World Fell Silent», автор Tsorthan Grove,
   [OpenGameArt](https://opengameart.org/node/177977), лицензия [CC0](https://creativecommons.org/publicdomain/zero/1.0/).

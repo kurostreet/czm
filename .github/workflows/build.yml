@@ -149,7 +149,7 @@ jobs:
                            "gfx/czm/ui/white.png", "gfx/czm/ui/surface.png", "gfx/czm/ui/icon_crown.png", "gfx/czm/ui/icon_tools.png", "gfx/czm/maps/_zombie.png", "gfx/czm/maps/_classic.png",
                            "gfx/czm/maps/zm_3rooms.png", "gfx/czm/avatars/avatar_01.png", "gfx/czm/avatars/avatar_10.png",
                            "gfx/czm/radar/radar_classic.png", "gfx/czm/radar/radar_tactical.png", "gfx/czm/radar/mark_dot.png"]:
-                  assert apk.read("assets/" + name) == Path("3rdparty/cs16client-extras", name).read_bytes(), name
+                  assert apk.read("assets/" + name) == Path("3rdparty/czm_project", name).read_bytes(), name
               with wave.open(io.BytesIO(apk.read("assets/sound/czm/tapscroll.wav"))) as tap:
                   assert (tap.getnchannels(), tap.getsampwidth(), tap.getframerate(), tap.getcomptype()) == (1, 2, 44100, "NONE")
                   assert 0.05 < tap.getnframes() / tap.getframerate() < 1.0

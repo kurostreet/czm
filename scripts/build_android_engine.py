@@ -57,7 +57,7 @@ def main():
         print("Engine libraries ready:", abi, flush=True)
     # The engine fallback UI must use the same artwork as the client. In
     # particular, its brightness sample must not contain a legacy game screenshot.
-    shell = ROOT / "3rdparty/cs16client-extras/gfx/shell"
+    shell = ROOT / "3rdparty/czm_project/gfx/shell"
     from_directories(output.parent / "bundle-assets/bundled/engine-resources.zip",
                      [ENGINE / "3rdparty/extras/xash-extras"],
                      overrides={"gfx/shell/" + name: shell / name

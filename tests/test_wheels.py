@@ -334,12 +334,12 @@ class WheelsTests(unittest.TestCase):
         for picture in ("ui/icon_spray.png", "ui/icon_knife.png", "ui/icon_cart.png", "ui/touch_ripple.png", "touch/wheel.png",
                         "shop/wheel5.png", "shop/wheel8.png", "shop/wheel6.png", "shop/wheel9.png", "shop/wheel9_8.png",
                         "ui/icon_go.png", "ui/icon_bomb.png", "ui/icon_skull.png"):
-            self.assertTrue((ROOT / "3rdparty/cs16client-extras/gfx/czm" / picture).is_file(), picture)
+            self.assertTrue((ROOT / "3rdparty/czm_project/gfx/czm" / picture).is_file(), picture)
         # every picture a wheel names is there
         import re
         source = (ROOT / "czm/menu/CzmWheels.cpp").read_text()
         for name in set(re.findall(r'\{ "(icon_[a-z_]+)", "', source)):
-            self.assertTrue((ROOT / "3rdparty/cs16client-extras/gfx/czm/ui" / (name + ".png")).is_file(), name)
+            self.assertTrue((ROOT / "3rdparty/czm_project/gfx/czm/ui" / (name + ".png")).is_file(), name)
 
     def test_the_editor_shows_wheel_buttons(self):
         # the touch editor draws and moves only the buttons the player owns: a wheel is one of them

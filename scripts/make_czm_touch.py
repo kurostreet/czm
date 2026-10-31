@@ -2,7 +2,7 @@
 """Build Counter Zombie Mobile touch buttons: icon textures, layout presets and the editor background.
 
 Icons: most glyphs come from game-icons.net (CC BY 3.0, authors listed in
-3rdparty/cs16client-extras/gfx/czm/touch/CREDITS.txt), a few are drawn here.
+3rdparty/czm_project/gfx/czm/touch/CREDITS.txt), a few are drawn here.
 Every glyph is put on the same round button (dark translucent circle, light
 ring; the fire button has a red ring) and rendered with headless Chromium.
 
@@ -15,7 +15,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-EXTRAS = ROOT / "3rdparty/cs16client-extras"
+EXTRAS = ROOT / "3rdparty/czm_project"
 ICON_DIR = EXTRAS / "gfx/czm/touch"
 PRESET_DIR = EXTRAS / "touch_presets"
 FONT = EXTRAS / "gfx/fonts/czm/InterDisplay-Black.otf"

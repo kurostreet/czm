@@ -118,7 +118,7 @@ int main(int argc,char **argv){
 
     def test_all_presets_are_distinct_compatible_goldsrc_wads(self):
         hashes = set()
-        for path in sorted((ROOT / "3rdparty/cs16client-extras/logos").glob("czm_*.png")):
+        for path in sorted((ROOT / "3rdparty/czm_project/logos").glob("czm_*.png")):
             with self.subTest(spray=path.name):
                 wad, dimensions = self.convert(path)
                 self.assertEqual(dimensions, (64, 64))

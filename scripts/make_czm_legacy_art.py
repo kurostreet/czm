@@ -7,7 +7,7 @@ import zipfile
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
-ART = ROOT / "3rdparty/cs16client-extras"
+ART = ROOT / "3rdparty/czm_project"
 
 def main():
     parser = argparse.ArgumentParser()

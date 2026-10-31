@@ -43,7 +43,7 @@
 | Главный экран и пауза | `czm/menu/CzmMain.cpp` |
 | Список серверов | `czm/menu/CzmServers.cpp` |
 | Общие функции, тексты RU/EN, серверы, загрузка | `czm/menu/CzmMenu.cpp` |
-| Текстуры плиток, иконки, кнопки | `3rdparty/cs16client-extras/gfx/czm/ui/` (создаёт `scripts/make_czm_ui.py`) |
+| Текстуры плиток, иконки, кнопки | `3rdparty/czm_project/gfx/czm/ui/` (создаёт `scripts/make_czm_ui.py`) |
 | Правки стокового меню | `scripts/brand_mainui.py` |
 
 Временный список серверов — таблица `s_servers` в `czm/menu/CzmMenu.cpp`.

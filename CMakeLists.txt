@@ -99,7 +99,7 @@ execute_process(
 	${GRAPHS_OUTPUT}/addons/yapb/data/graph
 )
 
-set(EXTRAS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/cs16client-extras")
+set(EXTRAS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/czm_project")
 set(YAPB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/yapb/cfg")
 
 if(ANDROID)

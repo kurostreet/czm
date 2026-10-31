@@ -2,8 +2,8 @@
 """Build Counter Zombie Mobile menu and loading-screen textures.
 
 Sources live in assets/branding/ (owner-supplied art) and the Inter fonts
-shipped in 3rdparty/cs16client-extras/gfx/fonts/czm/. The generated files are
-committed to 3rdparty/cs16client-extras/gfx/czm/, so the Android build does not
+shipped in 3rdparty/czm_project/gfx/fonts/czm/. The generated files are
+committed to 3rdparty/czm_project/gfx/czm/, so the Android build does not
 need Pillow. Re-run this script after replacing any source picture.
 """
 import argparse
@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = ROOT / "assets/branding"
-EXTRAS = ROOT / "3rdparty/cs16client-extras"
+EXTRAS = ROOT / "3rdparty/czm_project"
 FONTS = EXTRAS / "gfx/fonts/czm"
 OUTPUT = EXTRAS / "gfx/czm"
 

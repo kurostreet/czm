@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build Counter Zombie Mobile main menu UI textures: mode tiles, icons, chips and buttons.
 
-Output goes to 3rdparty/cs16client-extras/gfx/czm/ui/ and is committed, so the Android
+Output goes to 3rdparty/czm_project/gfx/czm/ui/ and is committed, so the Android
 build does not need Pillow. Re-run after changing the owner's art or the design.
 """
 import math
@@ -11,7 +11,7 @@ from PIL import Image, ImageDraw, ImageFilter
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = ROOT / "assets/branding"
-OUTPUT = ROOT / "3rdparty/cs16client-extras/gfx/czm/ui"
+OUTPUT = ROOT / "3rdparty/czm_project/gfx/czm/ui"
 SS = 4  # supersampling factor for smooth edges
 
 TILE_W, TILE_H = 1110, 300  # 3.7:1, the menu keeps this aspect

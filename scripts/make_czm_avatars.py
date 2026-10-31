@@ -13,7 +13,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "3rdparty/cs16client-extras/gfx/czm/avatars"
+OUT = ROOT / "3rdparty/czm_project/gfx/czm/avatars"
 SIZE, SS = 192, 4
 RING = (255, 59, 47, 255)
 

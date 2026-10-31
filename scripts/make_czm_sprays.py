@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build Counter Zombie Mobile spray logos (player sprays).
 
-Output: 3rdparty/cs16client-extras/logos/czm_*.png (96x96 RGBA, transparent background).
+Output: 3rdparty/czm_project/logos/czm_*.png (96x96 RGBA, transparent background).
 The engine turns the chosen PNG into tempdecal.wad for GoldSrc servers
 (cl_spray.c), 96x96 already fits its size limit. Photo sprays come from the
 owner's art in assets/branding/, the others are drawn here.
@@ -15,8 +15,8 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = ROOT / "assets/branding"
-OUTPUT = ROOT / "3rdparty/cs16client-extras/logos"
-FONTS = ROOT / "3rdparty/cs16client-extras/gfx/fonts/czm"
+OUTPUT = ROOT / "3rdparty/czm_project/logos"
+FONTS = ROOT / "3rdparty/czm_project/gfx/fonts/czm"
 SIZE = 96
 SS = 4  # supersampling
 S = SIZE * SS

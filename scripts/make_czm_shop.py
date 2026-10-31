@@ -18,7 +18,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "3rdparty/cs16client-extras/gfx/czm/shop"
+OUT = ROOT / "3rdparty/czm_project/gfx/czm/shop"
 SIZE, C, R, R_IN, HUB = 640, 320, 300, 88, 80
 
 

@@ -17,7 +17,7 @@ from PIL import Image, ImageDraw, ImageFilter
 
 ROOT = Path(__file__).resolve().parents[1]
 ART = ROOT / "assets/branding"
-OUT = ROOT / "3rdparty/cs16client-extras/gfx/czm/maps"
+OUT = ROOT / "3rdparty/czm_project/gfx/czm/maps"
 W, H = 400, 182  # 2.2:1, the menu crops to its own boxes
 
 

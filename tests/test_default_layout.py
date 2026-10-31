@@ -36,7 +36,7 @@ class DefaultLayoutTests(unittest.TestCase):
         self.assertIn("_czmwheel weapons", [button[2] for button in layout["layouts"]["2"]])
 
     def check_preset(self, number, layout):
-        lines = [l for l in (ROOT / f"3rdparty/cs16client-extras/touch_presets/czm_scheme{number}.cfg").read_text().splitlines()
+        lines = [l for l in (ROOT / f"3rdparty/czm_project/touch_presets/czm_scheme{number}.cfg").read_text().splitlines()
                  if l.startswith("touch_addbutton")]
         buttons = layout["layouts"][str(number)]
         self.assertEqual(len(lines), len(buttons))

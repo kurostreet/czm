@@ -64,7 +64,7 @@ class GameHudTests(unittest.TestCase):
         folder=os.environ.get('CZM_HUD_PREVIEW_DIR')
         if not folder:return
         from PIL import Image,ImageDraw
-        target=Path(folder);target.mkdir(parents=True,exist_ok=True);atlas=Image.open(ROOT/'3rdparty/cs16client-extras/gfx/czm/hud_glyphs.tga').convert('RGBA')
+        target=Path(folder);target.mkdir(parents=True,exist_ok=True);atlas=Image.open(ROOT/'3rdparty/czm_project/gfx/czm/hud_glyphs.tga').convert('RGBA')
         for style in range(3):
             canvas=Image.new('RGBA',(1280,720),(32,42,52,255));color=(1,1,1,1);vertices=[];uv=[]
             for line in self.render(style,1280,720,1):

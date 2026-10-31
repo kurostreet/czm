@@ -13,7 +13,7 @@ from pathlib import Path
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "3rdparty/cs16client-extras/gfx/czm/radar"
+OUT = ROOT / "3rdparty/czm_project/gfx/czm/radar"
 SIZE = 512
 SS = 3  # supersampling
 RED = (224, 37, 50)
