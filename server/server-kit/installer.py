@@ -280,10 +280,17 @@ class ServerKit:
             print('SteamCMD получает игровые данные. Нужен интернет; это может занять несколько минут.', flush=True)
             # HLDS occasionally needs a repeated app_update to populate all depots.
             for attempt in range(3):
-                self.command([str(steam_exe), '+@sSteamCmdForcePlatformType', self.system,
-                              '+force_install_dir', str(self.game), '+login', 'anonymous',
-                              '+app_set_config', '90', 'mod', 'cstrike',
-                              '+app_update', '90', '-beta', 'steam_legacy', 'validate', '+quit'], self.steam)
+                try:
+                    self.command([str(steam_exe), '+@sSteamCmdForcePlatformType', self.system,
+                                  '+force_install_dir', str(self.game), '+login', 'anonymous',
+                                  '+app_set_config', '90', 'mod', 'cstrike',
+                                  '+app_update', '90', '-beta', 'steam_legacy', 'validate', '+quit'], self.steam)
+                except RuntimeError:
+                    if attempt == 2:
+                        raise
+                    print('SteamCMD не завершил установку. Повторяем попытку…', flush=True)
+                    time.sleep(3)
+                    continue
                 if self.binary.exists() and (self.cs / 'maps/de_dust2.bsp').exists():
                     break
             else:

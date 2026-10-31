@@ -54,7 +54,13 @@ def main():
     installer.extract(archive, unpacked)
     root = unpacked / ('CZM-Server-' + installer.SYSTEM.title())
     python = str(root / 'runtime/python.exe') if os.name == 'nt' else sys.executable
-    subprocess.run([python, str(root / 'installer.py'), 'install', '--yes'], check=True)
+    result = subprocess.run([python, str(root / 'installer.py'), 'install', '--yes'])
+    if result.returncode:
+        install_log = root / 'logs/install.log'
+        diagnostic = install_log.read_text(encoding='utf-8', errors='replace') if install_log.exists() else 'No installer log'
+        (args.output / (installer.SYSTEM + '-install.log')).write_text(diagnostic, encoding='utf-8')
+        print('\n'.join(diagnostic.splitlines()[-60:]), flush=True)
+        raise RuntimeError('Packaged installer failed; see the SteamCMD/compiler diagnostic above')
     spec = importlib.util.spec_from_file_location('packaged_installer', root / 'installer.py')
     packaged = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(packaged)
