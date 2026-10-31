@@ -12,7 +12,12 @@ diff --git a/engine/common/http/net_http_xash.c b/engine/common/http/net_http_xa
  	int size;
  	int reported_size;
  	int downloaded;
-@@ -191,6 +195,7 @@
+@@ -188,9 +192,12 @@
+ static CVAR_DEFINE_AUTO( http_maxconnections, "5", FCVAR_ARCHIVE | FCVAR_PRIVILEGED, "maximum http connection number" );
+ static CVAR_DEFINE_AUTO( http_show_headers, "0", FCVAR_ARCHIVE | FCVAR_PRIVILEGED, "show HTTP headers (request and response)" );
+ static CVAR_DEFINE_AUTO( http_max_redirects, "5", FCVAR_ARCHIVE | FCVAR_PRIVILEGED, "maximum HTTP redirects to follow per request" );
++static CVAR_DEFINE_AUTO( czm_download_source, "", FCVAR_PRIVILEGED, "current file download transport" );
++static CVAR_DEFINE_AUTO( czm_download_file, "", FCVAR_PRIVILEGED, "current download resource, without URL credentials" );
  
  static int HTTP_FileFree( httpfile_t *file );
  static int HTTP_FileConnect( httpfile_t *file );
@@ -20,7 +25,7 @@ diff --git a/engine/common/http/net_http_xash.c b/engine/common/http/net_http_xa
  static int HTTP_FileCreateSocket( httpfile_t *file );
  static int HTTP_FileProcessStream( httpfile_t *file );
  static int HTTP_FileQueue( httpfile_t *file );
-@@ -201,6 +206,128 @@
+@@ -201,6 +208,128 @@
  static httpserver_t *HTTP_ParseURL( const char *url_, qboolean full_path );
  static qboolean HTTP_FileRedirect( httpfile_t *file, const char *location );
  
@@ -149,7 +154,7 @@ diff --git a/engine/common/http/net_http_xash.c b/engine/common/http/net_http_xa
  /*
  ==============
  HTTP_FreeFile
-@@ -214,31 +341,7 @@
+@@ -214,31 +343,7 @@
  
  	file->blocktime = 0;
  
@@ -182,7 +187,7 @@ diff --git a/engine/common/http/net_http_xash.c b/engine/common/http/net_http_xa
  
  	if( file->to_memory )
  	{
-@@ -319,6 +422,13 @@
+@@ -319,6 +424,13 @@
  	file->success = !error;
  }
  
@@ -196,7 +201,7 @@ diff --git a/engine/common/http/net_http_xash.c b/engine/common/http/net_http_xa
  static int HTTP_FileFree( httpfile_t *file )
  {
  	return 0; // do nothing, wait for memory clean up
-@@ -334,6 +444,8 @@
+@@ -334,6 +446,8 @@
  
  	file->pfn_process = HTTP_FileResolveNS;
  	file->blocktime = file->downloaded = file->lastchecksize = file->checktime = 0;
@@ -205,7 +210,7 @@ diff --git a/engine/common/http/net_http_xash.c b/engine/common/http/net_http_xa
  	return 1;
  }
  
-@@ -346,6 +458,8 @@
+@@ -346,6 +460,8 @@
  		return 1;
  	}
  
@@ -214,7 +219,7 @@ diff --git a/engine/common/http/net_http_xash.c b/engine/common/http/net_http_xa
  	if( http.resolving )
  		return 0;
  
-@@ -402,6 +516,7 @@
+@@ -402,6 +518,7 @@
  		return 0;
  	}
  
@@ -222,7 +227,7 @@ diff --git a/engine/common/http/net_http_xash.c b/engine/common/http/net_http_xa
  	if( !NET_MakeSocketNonBlocking( file->socket ))
  	{
  		Con_Printf( S_ERROR "%s: failed to make socket non-blocking, error %s\n", __func__, NET_ErrorString());
-@@ -412,7 +527,6 @@
+@@ -412,7 +529,6 @@
  	if( !file->buf )
  		file->buf = Mem_Calloc( http_mempool, MAX_HTTP_BUFFER_SIZE + 1 );
  
@@ -230,7 +235,7 @@ diff --git a/engine/common/http/net_http_xash.c b/engine/common/http/net_http_xa
  	file->pfn_process = HTTP_FileConnect;
  	return 1;
  }
-@@ -518,8 +632,8 @@
+@@ -518,8 +634,8 @@
  	if( err != 0 )
  	{
  		Con_Printf( S_ERROR "cannot connect to server: error %d\n", err );
@@ -241,7 +246,7 @@ diff --git a/engine/common/http/net_http_xash.c b/engine/common/http/net_http_xa
  	}
  
  	file->pfn_process = HTTP_FilePrepareRequest;
-@@ -537,8 +651,8 @@
+@@ -537,8 +653,8 @@
  		if( err != WSAEWOULDBLOCK && err != WSAEINPROGRESS )
  		{
  			Con_Printf( S_ERROR "cannot connect to server: %s\n", NET_ErrorString( ));
@@ -252,7 +257,40 @@ diff --git a/engine/common/http/net_http_xash.c b/engine/common/http/net_http_xa
  		}
  
  		file->pfn_process = HTTP_FileWaitConnect;
-@@ -1268,8 +1382,14 @@
+@@ -1247,6 +1363,32 @@
+ 	return 0; // don't block
+ }
+ 
++// Publish only public transport metadata. Never expose a full URL, query,
++// account credentials or requests read into memory (policy, profiles, etc.).
++static void HTTP_DownloadStatus( void )
++{
++	char source[384] = "", resource[MAX_SYSPATH] = "";
++	for( httpfile_t *file = http.first_file; file; file = file->next )
++	{
++		if( file->to_memory || !file->server || file->pfn_process == HTTP_FileFree )
++			continue;
++		const char *host = Q_strrchr( file->server->host, '@' );
++		host = host ? host + 1 : file->server->host;
++		const char *family = file->addr.ss_family == AF_INET6 ? "IPv6" : file->addr.ss_family == AF_INET ? "IPv4" : "DNS";
++		const char *state = file->blockreason ? file->blockreason : "queued";
++		Q_snprintf( source, sizeof( source ), "%s %s %s:%d - %s", file->server->secure ? "HTTPS" : "HTTP",
++			family, host, file->server->port, state );
++		Q_strncpy( resource, file->path, sizeof( resource ));
++		char *query = Q_strpbrk( resource, "?#" );
++		if( query ) *query = 0;
++		for( char *p = resource; *p; p++ )
++			if( (byte)*p < 32 || *p == '^' ) *p = '_';
++		break;
++	}
++	Cvar_DirectSet( &czm_download_source, source );
++	Cvar_DirectSet( &czm_download_file, resource );
++}
++
+ /*
+ ==============
+ HTTP_Run
+@@ -1268,8 +1410,14 @@
  		while( move_next > 0 )
  			move_next = curfile->pfn_process( curfile );
  
@@ -267,7 +305,15 @@ diff --git a/engine/common/http/net_http_xash.c b/engine/common/http/net_http_xa
  			Con_Printf( S_ERROR "timeout on %s (file: %s)\n", curfile->blockreason,
  				curfile->to_memory ? curfile->url : curfile->path );
  			HTTP_FreeFile( curfile, true );
-@@ -1338,6 +1458,7 @@
+@@ -1280,6 +1428,7 @@
+ 	if( !Host_IsDedicated() && http.progress_count != 0 )
+ 		Cvar_SetValue( "scr_download", http.progress/http.progress_count * 100 );
+ 
++	HTTP_DownloadStatus();
+ 	HTTP_AutoClean();
+ }
+ 
+@@ -1338,6 +1487,7 @@
  	httpfile->size = size;
  	httpfile->reported_size = size;
  	httpfile->socket = -1;
@@ -275,7 +321,7 @@ diff --git a/engine/common/http/net_http_xash.c b/engine/common/http/net_http_xa
  	Q_strncpy( httpfile->path, path, sizeof( httpfile->path ));
  
  	httpfile->pfn_process = HTTP_FileQueue;
-@@ -1377,6 +1498,7 @@
+@@ -1377,6 +1527,7 @@
  	httpfile->size = -1;
  	httpfile->reported_size = -1;
  	httpfile->socket = -1;
@@ -283,7 +329,7 @@ diff --git a/engine/common/http/net_http_xash.c b/engine/common/http/net_http_xa
  	httpfile->server = server;
  	httpfile->own_server = true;
  	httpfile->to_memory = true;
-@@ -1528,6 +1650,9 @@
+@@ -1528,6 +1679,9 @@
  	Con_Reportf( "HTTP: redirect %s -> %s\n", file->to_memory ? file->url : file->path, location );
  
  	// tear down current connection but keep file/mem buffers
@@ -293,3 +339,40 @@ diff --git a/engine/common/http/net_http_xash.c b/engine/common/http/net_http_xa
  	if( file->tls )
  	{
  		HTTP_TlsFree( file->tls );
+@@ -1630,17 +1784,7 @@
+ 
+ 		http.first_file = http.first_file->next;
+ 
+-		if( file->file )
+-			FS_Close( file->file );
+-
+-		if( file->tls )
+-			HTTP_TlsFree( file->tls );
+-
+-		if( file->socket != -1 )
+-			closesocket( file->socket );
+-
+-		if( file->buf )
+-			Mem_Free( file->buf );
++		HTTP_CloseTransfer( file );
+ 
+ 		if( file->to_memory )
+ 		{
+@@ -1654,6 +1798,8 @@
+ 
+ 		Mem_Free( file );
+ 	}
++	Cvar_DirectSet( &czm_download_source, "" );
++	Cvar_DirectSet( &czm_download_file, "" );
+ }
+ 
+ /*
+@@ -1753,6 +1899,8 @@
+ 	Cvar_RegisterVariable( &http_maxconnections );
+ 	Cvar_RegisterVariable( &http_show_headers );
+ 	Cvar_RegisterVariable( &http_max_redirects );
++	Cvar_RegisterVariable( &czm_download_source );
++	Cvar_RegisterVariable( &czm_download_file );
+ }
+ 
+ /*

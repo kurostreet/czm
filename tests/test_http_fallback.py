@@ -27,7 +27,9 @@ class HttpFallbackTests(unittest.TestCase):
             "static int HTTP_FilePrepareRequest( httpfile_t *file )",
             "static int HTTP_FileWaitConnect( httpfile_t *file )",
             "static int HTTP_FileConnect( httpfile_t *file )",
+            "static void HTTP_DownloadStatus( void )",
             "void HTTP_Run( void )",
+            "static void HTTP_Clear_f( void )",
             "void HTTP_AddDownload( const char *path, int size, qboolean process, resource_t *res )",
             "qboolean HTTP_GetToMemory( const char *url, http_memory_cb_t cb, void *userdata )",
             "static qboolean HTTP_FileRedirect( httpfile_t *file, const char *location )",
@@ -76,10 +78,39 @@ class HttpFallbackTests(unittest.TestCase):
     def test_cancel_and_redirect_close_the_probe(self):
         self.check("cancel")
         self.check("redirect")
+        self.check("clear")
 
     def test_dns_queues_time_out_and_socket_setup_balances_counts(self):
         self.check("dns-queue")
         self.check("socket-fails")
+
+    def test_status_excludes_credentials_query_strings_and_memory_requests(self):
+        self.check("status")
+
+    def test_stall_hint_waits_for_eight_seconds_and_retires_on_progress(self):
+        menu = (ROOT / "czm/menu/CzmMenu.cpp").read_text()
+        code = "#include <cassert>\nenum { CZM_STAGE_DOWNLOAD = 3 };\n"
+        code += function(menu, "static bool CZM_DownloadStalled(")
+        code += r"""
+int main() {
+ assert(!CZM_DownloadStalled(1,3,0,0,100));
+ assert(!CZM_DownloadStalled(1,3,0,0,8099));
+ assert(CZM_DownloadStalled(1,3,0,0,8100));
+ assert(!CZM_DownloadStalled(1,3,0,1,8101)); // even one byte is progress
+ assert(!CZM_DownloadStalled(1,3,1,1,10000)); // next file
+ assert(CZM_DownloadStalled(1,3,1,1,18000));
+ assert(!CZM_DownloadStalled(2,3,1,1,18001)); // fresh connection
+ assert(!CZM_DownloadStalled(2,4,1,1,28000)); // no download
+ assert(!CZM_DownloadStalled(2,3,1,1,29000));
+ assert(!CZM_DownloadStalled(2,3,1,1,100)); // clock restarted
+ assert(CZM_DownloadStalled(2,3,1,1,8100));
+}
+"""
+        folder = Path(self.temporary.name)
+        (folder / "hint.cpp").write_text(code)
+        subprocess.run(["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
+                        str(folder / "hint.cpp"), "-o", str(folder / "hint")], check=True)
+        subprocess.run([str(folder / "hint")], check=True, timeout=5)
 
     def test_download_and_memory_constructors_never_own_stdin(self):
         self.check("constructors")
@@ -114,10 +145,12 @@ typedef enum { NET_EAI_OK, NET_EAI_AGAIN, NET_EAI_NONAME } net_gai_state_t;
 #define WSAGetLastError() errno
 #define NET_IsSocketError(n) ((n) < 0)
 #define Q_strchr strchr
+#define Q_strrchr strrchr
 #define Q_strpbrk strpbrk
 #define Q_strcmp strcmp
 #define Q_strnicmp strncasecmp
-#define Q_strncpy(d,s,n) snprintf(d,n,"%s",s)
+#define Q_strncpy bounded_copy
+static void bounded_copy(char *out,const char *text,size_t size) { size_t count=strlen(text); if(count>=size)count=size-1;memcpy(out,text,count);out[count]=0; }
 #define Q_snprintf snprintf
 #define MSG_BigShort htons
 #define COM_StringEmpty(s) (!(s)[0])
@@ -129,7 +162,10 @@ static void quiet_log(const char *format, ...) {}
 STUBS = r'''
 static int http_mempool;
 static struct { float frametime; } host = { 1.0f };
-static struct { float value; const char *string; } http_timeout = {45,""},
+typedef struct { float value; char string[1024]; } cvar_t;
+static cvar_t czm_download_source, czm_download_file;
+static void Cvar_DirectSet(cvar_t *var,const char *text) { snprintf(var->string,sizeof(var->string),"%s",text); }
+static cvar_t http_timeout = {45,""},
  http_maxconnections = {5,""}, http_autoremove = {1,""},
  http_useragent = {0,"xash3d"}, http_max_redirects = {5,""};
 static const char *g_buildcommit = "test";
@@ -257,6 +293,18 @@ int main(int argc,char **argv) {
  } else if(!strcmp(scenario,"cancel")) {
   f.blocktime=3;tick();assert(f.ipv4_socket==70);HTTP_FreeFile(&f,true);
   assert(closed[20]==1 && closed[70]==1 && !f.buf && http.active_count==0);
+ } else if(!strcmp(scenario,"clear")) {
+  httpfile_t *heap=malloc(sizeof(f));*heap=f;http.first_file=heap;heap->blocktime=3;
+  tick();assert(heap->ipv4_socket==70);HTTP_Clear_f();
+  assert(closed[20]==1 && closed[70]==1 && http.first_file==NULL && http.active_count==0);
+  assert(!czm_download_source.string[0] && !czm_download_file.string[0]);
+ } else if(!strcmp(scenario,"status")) {
+  strcpy(s.host,"account@dl.example");strcpy(f.path,"maps/test.bsp?token=secret#fragment");
+  f.blockreason="receiving header";tick();
+  assert(strstr(czm_download_source.string,"HTTPS IPv6 dl.example:443 - receiving header"));
+  assert(!strstr(czm_download_source.string,"account") && !strstr(czm_download_source.string,"secret"));
+  assert(!strcmp(czm_download_file.string,"maps/test.bsp"));
+  f.to_memory=true;tick();assert(!czm_download_source.string[0] && !czm_download_file.string[0]);
  } else if(!strcmp(scenario,"redirect")) {
   f.blocktime=3;tick();assert(f.ipv4_socket==70);
   assert(!HTTP_FileRedirect(&f,"http://redirect.example/test"));assert(f.socket==20 && !closed[70]);

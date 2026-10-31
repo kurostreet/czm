@@ -1,1 +1,1 @@
-Server file downloads now try IPv4 when an IPv6 connection stalls. DNS waits are bounded.
+Improved server file downloads with IPv4 fallback for stalled IPv6 connections and bounded DNS waits. Stalled downloads now show the file source and waiting stage.

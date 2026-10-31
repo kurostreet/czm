@@ -1697,6 +1697,36 @@ static void CZM_StageText( int stage, char *buf, size_t size )
 	}
 }
 
+// Show a useful source on a stalled download instead of an unrelated game tip.
+// Receiving even a small amount of data restarts the grace period.
+static bool CZM_DownloadStalled( int session, int stage, int files, int bytes, int now )
+{
+	static int lastSession = -1, lastStage = -1, lastFiles, lastBytes, changedAt;
+	if( session != lastSession || stage != lastStage || files != lastFiles || bytes != lastBytes || now < changedAt )
+	{
+		lastSession = session; lastStage = stage; lastFiles = files; lastBytes = bytes; changedAt = now;
+	}
+	return stage == CZM_STAGE_DOWNLOAD && now - changedAt >= 8000;
+}
+
+static bool CZM_DrawDownloadWait( int session, int stage, int x, int y, int width )
+{
+	int files = 0, total = 0, bytes = 0;
+	sscanf( EngFuncs::GetCvarString( "czm_loading_dl" ), "%d %d %d", &files, &total, &bytes );
+	if( !CZM_DownloadStalled( session, stage, files, bytes, uiStatic.realTime )) return false;
+	const char *source = EngFuncs::GetCvarString( "czm_download_source" );
+	const char *resource = EngFuncs::GetCvarString( "czm_download_file" );
+	char line[512];
+	if( source && source[0] )
+		snprintf( line, sizeof( line ), "%s: %s", CZM_IsRussian() ? "Ожидаем файлы" : "Waiting for files", source );
+	else snprintf( line, sizeof( line ), "%s", CZM_IsRussian() ? "Ожидаем файлы от игрового сервера (UDP)" : "Waiting for files from the game server (UDP)" );
+	HFont font = CZM_Font( CZMF_LOAD_TIP );
+	CZM_DrawText( font, x, y, width, line, PackRGBA( 245, 205, 150, 255 ));
+	if( resource && resource[0] && y + 2 * CZM_FontHeight( font ) + 3 < ScreenHeight * 0.785f )
+		CZM_DrawText( font, x, y + CZM_FontHeight( font ) + 3, width, resource, PackRGBA( 205, 205, 205, 255 ));
+	return true;
+}
+
 static void CZM_DrawProgressBar( int x0, int x1, int y, int h, float percent )
 {
 	const int count = 40;
@@ -1809,7 +1839,8 @@ bool CZM_DrawLoadingScreen( void )
 	CZM_DrawText( CZM_Font( CZMF_LOAD_HOST ), x0, H * 0.56f, x1 - x0, title, PackRGBA( 255, 255, 255, 255 ));
 	CZM_DrawInfoRow( x0, H * 0.655f, x1 - x0, cached );
 	snprintf( text, sizeof( text ), "tip%d", tip + 1 );
-	CZM_DrawText( CZM_Font( CZMF_LOAD_TIP ), x0, H * 0.712f, x1 - x0, CZM_T( text ), PackRGBA( 205, 205, 205, 255 ));
+	if( !CZM_DrawDownloadWait( session, stage, x0, H * 0.712f, x1 - x0 ))
+		CZM_DrawText( CZM_Font( CZMF_LOAD_TIP ), x0, H * 0.712f, x1 - x0, CZM_T( text ), PackRGBA( 205, 205, 205, 255 ));
 
 	CZM_StageText( stage, text, sizeof( text ));
 	percentTop = H * 0.845f - CZM_FontHeight( CZM_Font( CZMF_LOAD_PERCENT ));
