@@ -1,0 +1,295 @@
+diff --git a/engine/common/http/net_http_xash.c b/engine/common/http/net_http_xash.c
+--- a/engine/common/http/net_http_xash.c
++++ b/engine/common/http/net_http_xash.c
+@@ -132,6 +132,10 @@
+ 	char path[MAX_SYSPATH];
+ 	file_t *file;
+ 	int socket;
++	int ipv4_socket; // temporary connection probe; never sends a request before winning
++	struct sockaddr_storage ipv4_addr;
++	double ipv4_started;
++	qboolean ipv4_done;
+ 	int size;
+ 	int reported_size;
+ 	int downloaded;
+@@ -191,6 +195,7 @@
+ 
+ static int HTTP_FileFree( httpfile_t *file );
+ static int HTTP_FileConnect( httpfile_t *file );
++static int HTTP_FilePrepareRequest( httpfile_t *file );
+ static int HTTP_FileCreateSocket( httpfile_t *file );
+ static int HTTP_FileProcessStream( httpfile_t *file );
+ static int HTTP_FileQueue( httpfile_t *file );
+@@ -201,6 +206,128 @@
+ static httpserver_t *HTTP_ParseURL( const char *url_, qboolean full_path );
+ static qboolean HTTP_FileRedirect( httpfile_t *file, const char *location );
+ 
++static void HTTP_CloseIPv4Probe( httpfile_t *file )
++{
++	if( file->ipv4_socket != -1 )
++		closesocket( file->ipv4_socket );
++	file->ipv4_socket = -1;
++}
++
++static void HTTP_CloseTransfer( httpfile_t *file )
++{
++	HTTP_CloseIPv4Probe( file );
++	if( file->file )
++		FS_Close( file->file );
++	file->file = NULL;
++	if( file->tls )
++		HTTP_TlsFree( file->tls );
++	file->tls = NULL;
++	if( file->socket != -1 )
++	{
++		closesocket( file->socket );
++		http.active_count--;
++	}
++	file->socket = -1;
++	if( file->buf )
++		Mem_Free( file->buf );
++	file->buf = NULL;
++}
++
++// A DNS answer can put an unusable IPv6 route first. Probe IPv4 without
++// discarding the original connection: IPv6-only networks must still work.
++// Each transfer gets at most one probe, with a bounded DNS/connect wait.
++static qboolean HTTP_RetryIPv4( httpfile_t *file )
++{
++	if( !file->server || file->ipv4_done || file->addr.ss_family != AF_INET6
++		|| file->got_response || file->downloaded > 0 || Q_strchr( file->server->host, ':' ))
++		return false;
++
++	double now = Platform_DoubleTime();
++	if( !file->ipv4_started )
++		file->ipv4_started = now;
++	if( now - file->ipv4_started >= 5.0 )
++	{
++		HTTP_CloseIPv4Probe( file );
++		file->ipv4_done = true;
++		return false;
++	}
++
++	if( file->ipv4_socket == -1 )
++	{
++		if( file->server->resolved && file->server->addr.ss_family == AF_INET )
++			file->ipv4_addr = file->server->addr;
++		else
++		{
++			if( http.resolving ) return true;
++			net_gai_state_t res = NET_StringToSockaddr( file->server->host, &file->ipv4_addr, true, AF_INET );
++			if( res == NET_EAI_AGAIN )
++			{
++				http.resolving = true;
++				return true;
++			}
++			if( res != NET_EAI_OK )
++			{
++				file->ipv4_done = true;
++				return false;
++			}
++			// The shared async resolver may return an older request for this
++			// hostname. Consume it, then request the required address family.
++			if( file->ipv4_addr.ss_family != AF_INET )
++			{
++				http.resolving = true;
++				return true;
++			}
++		}
++		((struct sockaddr_in *)&file->ipv4_addr)->sin_port = MSG_BigShort( file->server->port );
++		file->ipv4_socket = socket( AF_INET, SOCK_STREAM, IPPROTO_TCP );
++		if( file->ipv4_socket < 0 || !NET_MakeSocketNonBlocking( file->ipv4_socket ))
++		{
++			HTTP_CloseIPv4Probe( file );
++			file->ipv4_done = true;
++			return false;
++		}
++		int ret = connect( file->ipv4_socket, (struct sockaddr *)&file->ipv4_addr, sizeof( struct sockaddr_in ));
++		int err = ret < 0 ? WSAGetLastError() : 0;
++		if( ret < 0 && err != WSAEWOULDBLOCK && err != WSAEINPROGRESS )
++		{
++			HTTP_CloseIPv4Probe( file );
++			file->ipv4_done = true;
++			return false;
++		}
++	}
++
++	fd_set writefds, exceptfds;
++	struct timeval tv = { 0 };
++	FD_ZERO( &writefds ); FD_ZERO( &exceptfds );
++	FD_SET( file->ipv4_socket, &writefds ); FD_SET( file->ipv4_socket, &exceptfds );
++	int ready = select( file->ipv4_socket + 1, NULL, &writefds, &exceptfds, &tv );
++	if( ready == 0 ) return true;
++	int err = 0;
++	socklen_t len = sizeof( err );
++	if( ready < 0 || getsockopt( file->ipv4_socket, SOL_SOCKET, SO_ERROR, (char *)&err, &len ) < 0 || err )
++	{
++		HTTP_CloseIPv4Probe( file );
++		file->ipv4_done = true;
++		return false;
++	}
++
++	int connected = file->ipv4_socket;
++	file->ipv4_socket = -1;
++	HTTP_CloseTransfer( file );
++	file->socket = connected;
++	http.active_count++;
++	file->buf = Mem_Calloc( http_mempool, MAX_HTTP_BUFFER_SIZE + 1 );
++	file->addr = file->ipv4_addr;
++	file->server->addr = file->addr;
++	file->server->resolved = true;
++	file->ipv4_done = true;
++	file->blocktime = 0;
++	file->header_size = file->bytes_sent = file->query_length = 0;
++	file->pfn_process = HTTP_FilePrepareRequest;
++	Con_Reportf( "HTTP: using IPv4 for %s after unavailable IPv6\n", file->server->host );
++	return true;
++}
++
+ /*
+ ==============
+ HTTP_FreeFile
+@@ -214,31 +341,7 @@
+ 
+ 	file->blocktime = 0;
+ 
+-	// Allways close file and socket
+-	if( file->file )
+-		FS_Close( file->file );
+-
+-	file->file = NULL;
+-
+-	if( file->tls )
+-	{
+-		HTTP_TlsFree( file->tls );
+-		file->tls = NULL;
+-	}
+-
+-	if( file->socket != -1 )
+-	{
+-		closesocket( file->socket );
+-		http.active_count--;
+-	}
+-
+-	file->socket = -1;
+-
+-	if( file->buf )
+-	{
+-		Mem_Free( file->buf );
+-		file->buf = NULL;
+-	}
++	HTTP_CloseTransfer( file );
+ 
+ 	if( file->to_memory )
+ 	{
+@@ -319,6 +422,13 @@
+ 	file->success = !error;
+ }
+ 
++static int HTTP_FileIPv4Fallback( httpfile_t *file )
++{
++	if( !HTTP_RetryIPv4( file ))
++		HTTP_FreeFile( file, true );
++	return 0;
++}
++
+ static int HTTP_FileFree( httpfile_t *file )
+ {
+ 	return 0; // do nothing, wait for memory clean up
+@@ -334,6 +444,8 @@
+ 
+ 	file->pfn_process = HTTP_FileResolveNS;
+ 	file->blocktime = file->downloaded = file->lastchecksize = file->checktime = 0;
++	file->ipv4_started = 0;
++	file->ipv4_done = false;
+ 	return 1;
+ }
+ 
+@@ -346,6 +458,8 @@
+ 		return 1;
+ 	}
+ 
++	file->blocktime += host.frametime;
++	file->blockreason = "resolving";
+ 	if( http.resolving )
+ 		return 0;
+ 
+@@ -402,6 +516,7 @@
+ 		return 0;
+ 	}
+ 
++	http.active_count++;
+ 	if( !NET_MakeSocketNonBlocking( file->socket ))
+ 	{
+ 		Con_Printf( S_ERROR "%s: failed to make socket non-blocking, error %s\n", __func__, NET_ErrorString());
+@@ -412,7 +527,6 @@
+ 	if( !file->buf )
+ 		file->buf = Mem_Calloc( http_mempool, MAX_HTTP_BUFFER_SIZE + 1 );
+ 
+-	http.active_count++;
+ 	file->pfn_process = HTTP_FileConnect;
+ 	return 1;
+ }
+@@ -518,8 +632,8 @@
+ 	if( err != 0 )
+ 	{
+ 		Con_Printf( S_ERROR "cannot connect to server: error %d\n", err );
+-		HTTP_FreeFile( file, true );
+-		return 0;
++		file->pfn_process = HTTP_FileIPv4Fallback;
++		return HTTP_FileIPv4Fallback( file );
+ 	}
+ 
+ 	file->pfn_process = HTTP_FilePrepareRequest;
+@@ -537,8 +651,8 @@
+ 		if( err != WSAEWOULDBLOCK && err != WSAEINPROGRESS )
+ 		{
+ 			Con_Printf( S_ERROR "cannot connect to server: %s\n", NET_ErrorString( ));
+-			HTTP_FreeFile( file, true );
+-			return 0;
++			file->pfn_process = HTTP_FileIPv4Fallback;
++			return HTTP_FileIPv4Fallback( file );
+ 		}
+ 
+ 		file->pfn_process = HTTP_FileWaitConnect;
+@@ -1268,8 +1382,14 @@
+ 		while( move_next > 0 )
+ 			move_next = curfile->pfn_process( curfile );
+ 
++		if( curfile->got_response )
++			HTTP_CloseIPv4Probe( curfile );
++		else if( curfile->blocktime > 3.0f && HTTP_RetryIPv4( curfile ))
++			continue;
++
+ 		if( curfile->blocktime > http_timeout.value )
+ 		{
++			if( HTTP_RetryIPv4( curfile )) continue;
+ 			Con_Printf( S_ERROR "timeout on %s (file: %s)\n", curfile->blockreason,
+ 				curfile->to_memory ? curfile->url : curfile->path );
+ 			HTTP_FreeFile( curfile, true );
+@@ -1338,6 +1458,7 @@
+ 	httpfile->size = size;
+ 	httpfile->reported_size = size;
+ 	httpfile->socket = -1;
++	httpfile->ipv4_socket = -1;
+ 	Q_strncpy( httpfile->path, path, sizeof( httpfile->path ));
+ 
+ 	httpfile->pfn_process = HTTP_FileQueue;
+@@ -1377,6 +1498,7 @@
+ 	httpfile->size = -1;
+ 	httpfile->reported_size = -1;
+ 	httpfile->socket = -1;
++	httpfile->ipv4_socket = -1;
+ 	httpfile->server = server;
+ 	httpfile->own_server = true;
+ 	httpfile->to_memory = true;
+@@ -1528,6 +1650,9 @@
+ 	Con_Reportf( "HTTP: redirect %s -> %s\n", file->to_memory ? file->url : file->path, location );
+ 
+ 	// tear down current connection but keep file/mem buffers
++	HTTP_CloseIPv4Probe( file );
++	file->ipv4_done = false;
++	file->ipv4_started = 0;
+ 	if( file->tls )
+ 	{
+ 		HTTP_TlsFree( file->tls );

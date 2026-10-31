@@ -1,1 +1,1 @@
-Improved adding project servers: copied IP addresses and ports now work with extra spacing and invisible formatting marks. The address field is optimized for entering IP:port.
+Server file downloads now try IPv4 when an IPv6 connection stalls. DNS waits are bounded.

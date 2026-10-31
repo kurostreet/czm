@@ -75,6 +75,7 @@ jobs:
         run: |
           python3 -m unittest discover -s tests -p test_engine_patches.py -v
           python3 scripts/apply_engine_patches.py
+          python3 -m unittest discover -s tests -p test_http_fallback.py -v
           python3 -m unittest discover -s tests -p test_server_policy.py -k common -v
           python3 -m unittest discover -s tests -p test_goldsrc_entities.py -v
       - name: Check native home and lobby geometry, actions and role controls
