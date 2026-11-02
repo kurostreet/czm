@@ -82,7 +82,7 @@ class RuStoreTests(unittest.TestCase):
 
     def test_the_apk_gets_the_game_data_and_stays_off_the_site(self):
         self.key()
-        with patch.object(rustore, "apksigner", side_effect=fake_apksigner), \
+        with patch.object(rustore, "CERT_SHA256", "c" * 64), patch.object(rustore, "apksigner", side_effect=fake_apksigner), \
                 patch.object(rustore, "signer_digest", return_value="c" * 64):
             apk, digest = rustore.assemble(self.core(), "1.35-abc1234")
         self.assertEqual(digest, "c" * 64)
@@ -95,6 +95,9 @@ class RuStoreTests(unittest.TestCase):
         line = (apk.parent / (apk.name + ".sha256")).read_text()
         self.assertEqual(line.split()[0], hashlib.sha256(apk.read_bytes()).hexdigest())
         self.assertEqual(sorted(p.name for p in apk.parent.iterdir()), sorted([apk.name, apk.name + ".sha256"]))
+
+    def test_the_first_release_certificate_is_pinned(self):
+        self.assertRegex(rustore.CERT_SHA256, r"^[0-9a-f]{64}$")
 
     def test_another_key_than_the_first_release_is_refused(self):
         self.key()
