@@ -83,6 +83,7 @@ final class CzmAdmin {
         if(code.equals("not_found")||code.equals("account_not_found"))return L("Игрок не найден","Player not found");
         if(code.equals("moderator_required"))return L("Модератор или его история не найдены","Moderator or history not found");
         if(code.equals("server")||code.equals("server_address"))return L("Нужен публичный IP:порт","Enter a public IP:port");
+        if(code.equals("official_same"))return L("У Survival и Escape должны быть разные IP","Survival and Escape need different addresses");
         if(code.equals("staff")||code.equals("self"))return L("Это действие запрещено для выбранного аккаунта","This action is not allowed for that account");
         if(response.startsWith("401\n"))return L("Сеанс истёк. Войдите снова","Session expired. Sign in again");
         if(response.startsWith("429\n"))return L("Слишком часто. Повторите позже","Too often. Try again later");
@@ -105,8 +106,8 @@ final class CzmAdmin {
     private void open(Screen next){
         if(!live())return;screen=next;clear();dialog.note(L("Загружаем…","Loading…"));
         String section=next.page.equals("player")?"players":next.page.equals("server")?"servers":next.page.equals("moderator")?"moderators":next.page.endsWith("history")?"history":next.page;
-        dialog.navigation(section,new String[]{"overview","players","servers","reports","moderators","sanctions","history"},
-            new String[]{L("Обзор","Overview"),L("Игроки и роли","Players and roles"),L("Серверы","Servers"),L("Жалобы","Reports"),L("Модераторы","Moderators"),L("Наказания","Sanctions"),L("История","History")},this::go);
+        dialog.navigation(section,new String[]{"overview","players","servers","official","reports","moderators","sanctions","history"},
+            new String[]{L("Обзор","Overview"),L("Игроки и роли","Players and roles"),L("Серверы","Servers"),L("Наши серверы","Our servers"),L("Жалобы","Reports"),L("Модераторы","Moderators"),L("Наказания","Sanctions"),L("История","History")},this::go);
         dialog.submit.setText(L("Обновить","Refresh"));dialog.submit.setOnClickListener(v->open(screen));
         if(next.page.equals("overview")){dialog.cancel.setText(L("Закрыть","Close"));dialog.cancel.setOnClickListener(v->dialog.dismiss());}
         else back(()->go("overview"));
@@ -129,6 +130,7 @@ final class CzmAdmin {
         case "moderator":moderator(current,value);break;
         case "reports":reports(current,value);break;
         case "sanctions":sanctions(current,value);break;
+        case "official":official(value);break;
         default:history(current,value);break;
         }
     }
@@ -199,9 +201,9 @@ final class CzmAdmin {
     private String actionName(String action){
         if(action.equals("role_grant")||action.equals("grant"))return L("Выдача роли","Grant role");
         if(action.equals("role_revoke")||action.equals("revoke"))return L("Снятие роли","Revoke role");
-        String[] keys={"warn","mute_text","mute_voice","ban","remove_avatar","restrict_photo","close_lobby","delete_message","dismiss","lift","server_ban","server_unban","mod_pause","mod_resume","mod_undo","owner_server_remove"};
-        String[] russian={"Предупреждение","Отключение текста","Отключение голоса","Блокировка игрока","Сброс аватара","Запрет фото","Закрытие лобби","Удаление контента","Отклонение жалобы","Снятие наказания","Блокировка сервера в CZM","Разблокировка сервера","Приостановка прав","Возврат прав после проверки","Отмена действий модератора","Удаление IP из профиля"};
-        String[] english={"Warning","Mute text","Mute voice","Player ban","Reset avatar","Restrict photo","Close lobby","Remove content","Dismiss report","Lift sanction","Restrict server in CZM","Restore server","Pause moderator","Resume after review","Undo moderator actions","Remove profile IP"};
+        String[] keys={"warn","mute_text","mute_voice","ban","remove_avatar","restrict_photo","close_lobby","delete_message","dismiss","lift","server_ban","server_unban","mod_pause","mod_resume","mod_undo","owner_server_remove","official_servers"};
+        String[] russian={"Предупреждение","Отключение текста","Отключение голоса","Блокировка игрока","Сброс аватара","Запрет фото","Закрытие лобби","Удаление контента","Отклонение жалобы","Снятие наказания","Блокировка сервера в CZM","Разблокировка сервера","Приостановка прав","Возврат прав после проверки","Отмена действий модератора","Удаление IP из профиля","Наши серверы"};
+        String[] english={"Warning","Mute text","Mute voice","Player ban","Reset avatar","Restrict photo","Close lobby","Remove content","Dismiss report","Lift sanction","Restrict server in CZM","Restore server","Pause moderator","Resume after review","Undo moderator actions","Remove profile IP","Our servers"};
         for(int i=0;i<keys.length;i++)if(keys[i].equals(action))return ru?russian[i]:english[i];return action;
     }
     private String reviewState(String value){
@@ -230,6 +232,25 @@ final class CzmAdmin {
                 JSONObject body=new JSONObject(template.toString());if(reason!=null)body.put("reason",reason.getText().toString().trim());if(duration)body.put("minutes",minutes[0]);
                 String payload=body.toString();if(!last[0].isEmpty()&&!last[0].equals(payload))nonce[0]=CzmNet.newKey();last[0]=payload;body.put("nonce",nonce[0]);apply(body,previous);
             }catch(Exception ignored){}
+        });
+    }
+    // the project's own servers: two cards on the main screen and a golden frame in the server list;
+    // an empty address shows «Скоро открытие» on its card, the switch hides everything
+    private void official(JSONObject v){
+        dialog.note(L("Карточки Survival и Escape на главном экране и золотая рамка вокруг наших серверов в списке. Пустой IP — на карточке «Скоро открытие». Игроки увидят изменения в течение минуты.",
+            "Survival and Escape cards on the main screen and a golden frame around our servers in the list. An empty address shows \"Coming soon\" on its card. Players see changes within a minute."));
+        final boolean[] on={v.optBoolean("enabled")};
+        final Button toggle=dialog.link("",button->{});
+        final Runnable paint=()->toggle.setText((on[0]?"● ":"○ ")+L("Показывать в игре: ","Show in the game: ")+(on[0]?L("включено","on"):L("выключено","off")));
+        paint.run();toggle.setOnClickListener(button->{on[0]=!on[0];paint.run();});
+        final EditText survival=dialog.field(L("IP Survival (IP:порт)","Survival address (IP:port)"),false,64);survival.setText(v.optString("survival"));
+        final EditText escape=dialog.field(L("IP Escape (IP:порт)","Escape address (IP:port)"),false,64);escape.setText(v.optString("escape"));
+        dialog.submit.setText(L("Сохранить","Save"));final String[] nonce={CzmNet.newKey()},last={""};
+        dialog.submit.setOnClickListener(button->{
+            JSONObject body=data("action","official_servers","enabled",on[0],"survival",survival.getText().toString().trim(),"escape",escape.getText().toString().trim());
+            String payload=body.toString();if(!last[0].isEmpty()&&!last[0].equals(payload))nonce[0]=CzmNet.newKey();last[0]=payload;
+            try{body.put("nonce",nonce[0]);}catch(Exception ignored){}
+            apply(body,screen);
         });
     }
     private void apply(JSONObject body,Screen previous){

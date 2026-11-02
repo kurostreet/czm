@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, FileResponse, HTML
 from PIL import Image
 from pydantic import BaseModel, Field
 
-from . import service, mappics, accounts, settings, tab, social, website, distribution, lobbies, game_probe, voice_lobby, notifications, rules, moderation, play_feed, playtime, server_moderation, community, admin
+from . import service, mappics, accounts, settings, tab, social, website, distribution, lobbies, game_probe, voice_lobby, notifications, rules, moderation, play_feed, playtime, server_moderation, community, admin, official
 from .config import get_settings
 from .db import db
 
@@ -118,6 +118,8 @@ async def hello(body: HelloIn, request: Request):
             "moderation": moderation.state(conn, player),
             # the bell shows the notes of the code Google Play offers this player
             "play": play_feed.latest(conn),
+            # the project's own servers: cards on the main screen, golden frame in the list
+            "official": official.state(conn),
         }
 
     try:
@@ -361,6 +363,9 @@ class AdminActionIn(BaseModel):
     batch: int = Field(default=0,ge=0)
     all_history: bool = False
     expected_log: int = Field(default=0,ge=0)
+    enabled: bool = False
+    survival: str = Field(default="",max_length=64)
+    escape: str = Field(default="",max_length=64)
     nonce: str = Field(pattern=r"^[A-Za-z0-9_-]{12,64}$")
 
 

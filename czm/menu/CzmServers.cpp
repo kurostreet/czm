@@ -895,6 +895,24 @@ void CCzmServers::Refresh( bool force )
 
 	QueryList( m_favorites, now );
 	QueryList( m_history, now );
+
+	// our own servers are in the list even when the master server does not know them
+	{
+		CUtlVector<CzmListAddress> official;
+		for( int i = 0; i < CZM_OFFICIAL_COUNT; i++ )
+		{
+			CzmServer *server = CZM_OfficialServer( i );
+			CzmEntry *e = server ? AddAddress( server->address, "gs" ) : NULL;
+			if( !e )
+				continue;
+			CzmListAddress entry;
+			Q_strncpy( entry.address, e->address, sizeof( entry.address ));
+			Q_strncpy( entry.prot, "gs", sizeof( entry.prot ));
+			official.AddToTail( entry );
+			e->sources |= SRC_INTERNET;
+		}
+		QueryList( official, now );
+	}
 	m_bDirty = m_bForceRebuild = true;
 }
 
@@ -2147,8 +2165,23 @@ void CCzmServers::DrawRow( int index, const CzmRect &r )
 	unsigned int dim = PackRGBA( 154, 163, 175, 255 );
 	char text[128];
 
-	CZM_DrawSliced( selected ? UI_DIR "card_on.png" : UI_DIR "card.png", r.x, r.y, r.w, r.h, 30, (int)( H * 0.02f ),
-		pressed ? PackRGBA( 200, 200, 200, 255 ) : CZM_White( selected ? 255 : 235 ));
+	bool official = CZM_IsOfficial( e.address );
+	int rad = H * 0.02f;
+
+	if( official )
+	{
+		// our own server: a golden frame, a warm golden glass inside, stronger on the left
+		int line = Q_max( 2, (int)( H * 0.0028f ));
+		CZM_DrawSliced( UI_DIR "surface.png", r.x, r.y, r.w, r.h, 16, rad, PackRGBA( 244, 201, 93, 255 ));
+		CZM_DrawSliced( UI_DIR "surface.png", r.x + line, r.y + line, r.w - line * 2, r.h - line * 2, 16, Q_max( 1, rad - line ),
+			pressed ? PackRGBA( 46, 38, 18, 250 ) : PackRGBA( 24, 22, 16, 235 ));
+		CZM_DrawSliced( UI_DIR "surface.png", r.x + line, r.y + line, r.w - line * 2, r.h - line * 2, 16, Q_max( 1, rad - line ),
+			PackRGBA( 196, 150, 52, selected ? 92 : 70 ));
+		CZM_DrawImage( "gfx/czm/fade_left.png", r.x + rad, r.y + line, r.w * 0.55f, r.h - line * 2, PackRGBA( 226, 176, 66, 70 ));
+	}
+	else
+		CZM_DrawSliced( selected ? UI_DIR "card_on.png" : UI_DIR "card.png", r.x, r.y, r.w, r.h, 30, rad,
+			pressed ? PackRGBA( 200, 200, 200, 255 ) : CZM_White( selected ? 255 : 235 ));
 
 	// picture with the mode badge, or the badge alone
 	x = r.x + pad;
@@ -2257,7 +2290,23 @@ void CCzmServers::DrawRow( int index, const CzmRect &r )
 		x += size + H * 0.01f;
 		textW -= size + H * 0.01f;
 	}
-	CZM_DrawText( nameFont, x, y, textW, e.name, e.answered ? CZM_White() : dim );
+	// our own server: the golden label after the name, the name gives way if the row is short
+	if( official )
+	{
+		int bh = CZM_FontHeight( nameFont ) * 0.92f, gapX = H * 0.014f;
+		int bw = CZM_OfficialBadge( 0, 0, bh, false );
+		int nameW = Q_min( CZM_TextWidth( nameFont, e.name ), textW - bw - gapX );
+
+		if( nameW > H * 0.12f )
+		{
+			CZM_DrawText( nameFont, x, y, nameW, e.name, e.answered ? CZM_White() : dim );
+			CZM_OfficialBadge( x + nameW + gapX, y + ( CZM_FontHeight( nameFont ) - bh ) / 2, bh, true );
+		}
+		else
+			CZM_DrawText( nameFont, x, y, textW, e.name, e.answered ? CZM_White() : dim );
+	}
+	else
+		CZM_DrawText( nameFont, x, y, textW, e.name, e.answered ? CZM_White() : dim );
 
 	// map, bots or the address
 	if( e.answered )
@@ -2276,7 +2325,10 @@ void CCzmServers::DrawRow( int index, const CzmRect &r )
 		Q_strncpy( text, e.address, sizeof( text ));
 
 	// the second line starts under the badges
-	CZM_DrawText( subFont, textX, r.y + r.h * 0.57f, right - statsW - textX, text, dim );
+	CZM_DrawText( subFont, textX, r.y + r.h * 0.57f, right - statsW - textX, text, official ? PackRGBA( 233, 220, 184, 255 ) : dim );
+
+	if( official )
+		CZM_GoldComet( r, (float)rad, 0.0f );
 }
 
 void CCzmServers::DrawEmpty( void )
