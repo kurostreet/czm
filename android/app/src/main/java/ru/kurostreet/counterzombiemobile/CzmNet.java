@@ -156,9 +156,9 @@ public final class CzmNet {
         }
     }
 
-    /** Updates from inside the game, not allowed in the Google Play build. */
+    /** Updates from inside the game: only the site build; a store updates its own builds. */
     public static boolean canSelfUpdate() {
-        return !BuildConfig.IS_GOOGLE_PLAY_BUILD;
+        return BuildConfig.SELF_UPDATE;
     }
 
     /** Google Play build: "code bytes" of the update Play offers, or "" (StoreUpdates per build flavor). */
@@ -335,8 +335,8 @@ public final class CzmNet {
     }
 
     // update from inside the game ----------------------------------------------
-    // Only the site build updates itself (SelfUpdate in src/git); the Google Play build has
-    // no installer code at all and asks Google Play instead (StoreUpdates in src/googlePlay).
+    // Only the site build updates itself (SelfUpdate in src/git); the store builds have no
+    // installer code at all: Google Play (src/googlePlay) and RuStore (src/rustore) update them.
 
     /** "state done total error": the menu draws the bar from it. */
     public static String updateState() {

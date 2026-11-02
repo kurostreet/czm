@@ -34,7 +34,7 @@ class AccountClientTests(unittest.TestCase):
                 "CzmTranslator": "package ru.kurostreet.counterzombiemobile;final class CzmTranslator{interface Done{void complete(String r);}static boolean available(){return true;}static void translate(android.content.Context c,byte[] t,boolean r,int g,Done d){d.complete(\"499\\n\");}}",
                 "CzmDownloadService": "package ru.kurostreet.counterzombiemobile; public class CzmDownloadService {}",
                 "SystemClock": "package android.os; public class SystemClock { public static long elapsedRealtime(){return 1000;} }",
-                "BuildConfig": "package ru.kurostreet.counterzombiemobile; public class BuildConfig { public static final boolean IS_GOOGLE_PLAY_BUILD=false; }",
+                "BuildConfig": "package ru.kurostreet.counterzombiemobile; public class BuildConfig { public static final boolean IS_GOOGLE_PLAY_BUILD=false, SELF_UPDATE=true; }",
                 # The account-router unit test intentionally runs without the
                 # microphone, Android media stack or WebSocket dependency.
                 # CzmNet forwards to the voice service, so give it a minimal

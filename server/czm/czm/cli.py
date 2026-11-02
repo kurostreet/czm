@@ -6,12 +6,14 @@
   python -m czm.cli create-dev-invite
   python -m czm.cli publish-migration <release-id>
   python -m czm.cli support-grant <player-id> | support-revoke <player-id> | support-list
+  python -m czm.cli rustore-assemble <core.apk> <version>
 
 add-release moves an uploaded APK into the download folder and remembers it as the
 newest private development build. The owner publishes it in the bot (/release).
 Only publish-migration exposes the final transition APK to existing public installs.
 assemble turns the core APKs sent by GitHub Actions into releases (czm-assemble.service)
 and finishes the bundles for Google Play sent by play.yml.
+rustore-assemble makes the RuStore APK from the core built by rustore.yml (czm/rustore.py).
 """
 import hashlib
 import shutil
@@ -94,6 +96,18 @@ def main(argv: list[str]) -> int:
         logging.basicConfig(level=logging.INFO, format="%(name)s %(levelname)s %(message)s")
         run_pending()
         play.run_pending()          # bundles for Google Play, after the players' release
+        return 0
+    if len(argv) == 3 and argv[0] == "rustore-assemble":
+        from . import rustore
+        from .assemble import BuildError
+        db.init()
+        try:
+            apk, digest = rustore.assemble(Path(argv[1]), argv[2])
+        except BuildError as error:
+            print("RuStore:", error)
+            return 1
+        print(f"RuStore APK ready: {apk} ({apk.stat().st_size // 1048576} MB)")
+        print("certificate SHA-256:", digest)
         return 0
     if len(argv) == 4 and argv[0] == "add-release" and argv[3].isdigit():
         add_release(Path(argv[1]), argv[2], int(argv[3]))
