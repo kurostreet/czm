@@ -96,13 +96,26 @@ android {
 			dimension = "version"
 			applicationId = "dev.gaming.czm"   // the Google Play listing; the site APK stays ru.kurostreet.counterzombiemobile.test
 			buildConfigField("Boolean", "IS_GOOGLE_PLAY_BUILD", "true")
+			buildConfigField("Boolean", "SELF_UPDATE", "false")
 			// Google Play refuses x86 without x86_64; x86_64 devices run the ARM code
+			ndk { abiFilters "armeabi-v7a", "arm64-v8a" }
+		}
+
+		// RuStore: the game's own identifier (docs/BRANDING_RU.md), never used by the site or Play
+		// builds, so it installs next to them without a signature conflict. RuStore updates it:
+		// no installer code, no Play libraries. The release APK is left unsigned here: the server
+		// adds the game data and signs it with the RuStore key (server/czm/czm/rustore.py).
+		create("rustore") {
+			dimension = "version"
+			buildConfigField("Boolean", "IS_GOOGLE_PLAY_BUILD", "false")
+			buildConfigField("Boolean", "SELF_UPDATE", "false")
 			ndk { abiFilters "armeabi-v7a", "arm64-v8a" }
 		}
 
 		create("git") {
 			dimension = "version"
 			buildConfigField("Boolean", "IS_GOOGLE_PLAY_BUILD", "false")
+			buildConfigField("Boolean", "SELF_UPDATE", "true")
 			ndk { abiFilters "armeabi-v7a", "arm64-v8a", "x86" }
 		}
 	}

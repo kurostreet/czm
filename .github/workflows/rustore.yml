@@ -1,0 +1,98 @@
+name: Counter Zombie Mobile for RuStore
+
+# Started by hand: Actions → this workflow → Run workflow. Builds the open part of the game for
+# RuStore (package ru.kurostreet.counterzombiemobile). The APK is unsigned and carries no game
+# data, so it cannot be installed: the server adds the game data and signs it with the RuStore
+# key (python -m czm.cli rustore-assemble, server/czm/czm/rustore.py).
+on:
+  workflow_dispatch:
+  # a change of the RuStore build itself is checked once in its pull request
+  pull_request:
+    paths:
+      - .github/workflows/rustore.yml
+      - android/app/src/rustore/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rustore-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    name: Build the RuStore APK core
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - name: Checkout pinned sources and dependencies
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: 21
+          distribution: temurin
+          cache: gradle
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Install Android build tools
+        run: sdkmanager --install 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
+      - name: Apply engine patches
+        run: python3 scripts/apply_engine_patches.py
+      - name: Check the RuStore build rules
+        run: python3 -m unittest discover -s tests -p test_rustore_build.py -v
+      - name: Build the APK
+        working-directory: android
+        run: ./gradlew --no-daemon :app:assembleRustoreRelease
+      - name: Check the APK
+        env:
+          APK: android/app/build/outputs/apk/rustore/release/app-rustore-release-unsigned.apk
+        run: |
+          set -euo pipefail
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" > apk-info.txt
+          grep -F "package: name='ru.kurostreet.counterzombiemobile'" apk-info.txt
+          grep -F "application-label:'Counter Zombie Mobile 32 players'" apk-info.txt
+          if grep -q REQUEST_INSTALL_PACKAGES apk-info.txt; then
+            echo "::error::The RuStore build must not install APKs itself"; exit 1
+          fi
+          sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" apk-info.txt | head -n1 > code.txt
+          sed -n "s/.*versionName='\([^']*\)'.*/\1/p" apk-info.txt | head -n1 > version.txt
+          python3 - <<'PY'
+          import hashlib, json, os
+          from zipfile import ZipFile
+          with ZipFile(os.environ["APK"]) as apk:
+              names = set(apk.namelist())
+              assert "assets/bundled/game-data.zip" not in names and "assets/bundled/game-data.json" not in names, \
+                  "game data never goes to GitHub"
+              assert not any(n.upper().startswith("META-INF/") and n.upper().endswith((".RSA", ".EC", ".DSA")) for n in names), \
+                  "the core stays unsigned: the server signs it with the RuStore key"
+              dex = b"".join(apk.read(n) for n in names if n.startswith("classes") and n.endswith(".dex"))
+              assert b"com/google/android/play/core" not in dex, "no Google Play libraries"
+              assert b"rustore://apps.rustore.ru/app/" in dex
+              for abi, suffix in [("arm64-v8a", "arm64"), ("armeabi-v7a", "armv7l")]:
+                  for library in ["SDL2", "xash", "client_android_" + suffix, "cs_android_" + suffix, "menu_android_" + suffix]:
+                      assert "lib/" + abi + "/lib" + library + ".so" in names, (abi, library)
+              assert not any(n.startswith("lib/x86") for n in names)
+              for name in ["engine-resources", "client-resources"]:
+                  meta = json.loads(apk.read("assets/bundled/" + name + ".json"))
+                  assert hashlib.sha256(apk.read("assets/bundled/" + name + ".zip")).hexdigest() == meta["sha256"], name
+          PY
+          cp "$APK" CounterZombieMobile-RuStore-core.apk
+          sha256sum CounterZombieMobile-RuStore-core.apk > CounterZombieMobile-RuStore-core.apk.sha256
+          echo "ru.kurostreet.counterzombiemobile $(cat version.txt) ($(cat code.txt)), $(du -m CounterZombieMobile-RuStore-core.apk | cut -f1) MB"
+      - name: Save the core for assembly on the server
+        uses: actions/upload-artifact@v4
+        with:
+          name: CZM-RUSTORE-CORE-NOT-INSTALLABLE
+          path: |
+            CounterZombieMobile-RuStore-core.apk
+            CounterZombieMobile-RuStore-core.apk.sha256
+            code.txt
+            version.txt
+          retention-days: 14
+          if-no-files-found: error
