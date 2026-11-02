@@ -95,6 +95,9 @@ class FileStore:
                     except FileExistsError:
                         pass
                 nxt = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+                if create:
+                    # FastDL is read by Caddy outside the game service's private umask.
+                    os.fchmod(nxt, 0o755)
                 os.close(fd)
                 fd = nxt
             yield fd
@@ -214,6 +217,7 @@ class FileStore:
         with self.open_file("/".join(parts)) as source, self.directory(parts[:-1], self.fastdl, create=True) as fd:
             temp = ".panel-" + secrets.token_hex(12)
             out = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644, dir_fd=fd)
+            os.fchmod(out, 0o644)
             try:
                 with os.fdopen(out, "wb") as target:
                     while chunk := source.read(128 * 1024):

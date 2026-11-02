@@ -82,6 +82,17 @@ class StorageTests(Fixture):
         self.files.write("addons/amxmodx/configs/new.cfg", b"private config", "new", True)
         self.assertFalse((self.fastdl / "addons").exists())
 
+    def test_fastdl_is_readable_under_the_service_private_umask(self):
+        (self.root / "maps/new").mkdir()
+        previous = os.umask(0o027)
+        try:
+            self.files.write("maps/new/resource.txt", b"public resource", "new")
+        finally:
+            os.umask(previous)
+        self.assertEqual((self.fastdl / "maps/new").stat().st_mode & 0o777, 0o755)
+        self.assertEqual((self.fastdl / "maps/new/resource.txt").stat().st_mode & 0o777, 0o644)
+        self.assertFalse((self.fastdl / "server.cfg").exists())
+
     def test_cp1251_round_trip_and_utf8_conversion(self):
         path = self.root / "addons/amxmodx/configs/test.ini"
         path.write_bytes("; Привет\n".encode("cp1251"))
