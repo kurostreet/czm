@@ -43,6 +43,10 @@
     if(state.entries.length||state.tab==='files'){renderFiles();renderCrumbs();}
     if(state.edit){editorChanged();setMode();loadHistory(state.edit.path).catch(report);}
     if(state.info)renderInfo(state.info);
+    if(state.loginError&&!$('login-error').hidden)$('login-error').textContent=t(state.loginError);
+    if(state.consoleKey)$('console-output').textContent=t(state.consoleKey);
+    if(state.searchKey)$('editor-find-state').textContent=t(state.searchKey);
+    if(state.uploadName)$('upload-label').textContent=t('uploading',{file:state.uploadName});
     if(confirmation)renderConfirmation();if(naming)renderName();
     if(notice)$('toast').textContent=t(notice.key,notice.params);
     if(state.cm)state.cm.getInputField().setAttribute('aria-label',t('Содержимое документа'));
@@ -68,9 +72,9 @@
   function showLogin(){state.generation++;state.csrf='';$('signin').hidden=false;$('workspace').hidden=true;$('logout').hidden=true;if($('editor').open)$('editor').close();state.edit=null;}
   async function loadSession(){const data=await api('/session');state.csrf=data.csrf;state.address=data.address;$('owner-name').textContent=data.profile.nick;$('server-address').textContent=state.address;$('signin').hidden=true;$('workspace').hidden=false;$('logout').hidden=false;await refreshStatus();}
   $('login-form').addEventListener('submit',async e=>{
-    e.preventDefault();const button=$('login-submit');button.disabled=true;$('login-error').hidden=true;
+    e.preventDefault();const button=$('login-submit');button.disabled=true;$('login-error').hidden=true;state.loginError=null;
     try{await api('/login',{method:'POST',json:{nick:$('login-name').value,password:$('login-password').value}});$('login-password').value='';await loadSession();}
-    catch(error){$('login-error').textContent=t(errorKey(error));$('login-error').hidden=false;}finally{button.disabled=false;}
+    catch(error){state.loginError=errorKey(error);$('login-error').textContent=t(state.loginError);$('login-error').hidden=false;}finally{button.disabled=false;}
   });
   $('logout').addEventListener('click',async()=>{if(dirty()&&!await confirm('Выйти из панели?','Несохранённые изменения документа будут потеряны.','Выйти'))return;try{await api('/logout',{method:'POST'});showLogin();}catch(e){report(e);}});
   async function switchTab(tab){
@@ -107,11 +111,11 @@
     try{await api('/power',{method:'POST',json:{action}});notify('Действие выполнено. Обновляем состояние…');await refreshStatus();}catch(e){report(e);await refreshStatus();}
   }));
   $('copy-address').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(state.address);notify('Адрес сервера скопирован.');}catch(_){notify('address',{address:state.address});}});
-  async function loadConsole(){try{const data=await api('/console');$('console-output').textContent=data.text||t('Журнал пока пуст.');$('console-output').scrollTop=$('console-output').scrollHeight;}catch(e){$('console-output').textContent=t(errorKey(e));}}
+  async function loadConsole(){try{const data=await api('/console');state.consoleKey=data.text?null:'Журнал пока пуст.';$('console-output').textContent=data.text||t(state.consoleKey);$('console-output').scrollTop=$('console-output').scrollHeight;}catch(e){state.consoleKey=errorKey(e);$('console-output').textContent=t(state.consoleKey);}}
   $('refresh-console').addEventListener('click',loadConsole);
   $('console-form').addEventListener('submit',async e=>{
     e.preventDefault();const input=$('console-command'),command=input.value.trim();if(!command)return;input.disabled=true;
-    try{const data=await api('/console',{method:'POST',json:{command}});$('console-output').textContent=($('console-output').textContent+'\n› '+command+'\n'+data.text).slice(-48000);$('console-output').scrollTop=$('console-output').scrollHeight;input.value='';}catch(error){report(error);}finally{input.disabled=false;input.focus();}
+    try{const data=await api('/console',{method:'POST',json:{command}});state.consoleKey=null;$('console-output').textContent=($('console-output').textContent+'\n› '+command+'\n'+data.text).slice(-48000);$('console-output').scrollTop=$('console-output').scrollHeight;input.value='';}catch(error){report(error);}finally{input.disabled=false;input.focus();}
   });
   async function listFiles(path=''){const generation=++listGeneration;$('file-list').replaceChildren(node('div','empty-folder',t('Загрузка папки…')));const data=await api('/files'+query(path));if(generation!==listGeneration)return;state.path=path;state.entries=data.entries;$('file-search').value='';renderFiles();renderCrumbs();}
   function renderCrumbs(){
@@ -157,7 +161,7 @@
   async function openEditor(path){
     if(dirty()&&!await confirm('Открыть другой документ?','Текущие изменения не сохранены.','Открыть'))return;
     const edit=await api('/file'+query(path));state.edit=edit;state.original=edit.text;$('editor-name').textContent=path.split('/').pop();$('editor-path').textContent=path;
-    $('editor-text').value=edit.text;$('editor-encoding').value=edit.encoding;$('editor-mode').value='auto';$('editor-find').value='';$('editor-find-state').textContent='';
+    $('editor-text').value=edit.text;$('editor-encoding').value=edit.encoding;$('editor-mode').value='auto';$('editor-find').value='';$('editor-find-state').textContent='';state.searchKey=null;
     $('protected-note').hidden=!edit.protected;if(!$('editor').open)$('editor').showModal();ensureEditor();setMode();
     if(state.cm){state.cm.setValue(edit.text);state.cm.clearHistory();state.cm.setCursor(0,0);requestAnimationFrame(()=>{state.cm.refresh();state.cm.focus();});}
     editorChanged();await loadHistory(path);
@@ -170,10 +174,10 @@
   $('editor-undo').addEventListener('click',()=>{if(state.cm)state.cm.undo();});
   $('editor-redo').addEventListener('click',()=>{if(state.cm)state.cm.redo();});
   function search(back=false){
-    if(!state.cm)return;const term=$('editor-find').value;if(!term){$('editor-find-state').textContent='';return;}
+    if(!state.cm)return;const term=$('editor-find').value;if(!term){$('editor-find-state').textContent='';state.searchKey=null;return;}
     const cm=state.cm,start=cm.getCursor(back?'from':'to');let cursor=cm.getSearchCursor(term,start,{caseFold:true}),found=back?cursor.findPrevious():cursor.findNext();
     if(!found){cursor=cm.getSearchCursor(term,back?CodeMirror.Pos(cm.lastLine(),cm.getLine(cm.lastLine()).length):CodeMirror.Pos(0,0),{caseFold:true});found=back?cursor.findPrevious():cursor.findNext();}
-    $('editor-find-state').textContent=t(found?'editor.search_found':'Не найдено');if(found){cm.setSelection(cursor.from(),cursor.to());cm.scrollIntoView({from:cursor.from(),to:cursor.to()},50);}
+    state.searchKey=found?'editor.search_found':'Не найдено';$('editor-find-state').textContent=t(state.searchKey);if(found){cm.setSelection(cursor.from(),cursor.to());cm.scrollIntoView({from:cursor.from(),to:cursor.to()},50);}
   }
   $('editor-find-next').addEventListener('click',()=>search());$('editor-find-prev').addEventListener('click',()=>search(true));$('editor-find').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();search(e.shiftKey);}});
   async function saveEditor(){
@@ -201,8 +205,8 @@
   async function upload(files){
     if(state.upload||!files.length)return;state.upload=true;$('upload-button').disabled=true;$('upload-progress').hidden=false;const target=state.path;let count=0;
     try{for(const file of files){if(file.size>64*1024*1024)throw fail('upload.large',{file:file.name});const path=(target?target+'/':'')+file.name,meta=await api('/metadata'+query(path));if(meta.exists&&!await confirm('Заменить файл?','replace.detail','Заменить',{path}))continue;
-      $('upload-label').textContent=t('uploading',{file:file.name});$('upload-meter').value=0;const result=await sendUpload(file,path,meta.revision);count++;if(!result.fastdl_synced)notify('Файл загружен, но синхронизацию ресурсов нужно проверить.',{},true);
-    }notify('uploaded',{count});await listFiles(target);}catch(e){report(e);}finally{state.upload=false;$('upload-button').disabled=false;$('upload-progress').hidden=true;$('upload-input').value='';}
+      state.uploadName=file.name;$('upload-label').textContent=t('uploading',{file:file.name});$('upload-meter').value=0;const result=await sendUpload(file,path,meta.revision);count++;if(!result.fastdl_synced)notify('Файл загружен, но синхронизацию ресурсов нужно проверить.',{},true);
+    }notify('uploaded',{count});await listFiles(target);}catch(e){report(e);}finally{state.upload=false;state.uploadName=null;$('upload-button').disabled=false;$('upload-progress').hidden=true;$('upload-input').value='';}
   }
   $('upload-button').addEventListener('click',()=>$('upload-input').click());$('upload-input').addEventListener('change',()=>upload([...$('upload-input').files]));
   const drop=$('tab-files');drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('dragover');});drop.addEventListener('dragleave',()=>drop.classList.remove('dragover'));drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('dragover');upload([...e.dataTransfer.files]);});

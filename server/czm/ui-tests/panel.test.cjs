@@ -9,7 +9,7 @@ const css=fs.readFileSync(path.join(site,'assets/server-panel.css'),'utf8');
 const scripts=['assets/vendor/codemirror.js','assets/server-panel-i18n.js','assets/server-panel.js'].map(p=>fs.readFileSync(path.join(site,p),'utf8'));
 const tick=()=>new Promise(r=>setTimeout(r,35));
 
-async function panel(lang='ru'){
+async function panel(lang='ru',fixture={}){
   const errors=[],requests=[],downloads=[];
   const vc=new VirtualConsole();vc.on('jsdomError',e=>errors.push(e));
   const dom=new JSDOM(html,{url:'https://counter-zombie.ru/server-panel',runScripts:'outside-only',pretendToBeVisual:true,virtualConsole:vc});
@@ -35,7 +35,11 @@ async function panel(lang='ru'){
     const body=options.body?JSON.parse(options.body):undefined;
     requests.push({route,method,body,path:u.searchParams.get('path')});
     let data={},status=200;
-    if(route==='/session')data={csrf:'fixture-csrf',profile:{id:1,nick:'Operator'},address:'192.0.2.1:27016'};
+    if(route==='/session'){
+      if(fixture.anonymous){status=401;data={error:'auth'};}
+      else data={csrf:'fixture-csrf',profile:{id:1,nick:'Operator'},address:'192.0.2.1:27016'};
+    }
+    else if(route==='/login'){status=401;data={error:'credentials'};}
     else if(route==='/status')data={state:'active',cpu:3.5,cpu_limit:35,memory:100000000,memory_limit:335544320,disk:400000000,uptime:61,observed_at:1793630000,game:{name:'CZM Test',map:'zm_test',players:1,slots:32,bots:1}};
     else if(route==='/files')data={path:u.searchParams.get('path')||'',entries:folders[u.searchParams.get('path')||'']||[]};
     else if(route==='/file'&&method==='GET')data={path:u.searchParams.get('path'),text,revision,encoding:'utf-8',protected:false};
@@ -45,7 +49,7 @@ async function panel(lang='ru'){
       if(conflict||body.revision!==revision){status=409;data={error:'conflict'};}
       else{text=body.text;revision+='x';data={ok:true,revision,fastdl_synced:true};}
     }else if(route==='/history')data={entries:[]};
-    else if(route==='/console')data={text:'Game console ready'};
+    else if(route==='/console')data={text:fixture.emptyConsole?'':'Game console ready'};
     return{ok:status===200,status,json:async()=>data};
   };
   for(const source of scripts)w.eval(source);
@@ -111,6 +115,7 @@ test('syntax choice, indentation and search work; changing language preserves un
   assert.equal(cm.getOption('mode'),'text/x-lua');cm.setCursor(0,0);cm.getOption('extraKeys').Tab(cm);assert.match(cm.getValue(),/^    local/);
   p.d.querySelector('#editor-find').value='value';await p.click('#editor-find-next');assert.equal(cm.getSelection(),'value');
   const code=cm.getValue();await p.click('[data-lang="en"]');assert.equal(cm.getValue(),code);assert.equal(p.d.querySelector('#editor-state').textContent,'Unsaved changes');
+  assert.equal(p.d.querySelector('#editor-find-state').textContent,p.w.CZM_PANEL_I18N['editor.search_found'].en);
   assert.equal(p.d.querySelector('#editor-save').textContent.trim(),'Save');assert.equal(p.requests.filter(r=>r.method==='POST').length,0);
 });
 
@@ -137,4 +142,18 @@ test('translated labels retain text styling instead of icon widths and hidden ar
   assert.ok(!css.includes('.console-input .primary>span{display:none}'));
   assert.ok(css.includes('.console-input .primary>span:last-child{display:none}'));
   w.close();
+});
+
+test('visible sign-in errors follow a language switch without another login attempt',async t=>{
+  const p=await panel('ru',{anonymous:true});t.after(()=>p.dom.window.close());
+  p.d.querySelector('#login-password').value='fixture-invalid';p.d.querySelector('#login-form').dispatchEvent(new p.w.Event('submit',{cancelable:true}));await tick();
+  assert.equal(p.d.querySelector('#login-error').hidden,false);assert.equal(p.d.querySelector('#login-error').textContent,p.w.CZM_PANEL_I18N['error.credentials'].ru);
+  await p.click('[data-lang="en"]');assert.equal(p.d.querySelector('#login-error').textContent,p.w.CZM_PANEL_I18N['error.credentials'].en);
+  assert.equal(p.requests.filter(r=>r.route==='/login').length,1);
+});
+
+test('an empty console translates immediately when the language changes',async t=>{
+  const p=await panel('ru',{emptyConsole:true});t.after(()=>p.dom.window.close());await p.click('.panel-nav [data-tab="console"]');
+  assert.equal(p.d.querySelector('#console-output').textContent,'Журнал пока пуст.');
+  await p.click('[data-lang="en"]');assert.equal(p.d.querySelector('#console-output').textContent,p.w.CZM_PANEL_I18N['Журнал пока пуст.'].en);
 });
