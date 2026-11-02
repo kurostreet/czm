@@ -1,1 +1,1 @@
-Improved server file downloads with IPv4 fallback for stalled IPv6 connections and bounded DNS waits. Stalled downloads now show the file source and waiting stage.
+Official Counter Zombie Mobile servers: Survival and Escape cards on the main screen show players, map and ping and join in one tap. In the server list our server stands out with a golden frame and an "Official" label.

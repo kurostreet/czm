@@ -895,6 +895,24 @@ void CCzmServers::Refresh( bool force )
 
 	QueryList( m_favorites, now );
 	QueryList( m_history, now );
+
+	// our own servers are in the list even when the master server does not know them
+	{
+		CUtlVector<CzmListAddress> official;
+		for( int i = 0; i < CZM_OFFICIAL_COUNT; i++ )
+		{
+			CzmServer *server = CZM_OfficialServer( i );
+			CzmEntry *e = server ? AddAddress( server->address, "gs" ) : NULL;
+			if( !e )
+				continue;
+			CzmListAddress entry;
+			Q_strncpy( entry.address, e->address, sizeof( entry.address ));
+			Q_strncpy( entry.prot, "gs", sizeof( entry.prot ));
+			official.AddToTail( entry );
+			e->sources |= SRC_INTERNET;
+		}
+		QueryList( official, now );
+	}
 	m_bDirty = m_bForceRebuild = true;
 }
 
@@ -1650,14 +1668,13 @@ int CCzmServers::HitTest( void ) const
 			{
 				int col = 0; // the row
 
+				// from the right: star, heart, then the verified shield when there is one
 				if( x >= r.x + r.w - r.h )
 					col = 1; // the star
-				else if( CZM_ServerOwner( m_entries[m_view[index]].address ) )
-				{
-					if( x >= r.x + r.w - r.h * 2 ) col = 3;
-					else if( x >= r.x + r.w - r.h * 3 ) col = 2;
-				}
-				else if( x >= r.x + r.w - r.h * 2 ) col = 2;
+				else if( x >= r.x + r.w - r.h * 2 )
+					col = 2; // the heart
+				else if( x >= r.x + r.w - r.h * 3 && CZM_ServerOwner( m_entries[m_view[index]].address ) )
+					col = 3; // the verified owner
 				return HIT_ROW + index * ROW_HITS + col;
 			}
 		}
@@ -2147,8 +2164,23 @@ void CCzmServers::DrawRow( int index, const CzmRect &r )
 	unsigned int dim = PackRGBA( 154, 163, 175, 255 );
 	char text[128];
 
-	CZM_DrawSliced( selected ? UI_DIR "card_on.png" : UI_DIR "card.png", r.x, r.y, r.w, r.h, 30, (int)( H * 0.02f ),
-		pressed ? PackRGBA( 200, 200, 200, 255 ) : CZM_White( selected ? 255 : 235 ));
+	bool official = CZM_IsOfficial( e.address );
+	int rad = H * 0.02f;
+
+	if( official )
+	{
+		// our own server: a golden frame, a warm golden glass inside, stronger on the left
+		int line = Q_max( 2, (int)( H * 0.0028f ));
+		CZM_DrawSliced( UI_DIR "surface.png", r.x, r.y, r.w, r.h, 16, rad, PackRGBA( 244, 201, 93, 255 ));
+		CZM_DrawSliced( UI_DIR "surface.png", r.x + line, r.y + line, r.w - line * 2, r.h - line * 2, 16, Q_max( 1, rad - line ),
+			pressed ? PackRGBA( 46, 38, 18, 250 ) : PackRGBA( 24, 22, 16, 235 ));
+		CZM_DrawSliced( UI_DIR "surface.png", r.x + line, r.y + line, r.w - line * 2, r.h - line * 2, 16, Q_max( 1, rad - line ),
+			PackRGBA( 196, 150, 52, selected ? 92 : 70 ));
+		CZM_DrawImage( "gfx/czm/fade_left.png", r.x + rad, r.y + line, r.w * 0.55f, r.h - line * 2, PackRGBA( 226, 176, 66, 70 ));
+	}
+	else
+		CZM_DrawSliced( selected ? UI_DIR "card_on.png" : UI_DIR "card.png", r.x, r.y, r.w, r.h, 30, rad,
+			pressed ? PackRGBA( 200, 200, 200, 255 ) : CZM_White( selected ? 255 : 235 ));
 
 	// picture with the mode badge, or the badge alone
 	x = r.x + pad;
@@ -2186,14 +2218,7 @@ void CCzmServers::DrawRow( int index, const CzmRect &r )
 			starSize, starSize, fav ? PackRGBA( 250, 204, 21, 255 ) : starPressed ? CZM_White() : PackRGBA( 110, 116, 126, 255 ));
 	}
 
-	// Verified owner sits between the heart and favorite star.
-	if( CZM_ServerOwner( e.address ) )
-	{
-		right -= r.h;
-		const int shield = Q_max( 14, r.h * 52 / 100 );
-		CzmStyle::Verified( CZM_Rect( right + ( r.h - shield ) / 2, r.y + ( r.h - shield ) / 2, shield, shield ), false );
-	}
-	// heart to the left of the shield/star: pin to the main screen (max 3)
+	// heart next to the star: pin to the main screen (max 3); heart and star never move
 	{
 		int heartSize = r.h * 0.34f;
 		int heartX = right - r.h;
@@ -2204,7 +2229,22 @@ void CCzmServers::DrawRow( int index, const CzmRect &r )
 			heartX + ( r.h - heartSize ) / 2, r.y + ( r.h - heartSize ) / 2, heartSize, heartSize,
 			pinned ? PackRGBA( 244, 63, 94, 255 ) : heartPressed ? CZM_White() : PackRGBA( 110, 116, 126, 255 ));
 	}
-	right -= r.h; // the stats and the name stop before the heart
+	right -= r.h;
+	// a verified owner comes first, before the heart
+	if( CZM_ServerOwner( e.address ) )
+	{
+		right -= r.h;
+		const int shield = Q_max( 14, r.h * 52 / 100 );
+		CzmStyle::Verified( CZM_Rect( right + ( r.h - shield ) / 2, r.y + ( r.h - shield ) / 2, shield, shield ), false );
+	}
+	// our own server: the golden badge with sparks is the very first mark
+	if( official )
+	{
+		right -= r.h;
+		const int mark = Q_max( 16, r.h * 56 / 100 );
+		CZM_OfficialMark( right + ( r.h - mark ) / 2, r.y + ( r.h - mark ) / 2, mark );
+	}
+	// the stats and the name stop before the marks
 
 	statsW = H * 0.30f;
 	if( e.answered )
@@ -2257,7 +2297,23 @@ void CCzmServers::DrawRow( int index, const CzmRect &r )
 		x += size + H * 0.01f;
 		textW -= size + H * 0.01f;
 	}
-	CZM_DrawText( nameFont, x, y, textW, e.name, e.answered ? CZM_White() : dim );
+	// our own server: the golden label after the name, the name gives way if the row is short
+	if( official )
+	{
+		int bh = CZM_FontHeight( nameFont ) * 0.92f, gapX = H * 0.014f;
+		int bw = CZM_OfficialBadge( 0, 0, bh, false );
+		int nameW = Q_min( CZM_TextWidth( nameFont, e.name ), textW - bw - gapX );
+
+		if( nameW > H * 0.12f )
+		{
+			CZM_DrawText( nameFont, x, y, nameW, e.name, e.answered ? CZM_White() : dim );
+			CZM_OfficialBadge( x + nameW + gapX, y + ( CZM_FontHeight( nameFont ) - bh ) / 2, bh, true );
+		}
+		else
+			CZM_DrawText( nameFont, x, y, textW, e.name, e.answered ? CZM_White() : dim );
+	}
+	else
+		CZM_DrawText( nameFont, x, y, textW, e.name, e.answered ? CZM_White() : dim );
 
 	// map, bots or the address
 	if( e.answered )
@@ -2276,7 +2332,10 @@ void CCzmServers::DrawRow( int index, const CzmRect &r )
 		Q_strncpy( text, e.address, sizeof( text ));
 
 	// the second line starts under the badges
-	CZM_DrawText( subFont, textX, r.y + r.h * 0.57f, right - statsW - textX, text, dim );
+	CZM_DrawText( subFont, textX, r.y + r.h * 0.57f, right - statsW - textX, text, official ? PackRGBA( 233, 220, 184, 255 ) : dim );
+
+	if( official )
+		CZM_GoldComet( r, (float)rad, 0.0f );
 }
 
 void CCzmServers::DrawEmpty( void )

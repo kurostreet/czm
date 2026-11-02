@@ -132,6 +132,20 @@ void CZM_QuickPlayCancel( void );
 bool CZM_QuickPlayActive( void );
 int CZM_QuickPlayFrame( char *name, size_t size ); // 0 looking, 1 connecting (name of the server), -1 nothing fits
 
+// the project's own servers, set in the head administrator panel and sent with hello:
+// two cards on the main screen and a golden frame around them in the server list.
+// The frame follows the address, never the name. A slot without an address is "coming soon".
+enum { CZM_OFFICIAL_SURVIVAL = 0, CZM_OFFICIAL_ESCAPE, CZM_OFFICIAL_COUNT };
+void CZM_OfficialSet( bool enabled, const char *survival, const char *escape );
+bool CZM_OfficialEnabled( void );
+CzmServer *CZM_OfficialServer( int slot );   // NULL when off or while the slot has no address
+bool CZM_IsOfficial( const char *address );
+void CZM_ConnectOfficial( int slot );
+// the "Official" label: a golden pill with a bolt, h high; returns its width, draws only when asked
+int CZM_OfficialBadge( int x, int y, int h, bool draw );
+// the golden badge of our servers with electric sparks crackling round it, size x size at x, y
+void CZM_OfficialMark( int x, int y, int size );
+
 // pinned servers of the main screen, kept in home_servers.lst
 void CZM_HomeReload( void );                 // read the file into the tiles, call when the main screen opens
 int  CZM_HomePinCount( void );
@@ -181,6 +195,8 @@ struct CzmRect
 };
 
 CzmRect CZM_Rect( int x, int y, int w, int h );
+// a golden light running along a rounded frame, the mark of our servers; phase keeps two frames out of step
+void CZM_GoldComet( const CzmRect &r, float radius, float phase );
 int CZM_CountBadgeWidth( int count, int height );
 void CZM_DrawCountBadge( const CzmRect &rect, int count );
 unsigned int CZM_White( int alpha = 255 );

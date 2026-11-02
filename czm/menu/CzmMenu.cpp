@@ -1282,75 +1282,194 @@ bool CZM_HomeSetPinned( const char *address, const char *prot, bool on )
 	return true;
 }
 
+/*
+=================
+official servers
+
+The project's own servers come with hello (the head administrator sets them in the admin
+panel) and are kept in official_servers.lst, so the cards are there at once on the next start.
+=================
+*/
+#define CZM_OFFICIAL_FILE "official_servers.lst"
+
+static CzmServer s_official[CZM_OFFICIAL_COUNT];
+static bool s_officialOn = false;
+static bool s_officialLoaded = false;
+
+static void CZM_OfficialSlot( int slot, const char *address )
+{
+	CzmServer *s = &s_official[slot];
+
+	// only an IP:port goes into the console commands and the file
+	if( address && strspn( address, "0123456789abcdefABCDEF.:[]" ) != strlen( address ))
+		address = NULL;
+	if( !address || !address[0] || !strcmp( address, "-" ) || strlen( address ) >= sizeof( s->address ))
+	{
+		memset( s, 0, sizeof( *s ));
+		return;
+	}
+	if( !strcmp( s->address, address ))
+		return; // the same server: keep what it already told us
+	CZM_HomeInit( s, address, "gs" );
+}
+
+static void CZM_OfficialLoad( void )
+{
+	int length = 0;
+	byte *data;
+	char *p;
+	char token[64];
+
+	if( s_officialLoaded )
+		return;
+	s_officialLoaded = true;
+	memset( s_official, 0, sizeof( s_official ));
+	data = EngFuncs::COM_LoadFile( CZM_OFFICIAL_FILE, &length );
+	p = (char *)data;
+	if( p && ( p = EngFuncs::COM_ParseFile( p, token, sizeof( token ))) != NULL )
+	{
+		s_officialOn = !strcmp( token, "1" );
+		for( int i = 0; i < CZM_OFFICIAL_COUNT && p; i++ )
+		{
+			p = EngFuncs::COM_ParseFile( p, token, sizeof( token ));
+			if( p )
+				CZM_OfficialSlot( i, token );
+		}
+	}
+	if( data )
+		EngFuncs::COM_FreeFile( data );
+}
+
+void CZM_OfficialSet( bool enabled, const char *survival, const char *escape )
+{
+	char buf[160];
+	int n;
+
+	CZM_OfficialLoad();
+	if( enabled == s_officialOn && !strcmp( s_official[0].address, survival ? survival : "" )
+		&& !strcmp( s_official[1].address, escape ? escape : "" ))
+		return;
+
+	s_officialOn = enabled;
+	CZM_OfficialSlot( CZM_OFFICIAL_SURVIVAL, survival );
+	CZM_OfficialSlot( CZM_OFFICIAL_ESCAPE, escape );
+	n = snprintf( buf, sizeof( buf ), "%d %s %s\n", enabled ? 1 : 0,
+		s_official[0].address[0] ? s_official[0].address : "-", s_official[1].address[0] ? s_official[1].address : "-" );
+	EngFuncs::COM_SaveFile( CZM_OFFICIAL_FILE, buf, n );
+	CZM_QueryServers( true );
+}
+
+bool CZM_OfficialEnabled( void )
+{
+	CZM_OfficialLoad();
+	return s_officialOn;
+}
+
+CzmServer *CZM_OfficialServer( int slot )
+{
+	CZM_OfficialLoad();
+	if( !s_officialOn || slot < 0 || slot >= CZM_OFFICIAL_COUNT || !s_official[slot].address[0] )
+		return NULL;
+	return &s_official[slot];
+}
+
+bool CZM_IsOfficial( const char *address )
+{
+	for( int i = 0; address && address[0] && i < CZM_OFFICIAL_COUNT; i++ )
+	{
+		CzmServer *s = CZM_OfficialServer( i );
+		if( s && !strcmp( s->address, address ))
+			return true;
+	}
+	return false;
+}
+
+static void CZM_QueryOne( CzmServer *server, double now, bool force )
+{
+	if( !force && now - server->queryTime < 6.0 )
+		return;
+
+	// the previous query got no answer
+	if( server->queryTime > 0.0 && server->answerTime < server->queryTime && now - server->queryTime > 3.0 )
+		server->misses++;
+
+	server->queryTime = now;
+	EngFuncs::ClientCmdF( false, "czm_queryserver \"%s\"\n", server->address );
+}
+
 void CZM_QueryServers( bool force )
 {
 	double now = EngFuncs::DoubleTime();
 
 	for( int i = 0; i < CZM_ServerCount(); i++ )
+		CZM_QueryOne( CZM_Server( i ), now, force );
+	for( int i = 0; i < CZM_OFFICIAL_COUNT; i++ )
 	{
-		CzmServer *server = CZM_Server( i );
-
-		if( !force && now - server->queryTime < 6.0 )
-			continue;
-
-		// the previous query got no answer
-		if( server->queryTime > 0.0 && server->answerTime < server->queryTime && now - server->queryTime > 3.0 )
-			server->misses++;
-
-		server->queryTime = now;
-		EngFuncs::ClientCmdF( false, "czm_queryserver \"%s\"\n", server->address );
+		CzmServer *server = CZM_OfficialServer( i );
+		if( server && !CZM_ServerBlocked( server->address ))
+			CZM_QueryOne( server, now, force );
 	}
+}
+
+// one answer for a home tile or an official card
+static void CZM_ApplyServerInfo( CzmServer *server, const char *info, const char *czmping )
+{
+	const char *value;
+
+	if( czmping && czmping[0] )
+	{
+		server->ping = CZM_PingUpdate( server->ping, atoi( czmping ));
+		return;
+	}
+
+	value = Info_ValueForKey( info, "map" );
+	if( value )
+		Q_strncpy( server->map, value, sizeof( server->map ));
+	value = Info_ValueForKey( info, "numcl" );
+	server->players = value ? atoi( value ) : 0;
+	value = Info_ValueForKey( info, "maxcl" );
+	server->maxplayers = value ? atoi( value ) : 0;
+
+	// the server name, for the tile
+	value = Info_ValueForKey( info, "host" );
+	if( !value || !value[0] )
+		value = Info_ValueForKey( info, "name" );
+	if( value && value[0] )
+		Q_strncpy( server->name, value, sizeof( server->name ));
+	server->accent = CZM_MapAccent( server->map, server->name );
+
+	server->answerTime = EngFuncs::DoubleTime();
+	server->misses = 0;
+
+	// rough ping until the real one arrives
+	if( server->ping < 0 )
+		server->ping = CZM_PingUpdate( server->ping, (int)(( server->answerTime - server->queryTime ) * 1000.0 ));
 }
 
 bool CZM_OnServerInfo( netadr_t adr, const char *info )
 {
 	const char *address = EngFuncs::NET_AdrToString( adr );
-	const char *value;
+	const char *czmping = Info_ValueForKey( info, "czmping" );
 
 	// our server list sees every answer
 	CZM_ServerListInfo( adr, info );
 
+	// a pinned official server is both a tile and a card: both get the answer
 	for( int i = 0; i < CZM_ServerCount(); i++ )
 	{
 		CzmServer *server = CZM_Server( i );
-
-		if( strcmp( server->address, address ))
-			continue;
-
-		value = Info_ValueForKey( info, "czmping" );
-		if( value && value[0] )
-		{
-			server->ping = CZM_PingUpdate( server->ping, atoi( value ));
-			return true; // our own message, not a server entry
-		}
-
-		value = Info_ValueForKey( info, "map" );
-		if( value )
-			Q_strncpy( server->map, value, sizeof( server->map ));
-		value = Info_ValueForKey( info, "numcl" );
-		server->players = value ? atoi( value ) : 0;
-		value = Info_ValueForKey( info, "maxcl" );
-		server->maxplayers = value ? atoi( value ) : 0;
-
-		// the server name, for the tile
-		value = Info_ValueForKey( info, "host" );
-		if( !value || !value[0] )
-			value = Info_ValueForKey( info, "name" );
-		if( value && value[0] )
-			Q_strncpy( server->name, value, sizeof( server->name ));
-		server->accent = CZM_MapAccent( server->map, server->name );
-
-		server->answerTime = EngFuncs::DoubleTime();
-		server->misses = 0;
-
-		// rough ping until the real one arrives
-		if( server->ping < 0 )
-			server->ping = CZM_PingUpdate( server->ping, (int)(( server->answerTime - server->queryTime ) * 1000.0 ));
-		return false;
+		if( !strcmp( server->address, address ))
+			CZM_ApplyServerInfo( server, info, czmping );
+	}
+	for( int i = 0; i < CZM_OFFICIAL_COUNT; i++ )
+	{
+		CzmServer *server = CZM_OfficialServer( i );
+		if( server && !strcmp( server->address, address ))
+			CZM_ApplyServerInfo( server, info, czmping );
 	}
 
-	value = Info_ValueForKey( info, "czmping" );
-	return value && value[0];
+	// our own ping message is not a server entry for the stock list
+	return czmping && czmping[0];
 }
 
 /*
@@ -1377,6 +1496,189 @@ void CZM_ConnectToServer( int index )
 	EngFuncs::CvarSetString( "czm_connect_name", server->name );
 	EngFuncs::CvarSetString( "czm_connect_adr", server->address );
 	EngFuncs::ClientCmdF( false, "connect \"%s\" %s\n", server->address, server->prot[0] ? server->prot : "gs" );
+}
+
+void CZM_ConnectOfficial( int slot )
+{
+	if( !CZM_OnlinePlayAllowed() ) return;
+	CzmServer *server = CZM_OfficialServer( slot );
+
+	if( !server || CZM_ServerBlocked( server->address ))
+		return;
+
+	EngFuncs::CvarSetString( "czm_connect_name", server->name );
+	EngFuncs::CvarSetString( "czm_connect_adr", server->address );
+	EngFuncs::ClientCmdF( false, "connect \"%s\" %s\n", server->address, server->prot[0] ? server->prot : "gs" );
+}
+
+// a point on the rounded-rectangle border, s in [0, perim)
+static void CZM_RoundRectPoint( const CzmRect &r, float rad, float s, float perim, float *ox, float *oy )
+{
+	const float HALF_PI = 1.5707963f, PI = 3.1415927f;
+	float straightH = r.w - 2 * rad; // top and bottom
+	float straightV = r.h - 2 * rad; // the sides
+	float arc = HALF_PI * rad;       // a quarter circle
+	float a;
+
+	s = fmodf( s, perim );
+	if( s < 0 )
+		s += perim;
+
+	if( s < straightH ) { *ox = r.x + rad + s; *oy = r.y; return; }
+	s -= straightH;
+	if( s < arc ) { a = -HALF_PI + ( s / arc ) * HALF_PI; *ox = r.x + r.w - rad + cosf( a ) * rad; *oy = r.y + rad + sinf( a ) * rad; return; }
+	s -= arc;
+	if( s < straightV ) { *ox = r.x + r.w; *oy = r.y + rad + s; return; }
+	s -= straightV;
+	if( s < arc ) { a = ( s / arc ) * HALF_PI; *ox = r.x + r.w - rad + cosf( a ) * rad; *oy = r.y + r.h - rad + sinf( a ) * rad; return; }
+	s -= arc;
+	if( s < straightH ) { *ox = r.x + r.w - rad - s; *oy = r.y + r.h; return; }
+	s -= straightH;
+	if( s < arc ) { a = HALF_PI + ( s / arc ) * HALF_PI; *ox = r.x + rad + cosf( a ) * rad; *oy = r.y + r.h - rad + sinf( a ) * rad; return; }
+	s -= arc;
+	if( s < straightV ) { *ox = r.x; *oy = r.y + r.h - rad - s; return; }
+	s -= straightV;
+	a = PI + ( s / arc ) * HALF_PI; *ox = r.x + rad + cosf( a ) * rad; *oy = r.y + rad + sinf( a ) * rad;
+}
+
+/*
+A golden comet running along the frame: a continuous fading trail (samples closer than
+their size never look like beads), a soft glow around it and a white-hot head. The speed
+is the same for every frame size, so a long list row and a small card look alike.
+*/
+void CZM_GoldComet( const CzmRect &r, float rad, float phase )
+{
+	const float TWO_PI = 6.2831853f;
+	float perim, t, head, length, core, x = 0, y = 0;
+	int samples;
+
+	if( r.w <= 0 || r.h <= 0 )
+		return;
+	rad = Q_min( rad, Q_min( r.w, r.h ) * 0.5f );
+	perim = 2.0f * ( r.w + r.h ) - 8.0f * rad + TWO_PI * rad;
+	t = (float)EngFuncs::DoubleTime();
+	head = t * ScreenHeight * 0.55f + phase * perim;        // about half the screen height a second
+	length = Q_min( perim * 0.22f, ScreenHeight * 0.42f );  // the tail
+	core = Q_max( 2.0f, ScreenHeight * 0.0042f );            // line thickness at the head
+	samples = bound( 24, (int)( length / Q_max( 1.0f, core * 0.45f )), 160 );
+
+	// glow first, so the line stays crisp on top
+	for( int k = samples; k >= 0; k -= 4 )
+	{
+		float f = 1.0f - (float)k / samples;           // 0 at the end of the tail, 1 at the head
+		int g = (int)( core * ( 2.5f + 4.0f * f ));
+
+		CZM_RoundRectPoint( r, rad, head - length * k / samples, perim, &x, &y );
+		CZM_DrawImage( "gfx/czm/ui/glow.png", (int)x - g, (int)y - g, g * 2, g * 2, PackRGBA( 255, 170, 40, (int)( 70 * f * f )));
+	}
+
+	for( int k = samples; k >= 0; k-- )
+	{
+		float f = 1.0f - (float)k / samples;
+		int sz = Q_max( 2, (int)( core * ( 0.35f + 0.85f * f )));
+		int a = (int)( 250 * f * sqrtf( f ));
+
+		CZM_RoundRectPoint( r, rad, head - length * k / samples, perim, &x, &y );
+		CZM_DrawImage( "gfx/czm/ui/dot.png", (int)x - sz / 2, (int)y - sz / 2, sz, sz,
+			f > 0.92f ? PackRGBA( 255, 250, 228, a ) : PackRGBA( 255, 200, 70, a ));
+	}
+
+	// the head: a bright core in a wide warm halo
+	CZM_RoundRectPoint( r, rad, head, perim, &x, &y );
+	{
+		int halo = (int)( core * 9.0f ), spark = (int)( core * 3.2f );
+
+		CZM_DrawImage( "gfx/czm/ui/glow.png", (int)x - halo, (int)y - halo, halo * 2, halo * 2, PackRGBA( 255, 176, 50, 120 ));
+		CZM_DrawImage( "gfx/czm/ui/glow.png", (int)x - spark, (int)y - spark, spark * 2, spark * 2, PackRGBA( 255, 252, 235, 255 ));
+	}
+}
+
+int CZM_OfficialBadge( int x, int y, int h, bool draw )
+{
+	HFont font = CZM_Font( CZMF_UI_META );
+	const char *label = CZM_IsRussian() ? "Официальный" : "Official";
+	int icon = h * 62 / 100, pad = h * 40 / 100;
+	int w = pad + icon + h / 5 + CZM_TextWidth( font, label ) + pad;
+
+	if( !draw )
+		return w;
+	CZM_DrawSliced( "gfx/czm/ui/surface.png", x, y, w, h, 16, h / 2, PackRGBA( 240, 196, 92, 255 ));
+	CZM_DrawImage( "gfx/czm/ui/icon_bolt.png", x + pad, y + ( h - icon ) / 2, icon, icon, PackRGBA( 38, 28, 8, 255 ));
+	CZM_DrawText( font, x + pad + icon + h / 5, y + ( h - CZM_FontHeight( font )) / 2, w, label, PackRGBA( 38, 28, 8, 255 ));
+	return w;
+}
+
+/*
+The golden badge with an electric shock: a few short jagged arcs leap from its edge and die,
+new ones every 70 ms, a warm halo breathes behind it and now and then the whole badge flashes.
+The randomness is a hash of the time step and the place, so two badges crackle differently.
+*/
+static unsigned int CZM_SparkRandom( unsigned int *state )
+{
+	*state = *state * 1664525u + 1013904223u;
+	return *state >> 8;
+}
+
+void CZM_OfficialMark( int x, int y, int size )
+{
+	const float TWO_PI = 6.2831853f;
+	double now = EngFuncs::DoubleTime();
+	unsigned int step = (unsigned int)( now / 0.07 );
+	unsigned int seed = step * 2654435761u ^ (unsigned int)( x * 73856093 ) ^ (unsigned int)( y * 19349663 );
+	float cx = x + size * 0.5f, cy = y + size * 0.5f;
+	float breathe = 0.5f + 0.5f * sinf( (float)now * 5.0f );
+	int halo = (int)( size * ( 0.95f + 0.12f * breathe ));
+	int dot = Q_max( 2, size / 22 );
+
+	if( size <= 0 )
+		return;
+
+	CZM_DrawImage( "gfx/czm/ui/glow.png", (int)cx - halo, (int)cy - halo, halo * 2, halo * 2, PackRGBA( 255, 178, 40, (int)( 70 + 50 * breathe )));
+	CZM_DrawImage( "gfx/czm/ui/badge_official.png", x, y, size, size );
+
+	// most steps crackle, a few stay quiet: the rhythm of a live wire
+	CZM_SparkRandom( &seed );
+	if( CZM_SparkRandom( &seed ) % 10 < 7 )
+	{
+		int arcs = 1 + CZM_SparkRandom( &seed ) % 3;
+
+		for( int a = 0; a < arcs; a++ )
+		{
+			float angle = ( CZM_SparkRandom( &seed ) % 1000 ) / 1000.0f * TWO_PI;
+			float reach = size * ( 0.22f + ( CZM_SparkRandom( &seed ) % 100 ) / 100.0f * 0.22f );
+			float px = cx + cosf( angle ) * size * 0.40f, py = cy + sinf( angle ) * size * 0.40f;
+			float dx = cosf( angle ), dy = sinf( angle );
+			int alpha = 170 + CZM_SparkRandom( &seed ) % 86;
+			const int SEGMENTS = 4;
+
+			for( int k = 0; k < SEGMENTS; k++ )
+			{
+				// each segment goes outward and swings sideways, the last ones shorter
+				float len = reach / SEGMENTS * ( 1.15f - 0.1f * k );
+				float side = (( CZM_SparkRandom( &seed ) % 200 ) / 100.0f - 1.0f ) * len * 1.1f;
+				float nx = px + dx * len - dy * side, ny = py + dy * len + dx * side;
+				float dist = sqrtf(( nx - px ) * ( nx - px ) + ( ny - py ) * ( ny - py ));
+				int dots = Q_max( 2, (int)( dist / Q_max( 1, dot / 2 )));
+
+				for( int n = 0; n <= dots; n++ )
+				{
+					float t = (float)n / dots;
+					int sx = (int)( px + ( nx - px ) * t ), sy = (int)( py + ( ny - py ) * t );
+					int fade = alpha * ( SEGMENTS * 4 - k * 3 ) / ( SEGMENTS * 4 );
+
+					if( n % 3 == 0 )
+						CZM_DrawImage( "gfx/czm/ui/glow.png", sx - dot * 2, sy - dot * 2, dot * 4, dot * 4, PackRGBA( 255, 196, 70, fade / 3 ));
+					CZM_DrawImage( "gfx/czm/ui/dot.png", sx - dot / 2, sy - dot / 2, dot, dot, PackRGBA( 255, 248, 214, fade ));
+				}
+				px = nx;
+				py = ny;
+			}
+		}
+	}
+
+	// a short flash now and then
+	if( CZM_SparkRandom( &seed ) % 13 == 0 )
+		CZM_DrawImage( "gfx/czm/ui/glow.png", x - size / 4, y - size / 4, size + size / 2, size + size / 2, PackRGBA( 255, 252, 230, 120 ));
 }
 
 static CzmServer *CZM_ServerByAddress( const char *address )

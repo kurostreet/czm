@@ -118,6 +118,8 @@ private:
 		HIT_QUICK,                  // quick play under the logo
 		HIT_LOBBY_CREATE,          // start a temporary team room
 		HIT_LOBBY_SEARCH,          // browse public rooms
+		HIT_OFFICIAL,              // our own servers: Survival, Escape
+		HIT_OFFICIAL_LAST = HIT_OFFICIAL + CZM_OFFICIAL_COUNT - 1,
 		HIT_NAV,                    // 5 navigation items
 		HIT_TILE = HIT_NAV + 5,     // one per server
 		HIT_RETIRE = HIT_TILE + CZM_MAX_TILES,
@@ -139,6 +141,7 @@ private:
 	void DrawSetup( void );
 	void FinishSetup( void );
 	void DrawQuick( void );
+	void DrawOfficial( int slot );
 	void DrawRetired( void );
 
 	int m_overlay;
@@ -159,6 +162,7 @@ private:
 	CzmRect m_update, m_updateButton;
 	CzmRect m_setupLang, m_setupNick, m_setupGo, m_setupLogin, m_setupRegister;
 	CzmRect m_quick, m_lobbyCreate, m_lobbySearch;
+	CzmRect m_official[CZM_OFFICIAL_COUNT]; // empty when the owner has them off
 	CzmRect m_retire[6];
 	char m_szQuickNote[160];   // why the search found nothing, shown for a few seconds
 	double m_flQuickNote;
@@ -288,6 +292,22 @@ void CCzmMainMenu::Layout( void )
 		                         m_quick.w,actionHeight);
 		m_lobbySearch = CZM_Rect(m_quick.x,m_lobbyCreate.y+actionHeight+actionGap,
 		                         m_quick.w,actionHeight);
+	}
+
+	// our own servers: two cards between the actions and the navigation, left of the tiles;
+	// the line above them stays free for the quick play note
+	memset( m_official, 0, sizeof( m_official ));
+	if( CZM_OfficialEnabled( ))
+	{
+		int navTop = H * 0.884f, gap = H * 0.024f;
+		int cardH = H * 0.112f;
+		int left = m_iMargin, right = ( m_iTiles > 0 ? m_tiles[0].x : W - m_iMargin ) - (int)( H * 0.03f );
+		int cardW = ( right - left - gap ) / CZM_OFFICIAL_COUNT;
+		int cardY = navTop - (int)( H * 0.012f ) - cardH;
+
+		if( cardY > m_lobbySearch.y + m_lobbySearch.h && cardW > H * 0.2f )
+			for( int i = 0; i < CZM_OFFICIAL_COUNT; i++ )
+				m_official[i] = CZM_Rect( left + i * ( cardW + gap ), cardY, cardW, cardH );
 	}
 
 	// The visible cards are also their touch targets; the gaps stay empty.
@@ -421,6 +441,11 @@ int CCzmMainMenu::HitTest( void ) const
 		return HIT_LOBBY_CREATE;
 	if( m_lobbySearch.Grown( grow ).HasCursor( ))
 		return HIT_LOBBY_SEARCH;
+	for( int i = 0; i < CZM_OFFICIAL_COUNT; i++ )
+	{
+		if( m_official[i].HasCursor( ))
+			return HIT_OFFICIAL + i;
+	}
 
 	for( int i = 0; i < m_iTiles; i++ )
 	{
@@ -587,6 +612,9 @@ void CCzmMainMenu::Activate( int hit )
 		break;
 	}
 	default:
+		// our server: straight in; a slot without an address only says it opens soon
+		if( hit >= HIT_OFFICIAL && hit <= HIT_OFFICIAL_LAST )
+			CZM_ConnectOfficial( hit - HIT_OFFICIAL );
 		if( hit >= HIT_TILE && hit < HIT_TILE + m_iTiles )
 		{
 			int index = hit - HIT_TILE;
@@ -718,6 +746,145 @@ void CCzmMainMenu::DrawQuick( void )
             m_szQuickNote,PackRGBA(255,193,185,255));
 }
 
+/*
+Our own servers: the mode picture under a dark veil, a golden frame with a light running
+round it, the shield and «Официальный сервер», the mode and what is on the server now.
+A slot without an address is dimmed, locked and says «Скоро открытие».
+*/
+void CCzmMainMenu::DrawOfficial( int slot )
+{
+	CzmRect r = m_official[slot];
+	CzmServer *server = CZM_OfficialServer( slot );
+	bool soon = server == NULL, pressed = IsPressed( HIT_OFFICIAL + slot );
+	bool russian = CZM_IsRussian();
+	unsigned int gold = PackRGBA( 244, 201, 93, 255 );
+	int rad = Q_max( 5, (int)( H * 0.014f )), line = Q_max( 2, (int)( H * 0.0028f ));
+	HIMAGE art = CZM_Image( slot == CZM_OFFICIAL_ESCAPE ? UI_DIR "tile_escape.png" : UI_DIR "tile_attack.png" );
+	char text[128];
+
+	if( r.w <= 0 )
+		return;
+	if( pressed && !soon )
+	{
+		int dx = r.w * 0.015f, dy = r.h * 0.03f;
+		r = CZM_Rect( r.x + dx, r.y + dy, r.w - dx * 2, r.h - dy * 2 );
+	}
+
+	// frame and base
+	CZM_DrawSliced( UI_DIR "surface.png", r.x, r.y, r.w, r.h, 16, rad, soon ? PackRGBA( 150, 124, 64, 200 ) : gold );
+	CZM_DrawSliced( UI_DIR "surface.png", r.x + line, r.y + line, r.w - line * 2, r.h - line * 2, 16, Q_max( 1, rad - line ), PackRGBA( 12, 15, 22, 255 ));
+
+	// the mode picture: its slanted left edge stays outside, the play mark on the right inside
+	int artX = r.x + line, artY = r.y + line, artW = r.w - line * 2, artH = r.h - line * 2;
+	int picW = 0, picH = 0, picX = 0, picY = 0;
+	if( art )
+	{
+		int iw = EngFuncs::PIC_Width( art ), ih = EngFuncs::PIC_Height( art );
+		if( iw > 0 && ih > 0 )
+		{
+			picW = (int)( artW / 0.92f );
+			picH = picW * ih / iw;
+			if( picH < artH ) { picH = artH; picW = picH * iw / ih; }
+			picX = artX + artW - picW;
+			picY = artY + ( artH - picH ) / 2;
+			UI::Scissor::PushScissor( artX, artY, artW, artH );
+			EngFuncs::PIC_Set( art, 255, 255, 255, 255 );
+			EngFuncs::PIC_Draw( picX, picY, picW, picH );
+			// the veil: dark under the words, clear over the picture on the right
+			CZM_DrawImage( "gfx/czm/fade_left.png", artX, artY, artW * 0.85f, artH, PackRGBA( 6, 8, 13, soon ? 250 : 235 ));
+			if( soon )
+				UI_FillRect( artX, artY, artW, artH, PackRGBA( 8, 10, 15, 120 ));
+			UI::Scissor::PopScissor();
+		}
+	}
+
+	// the words
+	HFont labelFont = CZM_Font( CZMF_UI_META ), statusFont = CZM_Font( CZMF_TILE_STATUS );
+	HFont titleFont = CZM_Font( r.h > H * 0.10f ? CZMF_MENU_TITLE : CZMF_TILE_NAME );
+	int pad = r.h * 0.13f, textX = r.x + Q_max( pad, (int)( r.h * 0.22f ));
+	int playD = picH > 0 ? (int)( picH * 0.40f ) : (int)( r.h * 0.5f );
+	int textW = r.x + r.w - textX - playD - pad;
+	int labelH = CZM_FontHeight( labelFont ), titleH = CZM_FontHeight( titleFont ), statusH = CZM_FontHeight( statusFont );
+	int spare = r.h - pad * 2 - labelH - titleH - statusH;
+	int gapY = Q_max( 1, spare / 2 );
+	int y = r.y + pad;
+	bool compact = spare < 0; // a short card keeps the mode and the status only
+
+	if( compact )
+		y = r.y + ( r.h - titleH - statusH ) / 2;
+	else
+	{
+		int shield = labelH;
+		CZM_DrawImage( UI_DIR "badge_official.png", textX, y, shield, shield, soon ? PackRGBA( 200, 190, 170, 220 ) : CZM_White());
+		CZM_DrawText( labelFont, textX + shield + labelH / 3, y, textW - shield, russian ? "Официальный сервер" : "Official server",
+			soon ? PackRGBA( 214, 186, 120, 255 ) : gold );
+		y += labelH + gapY;
+	}
+
+	CZM_DrawText( titleFont, textX, y, textW, slot == CZM_OFFICIAL_ESCAPE ? "ESCAPE" : "SURVIVAL",
+		soon ? PackRGBA( 214, 219, 228, 255 ) : CZM_White());
+	y += titleH + ( compact ? 0 : gapY );
+
+	if( soon )
+	{
+		int icon = statusH * 85 / 100;
+		CZM_DrawImage( UI_DIR "icon_clock.png", textX, y + ( statusH - icon ) / 2, icon, icon, gold );
+		CZM_DrawText( statusFont, textX + icon + statusH / 3, y, textW - icon, russian ? "Скоро открытие" : "Coming soon", gold );
+	}
+	else
+	{
+		int dot = statusH * 45 / 100, x = textX + dot * 2, right = textX + textW;
+		unsigned int dotColor;
+
+		if( server->answerTime <= 0.0 && server->misses == 0 )
+		{
+			dotColor = PackRGBA( 150, 156, 166, 255 );
+			CZM_DrawText( statusFont, x, y, right - x, CZM_T( "querying" ), CZM_Grey());
+		}
+		else if( server->answerTime <= 0.0 || server->misses >= 2 )
+		{
+			dotColor = PackRGBA( 248, 113, 113, 255 );
+			CZM_DrawText( statusFont, x, y, right - x, CZM_T( "offline" ), PackRGBA( 248, 113, 113, 255 ));
+		}
+		else
+		{
+			bool full = server->maxplayers > 0 && server->players >= server->maxplayers;
+
+			dotColor = full ? PackRGBA( 250, 204, 21, 255 ) : PackRGBA( 74, 222, 128, 255 );
+			snprintf( text, sizeof( text ), "%d/%d %s", server->players, server->maxplayers, CZM_T( "in_game" ));
+			CZM_DrawText( statusFont, x, y, right - x, text, CZM_White());
+			x += CZM_TextWidth( statusFont, text );
+			if( server->ping >= 0 && x < right )
+			{
+				CZM_DrawText( statusFont, x, y, right - x, "  ·  ", CZM_Grey());
+				x += CZM_TextWidth( statusFont, "  ·  " );
+				snprintf( text, sizeof( text ), "%d %s", server->ping, CZM_T( "ms" ));
+				CZM_DrawText( statusFont, x, y, right - x, text, CZM_PingColor( server->ping ));
+				x += CZM_TextWidth( statusFont, text );
+			}
+			// the map only when it fits whole
+			if( server->map[0] && x + CZM_TextWidth( statusFont, "  ·  " ) + CZM_TextWidth( statusFont, server->map ) <= right )
+			{
+				CZM_DrawText( statusFont, x, y, right - x, "  ·  ", CZM_Grey());
+				x += CZM_TextWidth( statusFont, "  ·  " );
+				CZM_DrawText( statusFont, x, y, right - x, server->map, PackRGBA( 200, 206, 216, 255 ));
+			}
+		}
+		CZM_DrawImage( UI_DIR "dot.png", textX, y + ( statusH - dot ) / 2, dot, dot, dotColor );
+	}
+
+	// a locked slot covers the play mark of the picture
+	if( soon && picH > 0 )
+	{
+		int d = picH * 0.42f, cx = picX + (int)( picW * 0.907f ), cy = picY + picH / 2;
+		CZM_DrawImage( UI_DIR "dot.png", cx - d / 2, cy - d / 2, d, d, PackRGBA( 200, 168, 96, 140 ));
+		CZM_DrawImage( UI_DIR "dot.png", cx - d / 2 + line, cy - d / 2 + line, d - line * 2, d - line * 2, PackRGBA( 10, 14, 20, 245 ));
+		CZM_DrawImage( UI_DIR "icon_lock.png", cx - d / 4, cy - d / 4, d / 2, d / 2, PackRGBA( 226, 214, 186, 230 ));
+	}
+	else if( !soon )
+		CZM_GoldComet( r, (float)rad, slot * 0.5f );
+}
+
 void CCzmMainMenu::DrawTitle( void )
 {
 	int aspect = CZM_ImageAspect1000( "gfx/czm/title.png" );
@@ -781,87 +948,6 @@ void CCzmMainMenu::DrawHeader( void )
 	CZM_DrawText( langFont, m_lang.x + m_lang.w / 2, textY, segment, "EN", russian ? CZM_Grey() : CZM_White(), QM_CENTER );
 }
 
-// a point on the rounded-rectangle border, s in [0, perim)
-static void CZM_RoundRectPoint( const CzmRect &r, float rad, float s, float perim, float *ox, float *oy )
-{
-	const float HALF_PI = 1.5707963f, PI = 3.1415927f;
-	float straightH = r.w - 2 * rad; // top and bottom
-	float straightV = r.h - 2 * rad; // the sides
-	float arc = HALF_PI * rad;       // a quarter circle
-	float a;
-
-	s = fmodf( s, perim );
-	if( s < 0 )
-		s += perim;
-
-	if( s < straightH ) { *ox = r.x + rad + s; *oy = r.y; return; }
-	s -= straightH;
-	if( s < arc ) { a = -HALF_PI + ( s / arc ) * HALF_PI; *ox = r.x + r.w - rad + cosf( a ) * rad; *oy = r.y + rad + sinf( a ) * rad; return; }
-	s -= arc;
-	if( s < straightV ) { *ox = r.x + r.w; *oy = r.y + rad + s; return; }
-	s -= straightV;
-	if( s < arc ) { a = ( s / arc ) * HALF_PI; *ox = r.x + r.w - rad + cosf( a ) * rad; *oy = r.y + r.h - rad + sinf( a ) * rad; return; }
-	s -= arc;
-	if( s < straightH ) { *ox = r.x + r.w - rad - s; *oy = r.y + r.h; return; }
-	s -= straightH;
-	if( s < arc ) { a = HALF_PI + ( s / arc ) * HALF_PI; *ox = r.x + rad + cosf( a ) * rad; *oy = r.y + r.h - rad + sinf( a ) * rad; return; }
-	s -= arc;
-	if( s < straightV ) { *ox = r.x; *oy = r.y + r.h - rad - s; return; }
-	s -= straightV;
-	a = PI + ( s / arc ) * HALF_PI; *ox = r.x + rad + cosf( a ) * rad; *oy = r.y + rad + sinf( a ) * rad;
-}
-
-// a golden comet running along the tile border, so the tile asks to be tapped:
-// a continuous fading trail (samples closer than their size never look like beads)
-// and a soft glow around a white-hot head
-static void CZM_TileLightning( const CzmRect &r, int index )
-{
-	const float TWO_PI = 6.2831853f;
-	float rad = r.h * 0.16f;
-	float perim = 2.0f * ( r.w + r.h ) - 8.0f * rad + TWO_PI * rad;
-	float t = (float)EngFuncs::DoubleTime();
-	float offset = index * perim * 0.41f;              // the three tiles are out of step
-	float head = t * ( perim / 3.2f ) + offset;        // one loop every ~3.2 s
-	float length = perim * 0.17f;                      // the tail
-	float core = Q_max( 2.0f, r.h * 0.022f );          // line thickness at the head
-	int samples = (int)( length / Q_max( 1.0f, core * 0.45f ));
-	float x = 0, y = 0;
-
-	samples = bound( 24, samples, 160 );
-
-	// glow first, so the line stays crisp on top
-	for( int k = samples; k >= 0; k -= 4 )
-	{
-		float f = 1.0f - (float)k / samples;           // 0 at the end of the tail, 1 at the head
-		int g = (int)( core * ( 2.5f + 4.0f * f ));
-
-		CZM_RoundRectPoint( r, rad, head - length * k / samples, perim, &x, &y );
-		CZM_DrawImage( UI_DIR "glow.png", (int)x - g, (int)y - g, g * 2, g * 2, PackRGBA( 255, 170, 40, (int)( 70 * f * f )));
-	}
-
-	for( int k = samples; k >= 0; k-- )
-	{
-		float f = 1.0f - (float)k / samples;
-		int sz = (int)( core * ( 0.35f + 0.85f * f ));
-		int a = (int)( 250 * f * sqrtf( f ));
-
-		if( sz < 2 )
-			sz = 2;
-		CZM_RoundRectPoint( r, rad, head - length * k / samples, perim, &x, &y );
-		CZM_DrawImage( UI_DIR "dot.png", (int)x - sz / 2, (int)y - sz / 2, sz, sz,
-			f > 0.92f ? PackRGBA( 255, 250, 228, a ) : PackRGBA( 255, 200, 70, a ));
-	}
-
-	// the head: a bright core in a wide warm halo
-	CZM_RoundRectPoint( r, rad, head, perim, &x, &y );
-	{
-		int halo = (int)( core * 9.0f ), spark = (int)( core * 3.2f );
-
-		CZM_DrawImage( UI_DIR "glow.png", (int)x - halo, (int)y - halo, halo * 2, halo * 2, PackRGBA( 255, 176, 50, 120 ));
-		CZM_DrawImage( UI_DIR "glow.png", (int)x - spark, (int)y - spark, spark * 2, spark * 2, PackRGBA( 255, 252, 235, 255 ));
-	}
-}
-
 void CCzmMainMenu::DrawTile( int index, CzmRect r )
 {
 	bool add = index >= CZM_ServerCount();
@@ -896,9 +982,10 @@ void CCzmMainMenu::DrawTile( int index, CzmRect r )
 	}
 
 	unsigned int accent = server->accent ? server->accent : PackRGBA( 124, 58, 237, 255 );
+	bool official = CZM_IsOfficial( server->address );
 
-	// base card
-	CzmStyle::Surface(r,PackRGBA(20,27,38,250));
+	// base card; our own server gets the golden frame
+	CzmStyle::Surface(r,PackRGBA(20,27,38,250),official?PackRGBA(244,201,93,255):0);
 
 	// the map picture as a thumbnail on the right, well inside the rounded corners
 	{
@@ -981,11 +1068,15 @@ void CCzmMainMenu::DrawTile( int index, CzmRect r )
 	// pinned heart in the top-right corner
 	{
 		int hs = r.h * 0.20f;
-		if( CZM_ServerOwner( server->address ) )
+		if( !official && CZM_ServerOwner( server->address ) )
 			CzmStyle::Verified( CZM_Rect( r.x + r.w - hs * 2 - rad, r.y + rad * 0.4f, hs, hs ), false );
 
 		CZM_DrawImage( UI_DIR "icon_heart_on.png", r.x + r.w - hs - rad * 0.5f, r.y + rad * 0.4f, hs, hs, PackRGBA( 244, 63, 94, 255 ));
+		if( official )
+			CZM_OfficialMark( r.x + r.w - hs * 2 - rad, r.y + rad * 0.4f, hs );
 	}
+	if( official )
+		CZM_GoldComet( r, Q_max( 3.0f, H * 0.011f ), 0.25f + index * 0.3f );
 
 }
 
@@ -1429,6 +1520,8 @@ void CCzmMainMenu::Draw()
 
 	for( int i = 0; i < m_iTiles; i++ )
 		DrawTile( i, m_tiles[i] );
+	for( int i = 0; i < CZM_OFFICIAL_COUNT; i++ )
+		DrawOfficial( i );
 	DrawNav();
 	DrawHeader();
 

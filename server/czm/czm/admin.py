@@ -2,7 +2,7 @@
 import hashlib
 import json
 
-from . import accounts,community,moderation,moderator_guard,server_moderation,service,play_feed
+from . import accounts,community,moderation,moderator_guard,server_moderation,service,play_feed,official
 from .config import get_settings
 from .db import now
 
@@ -103,6 +103,7 @@ def view(conn,key,section,target=0,query="",offset=0):
         result["history"]=[dict(r) for r in conn.execute("SELECT l.actor,l.action,l.reason,l.created FROM server_moderation_log l "
             "JOIN server_cases s ON s.id=l.server_id WHERE s.server=? ORDER BY l.id DESC LIMIT 20",(address,))]
         return result
+    if section=="official":return official.state(conn)
     if section=="moderation_history":return moderation.history(conn,key,offset)
     if section=="role_history":
         rows=conn.execute("SELECT player,role,action,actor,created FROM community_role_log ORDER BY id DESC LIMIT ? OFFSET ?",(PAGE+1,offset)).fetchall()
@@ -146,6 +147,8 @@ def action(conn,key,data):
             latest=conn.execute("SELECT MAX(log) FROM moderation_events WHERE batch=?",(batch,)).fetchone()[0] or 0
             if not expected or expected!=latest:raise accounts.AuthError("batch",409)
             result=moderator_guard.undo(conn,target,batch,origin)
+    elif kind=="official_servers":
+        result=official.update(conn,bool(data.get("enabled")),data.get("survival",""),data.get("escape",""),principal["id"])
     elif kind=="owner_server_remove":
         person(conn,target);address=community.public_endpoint(data.get("server",""))
         conn.execute("DELETE FROM owner_servers WHERE player=? AND server=?",(target,address));result={"ok":True}

@@ -341,6 +341,12 @@ static void OnHello( int status, const char *body )
 		else
 			CZM_RulesSetState( 0, false, "" );
 	}
+	// the project's own servers; an older service sends nothing and the cached ones stay
+	{
+		int official = j.Get( 0, "official" );
+		if( j.Type( official ) == CzmJson::T_OBJECT )
+			CZM_OfficialSet( j.Bool( j.Get( official, "enabled" )), j.String( j.Get( official, "survival" )), j.String( j.Get( official, "escape" )));
+	}
 	s_online.newsLast = j.Int( j.Get( 0, "news" ));
 	{
 		int play = j.Get( 0, "play" );
