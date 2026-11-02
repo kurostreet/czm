@@ -5,6 +5,7 @@ const path=require('node:path');
 const {JSDOM,VirtualConsole}=require('jsdom');
 const site=path.join(__dirname,'../site');
 const html=fs.readFileSync(path.join(site,'server-panel.html'),'utf8');
+const css=fs.readFileSync(path.join(site,'assets/server-panel.css'),'utf8');
 const scripts=['assets/vendor/codemirror.js','assets/server-panel-i18n.js','assets/server-panel.js'].map(p=>fs.readFileSync(path.join(site,p),'utf8'));
 const tick=()=>new Promise(r=>setTimeout(r,35));
 
@@ -126,4 +127,14 @@ test('typing during a slow save stays unsaved until the next Save',async t=>{
   cm.setValue('second version');release();await tick();assert.equal(p.text,'first version');assert.equal(cm.getValue(),'second version');
   assert.equal(p.d.querySelector('#editor-state').textContent,'Unsaved changes');
   await p.click('#editor-save');assert.equal(p.text,'second version');assert.equal(p.d.querySelector('#editor-state').textContent,'Changes saved');
+});
+
+test('translated labels retain text styling instead of icon widths and hidden arrow styling',()=>{
+  const dom=new JSDOM('<style>'+css+'</style>'+html),w=dom.window,d=w.document;
+  for(const selector of ['.panel-nav button [data-i18n]','.power-actions button [data-i18n]']){
+    for(const label of d.querySelectorAll(selector))assert.ok(!/^\d+px$/.test(w.getComputedStyle(label).width),selector);
+  }
+  assert.ok(!css.includes('.console-input .primary>span{display:none}'));
+  assert.ok(css.includes('.console-input .primary>span:last-child{display:none}'));
+  w.close();
 });
