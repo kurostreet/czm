@@ -1,0 +1,40 @@
+[Unit]
+Description=Counter Zombie private server panel
+After=network.target czm-server-panel-agent.service
+Requires=czm-server-panel-agent.service
+
+[Service]
+User=czm-zm-test
+Group=czm-zm-test
+WorkingDirectory=/opt/czm/panel-current/server/czm
+EnvironmentFile=/etc/czm-server-panel/env
+ExecStart=/opt/czm/venv/bin/uvicorn czm.server_panel:application --factory --host 127.0.0.1 --port 8210 --proxy-headers --forwarded-allow-ips 127.0.0.1 --no-access-log --workers 1
+Restart=on-failure
+RestartSec=5
+UMask=0027
+MemoryHigh=144M
+MemoryMax=192M
+TasksMax=32
+CPUQuota=35%
+CPUWeight=10
+LimitNOFILE=1024
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+IPAddressDeny=any
+IPAddressAllow=localhost
+InaccessiblePaths=/etc/czm /var/lib/czm /opt/market-pay /opt/fva /root /srv/czm-zm-test/private
+ReadWritePaths=/var/lib/czm-server-panel /srv/czm-zm-test/game/cstrike /srv/czm-zm-test/fastdl
+ReadOnlyPaths=/srv/czm-zm-test/game/cstrike/dlls /srv/czm-zm-test/game/cstrike/addons/metamod /srv/czm-zm-test/game/cstrike/addons/reunion /srv/czm-zm-test/game/cstrike/addons/amxmodx/dlls /srv/czm-zm-test/game/cstrike/addons/amxmodx/modules
+
+[Install]
+WantedBy=multi-user.target

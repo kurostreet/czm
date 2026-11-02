@@ -10,11 +10,11 @@ umask 022
 COMMIT=${1:?usage: install.sh <commit>}
 REPO=https://raw.githubusercontent.com/kurostreet/czm/$COMMIT/server/czm
 FILES="requirements.txt czm/__init__.py czm/config.py czm/db.py czm/profanity.py czm/links.py czm/service.py czm/api.py
-       czm/bot.py czm/steam.py czm/main.py czm/cli.py czm/builds.py czm/assemble.py czm/distribution.py czm/game_branding.py czm/ui_art.py czm/apkpatch.py czm/mappics.py czm/game_probe.py czm/voice_lobby.py czm/accounts.py czm/settings.py czm/tab.py czm/social.py czm/notifications.py czm/rules.py czm/moderation.py czm/server_moderation.py czm/community.py czm/moderator_guard.py czm/admin.py czm/play_feed.py czm/playtime.py czm/lobbies.py czm/website.py czm/play.py czm/play_publish.py czm/settings_schema.json czm/tlds.txt
+       czm/bot.py czm/steam.py czm/main.py czm/cli.py czm/builds.py czm/assemble.py czm/distribution.py czm/game_branding.py czm/ui_art.py czm/apkpatch.py czm/mappics.py czm/game_probe.py czm/voice_lobby.py czm/accounts.py czm/settings.py czm/tab.py czm/social.py czm/notifications.py czm/rules.py czm/moderation.py czm/server_moderation.py czm/community.py czm/moderator_guard.py czm/admin.py czm/play_feed.py czm/playtime.py czm/lobbies.py czm/website.py czm/server_panel.py czm/server_panel_auth.py czm/server_panel_storage.py czm/server_panel_agent.py czm/play.py czm/play_publish.py czm/settings_schema.json czm/tlds.txt
        deploy/czm.service deploy/czm.caddy deploy/install.sh deploy/czm-set
-       deploy/czm-assemble.service deploy/czm-assemble.path deploy/czm-assemble.timer"
+       deploy/czm-assemble.service deploy/czm-assemble.path deploy/czm-assemble.timer deploy/czm-server-panel-agent.service deploy/czm-server-panel.service deploy/server-panel-install.sh"
 # the public site (pages, pictures, fonts, script)
-SITE="site/index.html site/privacy.html site/rules.html site/create-server.html site/assets/server-setup.css site/assets/server-setup.js site/assets/apple-touch-icon.png site/assets/art-3.webp
+SITE="site/index.html site/privacy.html site/rules.html site/create-server.html site/server-panel.html site/assets/server-panel.css site/assets/server-panel.js site/assets/server-setup.css site/assets/server-setup.js site/assets/apple-touch-icon.png site/assets/art-3.webp
       site/assets/avatar-1.png site/assets/avatar-10.png site/assets/avatar-2.png site/assets/avatar-3.png
       site/assets/avatar-4.png site/assets/avatar-5.png site/assets/avatar-6.png site/assets/avatar-7.png
       site/assets/avatar-8.png site/assets/avatar-9.png site/assets/ct.webp site/assets/env.webp
@@ -37,7 +37,7 @@ mkdir -p "$DEST/czm" "$DEST/deploy" /var/lib/czm/avatars /var/lib/czm/apk /var/l
 mkdir -p "$DEST/site/assets/fonts"
 for f in $FILES $SITE; do curl -fsSL "$REPO/$f" -o "$DEST/$f"; done
 # links to pictures and the script change with every release, so browsers fetch the new ones
-for page in "$DEST/site/index.html" "$DEST/site/create-server.html"; do
+for page in "$DEST/site/index.html" "$DEST/site/create-server.html" "$DEST/site/server-panel.html"; do
   sed -i "s/__V__/${COMMIT:0:7}/g" "$page"
 done
 
