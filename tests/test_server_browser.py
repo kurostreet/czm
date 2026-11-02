@@ -122,9 +122,10 @@ int main(int argc,char**argv){
    cursor(w.m_verified);assert(w.HitTest()==w.HIT_VERIFIED);w.Activate(w.HIT_VERIFIED);assert(openedOwner==42);
    w.Draw();w.m_bDetailsOpen=false;
    CzmRect row=w.RowRect(0);cursorY=uiStatic.cursorY=row.y+row.h/2;
-   cursorX=uiStatic.cursorX=row.x+row.w-row.h*3/2;
+   // the verified shield comes first, the heart and the star keep their places
+   cursorX=uiStatic.cursorX=row.x+row.w-row.h*5/2;
    assert(w.HitTest()==w.HIT_ROW+3);openedOwner=0;w.Activate(w.HitTest());assert(openedOwner==42);
-   cursorX=uiStatic.cursorX=row.x+row.w-row.h*5/2;assert(w.HitTest()==w.HIT_ROW+2);
+   cursorX=uiStatic.cursorX=row.x+row.w-row.h*3/2;assert(w.HitTest()==w.HIT_ROW+2);
    cursorX=uiStatic.cursorX=row.x+row.w-row.h/2;assert(w.HitTest()==w.HIT_ROW+1);
    verifiedOwner=0;w.m_bDetailsOpen=true;w.Layout();assert(!w.m_verified.w);
    actorAdmin=true;w.Layout();assert(inside(w.m_manage,w.m_details)&&!overlap(w.m_manage,w.m_report));
