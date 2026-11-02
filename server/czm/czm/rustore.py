@@ -23,8 +23,8 @@ from .config import get_settings
 PACKAGE = "ru.kurostreet.counterzombiemobile"
 ALIAS = "rustore"
 PASSWORD_ENV = "CZM_RUSTORE_KEY_PASSWORD"
-# the certificate of the first RuStore release (apksigner SHA-256 digest); empty until then
-CERT_SHA256 = ""
+# the certificate of the first RuStore release (1.35-7cfec80, apksigner SHA-256 digest)
+CERT_SHA256 = "894c18772de31fe70f53614f2a36c50de0c9c95f2de1f86cea1fbe020651607a"
 VERSION = re.compile(r"[0-9A-Za-z][0-9A-Za-z.\-]{0,63}")
 MANIFEST_MARKS = ("android.permission.REQUEST_INSTALL_PACKAGES",)
 DEX_MARKS = (b"com/google/android/play/core",)
