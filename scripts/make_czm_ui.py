@@ -417,6 +417,60 @@ def icon(kind, size=128, color=(255, 255, 255, 255)):
     return im.resize((size, size), Image.LANCZOS)
 
 
+BOLT = [(.60, .04), (.22, .56), (.46, .56), (.36, .96), (.80, .38), (.55, .38), (.70, .04)]
+
+
+def make_bolt(name, size=128):
+    """A white lightning bolt, tinted in the game (the "Official" label)."""
+    S = size * SS
+    im = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    ImageDraw.Draw(im).polygon([(x * S, y * S) for x, y in BOLT], fill=(255, 255, 255, 255))
+    save(im.resize((size, size), Image.LANCZOS), name)
+
+
+def make_official_badge(name, size=128):
+    """Our own servers: a golden shield with a dark lightning bolt, drawn untinted.
+    Metal gradient, a dark rim, a light bevel on top; the game adds the electric sparks."""
+    S = size * SS
+    right = [(S * .50, S * .03), (S * .68, S * .10), (S * .90, S * .13), (S * .90, S * .50)]
+    for i in range(1, 25):
+        t = i / 24.0
+        right.append((S * (.90 - .40 * t * t), S * (.50 + .47 * t)))
+    outline = right + [(S - x, y) for x, y in reversed(right[1:-1])]
+
+    def shape(scale):
+        cx, cy = S / 2, S / 2
+        return [(cx + (x - cx) * scale, cy + (y - cy) * scale) for x, y in outline]
+
+    im = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    rim = Image.new("L", (S, S), 0)
+    ImageDraw.Draw(rim).polygon(shape(1.0), fill=255)
+    inner = Image.new("L", (S, S), 0)
+    ImageDraw.Draw(inner).polygon(shape(0.86), fill=255)
+    # the rim: dark bronze; the face: light gold at the top to deep gold at the point
+    im.paste((74, 46, 8, 255), (0, 0), rim)
+    face = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    top, mid, bottom = (255, 238, 170), (244, 196, 72), (176, 112, 22)
+    for y in range(S):
+        t = y / (S - 1)
+        a, b, u = (top, mid, t / .5) if t < .5 else (mid, bottom, (t - .5) / .5)
+        colour = tuple(int(a[k] + (b[k] - a[k]) * u) for k in range(3)) + (255,)
+        ImageDraw.Draw(face).line([(0, y), (S, y)], fill=colour)
+    im.paste(face, (0, 0), inner)
+    # a soft shine across the upper half
+    shine = Image.new("L", (S, S), 0)
+    ImageDraw.Draw(shine).ellipse([S * .18, -S * .30, S * .82, S * .46], fill=90)
+    shine = Image.composite(shine, Image.new("L", (S, S), 0), inner).filter(ImageFilter.GaussianBlur(S * .03))
+    im.paste((255, 255, 255, 255), (0, 0), shine)
+    # the bolt, dark on the gold, with a thin light edge
+    bolt = [(S * (.5 + (x - .5) * .62), S * (.52 + (y - .5) * .62)) for x, y in BOLT]
+    edge = Image.new("L", (S, S), 0)
+    ImageDraw.Draw(edge).polygon([(x + S * .012, y + S * .012) for x, y in bolt], fill=150)
+    im.paste((255, 246, 210, 255), (0, 0), edge)
+    ImageDraw.Draw(im).polygon(bolt, fill=(42, 28, 4, 255))
+    save(im.resize((size, size), Image.LANCZOS), name)
+
+
 def rounded(w, h, radius, fill, outline=None, width=0):
     big = Image.new("RGBA", (w * SS, h * SS), (0, 0, 0, 0))
     ImageDraw.Draw(big).rounded_rectangle([0, 0, w * SS - 1, h * SS - 1], radius=radius * SS, fill=fill,
@@ -444,6 +498,11 @@ def main():
     OUTPUT.mkdir(parents=True, exist_ok=True)
     if "--support" in sys.argv:
         save(icon("shield"), "icon_shield.png")
+        return
+    if "--official" in sys.argv:
+        # our own servers: the golden badge (sparks are drawn by the game) and the bolt of the label
+        make_official_badge("badge_official.png")
+        make_bolt("icon_bolt.png")
         return
     if "--wheels" in sys.argv:
         # the touch wheels: knife and shop slots, the weapon wheel button

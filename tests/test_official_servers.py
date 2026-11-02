@@ -32,6 +32,9 @@ class OfficialServersTests(unittest.TestCase):
         self.assertIn("CZM_IsOfficial( e.address )", row)
         self.assertIn("CZM_GoldComet(", row)
         self.assertIn("CZM_OfficialBadge(", row)
+        # the marks from the right: star, heart, verified shield, then our golden badge first of all
+        order = [row.index(k) for k in ("icon_star_on.png", "icon_heart_on.png", "CzmStyle::Verified(", "CZM_OfficialMark(")]
+        self.assertEqual(order, sorted(order))
         self.assertNotRegex(row, re.compile(r"CZM_IsOfficial\(\s*e\.name"))
         refresh = servers[servers.index("void CCzmServers::Refresh"):servers.index("void CCzmServers::SetFavorite")]
         self.assertIn("CZM_OfficialServer( i )", refresh)

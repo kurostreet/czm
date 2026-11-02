@@ -1603,9 +1603,82 @@ int CZM_OfficialBadge( int x, int y, int h, bool draw )
 	if( !draw )
 		return w;
 	CZM_DrawSliced( "gfx/czm/ui/surface.png", x, y, w, h, 16, h / 2, PackRGBA( 240, 196, 92, 255 ));
-	CZM_DrawImage( "gfx/czm/ui/icon_shield.png", x + pad, y + ( h - icon ) / 2, icon, icon, PackRGBA( 38, 28, 8, 255 ));
+	CZM_DrawImage( "gfx/czm/ui/icon_bolt.png", x + pad, y + ( h - icon ) / 2, icon, icon, PackRGBA( 38, 28, 8, 255 ));
 	CZM_DrawText( font, x + pad + icon + h / 5, y + ( h - CZM_FontHeight( font )) / 2, w, label, PackRGBA( 38, 28, 8, 255 ));
 	return w;
+}
+
+/*
+The golden badge with an electric shock: a few short jagged arcs leap from its edge and die,
+new ones every 70 ms, a warm halo breathes behind it and now and then the whole badge flashes.
+The randomness is a hash of the time step and the place, so two badges crackle differently.
+*/
+static unsigned int CZM_SparkRandom( unsigned int *state )
+{
+	*state = *state * 1664525u + 1013904223u;
+	return *state >> 8;
+}
+
+void CZM_OfficialMark( int x, int y, int size )
+{
+	const float TWO_PI = 6.2831853f;
+	double now = EngFuncs::DoubleTime();
+	unsigned int step = (unsigned int)( now / 0.07 );
+	unsigned int seed = step * 2654435761u ^ (unsigned int)( x * 73856093 ) ^ (unsigned int)( y * 19349663 );
+	float cx = x + size * 0.5f, cy = y + size * 0.5f;
+	float breathe = 0.5f + 0.5f * sinf( (float)now * 5.0f );
+	int halo = (int)( size * ( 0.95f + 0.12f * breathe ));
+	int dot = Q_max( 2, size / 22 );
+
+	if( size <= 0 )
+		return;
+
+	CZM_DrawImage( "gfx/czm/ui/glow.png", (int)cx - halo, (int)cy - halo, halo * 2, halo * 2, PackRGBA( 255, 178, 40, (int)( 70 + 50 * breathe )));
+	CZM_DrawImage( "gfx/czm/ui/badge_official.png", x, y, size, size );
+
+	// most steps crackle, a few stay quiet: the rhythm of a live wire
+	CZM_SparkRandom( &seed );
+	if( CZM_SparkRandom( &seed ) % 10 < 7 )
+	{
+		int arcs = 1 + CZM_SparkRandom( &seed ) % 3;
+
+		for( int a = 0; a < arcs; a++ )
+		{
+			float angle = ( CZM_SparkRandom( &seed ) % 1000 ) / 1000.0f * TWO_PI;
+			float reach = size * ( 0.22f + ( CZM_SparkRandom( &seed ) % 100 ) / 100.0f * 0.22f );
+			float px = cx + cosf( angle ) * size * 0.40f, py = cy + sinf( angle ) * size * 0.40f;
+			float dx = cosf( angle ), dy = sinf( angle );
+			int alpha = 170 + CZM_SparkRandom( &seed ) % 86;
+			const int SEGMENTS = 4;
+
+			for( int k = 0; k < SEGMENTS; k++ )
+			{
+				// each segment goes outward and swings sideways, the last ones shorter
+				float len = reach / SEGMENTS * ( 1.15f - 0.1f * k );
+				float side = (( CZM_SparkRandom( &seed ) % 200 ) / 100.0f - 1.0f ) * len * 1.1f;
+				float nx = px + dx * len - dy * side, ny = py + dy * len + dx * side;
+				float dist = sqrtf(( nx - px ) * ( nx - px ) + ( ny - py ) * ( ny - py ));
+				int dots = Q_max( 2, (int)( dist / Q_max( 1, dot / 2 )));
+
+				for( int n = 0; n <= dots; n++ )
+				{
+					float t = (float)n / dots;
+					int sx = (int)( px + ( nx - px ) * t ), sy = (int)( py + ( ny - py ) * t );
+					int fade = alpha * ( SEGMENTS * 4 - k * 3 ) / ( SEGMENTS * 4 );
+
+					if( n % 3 == 0 )
+						CZM_DrawImage( "gfx/czm/ui/glow.png", sx - dot * 2, sy - dot * 2, dot * 4, dot * 4, PackRGBA( 255, 196, 70, fade / 3 ));
+					CZM_DrawImage( "gfx/czm/ui/dot.png", sx - dot / 2, sy - dot / 2, dot, dot, PackRGBA( 255, 248, 214, fade ));
+				}
+				px = nx;
+				py = ny;
+			}
+		}
+	}
+
+	// a short flash now and then
+	if( CZM_SparkRandom( &seed ) % 13 == 0 )
+		CZM_DrawImage( "gfx/czm/ui/glow.png", x - size / 4, y - size / 4, size + size / 2, size + size / 2, PackRGBA( 255, 252, 230, 120 ));
 }
 
 static CzmServer *CZM_ServerByAddress( const char *address )

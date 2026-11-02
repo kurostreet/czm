@@ -141,8 +141,10 @@ bool CZM_OfficialEnabled( void );
 CzmServer *CZM_OfficialServer( int slot );   // NULL when off or while the slot has no address
 bool CZM_IsOfficial( const char *address );
 void CZM_ConnectOfficial( int slot );
-// the "Official" label: a golden pill with the shield, h high; returns its width, draws only when asked
+// the "Official" label: a golden pill with a bolt, h high; returns its width, draws only when asked
 int CZM_OfficialBadge( int x, int y, int h, bool draw );
+// the golden badge of our servers with electric sparks crackling round it, size x size at x, y
+void CZM_OfficialMark( int x, int y, int size );
 
 // pinned servers of the main screen, kept in home_servers.lst
 void CZM_HomeReload( void );                 // read the file into the tiles, call when the main screen opens

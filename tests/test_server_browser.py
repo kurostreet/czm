@@ -36,7 +36,7 @@ void CZM_LobbyPickedServer(const char*,const char*,const char*,const char*,int,i
 struct CzmServer;
 enum{CZM_OFFICIAL_SURVIVAL=0,CZM_OFFICIAL_ESCAPE,CZM_OFFICIAL_COUNT};
 CzmServer*CZM_OfficialServer(int);bool CZM_IsOfficial(const char*);
-int CZM_OfficialBadge(int,int,int,bool);void CZM_GoldComet(const CzmRect&,float,float);
+int CZM_OfficialBadge(int,int,int,bool);void CZM_GoldComet(const CzmRect&,float,float);void CZM_OfficialMark(int,int,int);
 '''
 HARNESS = LOBBY_HARNESS.replace('unsigned CZM_White(){return 0xffffffff;}',
     'unsigned CZM_White(int alpha){return PackRGBA(255,255,255,alpha);}')
@@ -71,7 +71,7 @@ const char*CZM_T(const char*k){
 bool CZM_HomePinned(const char*){return false;}bool CZM_HomeSetPinned(const char*,const char*,bool){return true;}
 void CZM_ServerAuthShow(const char*,const char*){authOpened++;}
 CzmServer*CZM_OfficialServer(int){return nullptr;}bool CZM_IsOfficial(const char*){return false;}
-int CZM_OfficialBadge(int,int,int,bool){return 0;}void CZM_GoldComet(const CzmRect&,float,float){}
+int CZM_OfficialBadge(int,int,int,bool){return 0;}void CZM_GoldComet(const CzmRect&,float,float){}void CZM_OfficialMark(int,int,int){}
 void CZM_LobbyPickedServer(const char*a,const char*,const char*,const char*,int,int){picked++;pickedAddress=a;}
 static std::vector<CzmRect> mapRects;
 void CZM_DrawMapPreview(const char*,int x,int y,int w,int h,const char*){mapRects.push_back(CZM_Rect(x,y,w,h));if(trace)printf("M\t%d\t%d\t%d\t%d\n",x,y,w,h);}

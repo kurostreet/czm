@@ -815,7 +815,7 @@ void CCzmMainMenu::DrawOfficial( int slot )
 	else
 	{
 		int shield = labelH;
-		CZM_DrawImage( UI_DIR "icon_shield.png", textX, y, shield, shield, soon ? PackRGBA( 200, 168, 96, 255 ) : gold );
+		CZM_DrawImage( UI_DIR "badge_official.png", textX, y, shield, shield, soon ? PackRGBA( 200, 190, 170, 220 ) : CZM_White());
 		CZM_DrawText( labelFont, textX + shield + labelH / 3, y, textW - shield, russian ? "Официальный сервер" : "Official server",
 			soon ? PackRGBA( 214, 186, 120, 255 ) : gold );
 		y += labelH + gapY;
@@ -1073,7 +1073,7 @@ void CCzmMainMenu::DrawTile( int index, CzmRect r )
 
 		CZM_DrawImage( UI_DIR "icon_heart_on.png", r.x + r.w - hs - rad * 0.5f, r.y + rad * 0.4f, hs, hs, PackRGBA( 244, 63, 94, 255 ));
 		if( official )
-			CZM_DrawImage( UI_DIR "icon_shield.png", r.x + r.w - hs * 2 - rad, r.y + rad * 0.4f, hs, hs, PackRGBA( 244, 201, 93, 255 ));
+			CZM_OfficialMark( r.x + r.w - hs * 2 - rad, r.y + rad * 0.4f, hs );
 	}
 	if( official )
 		CZM_GoldComet( r, Q_max( 3.0f, H * 0.011f ), 0.25f + index * 0.3f );

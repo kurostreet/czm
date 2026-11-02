@@ -2237,7 +2237,14 @@ void CCzmServers::DrawRow( int index, const CzmRect &r )
 		const int shield = Q_max( 14, r.h * 52 / 100 );
 		CzmStyle::Verified( CZM_Rect( right + ( r.h - shield ) / 2, r.y + ( r.h - shield ) / 2, shield, shield ), false );
 	}
-	// the stats and the name stop before the heart or the shield
+	// our own server: the golden badge with sparks is the very first mark
+	if( official )
+	{
+		right -= r.h;
+		const int mark = Q_max( 16, r.h * 56 / 100 );
+		CZM_OfficialMark( right + ( r.h - mark ) / 2, r.y + ( r.h - mark ) / 2, mark );
+	}
+	// the stats and the name stop before the marks
 
 	statsW = H * 0.30f;
 	if( e.answered )
