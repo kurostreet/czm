@@ -31,6 +31,32 @@ class Fixture(unittest.TestCase):
 
 
 class StorageTests(Fixture):
+    def test_folder_sizes_include_nested_files_and_refresh_after_changes(self):
+        (self.root / "maps/sub").mkdir()
+        (self.root / "maps/sub/a.txt").write_bytes(b"12345")
+        (self.root / "maps/b.txt").write_bytes(b"123")
+        entry = next(e for e in self.files.list()["entries"] if e["name"] == "maps")
+        self.assertEqual((entry["size"], entry["size_complete"]), (8, True))
+        self.files.write("maps/b.txt", b"0123456789", digest(b"123"), True)
+        self.assertEqual(next(e for e in self.files.list()["entries"] if e["name"] == "maps")["size"], 15)
+        self.files.delete("maps/sub/a.txt", digest(b"12345"))
+        self.assertEqual(next(e for e in self.files.list()["entries"] if e["name"] == "maps")["size"], 10)
+
+    def test_folder_size_does_not_follow_links_or_read_outside_files(self):
+        outside = Path(self.temp.name) / "outside"; outside.mkdir()
+        (outside / "large").write_bytes(b"x" * 100)
+        (self.root / "maps/link").symlink_to(outside, target_is_directory=True)
+        (self.root / "maps/empty").mkdir()
+        self.assertEqual(self.files.folder_size(("maps",)), (0, True))
+
+    def test_lua_and_pawn_source_files_are_editable_without_publishing_them(self):
+        for name in ["test.lua", "test.sma"]:
+            (self.root / "addons/amxmodx/scripting").mkdir(exist_ok=True)
+            path = "addons/amxmodx/scripting/" + name
+            self.files.write(path, b"// source", "new", True)
+            self.assertEqual(self.files.read(path)["text"], "// source")
+        self.assertFalse((self.fastdl / "addons").exists())
+
     def test_public_listing_has_only_allowed_game_files(self):
         (self.root / "reunion.cfg").write_text("private")
         (self.root / "dlls").mkdir()

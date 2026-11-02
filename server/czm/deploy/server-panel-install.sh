@@ -18,11 +18,20 @@ fi
 chown root:czm-zm-test /etc/czm-server-panel/env
 chmod 640 /etc/czm-server-panel/env
 ln -sfn "$RELEASE" /opt/czm/panel-current
+SLOTS_CHANGED=0
+install -d -m 755 /etc/systemd/system/czm-zm-test.service.d
+if ! cmp -s "$RELEASE/server/czm/deploy/czm-zm-test-slots.conf" /etc/systemd/system/czm-zm-test.service.d/10-slots.conf; then
+  install -m 644 "$RELEASE/server/czm/deploy/czm-zm-test-slots.conf" /etc/systemd/system/czm-zm-test.service.d/10-slots.conf
+  SLOTS_CHANGED=1
+fi
 for unit in czm-server-panel-agent.service czm-server-panel.service; do
   install -m 644 "$RELEASE/server/czm/deploy/$unit" "/etc/systemd/system/$unit"
 done
 systemctl daemon-reload
 systemctl enable czm-server-panel-agent.service czm-server-panel.service >/dev/null
 systemctl restart czm-server-panel-agent.service czm-server-panel.service
+if [ "$SLOTS_CHANGED" = 1 ]; then
+  systemctl restart czm-zm-test.service
+fi
 systemctl is-active --quiet czm-server-panel-agent.service
 systemctl is-active --quiet czm-server-panel.service
