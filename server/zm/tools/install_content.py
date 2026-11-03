@@ -38,14 +38,25 @@ EXTRAS = [
      r"models/zm_dust_world/\1"),
 ]
 
-# Human knives of the LVL MOD shop (GameBanana, CC BY-NC-ND, see CREDITS.md): one v_ model each,
-# put under models/czm_survival/ so they never replace the stock knife of other servers' players.
-KNIVES = [
+# Knives and human skins of the LVL MOD shop (GameBanana, see CREDITS.md). Knives go under
+# models/czm_survival/, skins under models/player/czm_<skin>/ (with the <name>T.mdl texture file when
+# the model has one), so none of them replaces a stock model for other servers' players.
+def _skin(name):
+    return f"models/player/czm_{name}/czm_{name}.mdl", f"models/player/czm_{name}/czm_{name}T.mdl"
+
+
+MODELS = [
     ("221799_*", r"models/v_knife\.mdl$", "models/czm_survival/v_katana.mdl"),
     ("221665_*", r"Texture/Gold/models/v_knife\.mdl$", "models/czm_survival/v_axe.mdl"),
     ("221665_*", r"Texture/Gold/models/p_knife\.mdl$", "models/czm_survival/p_axe.mdl"),
     ("440810_*", r"models/v_knife\.mdl$", "models/czm_survival/v_glass.mdl"),
     ("221794_*", r"^v_knife\.mdl$", "models/czm_survival/v_sickle.mdl"),
+    ("227488_*", r"(?:^|/)gsg9\.mdl$", _skin("gsg9_admin")[0]),
+    ("228591_*v1-1*", r"models/sas/sas\.mdl$", _skin("sas_custom")[0]),
+    ("224534_*", r"models/leet/leet\.mdl$", _skin("leet_pirate")[0]),
+    ("224534_*", r"models/leet/leetT\.mdl$", _skin("leet_pirate")[1]),
+    ("225588_cs_16_*", r"Professionals/leet/leet\.mdl$", _skin("professional")[0]),  # variant 2: sunglasses
+    ("494736_*", r"models/player/urban/urban\.mdl$", _skin("survivor")[0]),
 ]
 
 # Decorations whose files were never published with the map, and skies nobody has: the map is
@@ -141,10 +152,10 @@ def main(src, game, fastdl):
 
         models = os.path.join(src, "models", "gb")
         for archive in sorted(os.listdir(models)) if os.path.isdir(models) else []:
-            rules = [r for r in KNIVES if re.fullmatch(r[0].replace("*", ".*"), archive)]
+            rules = [r for r in MODELS if re.fullmatch(r[0].replace("*", ".*"), archive)]
             if not rules:
                 continue
-            unpack = os.path.join(tmp, "knife-" + archive)
+            unpack = os.path.join(tmp, "model-" + archive)
             os.makedirs(unpack)
             subprocess.run(["bsdtar", "-xf", os.path.join(models, archive), "-C", unpack], check=True)
             for root, _, files in os.walk(unpack):

@@ -18,8 +18,11 @@
 | WEB_AUTH_BRIDGE, WEB_CONTROL_BRIDGE, сайт kontra-main | `/panel` на counter-zombie.ru |
 
 Ещё не перенесено: админ-меню и баны A_ADMIN_MENU / A_BAN_MANAGER, голосования, TeleportRequest,
-PropsManager, Strafes, отчёты LogsServer, мини-карта (в CS есть свой радар). Модели скинов людей
-пока стоковые (sas, gsg9, gign, leet, arctic, urban, terror).
+PropsManager, Strafes, отчёты LogsServer, мини-карта (в CS есть свой радар).
+
+Скины Gsg9 admin, Sas custom, Leet pirate, Professional и Survivor — свои модели
+`models/player/czm_*` (откуда — в `CREDITS.md`); остальные скины — стоковые модели CS.
+Если своей модели на сервере нет, игрок получает стоковую из поля `base` каталога.
 
 ## Профиль игрока
 

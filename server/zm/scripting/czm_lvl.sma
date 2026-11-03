@@ -34,7 +34,8 @@
 new g_catKey[MAX_CATS][12], g_catName[MAX_CATS][2][40], g_catCount;
 new g_itemId[MAX_CATS][MAX_ITEMS][24], g_itemName[MAX_CATS][MAX_ITEMS][2][40];
 new g_itemPrice[MAX_CATS][MAX_ITEMS], bool:g_itemShop[MAX_CATS][MAX_ITEMS], bool:g_itemAdmin[MAX_CATS][MAX_ITEMS];
-new g_itemModel[MAX_CATS][MAX_ITEMS][16], g_itemCount[MAX_CATS];
+new g_itemModel[MAX_CATS][MAX_ITEMS][24], g_itemBase[MAX_CATS][MAX_ITEMS][16], g_itemGlow[MAX_CATS][MAX_ITEMS][8];
+new g_itemCount[MAX_CATS];
 new g_upId[3][12], g_upName[3][2][40], g_upPrice[3], g_upCount;
 new g_bpPrice, g_bpDays, g_bpDaily, g_payMinLvl, g_payDaily;
 new bool:g_catalogReady;
@@ -78,6 +79,11 @@ new const PULL_SOUND[] = "s_change_rang.mp3";
 new const KNIFE_IDS[][] = { "katana", "axe", "glass", "sickle" };
 new bool:g_knifeV[sizeof KNIFE_IDS], bool:g_knifeP[sizeof KNIFE_IDS];
 
+// Our own player models of the shop skins: models/player/<name>/<name>.mdl. A skin whose model
+// is not on the server falls back to the stock model named in the catalog ("base").
+new const SKIN_MODELS[][] = { "czm_gsg9_admin", "czm_sas_custom", "czm_leet_pirate", "czm_professional", "czm_survivor" };
+new bool:g_skinReady[sizeof SKIN_MODELS];
+
 public plugin_natives()
 {
 	register_library("czm_lvl");
@@ -102,6 +108,25 @@ public plugin_precache()
 		if ((g_knifeP[k] = bool:file_exists(path)))
 			precache_model(path);
 	}
+	for (new k = 0; k < sizeof SKIN_MODELS; k++)
+	{
+		formatex(path, charsmax(path), "models/player/%s/%s.mdl", SKIN_MODELS[k], SKIN_MODELS[k]);
+		if (!(g_skinReady[k] = bool:file_exists(path)))
+			continue;
+		precache_model(path);
+		formatex(path, charsmax(path), "models/player/%s/%sT.mdl", SKIN_MODELS[k], SKIN_MODELS[k]);
+		if (file_exists(path))
+			precache_model(path);
+	}
+}
+
+// The player model to put on for a skin: ours when the server has it, else the stock one
+skin_model(c, i, out[], len)
+{
+	for (new k = 0; k < sizeof SKIN_MODELS; k++)
+		if (equal(g_itemModel[c][i], SKIN_MODELS[k]))
+			return copy(out, len, g_skinReady[k] ? g_itemModel[c][i] : g_itemBase[c][i]);
+	return copy(out, len, g_itemModel[c][i]);
 }
 
 public plugin_init()
@@ -231,9 +256,13 @@ public on_catalog(EzHttpRequest:request)
 			g_itemPrice[c][i] = ezjson_object_get_number(it, "price");
 			g_itemShop[c][i] = ezjson_object_get_bool(it, "shop");
 			g_itemAdmin[c][i] = ezjson_object_has_value(it, "admin") && ezjson_object_get_bool(it, "admin");
-			g_itemModel[c][i][0] = 0;
+			g_itemModel[c][i][0] = g_itemBase[c][i][0] = g_itemGlow[c][i][0] = 0;
 			if (ezjson_object_has_value(it, "model"))
 				ezjson_object_get_string(it, "model", g_itemModel[c][i], charsmax(g_itemModel[][][]));
+			if (ezjson_object_has_value(it, "base"))
+				ezjson_object_get_string(it, "base", g_itemBase[c][i], charsmax(g_itemBase[][][]));
+			if (ezjson_object_has_value(it, "glow"))
+				ezjson_object_get_string(it, "glow", g_itemGlow[c][i], charsmax(g_itemGlow[][][]));
 			ezjson_free(it);
 		}
 		ezjson_free(items);
@@ -793,14 +822,21 @@ look(id)
 	if (!is_user_alive(id) || zp_get_user_zombie(id) || zp_get_user_survivor(id))
 		return;
 	knife_look(id);
-	new skin = cat_index("skin"), glow = cat_index("skincolor");
-	if (skin >= 0 && g_equip[id][skin] >= 0 && g_itemModel[skin][g_equip[id][skin]][0])
-		zp_override_user_model(id, g_itemModel[skin][g_equip[id][skin]]);
+	new skin = cat_index("skin"), glow = cat_index("skincolor"), model[24];
+	new worn = (skin >= 0) ? g_equip[id][skin] : -1;
+	if (worn >= 0 && skin_model(skin, worn, model, charsmax(model)))
+		zp_override_user_model(id, model);
+	new r, g, b;
 	if (glow >= 0 && g_equip[id][glow] >= 0)
 	{
-		new r, g, b;
 		hex_color(g_itemId[glow][g_equip[id][glow]], r, g, b);
 		set_user_rendering(id, kRenderFxGlowShell, r, g, b, kRenderNormal, 16);
+	}
+	else if (worn >= 0 && g_itemGlow[skin][worn][0])
+	{
+		// a skin with a glow of its own (the survivor) shines when no other glow is chosen
+		hex_color(g_itemGlow[skin][worn], r, g, b);
+		set_user_rendering(id, kRenderFxGlowShell, r, g, b, kRenderNormal, 10);
 	}
 	else
 		set_user_rendering(id);

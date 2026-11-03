@@ -87,14 +87,18 @@ CATEGORIES = {
     "skin": {"ru": "Скины людей", "en": "Human skins", "items": [
         {"id": "sas", "ru": "Sas", "en": "Sas", "model": "sas"},
         {"id": "gsg9", "ru": "Gsg9", "en": "Gsg9", "model": "gsg9"},
-        {"id": "gsg9_admin", "ru": "Gsg9 admin", "en": "Gsg9 admin", "model": "gsg9"},
+        {"id": "gsg9_admin", "ru": "Gsg9 admin", "en": "Gsg9 admin", "model": "czm_gsg9_admin", "base": "gsg9"},
         {"id": "gign", "ru": "Gign", "en": "Gign", "model": "gign"},
-        {"id": "sas_custom", "ru": "Sas custom", "en": "Sas custom", "model": "sas"},
+        {"id": "sas_custom", "ru": "Sas custom", "en": "Sas custom", "model": "czm_sas_custom", "base": "sas"},
         {"id": "elite_arctic", "ru": "Elite arctic", "en": "Elite arctic", "model": "arctic"},
         {"id": "leet", "ru": "Leet", "en": "Leet", "model": "leet"},
-        {"id": "leet_pirate", "ru": "Leet pirate", "en": "Leet pirate", "model": "leet"},
-        {"id": "professional", "ru": "Professional", "en": "Professional", "model": "urban"},
-        {"id": "survivor", "ru": "Survivor", "en": "Survivor", "model": "terror", "price": 10000},
+        {"id": "leet_pirate", "ru": "Leet pirate", "en": "Leet pirate", "model": "czm_leet_pirate", "base": "leet"},
+        {"id": "professional", "ru": "Professional", "en": "Professional", "model": "czm_professional",
+         "base": "urban"},
+        # our own models (models/player/czm_*), "base" is the stock one when the server lacks ours;
+        # the survivor shines blue unless the player chose another glow
+        {"id": "survivor", "ru": "Survivor", "en": "Survivor", "model": "czm_survivor", "base": "terror",
+         "glow": "#0088FF", "price": 10000},
     ], "price": 5000},
     "skincolor": {"ru": "Свечение скина", "en": "Skin glow", "items": [
         {"id": "#0044FF", "ru": "Синий", "en": "Blue"}, {"id": "#0000FF", "ru": "Тёмно-синий", "en": "Navy"},
