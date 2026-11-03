@@ -1,0 +1,16 @@
+{
+ "Sounds": {
+  "WIN ZOMBIES": "survival/zombie_wins1.wav , survival/zombie_wins2.wav , survival/zombie_wins3.wav",
+  "WIN HUMANS": "survival/human_wins1.wav , survival/human_wins2.wav , survival/human_wins3.wav",
+  "ZOMBIE INFECT": "survival/zm_inf1.wav , survival/zm_inf2_new.wav",
+  "ZOMBIE DIE": "survival/zm_kill1.wav , survival/zm_kill2.wav"
+ },
+ "Custom Skies": {
+  "ENABLE": "0"
+ },
+ "Weather Effects": {
+  "FOG": "1",
+  "FOG DENSITY": "0.0010",
+  "FOG COLOR": "0 0 0"
+ }
+}
