@@ -495,6 +495,89 @@ static void WarningFrame( void )
 	s_online.warningSeenId = CZM_NetRequest( "POST", CZM_OnlineUrl( "/api/v1/moderation/warning/seen" ), s_online.key, payload );
 }
 
+// ---------------------------------------------------------------- tickets for our servers
+// The API signs a short ticket for one of our addresses (server/czm/czm/game_ticket.py). The game
+// puts it in userinfo (_czm) only right before it connects to that very server and takes it out
+// a minute later, so the CZM profile reaches our server and no other one.
+static struct
+{
+	char address[64];
+	char ticket[96];
+	double fresh;    // until when the ticket is worth sending (the server accepts it 15 minutes)
+	double nextTry;
+	int requestId;
+	int requestIdentity;
+	int identity;
+} s_tickets[CZM_OFFICIAL_COUNT];
+static double s_ticketClearAt;
+
+static void TicketFrame( double now )
+{
+	int status;
+	CUtlString body;
+
+	if( s_ticketClearAt > 0.0 && now >= s_ticketClearAt )
+	{
+		EngFuncs::ClientCmd( false, "setinfo _czm \"\"\n" );
+		s_ticketClearAt = 0.0;
+	}
+	for( int i = 0; i < CZM_OFFICIAL_COUNT; i++ )
+	{
+		auto &t = s_tickets[i];
+		CzmServer *server = CZM_OfficialServer( i );
+		const char *address = server ? server->address : "";
+
+		if( strcmp( t.address, address ) || t.identity != s_online.identity )
+		{
+			// another address or another profile: the old ticket is no use
+			Q_strncpy( t.address, address, sizeof( t.address ));
+			t.ticket[0] = 0;
+			t.fresh = 0.0;
+			t.nextTry = now;
+			t.identity = s_online.identity;
+		}
+		if( t.requestId )
+		{
+			if( !CZM_NetPoll( t.requestId, &status, body ))
+				continue;
+			t.requestId = 0;
+			CzmJson j;
+			const char *ticket = status == 200 && j.Parse( body.Get( )) ? j.String( j.Get( 0, "ticket" )) : "";
+			if( ticket[0] && strlen( ticket ) < sizeof( t.ticket ) && t.requestIdentity == s_online.identity
+				&& !strcmp( j.String( j.Get( 0, "address" )), t.address ))
+			{
+				Q_strncpy( t.ticket, ticket, sizeof( t.ticket ));
+				t.fresh = now + 600.0;
+			}
+			else t.nextTry = now + 60.0;
+			continue;
+		}
+		// asked for in the menus only; a game in progress does not need a new one
+		if( !t.address[0] || !s_online.ready || CL_IsActive( ) || now < t.nextTry || ( t.ticket[0] && now < t.fresh ))
+			continue;
+		char payload[96];
+		snprintf( payload, sizeof( payload ), "{\"address\":\"%s\"}", t.address );
+		t.requestIdentity = s_online.identity;
+		t.nextTry = now + 30.0;
+		t.requestId = CZM_NetRequest( "POST", CZM_OnlineUrl( "/api/v1/game/ticket" ), s_online.key, payload );
+	}
+}
+
+void CZM_PrepareConnect( const char *address )
+{
+	double now = EngFuncs::DoubleTime();
+	const char *ticket = "";
+
+	for( int i = 0; address && address[0] && i < CZM_OFFICIAL_COUNT; i++ )
+	{
+		// a ticket older than 14 minutes might expire on the way
+		if( s_tickets[i].ticket[0] && now < s_tickets[i].fresh + 240.0 && !strcmp( s_tickets[i].address, address ))
+			ticket = s_tickets[i].ticket;
+	}
+	EngFuncs::ClientCmdF( false, "setinfo _czm \"%s\"\n", ticket );
+	s_ticketClearAt = ticket[0] ? now + 60.0 : 0.0;
+}
+
 void CZM_OnlineFrame( void )
 {
 	CZM_TranslationFrame();
@@ -520,6 +603,7 @@ void CZM_OnlineFrame( void )
 
 	if( !s_online.key[0] )
 		return;
+	TicketFrame( now );
 	StoreUpdateFrame( now );
 	if( CZM_DistributionChanged() )
 	{
@@ -597,7 +681,7 @@ void CZM_OnlineFrame( void )
     { CUtlString request;if(CZM_WidgetEvent(request)) {
         char address[64],protocol[8],tail;
         if(CZM_OnlinePlayAllowed() && sscanf(request.Get(),"%63s %7s %c",address,protocol,&tail)==2 && strspn(address,"0123456789.:")==strlen(address) && (!strcmp(protocol,"gs")||!strcmp(protocol,"49"))) {
-            EngFuncs::CvarSetString("czm_connect_adr",address);EngFuncs::CvarSetString("czm_connect_name",address);EngFuncs::ClientCmdF(false,"connect \"%s\" %s\n",address,protocol);
+            EngFuncs::CvarSetString("czm_connect_adr",address);EngFuncs::CvarSetString("czm_connect_name",address);CZM_PrepareConnect(address);EngFuncs::ClientCmdF(false,"connect \"%s\" %s\n",address,protocol);
         }
     }}
 	CZM_CloudFrame();

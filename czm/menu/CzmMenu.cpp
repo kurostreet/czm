@@ -1495,6 +1495,7 @@ void CZM_ConnectToServer( int index )
 
 	EngFuncs::CvarSetString( "czm_connect_name", server->name );
 	EngFuncs::CvarSetString( "czm_connect_adr", server->address );
+	CZM_PrepareConnect( server->address );
 	EngFuncs::ClientCmdF( false, "connect \"%s\" %s\n", server->address, server->prot[0] ? server->prot : "gs" );
 }
 
@@ -1508,6 +1509,7 @@ void CZM_ConnectOfficial( int slot )
 
 	EngFuncs::CvarSetString( "czm_connect_name", server->name );
 	EngFuncs::CvarSetString( "czm_connect_adr", server->address );
+	CZM_PrepareConnect( server->address );
 	EngFuncs::ClientCmdF( false, "connect \"%s\" %s\n", server->address, server->prot[0] ? server->prot : "gs" );
 }
 

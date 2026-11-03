@@ -1327,7 +1327,7 @@ void CZM_LobbyFrame(void){
             EngFuncs::CvarSetString("czm_connect_name",s_launchServer);
             EngFuncs::CvarSetString("czm_connect_adr",s_launchServer);
             if(s_lobby && s_lobby->IsOpened())s_lobby->Hide();
-            EngFuncs::ClientCmdF(false,"connect \"%s\" %s\n",s_launchServer,s_launchProto);
+            CZM_PrepareConnect(s_launchServer);EngFuncs::ClientCmdF(false,"connect \"%s\" %s\n",s_launchServer,s_launchProto);
         }
         s_launchId[0]=s_launchServer[0]=s_launchProto[0]=0;
         s_deliveryNext=EngFuncs::DoubleTime()+5;

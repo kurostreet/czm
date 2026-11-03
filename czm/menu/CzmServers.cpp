@@ -1010,6 +1010,7 @@ void CCzmServers::Connect( CzmEntry *e, const char *password )
 	EngFuncs::CvarSetString( "czm_connect_name", e->answered ? e->name : e->address );
 	EngFuncs::CvarSetString( "czm_connect_adr", e->address );
 	m_bReturnHere = true;
+	CZM_PrepareConnect( e->address );
 	EngFuncs::ClientCmdF( false, "connect \"%s\" %s\n", e->address, e->gs ? "gs" : "49" );
 }
 

@@ -17,7 +17,7 @@ STUB = STUB.replace('using HFont=int;', 'using HFont=int;using HIMAGE=int;')
 STUB = STUB.replace('char name[64];};', 'char name[64];char map[64];int players,maxplayers,ping;double answerTime;};')
 STUB = STUB.replace('static double DoubleTime();', 'static double DoubleTime();template<class...T>static void ClientCmdF(bool,const char*,T...){}')
 STUB += r'''
-bool CZM_OnlinePlayAllowed();bool CZM_QuickPlayActive();void CZM_LobbyInviteFrame();
+bool CZM_OnlinePlayAllowed();bool CZM_QuickPlayActive();void CZM_LobbyInviteFrame();void CZM_PrepareConnect(const char*);
 void CZM_LobbyVoiceStart(const char*,const char*);void CZM_LobbyVoiceStop();void CZM_LobbyVoiceMic(bool);
 bool CZM_LobbyVoiceMicOn();bool CZM_LobbyVoiceSpeaking(int);int CZM_LobbyVoiceStatus();
 void CZM_LobbyVoiceTest();bool CZM_LobbyVoiceMicEnabled(int);
@@ -55,7 +55,7 @@ void CZM_DrawButton(const char*,const CzmRect&r,const char*,unsigned,bool,int){U
 void CZM_Init(){}bool CZM_IsRussian(){return russian;}unsigned CZM_White(){return 0xffffffff;}unsigned CZM_Grey(){return PackRGBA(155,166,184,255);}
 const char*EngFuncs::GetCvarString(const char*k){return vars[k].c_str();}float EngFuncs::GetCvarFloat(const char*k){return atof(GetCvarString(k));}
 void EngFuncs::CvarSetString(const char*k,const char*v){vars[k]=v;}void EngFuncs::CvarSetValue(const char*k,float v){vars[k]=std::to_string(v);}double EngFuncs::DoubleTime(){return now;}
-void UI_EnableTextInput(bool){}bool CZM_OnlineReady(){return true;}bool CZM_OnlineAccount(){return true;}bool CZM_OnlinePlayAllowed(){return true;}bool CZM_QuickPlayActive(){return false;}
+void UI_EnableTextInput(bool){}bool CZM_OnlineReady(){return true;}bool CZM_OnlineAccount(){return true;}bool CZM_OnlinePlayAllowed(){return true;}bool CZM_QuickPlayActive(){return false;}void CZM_PrepareConnect(const char*){}
 int CZM_OnlineIdentity(){return identity;}int CZM_OnlinePlayer(){return player;}const char*CZM_OnlineKey(){return "test";}const char*CZM_OnlineUrl(const char*p){return p;}
 const char*CZM_AvatarFor(const char*,int){return "gfx/czm/ui/avatar.png";}
 int CZM_NetRequest(const char*,const char*url,const char*,const char*body){lastUrl=url;lastBody=body;return ++nextRequest;}

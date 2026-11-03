@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, FileResponse, HTML
 from PIL import Image
 from pydantic import BaseModel, Field
 
-from . import service, mappics, accounts, settings, tab, social, website, distribution, lobbies, game_probe, voice_lobby, notifications, rules, moderation, play_feed, playtime, server_moderation, community, admin, official
+from . import service, mappics, accounts, settings, tab, social, website, distribution, lobbies, game_probe, voice_lobby, notifications, rules, moderation, play_feed, playtime, server_moderation, community, admin, official, game_ticket
 from .config import get_settings
 from .db import db
 
@@ -436,6 +436,16 @@ async def community_server_change(body: OwnerServerIn, request: Request, x_czm_k
         except game_probe.ProbeError:
             pass  # an offline server remains editable; its endpoint is the fallback label
     return await social_result(request, lambda c: community.owner_change(c, key, address, body.remove, name))
+
+
+class GameTicketIn(BaseModel):
+    address: str = Field(min_length=7, max_length=64)
+
+
+@router.post("/game/ticket")
+async def game_ticket_issue(body: GameTicketIn, request: Request, x_czm_key: str | None = Header(default=None)):
+    """A ticket for one of our servers: it proves the CZM profile to that server only."""
+    return await social_result(request, lambda c: game_ticket.issue(c, x_czm_key or "", body.address))
 
 
 @router.post("/community/tickets")

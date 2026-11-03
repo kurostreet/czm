@@ -141,6 +141,8 @@ bool CZM_OfficialEnabled( void );
 CzmServer *CZM_OfficialServer( int slot );   // NULL when off or while the slot has no address
 bool CZM_IsOfficial( const char *address );
 void CZM_ConnectOfficial( int slot );
+// before every connect: our server gets the player's CZM ticket (setinfo _czm), any other gets none
+void CZM_PrepareConnect( const char *address );
 // the "Official" label: a golden pill with a bolt, h high; returns its width, draws only when asked
 int CZM_OfficialBadge( int x, int y, int h, bool draw );
 // the golden badge of our servers with electric sparks crackling round it, size x size at x, y

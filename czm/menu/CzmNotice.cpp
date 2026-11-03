@@ -146,6 +146,7 @@ void CCzmNotice::Activate( int hit )
 	Q_strncpy( address,m_address,sizeof(address) ); Q_strncpy( protocol,m_protocol,sizeof(protocol) );
 	CZM_SetDiagnosticsMode( 0 );
 	CZM_PlayClick(); Hide();
+	CZM_PrepareConnect( address );
 	EngFuncs::ClientCmdF( false, "connect \"%s\" %s\n", address, protocol );
 }
 

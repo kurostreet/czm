@@ -35,7 +35,7 @@ void CZM_ServerBlocksShow();
 void CZM_LobbyPickedServer(const char*,const char*,const char*,const char*,int,int);
 struct CzmServer;
 enum{CZM_OFFICIAL_SURVIVAL=0,CZM_OFFICIAL_ESCAPE,CZM_OFFICIAL_COUNT};
-CzmServer*CZM_OfficialServer(int);bool CZM_IsOfficial(const char*);
+CzmServer*CZM_OfficialServer(int);bool CZM_IsOfficial(const char*);void CZM_PrepareConnect(const char*);
 int CZM_OfficialBadge(int,int,int,bool);void CZM_GoldComet(const CzmRect&,float,float);void CZM_OfficialMark(int,int,int);
 '''
 HARNESS = LOBBY_HARNESS.replace('unsigned CZM_White(){return 0xffffffff;}',
