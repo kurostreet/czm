@@ -29,10 +29,13 @@
 
 //#include "vgui_TeamFortressViewport.h"
 
-#define MAX_MENU_STRING	512
+// Counter Zombie Mobile: our server menu (czm_menu.amxx) sends the window's tabs, icons and
+// subtitles with the menu, up to a few kilobytes
+#define MAX_MENU_STRING	4096
 
 char g_szMenuString[MAX_MENU_STRING];
 char g_szPrelocalisedMenuString[MAX_MENU_STRING];
+static char g_szRichMenuString[MAX_MENU_STRING]; // the menu as the server sent it, for the cards
 
 int KB_ConvertString( char *in, char **ppout );
 
@@ -61,9 +64,46 @@ void CHudMenu::PublishCards( bool open )
 		return;
 	}
 
-	snprintf( buf, sizeof( buf ), "%d %d\n%s", ++s_iCardsSerial, m_bitsValidSlots, g_szMenuString );
+	snprintf( buf, sizeof( buf ), "%d %d\n%s", ++s_iCardsSerial, m_bitsValidSlots, g_szRichMenuString[0] ? g_szRichMenuString : g_szMenuString );
 	gEngfuncs.Cvar_Set( "czm_menu", buf );
 	s_bCardsShown = true;
+}
+
+/*
+A window menu of our servers starts with "#czm1": its first lines describe the window and the
+items carry subtitles, icons and colours after tabs. The classic text menu shows only the names.
+*/
+static void CZM_PlainMenuText( void )
+{
+	char plain[MAX_MENU_STRING];
+	size_t n = 0;
+	const char *line = g_szMenuString;
+
+	g_szRichMenuString[0] = 0;
+	if( strncmp( g_szMenuString, "#czm1", 5 ))
+		return;
+
+	strlcpy( g_szRichMenuString, g_szMenuString, sizeof( g_szRichMenuString ));
+	while( *line )
+	{
+		const char *end = strchr( line, '\n' );
+		const char *stop = end ? end : line + strlen( line );
+		const char *tab = (const char *)memchr( line, '\t', stop - line );
+
+		if( *line != '#' )
+		{
+			const char *cut = tab ? tab : stop;
+			while( line < cut && n < sizeof( plain ) - 2 )
+				plain[n++] = *line++;
+			if( end && n < sizeof( plain ) - 1 )
+				plain[n++] = '\n';
+		}
+		if( !end )
+			break;
+		line = end + 1;
+	}
+	plain[n] = 0;
+	strlcpy( g_szMenuString, plain, sizeof( g_szMenuString ));
 }
 
 void Touch_CloseMenu()
@@ -251,6 +291,7 @@ int CHudMenu :: MsgFunc_ShowMenu( const char *pszName, int iSize, void *pbuf )
 			strlcpy( g_szMenuString, temp, sizeof( g_szMenuString ) );
 			free( temp );
 		}
+		CZM_PlainMenuText();
 	}
 
 	m_fMenuDisplayed = 1;

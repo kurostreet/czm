@@ -414,6 +414,50 @@ def icon(kind, size=128, color=(255, 255, 255, 255)):
         d.pieslice([S * .02, S * .54, S * .62, S * 1.14], 180, 360, fill=c)
         d.rectangle([S * .70, S * .36, S * .70 + lw, S * .76], fill=c)
         d.rectangle([S * .50 + lw / 2, S * .56 - lw / 2, S * .90 + lw / 2, S * .56 + lw / 2], fill=c)
+    elif kind == "chart":
+        for i, top in enumerate((.56, .36, .14)):
+            x = S * (.12 + i * .28)
+            d.rounded_rectangle([x, S * top, x + S * .20, S * .88], radius=S * .04, fill=c)
+    elif kind == "box":
+        d.rounded_rectangle([S * .10, S * .10, S * .90, S * .90], radius=S * .08, outline=c, width=lw)
+        d.line([(S * .16, S * .16), (S * .84, S * .84)], fill=c, width=lw)
+        d.line([(S * .84, S * .16), (S * .16, S * .84)], fill=c, width=lw)
+        d.rectangle([S * .10, S * .44, S * .90, S * .56], fill=c)
+    elif kind == "ticket":
+        d.rounded_rectangle([S * .06, S * .24, S * .94, S * .76], radius=S * .08, fill=c)
+        d.ellipse([S * -.04, S * .40, S * .16, S * .60], fill=clear)
+        d.ellipse([S * .84, S * .40, S * 1.04, S * .60], fill=clear)
+        for k in range(4):
+            y = S * (.30 + k * .12)
+            d.rectangle([S * .62, y, S * .66, y + S * .06], fill=clear)
+    elif kind == "coins":
+        # a coin behind, the front one covers it with a clear rim
+        for k, (x, y, r) in enumerate(((.64, .36, .28), (.38, .62, .32))):
+            box = [S * (x - r), S * (y - r), S * (x + r), S * (y + r)]
+            if k:
+                g = lw * .9
+                d.ellipse([box[0] - g, box[1] - g, box[2] + g, box[3] + g], fill=clear)
+            d.ellipse(box, fill=c)
+            d.ellipse([box[0] + lw, box[1] + lw, box[2] - lw, box[3] - lw], fill=clear)
+            d.ellipse([box[0] + lw * 1.9, box[1] + lw * 1.9, box[2] - lw * 1.9, box[3] - lw * 1.9], fill=c)
+    elif kind == "trophy":
+        d.pieslice([S * .24, S * -.10, S * .76, S * .62], 0, 180, fill=c)
+        d.rectangle([S * .24, S * .08, S * .76, S * .26], fill=c)
+        d.arc([S * .04, S * .12, S * .36, S * .46], 90, 270, fill=c, width=lw)
+        d.arc([S * .64, S * .12, S * .96, S * .46], 270, 90, fill=c, width=lw)
+        d.rectangle([S * .44, S * .58, S * .56, S * .76], fill=c)
+        d.rounded_rectangle([S * .26, S * .76, S * .74, S * .90], radius=S * .04, fill=c)
+    elif kind == "gift":
+        d.rounded_rectangle([S * .10, S * .34, S * .90, S * .52], radius=S * .04, fill=c)
+        d.rounded_rectangle([S * .16, S * .56, S * .84, S * .92], radius=S * .05, fill=c)
+        d.rectangle([S * .44, S * .34, S * .56, S * .92], fill=clear)
+        d.ellipse([S * .22, S * .10, S * .50, S * .34], outline=c, width=lw)
+        d.ellipse([S * .50, S * .10, S * .78, S * .34], outline=c, width=lw)
+    elif kind == "map":
+        d.polygon([(S * .06, S * .20), (S * .34, S * .10), (S * .66, S * .22), (S * .94, S * .12),
+                   (S * .94, S * .80), (S * .66, S * .90), (S * .34, S * .78), (S * .06, S * .88)], outline=c, width=lw)
+        d.line([(S * .34, S * .10), (S * .34, S * .78)], fill=c, width=lw)
+        d.line([(S * .66, S * .22), (S * .66, S * .90)], fill=c, width=lw)
     return im.resize((size, size), Image.LANCZOS)
 
 
@@ -478,6 +522,46 @@ def rounded(w, h, radius, fill, outline=None, width=0):
     return big.resize((w, h), Image.LANCZOS)
 
 
+def make_server_menu_frames():
+    """The server menu window: its frame, the tile under a card icon, its rim and the light of a pressed card.
+    The tile, rim and light are white: the game tints them with the colour of the card."""
+    # the window: dark glass, a red rim; drawn sliced with a 48-pixel border
+    W = 256
+    frame = Image.new("RGBA", (W, W), (0, 0, 0, 0))
+    fill = Image.new("RGBA", (W, W), (0, 0, 0, 0))
+    grad = vgrad(W, W, 0, 255)
+    top, bottom = (27, 32, 41), (14, 17, 23)
+    col = Image.merge("RGB", [Image.eval(grad, lambda v, a=a, b=b: int(a + (b - a) * v / 255)) for a, b in zip(top, bottom)])
+    fill.paste(col, (0, 0))
+    mask = rounded(W, W, 40, (255, 255, 255, 252)).split()[3]
+    fill.putalpha(mask)
+    frame = Image.alpha_composite(frame, fill)
+    frame = Image.alpha_composite(frame, rounded(W, W, 40, (0, 0, 0, 0), (229, 63, 77, 165), 3))
+    save(frame, "smenu_frame.png")
+
+    # the icon tile: lighter at the top left, so a tint reads as a lit glass square
+    S = 128
+    tile = Image.new("RGBA", (S, S), (255, 255, 255, 0))
+    light = Image.new("L", (S, S), 0)
+    for y in range(S):
+        for x in range(S):
+            t = min(1.0, math.hypot(x - S * .25, y - S * .15) / (S * 1.05))
+            light.putpixel((x, y), int(120 - 75 * t))
+    shape = rounded(S, S, 30, (255, 255, 255, 255)).split()[3]
+    tile.putalpha(Image.composite(light, Image.new("L", (S, S), 0), shape))
+    save(tile, "smenu_tile.png")
+    save(rounded(S, S, 30, (0, 0, 0, 0), (255, 255, 255, 210), 3), "smenu_ring.png")
+
+    # a pressed card: a bright rim with a soft light around it (a 32-pixel margin for the glow)
+    L, m = 224, 32
+    rim = Image.new("RGBA", (L, L), (0, 0, 0, 0))
+    rim.paste(rounded(L - 2 * m, L - 2 * m, 26, (0, 0, 0, 0), (255, 255, 255, 255), 4), (m, m))
+    glow = rim.split()[3].filter(ImageFilter.GaussianBlur(10))
+    halo = Image.new("RGBA", (L, L), (255, 255, 255, 0))
+    halo.putalpha(Image.eval(glow, lambda v: min(255, v * 2)))
+    save(Image.alpha_composite(halo, rim), "smenu_lit.png")
+
+
 def make_avatar(name, size=256):
     logo = Image.open(SOURCES / "counter-zombie-mobile-original.jpg").convert("RGBA").resize((size, size), Image.LANCZOS)
     mask = Image.new("L", (size * SS, size * SS), 0)
@@ -522,6 +606,12 @@ def main():
         # the wheels of the three radio menus: go, it's gonna blow, enemy down
         for kind in ("go", "bomb", "skull"):
             save(icon(kind), f"icon_{kind}.png")
+        return
+    if "--servermenu" in sys.argv:
+        # the server menu window (czm/menu/CzmServerMenu.cpp): the icons plugins may use for their cards
+        for kind in ("chart", "box", "ticket", "coins", "trophy", "gift", "map"):
+            save(icon(kind), f"icon_{kind}.png")
+        make_server_menu_frames()
         return
     if "--top" in sys.argv:
         # Top 100: the crowns of the first three and of the rest
