@@ -105,6 +105,7 @@ jobs:
           python3 -m unittest discover -s tests -p test_rustore_build.py -v
           python3 -m unittest discover -s tests -p test_official_servers.py -v
           python3 -m unittest discover -s tests -p test_game_ticket_client.py -v
+          python3 -m unittest discover -s tests -p test_survival_maps.py -v
           python3 -m unittest discover -s tests -p test_touch_wheels.py -v
           python3 -m unittest discover -s tests -p test_loading_errors.py -v
           python3 -m unittest discover -s tests -p test_connection_notices.py -v

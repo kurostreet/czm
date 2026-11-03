@@ -26,10 +26,89 @@ def read(path):
     return data, lumps
 
 
+def blocks(text):
+    """Splits the entity text into "{ ... }" blocks the way the engine reads it: braces inside
+    quoted values (decal names such as "{bloodhand2") belong to the value."""
+    out, depth, start, quoted = [], 0, 0, False
+    for i, c in enumerate(text):
+        if c == '"':
+            quoted = not quoted
+        elif quoted:
+            continue
+        elif c == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                out.append(text[start:i + 1])
+    if depth or quoted:
+        raise SystemExit("entity text does not close its braces or quotes")
+    return out
+
+
+def check(data: bytes) -> str:
+    """Reads the entity text as the server does (COM_Parse / ED_ParseEdict); "" when it loads."""
+    off, length = struct.unpack_from("<ii", data, 4)
+    text = data[off:off + length]
+    end = text.find(b"\0")
+    text = text[:end] if end >= 0 else text
+    single = b"{})(',"
+    pos, n = 0, len(text)
+
+    def token():
+        nonlocal pos
+        while True:
+            while pos < n and (text[pos] <= 32 or text[pos] >= 128):  # signed char <= ' '
+                pos += 1
+            if pos >= n:
+                return None
+            if text.startswith(b"//", pos):
+                while pos < n and text[pos] != 10:
+                    pos += 1
+                continue
+            break
+        c = text[pos]
+        if c == 34:
+            close = text.find(b'"', pos + 1)
+            close = n if close < 0 else close
+            value, pos = text[pos + 1:close], close + 1
+            return value if len(value) < 1023 else b"\xff" * 1024
+        if c in single:
+            pos += 1
+            return bytes([c])
+        start = pos
+        while pos < n and 32 < text[pos] < 128:
+            pos += 1
+            if pos < n and text[pos] in single:
+                break
+        return text[start:pos]
+
+    count = 0
+    while (tok := token()) is not None:
+        if tok != b"{":
+            return f"entity {count}: expected {{"
+        count += 1
+        while True:
+            key = token()
+            if key is None:
+                return f"entity {count}: no closing brace"
+            if key == b"}":
+                break
+            value = token()
+            if value is None:
+                return f"entity {count}: no closing brace"
+            if value[:1] == b"}":
+                return f"entity {count}: closing brace without data after {key[:30]!r}"
+            if len(value) >= 1023:
+                return f"entity {count}: a value longer than the server reads"
+    return ""
+
+
 def edit(text, drop, sky):
-    blocks = re.findall(r"\{[^{}]*\}", text)
     kept, removed = [], 0
-    for block in blocks:
+    for block in blocks(text):
         model = re.search(r'"model"\s*"([^"]*)"', block)
         if model and any(model.group(1).lower().startswith(p.lower()) for p in drop):
             removed += 1
@@ -69,6 +148,9 @@ def main():
     text = data[off:off + length].rstrip(b"\0").decode("latin1")
     text, removed = edit(text, args.drop, args.sky)
     write(args.target, data, lumps, text.encode("latin1") + b"\0")
+    problem = check(open(args.target, "rb").read())
+    if problem:
+        raise SystemExit(f"{args.target}: {problem}")
     print(f"{args.target}: removed {removed} entities" + (f", sky {args.sky}" if args.sky else ""))
 
 

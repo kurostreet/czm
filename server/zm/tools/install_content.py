@@ -96,6 +96,11 @@ def main(src, game, fastdl):
             bsp_entities.write(path, data, lumps, text.encode("latin1") + b"\0")
             print(f"{name}: removed {removed} entities, sky {edit['sky']}")
 
+        for name in sorted(os.listdir(os.path.join(out, "maps"))):
+            problem = bsp_entities.check(open(os.path.join(out, "maps", name), "rb").read())
+            if problem:
+                raise SystemExit(f"{name} would not load on the server: {problem}")
+
         for root, _, files in os.walk(out):
             for f in files:
                 rel = os.path.relpath(os.path.join(root, f), out)
