@@ -118,8 +118,7 @@ public task_welcome(taskid)
 	get_user_name(id, name, charsmax(name));
 	czm_chat(id, "^4———————————————", "^4———————————————");
 	czm_chat(id, "^4• ^1Добро пожаловать, ^4%s^1!", "^4• ^1Welcome, ^4%s^1!", name);
-	czm_chat(id, "^4• ^1Панель игрока: ^4%s ^1— вход по почте или нику CZM", "^4• ^1Player panel: ^4%s ^1— sign in with your CZM email or nick", CZM_SITE);
-	czm_chat(id, "^4• ^1Без музыки: ^4/sound_off^1, язык: ^4/rus /eng", "^4• ^1No music: ^4/sound_off^1, language: ^4/rus /eng");
+	// Commands and the panel address live in czm_info's optional HUD, once on the screen.
 }
 
 public client_disconnected(id)
