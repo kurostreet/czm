@@ -74,6 +74,10 @@ new g_payTarget[MAX_PLAYERS + 1];
 
 new const PULL_SOUND[] = "s_change_rang.mp3";
 
+// Human knives of the shop: models/czm_survival/v_<id>.mdl (and p_<id>.mdl when the model has one)
+new const KNIFE_IDS[][] = { "katana", "axe", "glass", "sickle" };
+new bool:g_knifeV[sizeof KNIFE_IDS], bool:g_knifeP[sizeof KNIFE_IDS];
+
 public plugin_natives()
 {
 	register_library("czm_lvl");
@@ -88,6 +92,16 @@ public plugin_natives()
 public plugin_precache()
 {
 	g_hRank = czm_sound_precache(PULL_SOUND);
+	new path[64];
+	for (new k = 0; k < sizeof KNIFE_IDS; k++)
+	{
+		formatex(path, charsmax(path), "models/czm_survival/v_%s.mdl", KNIFE_IDS[k]);
+		if ((g_knifeV[k] = bool:file_exists(path)))
+			precache_model(path);
+		formatex(path, charsmax(path), "models/czm_survival/p_%s.mdl", KNIFE_IDS[k]);
+		if ((g_knifeP[k] = bool:file_exists(path)))
+			precache_model(path);
+	}
 }
 
 public plugin_init()
@@ -103,6 +117,7 @@ public plugin_init()
 
 	RegisterHam(Ham_Killed, "player", "fw_killed_post", 1);
 	RegisterHam(Ham_Spawn, "player", "fw_spawn_post", 1);
+	RegisterHam(Ham_Item_Deploy, "weapon_knife", "fw_knife_deploy_post", 1);
 	register_logevent("ev_round_start", 2, "1=Round_Start");
 	register_logevent("ev_round_end", 2, "1=Round_End");
 
@@ -777,6 +792,7 @@ look(id)
 {
 	if (!is_user_alive(id) || zp_get_user_zombie(id) || zp_get_user_survivor(id))
 		return;
+	knife_look(id);
 	new skin = cat_index("skin"), glow = cat_index("skincolor");
 	if (skin >= 0 && g_equip[id][skin] >= 0 && g_itemModel[skin][g_equip[id][skin]][0])
 		zp_override_user_model(id, g_itemModel[skin][g_equip[id][skin]]);
@@ -788,6 +804,36 @@ look(id)
 	}
 	else
 		set_user_rendering(id);
+}
+
+public fw_knife_deploy_post(weapon)
+{
+	new id = get_pdata_cbase(weapon, 41, 4); // m_pPlayer
+	if (1 <= id <= MaxClients)
+		knife_look(id);
+}
+
+knife_look(id)
+{
+	if (!is_user_alive(id) || !g_loaded[id] || zp_get_user_zombie(id) || get_user_weapon(id) != CSW_KNIFE)
+		return;
+	new c = cat_index("knife");
+	if (c < 0 || g_equip[id][c] < 0)
+		return;
+	for (new k = 0; k < sizeof KNIFE_IDS; k++)
+	{
+		if (!equal(g_itemId[c][g_equip[id][c]], KNIFE_IDS[k]) || !g_knifeV[k])
+			continue;
+		new path[64];
+		formatex(path, charsmax(path), "models/czm_survival/v_%s.mdl", KNIFE_IDS[k]);
+		set_pev(id, pev_viewmodel2, path);
+		if (g_knifeP[k])
+		{
+			formatex(path, charsmax(path), "models/czm_survival/p_%s.mdl", KNIFE_IDS[k]);
+			set_pev(id, pev_weaponmodel2, path);
+		}
+		return;
+	}
 }
 
 hex_color(const hex[], &r, &g, &b)

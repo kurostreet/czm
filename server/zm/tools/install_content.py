@@ -38,6 +38,16 @@ EXTRAS = [
      r"models/zm_dust_world/\1"),
 ]
 
+# Human knives of the LVL MOD shop (GameBanana, CC BY-NC-ND, see CREDITS.md): one v_ model each,
+# put under models/czm_survival/ so they never replace the stock knife of other servers' players.
+KNIVES = [
+    ("221799_*", r"models/v_knife\.mdl$", "models/czm_survival/v_katana.mdl"),
+    ("221665_*", r"Texture/Gold/models/v_knife\.mdl$", "models/czm_survival/v_axe.mdl"),
+    ("221665_*", r"Texture/Gold/models/p_knife\.mdl$", "models/czm_survival/p_axe.mdl"),
+    ("440810_*", r"models/v_knife\.mdl$", "models/czm_survival/v_glass.mdl"),
+    ("221794_*", r"^v_knife\.mdl$", "models/czm_survival/v_sickle.mdl"),
+]
+
 # Decorations whose files were never published with the map, and skies nobody has: the map is
 # loaded without them (the server refuses a map whose model is missing).
 MAP_EDITS = {
@@ -128,6 +138,21 @@ def main(src, game, fastdl):
                         m = re.search(pattern, member)
                         if m:
                             placed.append(place(os.path.join(root, f), m.expand(target), cstrike, fastdl, owner))
+
+        models = os.path.join(src, "models", "gb")
+        for archive in sorted(os.listdir(models)) if os.path.isdir(models) else []:
+            rules = [r for r in KNIVES if re.fullmatch(r[0].replace("*", ".*"), archive)]
+            if not rules:
+                continue
+            unpack = os.path.join(tmp, "knife-" + archive)
+            os.makedirs(unpack)
+            subprocess.run(["bsdtar", "-xf", os.path.join(models, archive), "-C", unpack], check=True)
+            for root, _, files in os.walk(unpack):
+                for f in files:
+                    member = os.path.relpath(os.path.join(root, f), unpack).replace(os.sep, "/")
+                    for _, pattern, target in rules:
+                        if re.search(pattern, member):
+                            placed.append(place(os.path.join(root, f), target, cstrike, fastdl, owner))
 
     for name, items in RES.items():
         lines = []
