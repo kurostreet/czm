@@ -285,7 +285,8 @@ public client_putinserver(id)
 	g_ready[id] = true;
 	new ret;
 	ExecuteForward(g_fwReady, ret, id, g_profile[id]);
-	query_client_cvar(id, "ui_language", "on_ui_language");
+	// the CZM game keeps the player's choice in czm_lang; other Xash3D clients have ui_language
+	query_client_cvar(id, "czm_lang", "on_czm_lang");
 }
 
 public client_disconnected(id)
@@ -293,6 +294,20 @@ public client_disconnected(id)
 	if (g_ready[id])
 		save_prefs(id);
 	g_ready[id] = false;
+}
+
+public on_czm_lang(id, const cvar[], const value[])
+{
+	if (!is_user_connected(id))
+		return;
+	if (equali(value, "ru"))
+		set_lang(id, CZM_RU, LANG_GAME);
+	else if (equali(value, "en"))
+		set_lang(id, CZM_EN, LANG_GAME);
+	else if (containi(value, "Bad CVAR") != -1)
+		query_client_cvar(id, "ui_language", "on_ui_language");
+	// empty: the CZM game follows the phone and does not say which; ui_language may be a leftover
+	// "english" there, so the server default stays until the player chats or picks /rus /eng
 }
 
 public on_ui_language(id, const cvar[], const value[])
@@ -344,7 +359,8 @@ load_prefs(id)
 	if (!nvault_lookup(g_vault, key, value, charsmax(value), stamp))
 		return;
 	// "<lang><source><sound><info>", e.g. "r310": Russian chosen by /rus, sounds on, info off.
-	if ((value[0] == 'r' || value[0] == 'e') && '1' <= value[1] <= '3')
+	// Only a language the player chose (/rus, /eng, the menu) is kept; the game's is asked anew.
+	if ((value[0] == 'r' || value[0] == 'e') && value[1] - '0' == LANG_CHOSEN)
 	{
 		g_lang[id] = value[0] == 'e' ? CZM_EN : CZM_RU;
 		g_langSource[id] = value[1] - '0';

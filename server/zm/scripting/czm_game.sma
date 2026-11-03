@@ -10,7 +10,7 @@
 	  5 Приглашения                → the site, the player panel and the Telegram channel in chat
 	  6 Новости сервера            → what the owner published (bot /zmnews or the admin menu)
 	  7 Сообщение админу           → the owner's bot gets it, online staff see it at once
-	  8 Админ-меню                 → staff only (czm_admin)
+	  Админ-меню                   → first in the list, staff only (czm_admin)
 
 	A vote holds one voice per player (the CZM profile, else the address) and resets with the
 	map. A ban by vote lasts 30 minutes, a mute an hour; staff are immune. Two minutes before the
@@ -247,6 +247,9 @@ public game_menu(id)
 	formatex(title, charsmax(title), en(id) ? "\yCOUNTER ZOMBIE  SURVIVAL^n\d%s  |  %d:%02d left  |  %d/%d players" : "\yCOUNTER ZOMBIE  SURVIVAL^n\d%s  |  осталось %d:%02d  |  игроков %d/%d",
 		map, max(left, 0) / 60, max(left, 0) % 60, get_playersnum(), MaxClients);
 	new menu = menu_create(title, "on_game_menu"), line[64];
+	// the staff see their menu first, so it never hides on the second page
+	if (staff != CZM_STAFF_NONE)
+		item(menu, id, "\rАдмин-меню", "\rAdmin menu", "admin");
 	item(menu, id, "LVL MOD", "LVL MOD", "lvl");
 	item(menu, id, "Настройки", "Settings", "settings");
 	item(menu, id, "Голосования", "Voting", "votes");
@@ -260,8 +263,6 @@ public game_menu(id)
 	formatex(line, charsmax(line), "%s%s", en(id) ? "Server news" : "Новости сервера", news_unseen(id) ? " \r[New]" : "");
 	menu_additem(menu, line, "news");
 	item(menu, id, "Сообщение админу", "Message to the staff", "msg");
-	if (staff != CZM_STAFF_NONE)
-		item(menu, id, "\rАдмин-меню", "\rAdmin menu", "admin");
 	texts(menu, id);
 	menu_display(id, menu);
 	return PLUGIN_HANDLED;
