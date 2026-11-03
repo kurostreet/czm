@@ -47,7 +47,7 @@ class GameTicketTests(unittest.TestCase):
         self.assertEqual(self.ask(1, "127.0.0.1:27015").status_code, 400)
 
     def test_needs_a_player(self):
-        answer = self.request("POST", "game/ticket", json={"address": "194.226.112.249:27016"})
+        answer = self.client.post("/api/v1/game/ticket", json={"address": "194.226.112.249:27016"})
         self.assertEqual(answer.status_code, 401)
 
     def test_no_key_on_the_host_means_no_ticket(self):
@@ -58,3 +58,36 @@ class GameTicketTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SurvivalApiTests(GameTicketTests):
+    """The LVL MOD endpoints: game servers prove themselves with the ticket key, players with their key."""
+
+    def server(self, path, body, token=None):
+        from czm import survival
+        token = token if token is not None else survival.server_token("ab" * 32)
+        return self.client.post("/api/v1/survival/server/" + path, json=body, headers={"X-CZM-Server": token})
+
+    def test_only_our_game_server_reports(self):
+        body = {"batch": "api-batch-0001", "entries": [{"player": self.ids[1], "nick": "One", "kills": 10, "zkills": 10}]}
+        self.assertEqual(self.server("report", body, token="0" * 64).status_code, 401)
+        answer = self.server("report", body)
+        self.assertEqual(answer.status_code, 200, answer.text)
+        state = answer.json()["states"][str(self.ids[1])]
+        self.assertEqual((state["lvl"], state["tokens"]), (1, 10))
+        me = self.request("GET", "survival/me", 1).json()["state"]
+        self.assertEqual(me["tokens"], 10)
+
+    def test_a_player_buys_from_the_site_and_the_game_sees_it(self):
+        from czm import survival
+        with db.db() as c:
+            survival.ensure(c, self.ids[1])
+            c.execute("UPDATE survival_players SET tokens=3000 WHERE player=?", (self.ids[1],))
+        bought = self.request("POST", "survival/action", 1, json={"op": "site-buy-0001", "action": "buy",
+                                                                  "args": {"cat": "prefix", "item": "pro"}})
+        self.assertEqual(bought.status_code, 200, bought.text)
+        joined = self.server("join", {"player": self.ids[1], "op": "join-00000000", "action": "join", "args": {"nick": "One"}})
+        self.assertEqual(joined.json()["state"]["equipped"], {"prefix": "pro"})
+        catalog = self.client.get("/api/v1/survival/catalog").json()
+        self.assertEqual(catalog["categories"][0]["key"], "prefix")
+        self.assertEqual(self.client.get("/api/v1/survival/top").json()["top"][0]["id"], self.ids[1])

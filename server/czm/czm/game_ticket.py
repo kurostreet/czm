@@ -20,7 +20,8 @@ LIFE = 15 * 60
 KEY_FILE = Path("/etc/czm/game-ticket.key")
 
 
-def _key(path: Path = KEY_FILE) -> str:
+def _key(path: Path | None = None) -> str:
+    path = path or KEY_FILE  # looked up at call time, so tests and hosts can point elsewhere
     try:
         key = path.read_text().strip()
     except OSError:
@@ -35,7 +36,7 @@ def sign(key: str, profile: int, expires: int, address: str) -> str:
     return hashlib.sha256(message.encode()).hexdigest()[:32]
 
 
-def issue(conn: sqlite3.Connection, player_key: str, address: str, key_path: Path = KEY_FILE) -> dict:
+def issue(conn: sqlite3.Connection, player_key: str, address: str, key_path: Path | None = None) -> dict:
     player = service.player_by_key(conn, player_key)
     if player is None:
         raise accounts.AuthError("hello", 401)
