@@ -542,7 +542,13 @@ public on_key(id, key)
 	{
 		case SLOT_NEXT: open(id, g_sections[s][SecKey], g_page[id] + 1);
 		case SLOT_BACK: open(id, g_sections[s][SecKey], 0);
-		case SLOT_MAIN: open(id, g_sections[s][SecParent][0] ? g_sections[s][SecParent] : "main", 0);
+		case SLOT_MAIN:
+		{
+			if (g_sections[s][SecParent][0])
+				open(id, g_sections[s][SecParent], 0);
+			else
+				open(id, "main", 0);
+		}
 		case SLOT_NONE: {}
 		default:
 		{
