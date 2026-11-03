@@ -252,9 +252,9 @@ RIM_COOL, COOL = _norm((0.85, 0.25, -0.45)), (0.5, 0.75, 1.0)
 
 def _light(n):
     d = (_dot(n, KEY) + 0.5) / 1.5
-    base = 0.42 + 0.78 * max(0.0, d)
-    w = max(0.0, _dot(n, RIM_WARM)) ** 2 * 0.45
-    c = max(0.0, _dot(n, RIM_COOL)) ** 2 * 0.55
+    base = 0.5 + 0.78 * max(0.0, d)
+    w = max(0.0, _dot(n, RIM_WARM)) ** 1.5 * 0.75
+    c = max(0.0, _dot(n, RIM_COOL)) ** 1.5 * 0.9
     return base + w * WARM[0] + c * COOL[0], base + w * WARM[1] + c * COOL[1], base + w * WARM[2] + c * COOL[2]
 
 
@@ -482,7 +482,7 @@ def render_skin(path, glow=None, weapon=None):
     w, h = SKIN_SIZE
     W, H = w * SS, h * SS
     x0, y0, x1, y1 = bounds(ptris)
-    sc = min(W * 0.84 / (x1 - x0), H * 0.86 / (y1 - y0))
+    sc = min(W * 0.88 / (x1 - x0), H * 0.89 / (y1 - y0))
     ox = W / 2 - (x0 + x1) / 2 * sc
     oy = H * 0.95 + y0 * sc  # feet near the bottom, room for the shadow
     rgb, alpha = raster(model, ptris, W, H, sc, ox, oy)
