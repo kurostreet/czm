@@ -22,6 +22,7 @@
 #include "hud.h"
 #include "cl_util.h"
 #include "parsemsg.h"
+#include "hud/czm_tags.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -234,6 +235,10 @@ int CHudStatusBar :: Draw( float fTime )
 		if( !m_szStatusBar[i][0] )
 			continue;
 		else empty = false;
+
+		// our servers' tag of the player in the crosshair says it better (czm_tags.cpp)
+		if( i == STATUSBAR_ID_LINE && CZM_AimTagShown( ))
+			continue;
 
 		int TextHeight, TextWidth;
 		DrawUtils::ConsoleStringSize( m_szStatusBar[i], &TextWidth, &TextHeight );

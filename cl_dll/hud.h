@@ -422,6 +422,9 @@ public:
 	CHudMsgFunc(StatusText);
 	CHudMsgFunc(StatusValue);
 
+	// Counter Zombie Mobile: the player in the crosshair (1 his side, 2 his index, 3 a mate's health)
+	int Value( int i ) const { return i >= 0 && i < MAX_STATUSBAR_VALUES ? m_iStatusValues[i] : 0; }
+
 protected:
 	enum {
 		MAX_STATUSTEXT_LENGTH = 128,

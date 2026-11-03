@@ -33,6 +33,7 @@ class CHudScoreboard { public: void GetAllPlayersInfo() {} int DrawCzmScoreboard
 '''
 HARNESS = r'''
 #include "hud.h"
+#include "@TAGS@"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -55,6 +56,14 @@ const char *Bot(int i,const char *) { return i==3?"1":"0"; }
 bool CZM_DrawTabAvatar(int,bool,int,int,int) { return true; }
 void CZM_TabProfilesBeginDraw() {}
 void CZM_TabProfileRow(int,bool,int,int,int,int) {}
+// the LVL MOD tags of our servers: with CZM_TEST_TAGS every other player wears one
+CzmTag tags[33];
+const CzmTag *CZM_TagFor(int i) {
+ if(!getenv("CZM_TEST_TAGS")||i%2==0) return nullptr;
+ tags[i].lvl=i*40;tags[i].wr=52;strcpy(tags[i].prefix,i%3?"Зомбоубийца":"X");tags[i].r=0;tags[i].g=255;tags[i].b=170;
+ strcpy(tags[i].priv,i%5==1?"PREMIUM":"");return &tags[i];
+}
+void CZM_LevelColor(int,int *r,int *g,int *b) { *r=255;*g=136;*b=0; }
 Engine gEngfuncs={String,Float,Len,Color,Text,Bot};
 void FillRGBA(int x,int y,int w,int h,int r,int g,int b,int a) { printf("R\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n",x,y,w,h,r,g,b,a); }
 void FillRGBABlend(int x,int y,int w,int h,int r,int g,int b,int a) { FillRGBA(x,y,w,h,r,g,b,a); }
@@ -84,7 +93,7 @@ class ScoreboardStylesTests(unittest.TestCase):
         (root / 'hud.h').write_text(STUB)
         for name in ['cl_util.h', 'draw_util.h']:
             (root / name).write_text('')
-        (root / 'main.cpp').write_text(HARNESS)
+        (root / 'main.cpp').write_text(HARNESS.replace('@TAGS@', str(ROOT / 'cl_dll/hud/czm_tags.h')))
         cls.exe = root / 'scoreboard'
         subprocess.run(['g++', '-std=c++11', '-Wall', '-Wextra', '-Wno-unused-parameter', '-I', str(root),
                         str(ROOT / 'cl_dll/hud/czm_scoreboard.cpp'), str(root / 'main.cpp'), '-o', str(cls.exe)], check=True)
@@ -94,17 +103,21 @@ class ScoreboardStylesTests(unittest.TestCase):
         cls.temp.cleanup()
 
     @classmethod
-    def draw(cls, style, count, width, height, font, lang='ru', long_name=False):
+    def draw(cls, style, count, width, height, font, lang='ru', long_name=False, tags=False):
+        env = dict(os.environ)
+        env.pop('CZM_TEST_TAGS', None)
+        if tags:
+            env['CZM_TEST_TAGS'] = '1'
         result = subprocess.run([str(cls.exe), str(style), str(count), str(width), str(height), str(font), lang] +
-                                (['long'] if long_name else []), capture_output=True, text=True, check=True)
+                                (['long'] if long_name else []), capture_output=True, text=True, check=True, env=env)
         return [line.split('\t') for line in result.stdout.splitlines()]
 
     def test_every_player_fits_once_without_overlapping(self):
-        for style in [0, 1, 2, -1, 9]:
+        for style, tags in [(0, False), (1, False), (2, False), (-1, False), (9, False), (0, True), (1, True), (2, True)]:
             for count in [0, 1, 8, 10, 11, 16, 31, 32]:
                 for width, height, font in [(640, 360, 12), (960, 540, 16), (1536, 716, 18), (1280, 720, 24)]:
-                    with self.subTest(style=style, count=count, width=width, font=font):
-                        calls = self.draw(style, count, width, height, font)
+                    with self.subTest(style=style, tags=tags, count=count, width=width, font=font):
+                        calls = self.draw(style, count, width, height, font, tags=tags)
                         players = [c for c in calls if c[0] == 'T' and re.fullmatch(r'P\d{2}', c[-1])]
                         self.assertEqual(sorted(c[-1] for c in players), ['P%02d' % i for i in range(1, count + 1)])
                         for c in calls:
@@ -129,6 +142,17 @@ class ScoreboardStylesTests(unittest.TestCase):
             self.assertTrue(any('Очень' in x for x in text))
             self.assertTrue(any(x.endswith('...') for x in text))
             self.assertFalse(any('^1' in x or '\\r' in x for x in text))
+
+    def test_tags_show_level_prefix_and_privilege(self):
+        calls = self.draw(0, 8, 1536, 716, 18, tags=True)
+        text = [c[-1] for c in calls if c[0] == 'T']
+        self.assertIn('LVL 40 · 52%', text)
+        self.assertIn('PREMIUM', text)
+        self.assertTrue(any(x.startswith('[Зомбоубийца]') for x in text))
+        level = [c for c in calls if c[0] == 'T' and c[-1] == 'LVL 40 · 52%'][0]
+        self.assertEqual(level[4:7], ['255', '136', '0'])
+        self.assertEqual(text, [c[-1] for c in self.draw(0, 8, 1536, 716, 18, tags=True) if c[0] == 'T'])
+        self.assertNotIn('LVL 40 · 52%', [c[-1] for c in self.draw(0, 8, 1536, 716, 18) if c[0] == 'T'])
 
     def test_optional_geometry_preview(self):
         output = os.environ.get('CZM_SCOREBOARD_PREVIEW')

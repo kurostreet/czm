@@ -22,6 +22,7 @@
 
 #include "hud.h"
 #include "hud/czm_hud.h"
+#include "hud/czm_tags.h"
 #include "cl_util.h"
 #include <string.h>
 #include <stdio.h>
@@ -413,6 +414,7 @@ void CHud :: Init( void )
 
 	// chat, death notice, status bars and other
 	m_SayText.Init();
+	CZM_TagsInit(); // the LVL MOD tags of our servers
 	m_Spectator.Init();
 	m_Geiger.Init();
 	m_Flash.Init();
@@ -463,6 +465,7 @@ CHud :: ~CHud()
 void CHud :: VidInit( void )
 {
 	static bool firstinit = true;
+	CZM_TagsReset(); // a new map or server: its tags come again
 	m_scrinfo.iSize = sizeof( m_scrinfo );
 	GetScreenInfo( &m_scrinfo );
 

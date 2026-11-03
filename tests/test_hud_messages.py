@@ -1,5 +1,6 @@
 """Geometry of the chat block and the frame of server messages stays on any screen."""
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -58,6 +59,34 @@ class HudMessagesTests(unittest.TestCase):
         self.assertIn('CZM_HudValue( CzmHud::CHAT, "hidden", 0 )', saytext)
         self.assertIn("CzmHud::MessageFrame", message)
         self.assertIn("if ( !s_framesHidden )", message)
+
+
+    def test_chat_colours_of_our_servers(self):
+        """\\x07RRGGBB colours a part of a chat line and takes no room; a broken code is only left out."""
+        if not shutil.which("g++"):
+            self.skipTest("g++ required")
+        saytext = (ROOT / "cl_dll/saytext.cpp").read_text()
+        code = re.search(r"static int SayTextRgb\(.*?\n}\n\nstatic void StripSayTextControlCodes\(.*?\n}\n", saytext, re.S).group(0)
+        harness = "#include <cassert>\n#include <cstring>\n#include <cstddef>\n" + code + r'''
+int main()
+{
+	unsigned char r = 0, g = 0, b = 0;
+	assert( SayTextRgb( "\x07" "00FFaa[LVL 12]", &r, &g, &b ) == 7 && r == 0 && g == 255 && b == 170 );
+	assert( SayTextRgb( "\x07" "12G", &r, &g, &b ) == 1 && SayTextRgb( "\x07", NULL, NULL, NULL ) == 1 );
+	assert( SayTextRgb( "plain", &r, &g, &b ) == 0 );
+	char out[64];
+	StripSayTextControlCodes( "\x01" "\x07" "FF8800[LVL 300] \x07" "00ffaa[King] \x03" "Nick\x01: hi\x07", out, sizeof( out ));
+	assert( !strcmp( out, "[LVL 300] [King] Nick: hi" ));
+	StripSayTextControlCodes( "a\x07" "12b", out, sizeof( out ));
+	assert( !strcmp( out, "a12b" ));
+	return 0;
+}
+'''
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder)
+            (path / "main.cpp").write_text(harness)
+            subprocess.run(["g++", "-std=c++11", "-Wall", str(path / "main.cpp"), "-o", str(path / "run")], check=True)
+            subprocess.run([str(path / "run")], check=True)
 
 
 if __name__ == "__main__":

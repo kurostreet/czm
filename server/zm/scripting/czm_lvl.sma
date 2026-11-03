@@ -45,6 +45,12 @@ new bool:g_catalogReady;
 // ---------------------------------------------------------------- players
 new g_profile[MAX_PLAYERS + 1], g_session[MAX_PLAYERS + 1], bool:g_loaded[MAX_PLAYERS + 1];
 new g_lvl[MAX_PLAYERS + 1], g_tokens[MAX_PLAYERS + 1], Float:g_tokBoostUntil[MAX_PLAYERS + 1];
+// the tag everyone sees with the CZM game (the player list, the player in the crosshair, the chat):
+// the level, the wins in %, the prefix in its colour, the privilege; toasts for "+tokens" and levels
+new g_wr[MAX_PLAYERS + 1], g_nextKills[MAX_PLAYERS + 1];
+new g_msgTag, g_msgToast;
+new g_tagSent[MAX_PLAYERS + 1][64];
+new bool:g_tagSynced[MAX_PLAYERS + 1];
 new g_equip[MAX_PLAYERS + 1][MAX_CATS];              // item index or -1
 new bool:g_owned[MAX_PLAYERS + 1][MAX_CATS][MAX_ITEMS];
 new bool:g_bpActive[MAX_PLAYERS + 1], bool:g_bpDailyReady[MAX_PLAYERS + 1], g_bpLeftDays[MAX_PLAYERS + 1];
@@ -99,6 +105,9 @@ public plugin_natives()
 
 public plugin_precache()
 {
+	// read by the CZM game only (cl_dll/hud/czm_tags.cpp); others never get them
+	g_msgTag = engfunc(EngFunc_RegUserMsg, "CzmTag", -1);
+	g_msgToast = engfunc(EngFunc_RegUserMsg, "CzmToast", -1);
 	g_hRank = czm_sound_precache(PULL_SOUND);
 	new path[64];
 	for (new k = 0; k < sizeof KNIFE_IDS; k++)
@@ -156,6 +165,7 @@ public plugin_init()
 	for (new i = 0; i <= MaxClients; i++)
 		reset_player(i);
 	set_task(REPORT_EVERY, "task_report", _, _, _, "b");
+	set_task(2.0, "task_tags", _, _, _, "b");
 	set_task(1.0, "task_map_end", _, _, _, "b");
 }
 
@@ -336,6 +346,10 @@ reset_player(id)
 	g_profile[id] = 0;
 	g_loaded[id] = false;
 	g_lvl[id] = 0;
+	g_wr[id] = 0;
+	g_nextKills[id] = 0;
+	g_tagSent[id][0] = EOS;
+	g_tagSynced[id] = false;
 	g_tokens[id] = 0;
 	g_tokBoostUntil[id] = 0.0;
 	g_inRound[id] = false;
@@ -422,6 +436,8 @@ apply_state(id, EzJSON:st)
 		return;
 	g_lvl[id] = ezjson_object_get_number(st, "lvl");
 	g_tokens[id] = ezjson_object_get_number(st, "tokens");
+	g_wr[id] = ezjson_object_get_number(st, "wr", true);
+	g_nextKills[id] = ezjson_object_get_number(st, "next_lvl_kills", true);
 	new left = ezjson_object_get_number(st, "boosts.tokens", true);
 	g_tokBoostUntil[id] = left > 0 ? get_gametime() + float(left) : 0.0;
 	g_bpActive[id] = ezjson_object_get_bool(st, "battlepass.active", true);
@@ -789,6 +805,13 @@ tokens_hud(id, amount, const reason[], const victim[])
 {
 	if (!is_user_connected(id) || amount <= 0)
 		return;
+	if (czm_menu_rich(id))
+	{
+		new text[96];
+		formatex(text, charsmax(text), "%s%s%s", reason, victim[0] ? " " : "", victim);
+		toast(id, 1, amount, text);
+		return;
+	}
 	set_hudmessage(255, 200, 40, 0.02, 0.17, 0, 0.0, 3.0, 0.1, 0.4, -1);
 	if (victim[0])
 		ShowSyncHudMsg(id, g_hudTokens, "+%d Tokens %s %s", amount, reason, victim);
@@ -800,6 +823,13 @@ level_up(id, level)
 {
 	new name[32];
 	get_user_name(id, name, charsmax(name));
+	g_lvl[id] = max(g_lvl[id], level);
+	if (czm_menu_rich(id))
+	{
+		toast(id, 2, level, name);
+		czm_play_sound(id, g_hRank);
+		return;
+	}
 	set_hudmessage(80, 220, 255, 0.02, 0.21, 0, 0.0, 4.0, 0.1, 0.5, -1);
 	ShowSyncHudMsg(id, g_hudLevel, czm_lang(id) == CZM_EN ? "%s reached LVL %d" : "%s повысил уровень: LVL %d", name, level);
 	czm_play_sound(id, g_hRank);
@@ -882,6 +912,107 @@ knife_look(id)
 	}
 }
 
+// a toast of the CZM game: kind 1 "+N tokens" (text: why), 2 a new level (text: the nick)
+toast(id, kind, value, const text[])
+{
+	message_begin(MSG_ONE, g_msgToast, _, id);
+	write_byte(kind);
+	write_short(value);
+	write_string(text);
+	message_end();
+}
+
+hex6(value, out[8])
+{
+	static const digits[] = "0123456789ABCDEF";
+	for (new i = 5; i >= 0; i--)
+	{
+		out[i] = digits[value & 0xF];
+		value >>= 4;
+	}
+	out[6] = EOS;
+}
+
+// the level colours of Kontra
+level_color(level)
+{
+	if (level <= 10) return 0xFFFFFF;
+	if (level <= 20) return 0x00FFAA;
+	if (level <= 40) return 0x00FFFF;
+	if (level <= 80) return 0x0088FF;
+	if (level <= 160) return 0xAA00FF;
+	if (level <= 320) return 0xFF8800;
+	if (level <= 640) return 0xFFD700;
+	if (level <= 1280) return 0xFF4500;
+	return 0xFF0000;
+}
+
+// what the tag of a player says: the prefix in the owner's language and its colour
+tag_parts(id, prefix[], len, &color)
+{
+	new cat = cat_index("prefix"), col = cat_index("prefcolor");
+	new p = g_loaded[id] && cat >= 0 ? g_equip[id][cat] : -1;
+	prefix[0] = EOS;
+	color = 0xFFFFFF;
+	if (p < 0)
+		return;
+	copy(prefix, len, g_itemName[cat][p][czm_lang(id)]);
+	if (col >= 0 && g_equip[id][col] >= 0)
+	{
+		new r, g, b;
+		hex_color(g_itemId[col][g_equip[id][col]], r, g, b);
+		color = (r << 16) | (g << 8) | b;
+	}
+}
+
+send_tag(id, to)
+{
+	new prefix[32], priv[12], color;
+	tag_parts(id, prefix, charsmax(prefix), color);
+	czm_privilege_name(id, priv, charsmax(priv));
+	message_begin(MSG_ONE, g_msgTag, _, to);
+	write_byte(id);
+	write_short(g_loaded[id] ? g_lvl[id] : 0);
+	write_byte(g_loaded[id] ? clamp(g_wr[id], 0, 100) : 0);
+	write_string(prefix);
+	write_long(color);
+	write_string(priv);
+	message_end();
+}
+
+// every two seconds: a changed tag goes to every CZM game, a new CZM game gets them all
+public task_tags()
+{
+	new players[MAX_PLAYERS], count, viewers[MAX_PLAYERS], seen;
+	get_players(players, count, "ch");
+	for (new k = 0; k < count; k++)
+		if (czm_menu_rich(players[k]))
+			viewers[seen++] = players[k];
+
+	for (new k = 0; k < count; k++)
+	{
+		new id = players[k], prefix[32], priv[12], color, sig[64];
+		tag_parts(id, prefix, charsmax(prefix), color);
+		czm_privilege_name(id, priv, charsmax(priv));
+		formatex(sig, charsmax(sig), "%d|%d|%s|%x|%s", g_loaded[id] ? g_lvl[id] : 0, g_wr[id], prefix, color, priv);
+		if (equal(sig, g_tagSent[id]))
+			continue;
+		copy(g_tagSent[id], charsmax(g_tagSent[]), sig);
+		for (new v = 0; v < seen; v++)
+			if (g_tagSynced[viewers[v]])
+				send_tag(id, viewers[v]);
+	}
+	for (new v = 0; v < seen; v++)
+	{
+		new to = viewers[v];
+		if (g_tagSynced[to])
+			continue;
+		g_tagSynced[to] = true;
+		for (new k = 0; k < count; k++)
+			send_tag(players[k], to);
+	}
+}
+
 hex_color(const hex[], &r, &g, &b)
 {
 	new value = 0;
@@ -952,10 +1083,35 @@ chat(id, bool:team)
 			len += formatex(line[len], charsmax(line) - len, "^1(%s) ", zombie ? (lang == CZM_EN ? "Zombies" : "Зомби") : (lang == CZM_EN ? "Humans" : "Люди"));
 		if (priv[0])
 			len += formatex(line[len], charsmax(line) - len, "^3[%s] ", priv);
-		if (g_loaded[id])
-			len += formatex(line[len], charsmax(line) - len, "^4[LVL %d] ", g_lvl[id]);
-		if (p >= 0)
-			len += formatex(line[len], charsmax(line) - len, "%c[%s] ", code, g_itemName[prefix][p][lang]);
+		if (czm_menu_rich(to))
+		{
+			// ^7RRGGBB: a colour of the CZM game's chat
+			if (g_loaded[id])
+			{
+				new hex[8];
+				hex6(level_color(g_lvl[id]), hex);
+				len += formatex(line[len], charsmax(line) - len, "^7%s[LVL %d] ", hex, g_lvl[id]);
+			}
+			if (p >= 0)
+			{
+				new tagColor = 0xFFFFFF, r, g, b;
+				if (color >= 0 && g_equip[id][color] >= 0)
+				{
+					hex_color(g_itemId[color][g_equip[id][color]], r, g, b);
+					tagColor = (r << 16) | (g << 8) | b;
+				}
+				new hex[8];
+				hex6(tagColor, hex);
+				len += formatex(line[len], charsmax(line) - len, "^7%s[%s] ", hex, g_itemName[prefix][p][lang]);
+			}
+		}
+		else
+		{
+			if (g_loaded[id])
+				len += formatex(line[len], charsmax(line) - len, "^4[LVL %d] ", g_lvl[id]);
+			if (p >= 0)
+				len += formatex(line[len], charsmax(line) - len, "%c[%s] ", code, g_itemName[prefix][p][lang]);
+		}
 		formatex(line[len], charsmax(line) - len, "^3%s^1: %s", name, text);
 		client_print_color(to, id, "%s", line);
 	}

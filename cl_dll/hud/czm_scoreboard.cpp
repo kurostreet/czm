@@ -3,6 +3,7 @@
 #include "cl_util.h"
 #include "draw_util.h"
 #include "czm_avatars.h"
+#include "czm_tags.h"
 #include <algorithm>
 #include <stdio.h>
 #include <stdlib.h>
@@ -170,8 +171,59 @@ int CHudScoreboard::DrawCzmScoreboard( void )
 			const int icon = std::max( 0, std::min( rh - 2, pad * 3 ));
 			if( icon > 0 && !CZM_DrawTabAvatar( id, p.thisplayer != 0, left + pad, y + ( rh - icon ) / 2, icon ))
 				Text( left + pad, ty, icon, "?", 130, 144, 162 );
-			const int nx = left + pad + icon;
-			Text( nx, ty, std::max( 0, nameW - pad - icon - pad ), p.name, p.thisplayer ? 255 : 225, p.thisplayer ? 238 : 230, p.thisplayer ? 240 : 238 );
+			int nx = left + pad + icon, nameRight = left + nameW - pad;
+			// our servers: the privilege, the prefix in its colour, the level on the right in its colour;
+			// the nick keeps two fifths of the room at least, the tags share the rest
+			if( const CzmTag *tag = CZM_TagFor( id ))
+			{
+				char clean[256];
+				Clean( p.name, clean, sizeof( clean ));
+				int spare = nameRight - nx - std::min( Width( clean ), ( nameRight - nx ) * 2 / 5 );
+				// what fits, most needed first: the level, the privilege, the wins, the prefix
+				char forms[3][32];
+				int level = -1;
+				snprintf( forms[0], sizeof( forms[0] ), "LVL %d · %d%%", tag->lvl, tag->wr );
+				snprintf( forms[1], sizeof( forms[1] ), "LVL %d", tag->lvl );
+				snprintf( forms[2], sizeof( forms[2] ), "%d", tag->lvl );
+				for( int f = 1; tag->lvl > 0 && f < 3 && level < 0; f++ )
+					if( Width( forms[f] ) + pad * 2 <= spare ) level = f;
+				if( level >= 0 ) spare -= Width( forms[level] ) + pad * 2;
+				const int pw = tag->priv[0] ? Width( tag->priv ) + pad : 0;
+				const bool priv = pw && pw + pad / 2 <= spare;
+				if( priv ) spare -= pw + pad / 2;
+				if( level == 1 && tag->wr > 0 && Width( forms[0] ) - Width( forms[1] ) <= spare )
+				{
+					spare -= Width( forms[0] ) - Width( forms[1] );
+					level = 0;
+				}
+				if( level >= 0 )
+				{
+					int r, g, b;
+					const int lw = Width( forms[level] );
+					CZM_LevelColor( tag->lvl, &r, &g, &b );
+					Text( nameRight - pad - lw, ty, lw, forms[level], r, g, b );
+					nameRight -= lw + pad * 2;
+				}
+				if( priv )
+				{
+					FillRGBABlend( nx, ty, pw, fontH, 231, 187, 96, 225 );
+					Text( nx + pad / 2, ty, pw, tag->priv, 28, 20, 8 );
+					nx += pw + pad / 2;
+				}
+				if( tag->prefix[0] )
+				{
+					char pf[48];
+					snprintf( pf, sizeof( pf ), "[%s] ", tag->prefix );
+					// whole, or cut to a few letters and "..."
+					const int fw = std::min( Width( pf ), spare );
+					if( fw == Width( pf ) || fw >= Width( "[X...] " ))
+					{
+						Text( nx, ty, fw, pf, tag->r, tag->g, tag->b );
+						nx += fw;
+					}
+				}
+			}
+			Text( nx, ty, std::max( 0, nameRight - nx ), p.name, p.thisplayer ? 255 : 225, p.thisplayer ? 238 : 230, p.thisplayer ? 240 : 238 );
 			// Status is conveyed by the stripe and a small live/dead indicator.
 			FillRGBA( left + nameW - pad, y + rh / 2, std::max( 2, pad / 2 ), std::max( 2, pad / 2 ), extra.dead ? 239 : 74, extra.dead ? 87 : 212, extra.dead ? 98 : 140, 255 );
 			snprintf( buf, sizeof( buf ), "%d", extra.frags );

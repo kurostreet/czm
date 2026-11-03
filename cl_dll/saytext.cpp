@@ -49,6 +49,38 @@ static CzmHud::Rect ChatRect( int lineHeight )
 #define LINE_START  10
 #define MAX_LINE_WIDTH  ( (int)ChatRect( line_height ).w - LINE_START * 2 )
 
+// CZM: "\x07RRGGBB" is a colour of our servers (the LVL MOD tags in the chat). How many characters
+// it takes: 7 with the colour, 1 for a lone \x07 (no colour, just left out), 0 for other text.
+static int SayTextRgb( const char *p, unsigned char *r, unsigned char *g, unsigned char *b )
+{
+	int value = 0;
+
+	if ( p[0] != '\x07' )
+		return 0;
+	for ( int i = 1; i <= 6; i++ )
+	{
+		char c = p[i];
+		int digit;
+
+		if ( c >= '0' && c <= '9' )
+			digit = c - '0';
+		else if ( c >= 'A' && c <= 'F' )
+			digit = c - 'A' + 10;
+		else if ( c >= 'a' && c <= 'f' )
+			digit = c - 'a' + 10;
+		else
+			return 1;
+		value = value * 16 + digit;
+	}
+	if ( r && g && b )
+	{
+		*r = ( value >> 16 ) & 255;
+		*g = ( value >> 8 ) & 255;
+		*b = value & 255;
+	}
+	return 7;
+}
+
 static void StripSayTextControlCodes( const char *src, char *dst, int dstSize )
 {
 	if ( !src || dstSize <= 0 )
@@ -59,6 +91,11 @@ static void StripSayTextControlCodes( const char *src, char *dst, int dstSize )
 	{
 		if ( *p == '\x01' || *p == '\x02' || *p == '\x03' || *p == '\x04' )
 			continue;
+		if ( *p == '\x07' )
+		{
+			p += SayTextRgb( p, NULL, NULL, NULL ) - 1;
+			continue;
+		}
 
 		dst[j++] = *p;
 	}
@@ -210,6 +247,24 @@ int CHudSayText :: Draw( float flTime )
 
 		for (size_t c = 0; c < length; c++)
 		{
+			// CZM: \x07RRGGBB, any colour
+			if (text[c] == '\x07')
+			{
+				unsigned char r, g, b;
+				int taken = SayTextRgb(text + c, &r, &g, &b);
+
+				if (buffer_pos > 0)
+				{
+					color_buffer[buffer_pos] = '\x00';
+					current_x = DrawUtils::DrawConsoleString(current_x, y, color_buffer);
+					buffer_pos = 0;
+				}
+				if (taken == 7)
+					DrawUtils::SetConsoleTextColor(r, g, b);
+				c += taken - 1;
+				continue;
+			}
+
 			// color code parse
 			// '\x01' - normal (yellow); '\0x03' - teamcolor (R GREY B); '\x04' - green
 			if (text[c] == '\x01' || text[c] == '\x03' || text[c] == '\x04')
@@ -478,7 +533,10 @@ void CHudSayText :: SayTextPrint( const char *pszBuf, int iBufSize, int clientIn
 void CHudSayText :: EnsureTextFitsInOneLineAndWrapIfHaveTo( int line )
 {
 	int line_width = 0;
-	DrawUtils::ConsoleStringSize(g_szLineBuffer[line], &line_width, &line_height );
+	char plain[ MAX_CHARS_PER_LINE ];
+	// the colour codes take no room on the screen
+	StripSayTextControlCodes( g_szLineBuffer[line], plain, sizeof( plain ));
+	DrawUtils::ConsoleStringSize( plain, &line_width, &line_height );
 
 	if ( (line_width + LINE_START) > MAX_LINE_WIDTH )
 	{ // string is too long to fit on line
@@ -501,6 +559,15 @@ void CHudSayText :: EnsureTextFitsInOneLineAndWrapIfHaveTo( int line )
 
 				if ( *x == 0 )
 					break;
+			}
+
+			// the colour codes take no room
+			if ( *x == '\x01' || *x == '\x02' || *x == '\x03' || *x == '\x04' )
+				continue;
+			if ( *x == '\x07' )
+			{
+				x += SayTextRgb( x, NULL, NULL, NULL ) - 1;
+				continue;
 			}
 
 			char buf[2];

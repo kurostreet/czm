@@ -19,6 +19,7 @@
 #include <stdlib.h>
 #include "hud.h"
 #include "hud/czm_hud.h"
+#include "hud/czm_tags.h"
 #include "cl_util.h"
 #include "triangleapi.h"
 
@@ -175,6 +176,10 @@ int CHud :: Redraw( float flTime, int intermission )
 
 		// server files still downloading: the indicator where the player put it in the editor
 		CZM_DownloadsDraw();
+
+		// our servers: the player in the crosshair with his LVL MOD tag, "+tokens" and level toasts
+		if( !intermission )
+			CZM_TagsDraw( flTime );
 	}
 	CZM_AmmoFrameEnd(); // the reload button shows the clip only while the ammo HUD has one
 
