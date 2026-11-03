@@ -37,7 +37,7 @@
       nothingToSell: 'Нечего выставить: в лавку идут купленные вещи.', seller: 'Продавец', daysLeft: '{d} дн.',
       withdraw: 'Снять', mine: 'Твоё', marketEmpty: 'В лавке пока пусто.', payLead: 'С {lvl} LVL, до {limit} токенов в день. Сегодня отправлено: {today}.',
       topEmpty: 'Пока никого.', liveEmpty: 'Сервер сейчас не в сети или на нём никого нет.', liveNow: '{n} из {max}', leftMin: '{m} мин до смены карты',
-      zombie: 'Зомби', human: 'Человек', frags: 'Фраги', lvl: 'LVL', player: 'Игрок', place: '{n} место', done: 'Готово', bought: 'Куплено и надето', on: 'Надето', off: 'Снято',
+      zombie: 'Зомби', human: 'Человек', frags: 'Фраги', lvl: 'LVL', player: 'Игрок', place: '{n} место', crate: 'Ящик с оружием', crateLead: 'на 30 минут, выдаётся при каждом спавне человеком', charges: 'зарядов: {n}', minLeft: 'ещё {m} мин', extend: 'Продлить', hCrate: 'Ящик с оружием', hAirdrop: 'Аирдроп', done: 'Готово', bought: 'Куплено и надето', on: 'Надето', off: 'Снято',
       paid: 'Передано {n} токенов', listed: 'Выставлено в лавку', boughtMarket: 'Куплено в лавке', withdrawn: 'Вещь вернулась к тебе',
       hBuy: 'Покупка', hUpgrade: 'Прокачка', hPay: 'Перевод', hPromo: 'Промокод', hPass: 'Боевой пропуск', hMarketBuy: 'Покупка в лавке',
       hMarketSell: 'Продажа в лавке', hMapTop: 'Топ карты', noHistory: 'Событий пока нет: зайди на сервер Survival.',
@@ -74,7 +74,7 @@
       nothingToSell: 'Nothing to sell: bought items go to the market.', seller: 'Seller', daysLeft: '{d} d',
       withdraw: 'Take back', mine: 'Yours', marketEmpty: 'The market is empty for now.', payLead: 'From LVL {lvl}, up to {limit} tokens a day. Sent today: {today}.',
       topEmpty: 'Nobody yet.', liveEmpty: 'The server is offline or empty right now.', liveNow: '{n} of {max}', leftMin: '{m} min to the next map',
-      zombie: 'Zombie', human: 'Human', frags: 'Frags', lvl: 'LVL', player: 'Player', place: 'place {n}', done: 'Done', bought: 'Bought and put on', on: 'Put on', off: 'Taken off',
+      zombie: 'Zombie', human: 'Human', frags: 'Frags', lvl: 'LVL', player: 'Player', place: 'place {n}', crate: 'Weapon crate', crateLead: 'for 30 minutes, given at every spawn as a human', charges: '{n} charges', minLeft: '{m} min left', extend: 'Extend', hCrate: 'Weapon crate', hAirdrop: 'Airdrop', done: 'Done', bought: 'Bought and put on', on: 'Put on', off: 'Taken off',
       paid: '{n} tokens sent', listed: 'Put up for sale', boughtMarket: 'Bought on the market', withdrawn: 'The item is back with you',
       hBuy: 'Purchase', hUpgrade: 'Upgrade', hPay: 'Transfer', hPromo: 'Promo code', hPass: 'Battle pass', hMarketBuy: 'Market purchase',
       hMarketSell: 'Market sale', hMapTop: 'Map top', noHistory: 'Nothing yet: join the Survival server.',
@@ -241,7 +241,7 @@
       [t('rounds'), fmt(s.matches)], [t('wins'), fmt(s.wins)], [t('wr'), s.wr + '%'],
       [t('since'), s.first_seen ? new Date(s.first_seen * 1000).toLocaleDateString(lang === 'en' ? 'en-GB' : 'ru-RU') : '—']];
     $('stats').innerHTML = stats.map(function (x) { return '<div class="stat card"><small>' + esc(x[0]) + '</small><b>' + esc(x[1]) + '</b></div>'; }).join('');
-    var kinds = { buy: 'hBuy', upgrade: 'hUpgrade', pay: 'hPay', promo: 'hPromo', battlepass: 'hPass', market_buy: 'hMarketBuy', market_sell: 'hMarketSell', map_top: 'hMapTop' };
+    var kinds = { buy: 'hBuy', upgrade: 'hUpgrade', pay: 'hPay', promo: 'hPromo', battlepass: 'hPass', market_buy: 'hMarketBuy', market_sell: 'hMarketSell', map_top: 'hMapTop', crate: 'hCrate', airdrop: 'hAirdrop' };
     var rows = (me.history || []).map(function (h) {
       var when = new Date(h.time * 1000).toLocaleString(lang === 'en' ? 'en-GB' : 'ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
       var amount = h.amount ? '<span class="amount ' + (h.amount > 0 ? 'plus' : 'minus') + '">' + (h.amount > 0 ? '+' : '') + fmt(h.amount) + '</span>' : '';
@@ -255,7 +255,7 @@
     if (place) return t('place', { n: place[1] });
     var m = /^(\w+):(.+)$/.exec(h.detail || '');
     if (m) { var it = item(m[1], m[2]); if (it) return name(it); }
-    var up = (catalog.upgrades || []).filter(function (u) { return u.id === h.detail; })[0];
+    var up = (catalog.upgrades || []).concat((catalog.crate || {}).items || []).filter(function (u) { return u.id === h.detail; })[0];
     return up ? name(up) : (h.detail || '');
   }
 
@@ -285,7 +285,15 @@
       return '<div class="offer card"><div class="top-row"><div class="name">' + esc(name(u)) + '</div></div>' +
         '<button class="btn gold small" data-act="upgrade" data-item="' + esc(u.id) + '">' + esc(t('buy')) + ' · ' + fmt(u.price) + '</button></div>';
     }).join('');
-    $('shopCats').innerHTML = SHOP_CATS.map(function (key) {
+    var crate = catalog.crate || { items: [] }, have = s.crate || {};
+    var crateHtml = '<h2 class="cat-title">' + esc(t('crate')) + ' <small>' + esc(t('crateLead')) + '</small></h2><div class="grid offers">' + crate.items.map(function (it) {
+      var left = have[it.id] || 0;
+      var extra = it.id === 'invis' && left ? ' · ' + t('charges', { n: have.charges || 0 }) : '';
+      return '<div class="offer card' + (left ? ' item on' : '') + '"><div class="top-row"><div class="name">' + esc(name(it)) + '</div>' +
+        (left ? '<span class="chip green">' + esc(t('minLeft', { m: Math.ceil(left / 60) }) + extra) + '</span>' : '') + '</div>' +
+        '<button class="btn gold small" data-act="crate" data-item="' + esc(it.id) + '">' + esc(left ? t('extend') : t('buy')) + ' · ' + fmt(it.price) + '</button></div>';
+    }).join('') + '</div>';
+    $('shopCats').innerHTML = crateHtml + SHOP_CATS.map(function (key) {
       var c = cat(key); if (!c) return '';
       var owned = s.owned[key] || [];
       var cards = c.items.filter(function (it) { return it.shop || owned.indexOf(it.id) >= 0; }).map(function (it) {
@@ -421,6 +429,7 @@
     else if (a === 'wear') p = act('equip', { cat: catKey, item: it }, t('on'));
     else if (a === 'takeoff') p = act('equip', { cat: catKey, item: '' }, t('off'));
     else if (a === 'upgrade') p = act('upgrade', { item: it });
+    else if (a === 'crate') p = act('crate', { item: it });
     else if (a === 'bp_buy' || a === 'bp_daily') p = act(a, {});
     else if (a === 'bp_final') p = act('bp_final', { item: it });
     else if (a === 'market_buy') p = act('market_buy', { listing: parseInt(it, 10) }, t('boughtMarket')).then(loadMarket);

@@ -530,7 +530,7 @@ async def survival_server_report(body: SurvivalReportIn, request: Request, x_czm
 async def survival_server_action(body: SurvivalActionIn, request: Request, x_czm_server: str | None = Header(default=None)):
     def run(c):
         survival.check_server(x_czm_server)
-        return survival.action(c, body.player, "game:" + body.op, body.action, body.args)
+        return survival.action(c, body.player, "game:" + body.op, body.action, body.args, server=True)
     return await social_result(request, run)
 
 

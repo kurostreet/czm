@@ -384,6 +384,7 @@ def init() -> None:
             conn.executescript(admin.SCHEMA)
             conn.executescript(official.SCHEMA)
             conn.executescript(survival.SCHEMA)
+            survival.migrate(conn)
             play_feed.migrate(conn)
             # Preserve existing unviewed incoming requests on upgrade.
             conn.execute("INSERT OR IGNORE INTO social_notices(player,peer,kind,created) "

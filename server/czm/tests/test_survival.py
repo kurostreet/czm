@@ -157,6 +157,31 @@ class SurvivalTests(unittest.TestCase):
         self.assertEqual(self.run_in(survival.market, self.b)["listings"], [])
         self.assertEqual(self.state(self.b)["owned"]["prefcolor"], ["#FFD700"])
 
+    def test_weapon_crate_lasts_half_an_hour(self):
+        self.give(self.a, tokens=1000)
+        s = self.act(self.a, "crate", item="arm100")["state"]
+        self.assertEqual((s["tokens"], s["crate"]), (900, {"arm100": survival.CRATE_SECONDS}))
+        s = self.act(self.a, "crate", item="invis")["state"]
+        self.assertEqual(s["crate"]["charges"], 3)
+        # charges are spent by the game server only
+        with self.assertRaises(survival.Error):
+            self.act(self.a, "crate_use")
+        self.ops += 1
+        s = self.run_in(survival.action, self.a, "game-use-1", "crate_use", {}, True)["state"]
+        self.assertEqual(s["crate"]["charges"], 2)
+        self.t += survival.CRATE_SECONDS
+        self.assertEqual(self.state()["crate"], {})
+
+    def test_airdrop_pays_only_known_packs(self):
+        self.give(self.a)
+        s = self.run_in(survival.action, self.a, "game-air-1", "reward", {"kind": "airdrop", "amount": 25}, True)["state"]
+        self.assertEqual(s["tokens"], 25)
+        for args in ({"kind": "airdrop", "amount": 26}, {"kind": "gift", "amount": 25}):
+            with self.assertRaises(survival.Error):
+                self.run_in(survival.action, self.a, "game-air-2", "reward", args, True)
+        with self.assertRaises(survival.Error):
+            self.act(self.a, "reward", kind="airdrop", amount=25)
+
     def test_map_top_pays_the_best_three(self):
         for p in (self.a, self.b):
             self.give(p)

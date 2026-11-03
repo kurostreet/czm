@@ -48,6 +48,12 @@ new bool:g_bpActive[MAX_PLAYERS + 1], bool:g_bpDailyReady[MAX_PLAYERS + 1], g_bp
 new g_bpProgress[MAX_PLAYERS + 1][6], g_bpClaimed[MAX_PLAYERS + 1];
 new g_payToday[MAX_PLAYERS + 1];
 
+// the weapon crate (catalog "crate"): what it holds and until when each player has it
+#define MAX_CRATE 8
+new g_crateId[MAX_CRATE][12], g_crateName[MAX_CRATE][2][40], g_cratePrice[MAX_CRATE], g_crateCount;
+new Float:g_crateUntil[MAX_PLAYERS + 1][MAX_CRATE], g_charges[MAX_PLAYERS + 1];
+new g_fwChanged;
+
 enum { D_TIME = 0, D_KILLS, D_ZKILLS, D_DEATHS, D_ROUNDS, D_WINS, D_SURVIVED, D_CTWINS, D_COUNT };
 new const D_NAMES[D_COUNT][] = { "time", "kills", "zkills", "deaths", "rounds", "wins", "survived", "ctwins" };
 new g_delta[MAX_PLAYERS + 1][D_COUNT];
@@ -67,6 +73,17 @@ new g_hRank;
 new g_payTarget[MAX_PLAYERS + 1];
 
 new const PULL_SOUND[] = "s_change_rang.mp3";
+
+public plugin_natives()
+{
+	register_library("czm_lvl");
+	register_native("czm_lvl_ready", "native_ready");
+	register_native("czm_lvl_item", "native_item");
+	register_native("czm_lvl_crate", "native_crate");
+	register_native("czm_lvl_charges", "native_charges");
+	register_native("czm_lvl_use_charge", "native_use_charge");
+	register_native("czm_lvl_reward", "native_reward");
+}
 
 public plugin_precache()
 {
@@ -89,6 +106,7 @@ public plugin_init()
 	register_logevent("ev_round_start", 2, "1=Round_Start");
 	register_logevent("ev_round_end", 2, "1=Round_End");
 
+	g_fwChanged = CreateMultiForward("czm_lvl_changed", ET_IGNORE, FP_CELL);
 	g_hudTokens = CreateHudSyncObj();
 	g_hudLevel = CreateHudSyncObj();
 	g_mapKills = TrieCreate();
@@ -220,6 +238,18 @@ public on_catalog(EzHttpRequest:request)
 		ezjson_free(it);
 	}
 	ezjson_free(ups);
+	new EzJSON:crate = ezjson_object_get_value(root, "crate.items", true);
+	g_crateCount = J_OK(crate) ? min(ezjson_array_get_count(crate), MAX_CRATE) : 0;
+	for (new k = 0; k < g_crateCount; k++)
+	{
+		new EzJSON:it = ezjson_array_get_value(crate, k);
+		ezjson_object_get_string(it, "id", g_crateId[k], charsmax(g_crateId[]));
+		ezjson_object_get_string(it, "ru", g_crateName[k][CZM_RU], charsmax(g_crateName[][]));
+		ezjson_object_get_string(it, "en", g_crateName[k][CZM_EN], charsmax(g_crateName[][]));
+		g_cratePrice[k] = ezjson_object_get_number(it, "price");
+		ezjson_free(it);
+	}
+	if (J_OK(crate)) ezjson_free(crate);
 	g_bpPrice = ezjson_object_get_number(root, "battlepass.price", true);
 	g_bpDays = ezjson_object_get_number(root, "battlepass.days", true);
 	g_bpDaily = ezjson_object_get_number(root, "battlepass.daily", true);
@@ -255,6 +285,9 @@ reset_player(id)
 	g_tokens[id] = 0;
 	g_tokBoostUntil[id] = 0.0;
 	g_inRound[id] = false;
+	g_charges[id] = 0;
+	for (new k = 0; k < MAX_CRATE; k++)
+		g_crateUntil[id][k] = 0.0;
 	for (new c = 0; c < MAX_CATS; c++)
 	{
 		g_equip[id][c] = -1;
@@ -351,6 +384,14 @@ apply_state(id, EzJSON:st)
 	g_bpClaimed[id] = J_OK(claimed) ? ezjson_array_get_count(claimed) : 0;
 	if (J_OK(claimed)) ezjson_free(claimed);
 	g_payToday[id] = ezjson_object_get_number(st, "pay.today", true);
+	new EzJSON:crate = ezjson_object_get_value(st, "crate");
+	for (new k = 0; k < g_crateCount; k++)
+	{
+		new left = J_OK(crate) && ezjson_object_has_value(crate, g_crateId[k]) ? ezjson_object_get_number(crate, g_crateId[k]) : 0;
+		g_crateUntil[id][k] = left > 0 ? get_gametime() + float(left) : 0.0;
+	}
+	g_charges[id] = J_OK(crate) ? ezjson_object_get_number(crate, "charges") : 0;
+	if (J_OK(crate)) ezjson_free(crate);
 
 	new EzJSON:owned = ezjson_object_get_value(st, "owned");
 	new EzJSON:equipped = ezjson_object_get_value(st, "equipped");
@@ -376,6 +417,8 @@ apply_state(id, EzJSON:st)
 	}
 	if (J_OK(owned)) ezjson_free(owned);
 	if (J_OK(equipped)) ezjson_free(equipped);
+	new ret;
+	ExecuteForward(g_fwChanged, ret, id);
 }
 
 bool:boosted(id)
@@ -844,7 +887,7 @@ chat_color(const hex[])
 
 // ---------------------------------------------------------------- actions
 
-act(id, const name[], EzJSON:args)
+act(id, const name[], EzJSON:args, const callback[] = "on_action")
 {
 	if (!g_loaded[id])
 	{
@@ -864,8 +907,23 @@ act(id, const name[], EzJSON:args)
 	}
 	new data[2];
 	data[0] = id; data[1] = g_session[id];
-	api("POST", "/survival/server/action", body, "on_action", data, sizeof data);
+	api("POST", "/survival/server/action", body, callback, data, sizeof data);
 	ezjson_free(body);
+}
+
+// answers nobody needs to read about (a used charge): only the state is taken
+public on_quiet(EzHttpRequest:request)
+{
+	new data[2];
+	ezhttp_get_user_data(request, data);
+	new id = data[0], code, EzJSON:root = answer(request, code);
+	if (is_user_connected(id) && g_session[id] == data[1] && code == 200 && J_OK(root))
+	{
+		new EzJSON:st = ezjson_object_get_value(root, "state");
+		apply_state(id, st);
+		ezjson_free(st);
+	}
+	if (J_OK(root)) ezjson_free(root);
 }
 
 EzJSON:args1(const k1[], const v1[])
@@ -942,6 +1000,10 @@ done_message(id, const action[], EzJSON:root)
 			}
 		}
 	}
+	else if (equal(action, "reward"))
+		czm_chat(id, "^4[LVL]^1 Аирдроп: ^4+%d^1 токенов!", "^4[LVL]^1 Airdrop: ^4+%d^1 tokens!", ezjson_object_get_number(root, "amount"));
+	else if (equal(action, "crate"))
+		czm_chat(id, "^4[LVL]^1 Ящик открыт на 30 минут: всё выдаётся при каждом спавне человеком.", "^4[LVL]^1 The crate is yours for 30 minutes: it is given at every spawn as a human.");
 	else if (equal(action, "bp_buy"))
 		czm_chat(id, "^4[LVL]^1 Боевой пропуск активирован на ^4%d^1 дней!", "^4[LVL]^1 Battle pass active for ^4%d^1 days!", g_bpDays);
 	else if (equal(action, "bp_daily"))
@@ -1043,6 +1105,7 @@ public menu_lvl(id)
 	menu_additem(menu, ru ? "Профиль" : "Profile");
 	menu_additem(menu, ru ? "Магазин" : "Shop");
 	menu_additem(menu, ru ? "Прокачка" : "Upgrades");
+	menu_additem(menu, ru ? "Ящик с оружием" : "Weapon crate");
 	formatex(item, charsmax(item), ru ? "Боевой пропуск%s" : "Battle pass%s", g_bpDailyReady[id] ? " \r!" : "");
 	menu_additem(menu, item);
 	menu_additem(menu, ru ? "Перевод токенов" : "Send tokens");
@@ -1060,10 +1123,11 @@ public on_menu_lvl(id, menu, key)
 		case 0: show_profile(id);
 		case 1: menu_shop(id);
 		case 2: menu_upgrades(id);
-		case 3: menu_bp(id);
-		case 4: menu_pay(id);
-		case 5: show_top(id);
-		case 6: use_promo(id, "");
+		case 3: menu_crate(id);
+		case 4: menu_bp(id);
+		case 5: menu_pay(id);
+		case 6: show_top(id);
+		case 7: use_promo(id, "");
 	}
 	return PLUGIN_HANDLED;
 }
@@ -1213,6 +1277,31 @@ public on_menu_upgrades(id, menu, key)
 	return PLUGIN_HANDLED;
 }
 
+menu_crate(id)
+{
+	new ru = czm_lang(id) == CZM_RU, title[128], item[96];
+	formatex(title, charsmax(title), ru ? "\yЯЩИК С ОРУЖИЕМ^n\wна 30 минут, выдаётся каждый спавн^nТокены \r%d" : "\yWEAPON CRATE^n\wfor 30 minutes, given every spawn^nTokens \r%d", g_tokens[id]);
+	new menu = menu_create(title, "on_menu_crate");
+	new Float:now = get_gametime();
+	for (new k = 0; k < g_crateCount; k++)
+	{
+		if (g_crateUntil[id][k] > now)
+			formatex(item, charsmax(item), ru ? "%s \y[ещё %d мин]" : "%s \y[%d min left]", g_crateName[k][ru ? CZM_RU : CZM_EN], floatround((g_crateUntil[id][k] - now) / 60.0, floatround_ceil));
+		else
+			formatex(item, charsmax(item), "%s \r%d", g_crateName[k][ru ? CZM_RU : CZM_EN], g_cratePrice[k]);
+		menu_additem(menu, item);
+	}
+	menu_display(id, menu);
+}
+
+public on_menu_crate(id, menu, key)
+{
+	menu_destroy(menu);
+	if (0 <= key < g_crateCount)
+		act(id, "crate", args1("item", g_crateId[key]));
+	return PLUGIN_HANDLED;
+}
+
 menu_bp(id)
 {
 	new ru = czm_lang(id) == CZM_RU, title[160], item[80];
@@ -1348,4 +1437,70 @@ public on_top(EzHttpRequest:request)
 		if (J_OK(top)) ezjson_free(top);
 	}
 	if (J_OK(root)) ezjson_free(root);
+}
+
+
+// ---------------------------------------------------------------- natives for czm_lvl_fx and the airdrop
+
+crate_index(const name[])
+{
+	for (new k = 0; k < g_crateCount; k++)
+		if (equal(g_crateId[k], name))
+			return k;
+	return -1;
+}
+
+public bool:native_ready(plugin, params)
+{
+	new id = get_param(1);
+	return 1 <= id <= MaxClients && g_loaded[id];
+}
+
+public native_item(plugin, params)
+{
+	new id = get_param(1), cat[16];
+	get_string(2, cat, charsmax(cat));
+	new c = cat_index(cat);
+	if (!(1 <= id <= MaxClients) || !g_loaded[id] || c < 0 || g_equip[id][c] < 0)
+		return set_string(3, "", get_param(4));
+	return set_string(3, g_itemId[c][g_equip[id][c]], get_param(4));
+}
+
+public native_crate(plugin, params)
+{
+	new id = get_param(1), name[16];
+	get_string(2, name, charsmax(name));
+	new k = crate_index(name);
+	if (!(1 <= id <= MaxClients) || !g_loaded[id] || k < 0)
+		return 0;
+	new Float:left = g_crateUntil[id][k] - get_gametime();
+	return left > 0.0 ? floatround(left) : 0;
+}
+
+public native_charges(plugin, params)
+{
+	new id = get_param(1);
+	return 1 <= id <= MaxClients && g_loaded[id] ? g_charges[id] : 0;
+}
+
+public native_use_charge(plugin, params)
+{
+	new id = get_param(1);
+	if (!(1 <= id <= MaxClients) || !g_loaded[id] || g_charges[id] <= 0)
+		return 0;
+	g_charges[id]--;
+	act(id, "crate_use", J_NONE, "on_quiet");
+	return 1;
+}
+
+public native_reward(plugin, params)
+{
+	new id = get_param(1), amount = get_param(2);
+	if (!(1 <= id <= MaxClients) || !g_loaded[id])
+		return 0;
+	new EzJSON:a = ezjson_init_object();
+	ezjson_object_set_string(a, "kind", "airdrop");
+	ezjson_object_set_number(a, "amount", amount);
+	act(id, "reward", a);
+	return 1;
 }

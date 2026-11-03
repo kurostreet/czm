@@ -132,6 +132,21 @@ UPGRADES = {
     "tok_boost": {"ru": f"Токены ×2 на {BOOST_HOURS} ч", "en": f"Tokens ×2 for {BOOST_HOURS} h", "price": PRICE_BOOST_TOK},
 }
 
+# The weapon crate: temporary help for a human, 30 minutes from the purchase (Kontra CRATE_*).
+CRATE_SECONDS = 1800
+CRATE_INVIS_CHARGES = 3
+CRATE = {
+    "gold": {"ru": "Золотой АК47 и дигл", "en": "Golden AK47 and Deagle", "price": 300},
+    "mini": {"ru": "Миниган и гранаты", "en": "Minigun and grenades", "price": 500},
+    "arm50": {"ru": "50 брони каждый раунд", "en": "50 armour every round", "price": 50},
+    "arm100": {"ru": "100 брони каждый раунд", "en": "100 armour every round", "price": 100},
+    "invis": {"ru": "Авто-невидимость ×3", "en": "Auto invisibility ×3", "price": 150},
+    "blind": {"ru": "Ослепляющий нож", "en": "Blinding knife", "price": 200},
+    "gas": {"ru": "Противогаз", "en": "Gas mask", "price": 80},
+}
+# Airdrop packs a game server may hand out (Kontra AIR_TOKEN_TABLE)
+AIRDROP_TOKENS = (10, 25, 50, 75, 100, 150, 250, 500)
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS survival_players (
  player INTEGER PRIMARY KEY, nick TEXT NOT NULL DEFAULT '',
@@ -139,7 +154,7 @@ CREATE TABLE IF NOT EXISTS survival_players (
  matches INTEGER NOT NULL DEFAULT 0, wins INTEGER NOT NULL DEFAULT 0, tokens INTEGER NOT NULL DEFAULT 0,
  bonus_lvl INTEGER NOT NULL DEFAULT 0, lvl_boost_until INTEGER NOT NULL DEFAULT 0,
  tok_boost_until INTEGER NOT NULL DEFAULT 0, owned TEXT NOT NULL DEFAULT '{}', equipped TEXT NOT NULL DEFAULT '{}',
- bp TEXT NOT NULL DEFAULT '{}', pay_day TEXT NOT NULL DEFAULT '', pay_today INTEGER NOT NULL DEFAULT 0,
+ bp TEXT NOT NULL DEFAULT '{}', crate TEXT NOT NULL DEFAULT '{}', pay_day TEXT NOT NULL DEFAULT '', pay_today INTEGER NOT NULL DEFAULT 0,
  first_seen INTEGER NOT NULL DEFAULT 0, last_seen INTEGER NOT NULL DEFAULT 0, revision INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS survival_players_lvl ON survival_players(bonus_lvl, time_sec, kills);
@@ -167,6 +182,16 @@ CREATE TABLE IF NOT EXISTS survival_log (
 CREATE INDEX IF NOT EXISTS survival_log_player ON survival_log(player, id);
 CREATE TABLE IF NOT EXISTS survival_live (server TEXT PRIMARY KEY, data TEXT NOT NULL, time INTEGER NOT NULL);
 """
+
+
+def migrate(conn: sqlite3.Connection):
+    have = {r[1] for r in conn.execute("PRAGMA table_info(survival_players)")}
+    if "crate" not in have:
+        try:
+            conn.execute("ALTER TABLE survival_players ADD COLUMN crate TEXT NOT NULL DEFAULT '{}'")
+        except sqlite3.OperationalError as error:  # the other process was first
+            if "duplicate column" not in str(error):
+                raise
 
 
 class Error(accounts.AuthError):
@@ -200,6 +225,7 @@ def catalog() -> dict:
     return {
         "categories": cats,
         "upgrades": [{"id": k, **v} for k, v in UPGRADES.items()],
+        "crate": {"seconds": CRATE_SECONDS, "items": [{"id": k, **v} for k, v in CRATE.items()]},
         "battlepass": {"price": BP_PRICE, "days": BP_DAYS, "daily": BP_DAILY, "final": {
             "lvl": BP_FINAL_LVL, "tokens": BP_FINAL_TOK, "prefix": BP_PREFIX},
             "tasks": [{"id": t[0], "kind": t[1], "goal": t[2], "reward": t[3], "ru": t[4], "en": t[5]} for t in BP_TASKS]},
@@ -276,12 +302,13 @@ def state(conn, player: int, t: int | None = None) -> dict:
             "claimed": sorted(bp.get("claimed", [])), "final": sorted(bp.get("final", [])),
         },
         "pay": {"today": row["pay_today"] if row["pay_day"] == _today(t) else 0, "limit": PAY_DAILY_LIMIT},
+        "crate": _crate_state(_json(row["crate"]), t),
         "first_seen": row["first_seen"], "revision": row["revision"],
     }
 
 
 def _save(conn, player: int, **fields):
-    for key in ("owned", "equipped", "bp"):
+    for key in ("owned", "equipped", "bp", "crate"):
         if key in fields:
             fields[key] = json.dumps(fields[key], ensure_ascii=False, separators=(",", ":"), sort_keys=True)
     sets = ", ".join(f"{k}=?" for k in fields)
@@ -392,7 +419,7 @@ def _spend(row, amount: int):
         raise Error("tokens", 409)
 
 
-def action(conn: sqlite3.Connection, player: int, op: str, name: str, args: dict) -> dict:
+def action(conn: sqlite3.Connection, player: int, op: str, name: str, args: dict, server: bool = False) -> dict:
     """One action of a player, from the game menu or the site. Idempotent by op."""
     op = (op or "").strip()
     if not 8 <= len(op) <= 80:
@@ -402,7 +429,7 @@ def action(conn: sqlite3.Connection, player: int, op: str, name: str, args: dict
         if done["player"] != player:
             raise Error("op", 409)
         return json.loads(done["result"])
-    handler = ACTIONS.get(name)
+    handler = ACTIONS.get(name) or (ACTIONS_SERVER.get(name) if server else None)
     if handler is None:
         raise Error("action")
     row = ensure(conn, player)
@@ -654,10 +681,64 @@ def _market_withdraw(conn, row, args, t):
     return {"listing": listing["id"]}
 
 
+def _crate_state(crate: dict, t: int) -> dict:
+    """Seconds left for every crate item the player has, and the invisibility charges left."""
+    out = {k: crate[k] - t for k in CRATE if crate.get(k, 0) > t}
+    if "invis" in out:
+        out["charges"] = crate.get("charges", 0)
+        if not out["charges"]:
+            out.pop("invis")
+    return out
+
+
+def _crate(conn, row, args, t):
+    name = args.get("item", "")
+    if name not in CRATE:
+        raise Error("item", 404)
+    cost = CRATE[name]["price"]
+    _spend(row, cost)
+    crate = {k: v for k, v in _json(row["crate"]).items() if k == "charges" or v > t}
+    crate[name] = max(crate.get(name, 0), t) + CRATE_SECONDS
+    if name == "invis":
+        crate["charges"] = CRATE_INVIS_CHARGES
+    fields = {"tokens": row["tokens"] - cost, "crate": crate}
+    bp = _json(row["bp"])
+    if _bp_active(bp, t):
+        bp["spent"] = bp.get("spent", 0) + cost
+        fields["tokens"] += _bp_claim(bp)
+        fields["bp"] = bp
+    _save(conn, row["player"], **fields)
+    _log(conn, row["player"], "crate", -cost, name)
+
+
+def _crate_use(conn, row, args, t):
+    """The game used one invisibility charge."""
+    crate = _json(row["crate"])
+    if crate.get("invis", 0) <= t or crate.get("charges", 0) <= 0:
+        raise Error("crate_empty", 409)
+    crate["charges"] -= 1
+    _save(conn, row["player"], crate=crate)
+
+
+def _reward(conn, row, args, t):
+    """Tokens a game server hands out for an event in the game (only airdrops so far)."""
+    amount = int(args.get("amount") or 0)
+    if args.get("kind") != "airdrop" or amount not in AIRDROP_TOKENS:
+        raise Error("reward")
+    amount *= 2 if row["tok_boost_until"] > t else 1
+    _save(conn, row["player"], tokens=row["tokens"] + amount)
+    _log(conn, row["player"], "airdrop", amount)
+    return {"amount": amount}
+
+
+# what only a game server may ask for
+ACTIONS_SERVER = {"crate_use": _crate_use, "reward": _reward}
+
 ACTIONS = {
     "buy": _buy, "equip": _equip, "upgrade": _upgrade, "pay": _pay,
     "bp_buy": _bp_buy, "bp_daily": _bp_daily, "bp_final": _bp_final, "promo": _promo,
     "market_sell": _market_sell, "market_buy": _market_buy, "market_withdraw": _market_withdraw,
+    "crate": _crate,
 }
 
 
