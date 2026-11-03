@@ -514,7 +514,7 @@ async def survival_me(request: Request, mode: str = "survival", x_czm_key: str |
         with survival.on_mode(mode):
             survival.ensure(c, player["id"], player["nick"])
             return {"mode": survival.mode_name(mode), "state": survival.state(c, player["id"]),
-                    "history": survival.history(c, player["id"])}
+                    "history": survival.history(c, player["id"]), "privilege": survival_mod.privilege(c, player["id"])}
     return await social_result(request, run)
 
 
@@ -598,6 +598,23 @@ class SurvivalMessageIn(BaseModel):
     server: str = Field(default="survival", max_length=32)
 
 
+class SurvivalPrivilegeIn(BaseModel):
+    player: int
+    kind: str = Field(default="", max_length=16)
+    seconds: int = 0
+    by_player: int
+    by_name: str = Field(default="", max_length=64)
+
+
+class SurvivalStaffLogIn(BaseModel):
+    by_player: int = 0
+    by_name: str = Field(default="", max_length=64)
+    action: str = Field(min_length=1, max_length=32)
+    target_player: int = 0
+    target_name: str = Field(default="", max_length=64)
+    detail: str = Field(default="", max_length=200)
+
+
 class SurvivalNewsIn(BaseModel):
     by_player: int
     ru: str = Field(min_length=1, max_length=400)
@@ -648,6 +665,25 @@ async def survival_server_news(body: SurvivalNewsIn, request: Request, x_czm_ser
         if survival_mod.role(c, body.by_player) != "admin":
             raise survival_mod.Error("admin_only", 403)
         return survival_mod.news_add(c, body.ru, body.en)
+    return await social_result(request, run)
+
+
+@router.post("/survival/server/privilege")
+async def survival_server_privilege(body: SurvivalPrivilegeIn, request: Request, x_czm_server: str | None = Header(default=None)):
+    """A head administrator gives (or takes away) VIP+, PREMIUM, DELUXE or TESTER from the admin menu."""
+    def run(c):
+        survival.check_server(x_czm_server)
+        return survival_mod.set_privilege(c, body.player, body.kind, body.seconds, body.by_player, body.by_name)
+    return await social_result(request, run)
+
+
+@router.post("/survival/server/staff_log")
+async def survival_server_staff_log(body: SurvivalStaffLogIn, request: Request, mode: str = "survival",
+                                    x_czm_server: str | None = Header(default=None)):
+    def run(c):
+        survival.check_server(x_czm_server)
+        return survival_mod.staff_log(c, body.by_player, body.by_name, body.action, body.target_player,
+                                      body.target_name, body.detail, survival.mode_name(mode))
     return await social_result(request, run)
 
 

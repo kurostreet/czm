@@ -18,6 +18,7 @@
 #include <zombieplague>
 #include <easy_http>
 #include <czm_survival>
+#include <czm_admin>
 
 #define PLUGIN "CZM LVL"
 #define VERSION "1.0"
@@ -928,8 +929,9 @@ chat(id, bool:team)
 		return menu_lvl(id);
 
 	// the message goes out with the level and the prefix, as on Kontra
-	new name[32], bool:zombie = bool:zp_get_user_zombie(id), bool:dead = !is_user_alive(id);
+	new name[32], priv[12], bool:zombie = bool:zp_get_user_zombie(id), bool:dead = !is_user_alive(id);
 	get_user_name(id, name, charsmax(name));
+	czm_privilege_name(id, priv, charsmax(priv));
 	new prefix = cat_index("prefix"), color = cat_index("prefcolor");
 	new p = g_loaded[id] && prefix >= 0 ? g_equip[id][prefix] : -1;
 	new code = 3;
@@ -946,6 +948,8 @@ chat(id, bool:team)
 			len += formatex(line[len], charsmax(line) - len, "^1*%s* ", lang == CZM_EN ? "DEAD" : "МЁРТВ");
 		if (team)
 			len += formatex(line[len], charsmax(line) - len, "^1(%s) ", zombie ? (lang == CZM_EN ? "Zombies" : "Зомби") : (lang == CZM_EN ? "Humans" : "Люди"));
+		if (priv[0])
+			len += formatex(line[len], charsmax(line) - len, "^3[%s] ", priv);
 		if (g_loaded[id])
 			len += formatex(line[len], charsmax(line) - len, "^4[LVL %d] ", g_lvl[id]);
 		if (p >= 0)

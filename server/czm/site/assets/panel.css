@@ -93,6 +93,7 @@ input:focus,select:focus{outline:none;border-color:var(--gold)}
 .chip{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;background:var(--surface2);border:1px solid var(--line);color:var(--muted)}
 .chip.gold{color:var(--gold);border-color:color-mix(in srgb,var(--gold) 40%,transparent)}
 .chip.green{color:var(--green);border-color:color-mix(in srgb,var(--green) 40%,transparent)}
+.chip.priv{color:#fff;background:linear-gradient(135deg,var(--red),#b0121c);border-color:transparent;letter-spacing:.3px}
 .lvl,.tokens{display:grid;justify-items:end;line-height:1}
 .lvl{grid-area:lvl}.tokens{grid-area:tok}
 .lvl small,.tokens small{font-size:11px;letter-spacing:.08em;color:var(--muted);font-weight:600}

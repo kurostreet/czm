@@ -28,3 +28,9 @@ native czm_sanction(target, const kind[], seconds, const reason[], by = 0);
 
 // Opens the admin menu (staff only).
 native czm_admin_menu(id);
+
+// Kontra's privilege of the player: 0 none, 1 VIP+, 2 PREMIUM, 3 DELUXE, 4 TESTER.
+native czm_privilege(id);
+
+// Its name as shown in chat ("VIP+"), empty when there is none.
+native czm_privilege_name(id, out[], len);

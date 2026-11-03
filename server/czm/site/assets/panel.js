@@ -19,6 +19,7 @@
       byEmail: 'По почте', byNick: 'Ник и пароль', email: 'Почта', code: 'Код из письма', sendCode: 'Получить код',
       confirm: 'Войти', nick: 'Ник аккаунта', password: 'Пароль', signIn: 'Войти',
       loginHint: 'Аккаунта ещё нет? Создай его в игре: Профиль → Аккаунт. Почту привяжи там же — по ней приходит код входа.',
+      privDays: '{name}: ещё {d} дн.', privForever: '{name} навсегда',
       linkOld: 'Ссылка из игры уже использована или устарела. Нажми «Панель игрока» в игре ещё раз или войди здесь.',
       codeSent: 'Если почта привязана к аккаунту, код уже в письме.', profileId: 'Профиль CZM', tokens: 'Токены',
       tOverview: 'Обзор', tSkins: 'Скины', tKnives: 'Ножи', tShop: 'Магазин', tPass: 'Боевой пропуск', tMarket: 'Лавка',
@@ -61,6 +62,7 @@
       byEmail: 'By email', byNick: 'Nick and password', email: 'Email', code: 'Code from the email', sendCode: 'Get a code',
       confirm: 'Sign in', nick: 'Account nick', password: 'Password', signIn: 'Sign in',
       loginHint: 'No account yet? Create it in the game: Profile → Account. Add your email there: the sign-in code comes to it.',
+      privDays: '{name}: {d} more days', privForever: '{name} forever',
       linkOld: 'The link from the game was used or is too old. Tap «Player panel» in the game again or sign in here.',
       codeSent: 'If the email belongs to an account, the code is in your inbox.', profileId: 'CZM profile', tokens: 'Tokens',
       tOverview: 'Overview', tSkins: 'Skins', tKnives: 'Knives', tShop: 'Shop', tPass: 'Battle pass', tMarket: 'Market',
@@ -274,7 +276,8 @@
     var kShare = 1 - s.next_lvl_kills / 10, tShare = 1 - s.next_lvl_time / 600;
     $('pNextBar').style.width = Math.round(Math.max(kShare, tShare) * 100) + '%';
     $('pNext').textContent = t('nextLvl', { n: s.lvl + 1, k: s.next_lvl_kills, m: Math.ceil(s.next_lvl_time / 60) });
-    var chips = [];
+    var chips = [], priv = me.privilege;
+    if (priv) chips.push('<span class="chip priv">' + esc(priv.left < 0 ? t('privForever', { name: priv.name }) : t('privDays', { name: priv.name, d: Math.max(1, Math.ceil(priv.left / 86400)) })) + '</span>');
     if (s.boosts.lvl > 0) chips.push('<span class="chip gold">' + esc(t('boostLvl', { t: hm(s.boosts.lvl) })) + '</span>');
     if (s.boosts.tokens > 0) chips.push('<span class="chip gold">' + esc(t('boostTok', { t: hm(s.boosts.tokens) })) + '</span>');
     if (s.battlepass.active) chips.push('<span class="chip green">' + esc(t('passOn', { d: Math.ceil(s.battlepass.left / 86400) })) + '</span>');

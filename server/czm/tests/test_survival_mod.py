@@ -119,6 +119,34 @@ class SurvivalOrderTests(unittest.TestCase):
         with self.assertRaises(survival_mod.Error):
             self.run_in(survival_mod.news_add, "  ")
 
+    def test_privileges(self):
+        with self.assertRaises(survival_mod.Error):
+            self.run_in(survival_mod.set_privilege, self.p, "vip", 86400, self.mod, "Moder")    # head admins only
+        self.run_in(survival_mod.set_privilege, self.p, "vip", 86400, self.boss, "Boss")
+        state = self.run_in(survival_mod.check, self.p)["privilege"]
+        self.assertEqual((state["kind"], state["name"], state["left"]), ("vip", "VIP+", 86400))
+        self.run_in(survival_mod.set_privilege, self.p, "deluxe", survival_mod.FOREVER, 0, "bot", owner=True)
+        self.assertEqual(self.run_in(survival_mod.privilege, self.p)["left"], -1)
+        self.assertEqual([r["kind"] for r in self.run_in(survival_mod.privileges)], ["deluxe"])
+        with self.assertRaises(survival_mod.Error):
+            self.run_in(survival_mod.set_privilege, self.p, "god", 60, self.boss, "Boss")
+        self.run_in(survival_mod.set_privilege, self.p, "", 0, self.boss, "Boss")
+        self.assertIsNone(self.run_in(survival_mod.check, self.p)["privilege"])
+        self.run_in(survival_mod.set_privilege, self.q, "tester", 60, self.boss, "Boss")
+        self.t += 61
+        self.assertIsNone(self.run_in(survival_mod.privilege, self.q))
+        self.assertIsNone(self.run_in(survival_mod.privilege, 0))
+
+    def test_staff_log(self):
+        self.run_in(survival_mod.staff_log, self.mod, "Moder", "kick", self.p, "Player", "spam ^1", "survival")
+        self.run_in(survival_mod.staff_log, self.boss, "Boss", "airdrop")
+        rows = self.run_in(survival_mod.staff_log_list)
+        self.assertEqual([r["action"] for r in rows], ["airdrop", "kick"])
+        self.assertEqual(rows[1]["detail"], "spam 1")
+        self.t += 91 * 86400
+        self.run_in(survival_mod.staff_log, self.boss, "Boss", "say")
+        self.assertEqual(len(self.run_in(survival_mod.staff_log_list)), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

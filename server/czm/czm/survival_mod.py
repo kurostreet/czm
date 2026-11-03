@@ -15,6 +15,9 @@ KINDS = ("ban", "mute")
 FOREVER = 0
 MAX_SECONDS = 365 * 86400
 MODERATOR_MAX = 7 * 86400      # a moderator's ban or mute lasts a week at most
+# Kontra's privileges, given by the head administrators for a time: a tag in chat, and the votes
+# of players cannot touch them
+PRIVILEGES = {"vip": "VIP+", "premium": "PREMIUM", "deluxe": "DELUXE", "tester": "TESTER"}
 MESSAGE_LIMIT = 3              # messages to the staff from one player in MESSAGE_WINDOW
 MESSAGE_WINDOW = 600
 NEWS_KEEP = 40
@@ -37,6 +40,16 @@ CREATE TABLE IF NOT EXISTS survival_messages (
 CREATE TABLE IF NOT EXISTS survival_news (
  id INTEGER PRIMARY KEY AUTOINCREMENT, ru TEXT NOT NULL, en TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS survival_privileges (
+ player INTEGER PRIMARY KEY, kind TEXT NOT NULL, until INTEGER NOT NULL, by_player INTEGER NOT NULL DEFAULT 0,
+ by_name TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS survival_staff_log (
+ id INTEGER PRIMARY KEY AUTOINCREMENT, time INTEGER NOT NULL, by_player INTEGER NOT NULL DEFAULT 0,
+ by_name TEXT NOT NULL DEFAULT '', action TEXT NOT NULL, target_player INTEGER NOT NULL DEFAULT 0,
+ target_name TEXT NOT NULL DEFAULT '', detail TEXT NOT NULL DEFAULT '', server TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS survival_staff_log_time ON survival_staff_log(time);
 """
 
 
@@ -92,10 +105,10 @@ def _active(conn, kind: str, player: int, ip: str, t: int):
 
 
 def check(conn: sqlite3.Connection, player: int, ip: str = "", name: str = "") -> dict:
-    """What the game server needs when someone joins: the role and any active ban or mute."""
+    """What the game server needs when someone joins: the role, the privilege and any active ban or mute."""
     t = now()
     ip = _ip(ip)
-    result = {"role": role(conn, player)}
+    result = {"role": role(conn, player), "privilege": privilege(conn, player)}
     for kind in KINDS:
         row = _active(conn, kind, player, ip, t)
         result[kind] = None if row is None else {
@@ -212,3 +225,65 @@ def news(conn: sqlite3.Connection, limit: int = 10) -> list[dict]:
     rows = conn.execute("SELECT id, ru, en, created FROM survival_news ORDER BY id DESC LIMIT ?",
                         (max(1, min(int(limit), NEWS_KEEP)),)).fetchall()
     return [{"id": r["id"], "ru": r["ru"], "en": r["en"] or r["ru"], "created": r["created"]} for r in rows]
+
+
+# ---------------------------------------------------------------- privileges
+
+def privilege(conn: sqlite3.Connection, player: int) -> dict | None:
+    if not player:
+        return None
+    t = now()
+    row = conn.execute("SELECT * FROM survival_privileges WHERE player=? AND (until=0 OR until>?)", (player, t)).fetchone()
+    if row is None or row["kind"] not in PRIVILEGES:
+        return None
+    return {"kind": row["kind"], "name": PRIVILEGES[row["kind"]], "left": _left(row, t)}
+
+
+def set_privilege(conn: sqlite3.Connection, player: int, kind: str, seconds: int, by_player: int, by_name: str,
+                  owner: bool = False) -> dict:
+    """Gives a privilege for that many seconds (0 = forever) or takes it away (kind ""). Head
+    administrators only (owner=True is the owner's bot)."""
+    if not owner and role(conn, by_player) != "admin":
+        raise Error("admin_only", 403)
+    if not conn.execute("SELECT 1 FROM players WHERE id=?", (int(player),)).fetchone():
+        raise Error("player", 404)
+    if not kind:
+        conn.execute("DELETE FROM survival_privileges WHERE player=?", (int(player),))
+        return {"ok": True, "privilege": None}
+    if kind not in PRIVILEGES:
+        raise Error("kind")
+    seconds = int(seconds)
+    if seconds < 0 or seconds > MAX_SECONDS:
+        raise Error("seconds")
+    t = now()
+    conn.execute("INSERT INTO survival_privileges(player, kind, until, by_player, by_name, created) VALUES (?, ?, ?, ?, ?, ?) "
+                 "ON CONFLICT(player) DO UPDATE SET kind=excluded.kind, until=excluded.until, by_player=excluded.by_player, "
+                 "by_name=excluded.by_name, created=excluded.created",
+                 (int(player), kind, FOREVER if seconds == FOREVER else t + seconds, int(by_player or 0), _text(by_name, 32), t))
+    return {"ok": True, "privilege": privilege(conn, int(player))}
+
+
+def privileges(conn: sqlite3.Connection) -> list[dict]:
+    t = now()
+    rows = conn.execute("SELECT v.*, p.nick FROM survival_privileges v LEFT JOIN players p ON p.id=v.player "
+                        "WHERE v.until=0 OR v.until>? ORDER BY v.created DESC", (t,)).fetchall()
+    return [{"player": r["player"], "nick": r["nick"] or "?", "kind": r["kind"], "name": PRIVILEGES.get(r["kind"], r["kind"]),
+             "left": _left(r, t), "by": r["by_name"]} for r in rows]
+
+
+# ---------------------------------------------------------------- what the staff did (Kontra LogsServer)
+
+def staff_log(conn: sqlite3.Connection, by_player: int, by_name: str, action: str, target_player: int = 0,
+              target_name: str = "", detail: str = "", server: str = "") -> dict:
+    t = now()
+    conn.execute("INSERT INTO survival_staff_log(time, by_player, by_name, action, target_player, target_name, detail, server) "
+                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                 (t, int(by_player or 0), _text(by_name, 32), _text(action, 24) or "?", int(target_player or 0),
+                  _text(target_name, 32), _text(detail, 80), _text(server, 16)))
+    conn.execute("DELETE FROM survival_staff_log WHERE time<?", (t - 90 * 86400,))
+    return {"ok": True}
+
+
+def staff_log_list(conn: sqlite3.Connection, limit: int = 30) -> list[dict]:
+    rows = conn.execute("SELECT * FROM survival_staff_log ORDER BY id DESC LIMIT ?", (max(1, min(int(limit), 100)),)).fetchall()
+    return [dict(r) for r in rows]

@@ -461,6 +461,12 @@ pick_player(id)
 			TrieGetCell(kind == 1 ? g_banCount : g_muteCount, key, voices);
 			if (czm_staff(p) != CZM_STAFF_NONE)
 				add(line, charsmax(line), en(id) ? " \r[staff]" : " \r[админ]");
+			else if (czm_privilege(p))
+			{
+				new priv[12];
+				czm_privilege_name(p, priv, charsmax(priv));
+				format(line, charsmax(line), "%s \y[%s]", line, priv);
+			}
 			else
 				format(line, charsmax(line), "%s \d[%d/%d]", line, voices, need(kind == 1 ? VOTES_BAN : VOTES_MUTE, p, 2));
 		}
@@ -505,9 +511,9 @@ public on_pick_player(id, menu, item_)
 
 vote_against(id, target, bool:ban)
 {
-	if (czm_staff(target) != CZM_STAFF_NONE)
+	if (czm_staff(target) != CZM_STAFF_NONE || czm_privilege(target))
 	{
-		czm_chat(id, "^4[CZM]^1 За администрацию голосовать нельзя.", "^4[CZM]^1 Staff are immune.");
+		czm_chat(id, "^4[CZM]^1 Против администрации и игроков с привилегией голосовать нельзя.", "^4[CZM]^1 Staff and privileged players are immune.");
 		return;
 	}
 	new targetKey[40], voterKey[40], pair[84], gate[48], Float:until;

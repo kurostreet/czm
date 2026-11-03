@@ -44,7 +44,11 @@ enum
 	SCOPE_ALL
 }
 
-new g_staff[MAX_PLAYERS + 1], g_session[MAX_PLAYERS + 1];
+new g_staff[MAX_PLAYERS + 1], g_session[MAX_PLAYERS + 1], g_priv[MAX_PLAYERS + 1];
+
+// Kontra's privileges: index 0 is none (the same order as czm_admin.inc and the API)
+new const PRIV_KEYS[][] = { "", "vip", "premium", "deluxe", "tester" };
+new const PRIV_NAMES[][] = { "", "VIP+", "PREMIUM", "DELUXE", "TESTER" };
 new bool:g_muted[MAX_PLAYERS + 1], bool:g_frozen[MAX_PLAYERS + 1];
 new g_kickText[MAX_PLAYERS + 1][96];
 
@@ -87,6 +91,8 @@ public plugin_natives()
 	register_native("czm_muted", "native_muted");
 	register_native("czm_sanction", "native_sanction");
 	register_native("czm_admin_menu", "native_admin_menu");
+	register_native("czm_privilege", "native_privilege");
+	register_native("czm_privilege_name", "native_privilege_name");
 }
 
 public plugin_init()
@@ -179,12 +185,61 @@ public native_admin_menu(plugin, params)
 	return admin_menu(get_param(1));
 }
 
+public native_privilege(plugin, params)
+{
+	new id = get_param(1);
+	return (1 <= id <= MaxClients) ? g_priv[id] : 0;
+}
+
+public native_privilege_name(plugin, params)
+{
+	new id = get_param(1);
+	return set_string(2, (1 <= id <= MaxClients) ? PRIV_NAMES[g_priv[id]] : "", get_param(3));
+}
+
+// What the staff did goes to the owner (bot /zmlog), as LogsServer of Kontra kept it
+staff_log(id, const action[], target = 0, const detail[] = "")
+{
+	if (!czm_api_ready())
+		return;
+	new EzJSON:body = ezjson_init_object(), name[32];
+	get_user_name(id, name, charsmax(name));
+	ezjson_object_set_number(body, "by_player", czm_profile(id));
+	ezjson_object_set_string(body, "by_name", name);
+	ezjson_object_set_string(body, "action", action);
+	if (target && is_user_connected(target))
+	{
+		get_user_name(target, name, charsmax(name));
+		ezjson_object_set_number(body, "target_player", czm_profile(target));
+		ezjson_object_set_string(body, "target_name", name);
+	}
+	ezjson_object_set_string(body, "detail", detail);
+	czm_api("POST", "/survival/server/staff_log", body, "on_staff_log");
+	ezjson_free(body);
+}
+
+public on_staff_log(EzHttpRequest:request)
+{
+	new code, EzJSON:root = czm_api_answer(request, code);
+	if (CZM_JSON_OK(root))
+		ezjson_free(root);
+}
+
 // ---------------------------------------------------------------- who comes in
+
+priv_index(const kind[])
+{
+	for (new k = 1; k < sizeof PRIV_KEYS; k++)
+		if (equal(kind, PRIV_KEYS[k]))
+			return k;
+	return 0;
+}
 
 public czm_player_ready(id, profile)
 {
 	g_session[id]++;
 	g_staff[id] = CZM_STAFF_NONE;
+	g_priv[id] = 0;
 	set_mute(id, false);
 	if (is_user_bot(id) || is_user_hltv(id) || !czm_api_ready())
 		return;
@@ -213,6 +268,13 @@ public on_check(EzHttpRequest:request)
 	new role[16];
 	ezjson_object_get_string(root, "role", role, charsmax(role));
 	g_staff[id] = equal(role, "admin") ? CZM_STAFF_ADMIN : (equal(role, "moderator") ? CZM_STAFF_MODERATOR : CZM_STAFF_NONE);
+	g_priv[id] = 0;
+	if (ezjson_object_has_value(root, "privilege", EzJSONObject))
+	{
+		new kind[16];
+		ezjson_object_get_string(root, "privilege.kind", kind, charsmax(kind), true);
+		g_priv[id] = priv_index(kind);
+	}
 	if (ezjson_object_has_value(root, "ban", EzJSONObject))
 	{
 		new reason[64];
@@ -235,6 +297,7 @@ public client_disconnected(id)
 {
 	g_session[id]++;
 	g_staff[id] = CZM_STAFF_NONE;
+	g_priv[id] = 0;
 	g_muted[id] = false;
 	g_frozen[id] = false;
 	remove_task(TASK_UNMUTE + id);
@@ -407,6 +470,9 @@ lift(id, sanctionId)
 	new data[2];
 	data[0] = id; data[1] = get_user_userid(id);
 	czm_api("POST", "/survival/server/sanction", body, "on_lift", data, sizeof data);
+	new detail[16];
+	formatex(detail, charsmax(detail), "#%d", sanctionId);
+	staff_log(id, "lift", 0, detail);
 	ezjson_free(body);
 }
 
@@ -489,6 +555,8 @@ public admin_menu(id)
 	item_add(menu, id, "Сообщения игроков", "Players' messages", "inbox");
 	if (head)
 		item_add(menu, id, "Новость сервера", "Server news", "news");
+	if (head)
+		item_add(menu, id, "Привилегия игроку (VIP+, PREMIUM...)", "Privilege (VIP+, PREMIUM...)", "priv");
 	texts(menu, id);
 	menu_display(id, menu);
 	return PLUGIN_HANDLED;
@@ -535,6 +603,7 @@ public on_admin_menu(id, menu, item)
 	else if (equal(info, "airdrop") && staff(id, CZM_STAFF_ADMIN))
 	{
 		server_cmd("czm_airdrop");
+		staff_log(id, "airdrop");
 		czm_chat(id, "^4[CZM]^1 Аирдроп сброшен.", "^4[CZM]^1 The airdrop is down.");
 	}
 	else if (equal(info, "board"))
@@ -548,6 +617,11 @@ public on_admin_menu(id, menu, item)
 		new data[2];
 		data[0] = id; data[1] = get_user_userid(id);
 		czm_api("GET", "/survival/server/messages?limit=8", CZM_JSON_NONE, "on_inbox", data, sizeof data);
+	}
+	else if (equal(info, "priv") && staff(id, CZM_STAFF_ADMIN))
+	{
+		copy(g_doing[id], charsmax(g_doing[]), "priv");
+		pick_player(id, true);
 	}
 	else if (equal(info, "news") && staff(id, CZM_STAFF_ADMIN))
 	{
@@ -611,6 +685,8 @@ public on_pick_player(id, menu, item)
 		punish_menu(id, target);
 	else if (equal(g_doing[id], "give"))
 		give_menu(id);
+	else if (equal(g_doing[id], "priv"))
+		priv_menu(id, target);
 	else if (equal(g_doing[id], "nemesis") || equal(g_doing[id], "survivor"))
 		start_mode(id, g_doing[id], target);
 	return PLUGIN_HANDLED;
@@ -669,6 +745,7 @@ public on_punish_menu(id, menu, item)
 	}
 	else if (equal(info, "kick"))
 	{
+		staff_log(id, "kick", target);
 		server_cmd("kick #%d ^"%s^"", g_target[id], czm_lang(target) == CZM_EN ? "Kicked by the staff" : "Кик от администрации");
 		czm_chat(0, "^4[CZM]^3 %s^1 кикнут (%s).", "^4[CZM]^3 %s^1 was kicked (%s).", name, admin);
 	}
@@ -676,12 +753,14 @@ public on_punish_menu(id, menu, item)
 	{
 		if (is_user_alive(target))
 			user_kill(target, 1);
+		staff_log(id, "slay", target);
 		czm_chat(0, "^4[CZM]^1 Админ ^4%s^1 убил ^3%s^1.", "^4[CZM]^1 Admin ^4%s^1 killed ^3%s^1.", admin, name);
 	}
 	else if (equal(info, "freeze"))
 	{
 		g_frozen[target] = !g_frozen[target];
 		freeze(target, g_frozen[target]);
+		staff_log(id, g_frozen[target] ? "freeze" : "unfreeze", target);
 		if (g_frozen[target])
 			czm_chat(0, "^4[CZM]^1 Админ ^4%s^1 заморозил ^3%s^1.", "^4[CZM]^1 Admin ^4%s^1 froze ^3%s^1.", admin, name);
 		else
@@ -748,6 +827,9 @@ public on_reason_menu(id, menu, item)
 		return PLUGIN_HANDLED;
 	// the reason is kept in Russian: the board, the bot and most players read Russian
 	sanction(target, g_doing[id], g_seconds[id], r >= 0 ? REASONS[r][0] : "", id);
+	new detail[80];
+	formatex(detail, charsmax(detail), "%d s %s", g_seconds[id], r >= 0 ? REASONS[r][0] : "");
+	staff_log(id, g_doing[id], target, detail);
 	return PLUGIN_HANDLED;
 }
 
@@ -831,6 +913,10 @@ public on_give_menu(id, menu, item)
 	new targets[MAX_PLAYERS], count = scope_players(id, targets), done = 0;
 	for (new k = 0; k < count; k++)
 		done += give(id, targets[k], info);
+	new const SCOPES[][] = { "", "self", "all humans", "all zombies", "everyone" };
+	new detail[48];
+	formatex(detail, charsmax(detail), "%s %s x%d", info, SCOPES[g_scope[id]], done);
+	staff_log(id, "give", g_scope[id] == SCOPE_PLAYER ? find_player_ex(FindPlayer_MatchUserId, g_target[id]) : 0, detail);
 	czm_chat(id, "^4[CZM]^1 Выдано: ^4%d^1.", "^4[CZM]^1 Given: ^4%d^1.", done);
 	give_menu(id);
 	return PLUGIN_HANDLED;
@@ -981,6 +1067,9 @@ public on_grant_item(id, menu, item)
 	ezjson_free(args);
 	data[0] = id; data[1] = get_user_userid(id); data[2] = c; data[3] = i;
 	czm_api("POST", "/survival/server/action", body, "on_grant", data, sizeof data);
+	new detail[40];
+	formatex(detail, charsmax(detail), "%s:%s", g_catKey[c], g_itemId[c][i]);
+	staff_log(id, "grant", target, detail);
 	ezjson_free(body);
 	return PLUGIN_HANDLED;
 }
@@ -1002,6 +1091,116 @@ public on_grant(EzHttpRequest:request)
 		else
 			czm_chat(id, "^4[CZM]^1 Не получилось (%s).", "^4[CZM]^1 It did not work (%s).", error[0] ? error : "API");
 	}
+	if (CZM_JSON_OK(root))
+		ezjson_free(root);
+}
+
+// ---------------------------------------------------------------- privileges (Kontra AdminManager)
+
+priv_menu(id, target)
+{
+	new title[96], name[32], info[4], bool:en = czm_lang(id) == CZM_EN;
+	if (!czm_profile(target))
+	{
+		czm_chat(id, "^4[CZM]^1 Привилегии — только игрокам с профилем CZM.", "^4[CZM]^1 Privileges go to players with a CZM profile only.");
+		return;
+	}
+	get_user_name(target, name, charsmax(name));
+	formatex(title, charsmax(title), "\y%s^n\w%s%s%s", en ? "Privilege" : "Привилегия", name, g_priv[target] ? " \d- " : "", PRIV_NAMES[g_priv[target]]);
+	new menu = menu_create(title, "on_priv_menu");
+	for (new k = 1; k < sizeof PRIV_KEYS; k++)
+	{
+		num_to_str(k, info, charsmax(info));
+		menu_additem(menu, PRIV_NAMES[k], info);
+	}
+	if (g_priv[target])
+		item_add(menu, id, "\rСнять привилегию", "\rTake it away", "0");
+	texts(menu, id);
+	menu_display(id, menu);
+}
+
+public on_priv_menu(id, menu, item)
+{
+	if (item < 0)
+	{
+		menu_destroy(menu);
+		return PLUGIN_HANDLED;
+	}
+	new info[4], access, callback, bool:en = czm_lang(id) == CZM_EN;
+	menu_item_getinfo(menu, item, access, info, charsmax(info), _, _, callback);
+	menu_destroy(menu);
+	new kind = str_to_num(info);
+	if (!kind)
+	{
+		set_privilege(id, 0, 0);
+		return PLUGIN_HANDLED;
+	}
+	g_seconds[id] = kind;    // the kind waits here while the term is chosen
+	new title[64];
+	formatex(title, charsmax(title), "\y%s: \w%s", en ? "For how long" : "На сколько", PRIV_NAMES[kind]);
+	new terms = menu_create(title, "on_priv_term");
+	item_add(terms, id, "7 дней", "7 days", "604800");
+	item_add(terms, id, "30 дней", "30 days", "2592000");
+	item_add(terms, id, "90 дней", "90 days", "7776000");
+	item_add(terms, id, "Навсегда", "Forever", "0");
+	texts(terms, id);
+	menu_display(id, terms);
+	return PLUGIN_HANDLED;
+}
+
+public on_priv_term(id, menu, item)
+{
+	if (item < 0)
+	{
+		menu_destroy(menu);
+		return PLUGIN_HANDLED;
+	}
+	new info[12], access, callback;
+	menu_item_getinfo(menu, item, access, info, charsmax(info), _, _, callback);
+	menu_destroy(menu);
+	set_privilege(id, g_seconds[id], str_to_num(info));
+	return PLUGIN_HANDLED;
+}
+
+set_privilege(id, kind, seconds)
+{
+	new target = find_player_ex(FindPlayer_MatchUserId, g_target[id]);
+	if (!staff(id, CZM_STAFF_ADMIN) || !target || !czm_profile(target))
+		return;
+	new EzJSON:body = ezjson_init_object(), name[32], data[5];
+	get_user_name(id, name, charsmax(name));
+	ezjson_object_set_number(body, "player", czm_profile(target));
+	ezjson_object_set_string(body, "kind", PRIV_KEYS[kind]);
+	ezjson_object_set_number(body, "seconds", seconds);
+	ezjson_object_set_number(body, "by_player", czm_profile(id));
+	ezjson_object_set_string(body, "by_name", name);
+	data[0] = id; data[1] = get_user_userid(id); data[2] = target; data[3] = get_user_userid(target); data[4] = kind;
+	czm_api("POST", "/survival/server/privilege", body, "on_privilege", data, sizeof data);
+	ezjson_free(body);
+	staff_log(id, kind ? "privilege" : "privilege_off", target, PRIV_NAMES[kind]);
+}
+
+public on_privilege(EzHttpRequest:request)
+{
+	new data[5];
+	ezhttp_get_user_data(request, data);
+	new id = data[0], target = data[2], kind = data[4], code, EzJSON:root = czm_api_answer(request, code);
+	new bool:here = is_user_connected(target) && get_user_userid(target) == data[3];
+	if (code == 200)
+	{
+		if (here)
+		{
+			new name[32];
+			g_priv[target] = kind;
+			get_user_name(target, name, charsmax(name));
+			if (kind)
+				czm_chat(0, "^4[CZM]^3 %s^1 получил привилегию ^4%s^1!", "^4[CZM]^3 %s^1 got the ^4%s^1 privilege!", name, PRIV_NAMES[kind]);
+			else
+				czm_chat(0, "^4[CZM]^1 У ^3%s^1 больше нет привилегии.", "^4[CZM]^3 %s^1 no longer has a privilege.", name);
+		}
+	}
+	else if (is_user_connected(id) && get_user_userid(id) == data[1])
+		czm_chat(id, "^4[CZM]^1 Привилегия не сохранилась.", "^4[CZM]^1 The privilege was not saved.");
 	if (CZM_JSON_OK(root))
 		ezjson_free(root);
 }
@@ -1086,6 +1285,8 @@ start_mode(id, const mode[], target)
 		server_cmd("zp_%s", mode);
 		ok = true;
 	}
+	if (ok)
+		staff_log(id, "mode", target, mode);
 	if (!ok)
 		czm_chat(id, "^4[CZM]^1 Этот режим сейчас не запустить.", "^4[CZM]^1 This mode cannot start now.");
 }
@@ -1107,6 +1308,7 @@ public cmd_say_all(id)
 	set_hudmessage(255, 210, 0, -1.0, 0.25, 0, 0.0, 8.0, 0.3, 0.6, -1);
 	ShowSyncHudMsg(0, g_hud, "%s:^n%s", name, text);
 	czm_chat(0, "^4[Админ]^3 %s^1: %s", "^4[Admin]^3 %s^1: %s", name, text);
+	staff_log(id, "say", 0, text);
 	return PLUGIN_HANDLED;
 }
 
@@ -1127,6 +1329,7 @@ public cmd_news(id)
 	ezjson_object_set_string(body, "en", en);
 	data[0] = id; data[1] = get_user_userid(id);
 	czm_api("POST", "/survival/server/news", body, "on_news", data, sizeof data);
+	staff_log(id, "news", 0, ru);
 	ezjson_free(body);
 	return PLUGIN_HANDLED;
 }
@@ -1177,6 +1380,7 @@ public cmd_poll(id)
 	}
 	czm_play_all_beep();
 	set_task(1.0, "task_poll", TASK_POLL, _, _, "a", POLL_SECONDS);
+	staff_log(id, "poll", 0, g_pollText);
 	return PLUGIN_HANDLED;
 }
 
@@ -1259,6 +1463,7 @@ public on_map_menu(id, menu, item)
 	get_user_name(id, name, charsmax(name));
 	czm_chat(0, "^4[CZM]^1 Админ ^4%s^1 меняет карту на ^4%s^1 через 5 секунд.", "^4[CZM]^1 Admin ^4%s^1 changes the map to ^4%s^1 in 5 seconds.", name, g_mapNext);
 	set_task(1.0, "task_map", TASK_MAP, _, _, "a", g_mapLeft);
+	staff_log(id, "map", 0, g_mapNext);
 	return PLUGIN_HANDLED;
 }
 

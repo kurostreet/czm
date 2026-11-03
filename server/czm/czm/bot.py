@@ -51,6 +51,8 @@ HELP = (
     "/promo — промокоды Survival; /promo <i>код</i> tokens|lvl <i>сколько</i> — создать; /promo del <i>код</i> — удалить\n"
     "/zmbans — баны и муты сервера Survival; /zmunban <i>номер</i> — снять\n"
     "/zmnews — новости сервера Survival; /zmnews <i>текст | english</i> — добавить; /zmnews del <i>номер</i> — удалить\n"
+    "/zmvip — привилегии Survival; /zmvip <i>ID</i> vip|premium|deluxe|tester <i>дней</i>|forever — выдать; /zmvip del <i>ID</i>\n"
+    "/zmlog — что делала администрация на серверах (последние 30)\n"
     "/stats — сводка"
 )
 
@@ -756,6 +758,45 @@ class OwnerBot:
         except accounts.AuthError:
             await message.answer("Так: /zmnews Новая карта! | New map! — русский текст, потом английский через |")
 
+    async def on_zmvip(self, message: Message, command: CommandObject) -> None:
+        if not self.allowed(message.from_user and message.from_user.id):
+            return
+        from . import survival_mod
+        args = (command.args or "").split()
+        try:
+            if not args:
+                rows = await in_db(survival_mod.privileges)
+                await message.answer("\n".join(
+                    f"<b>{html.escape(r['name'])}</b> {html.escape(r['nick'])} (ID {r['player']}) — "
+                    + ("навсегда" if r["left"] < 0 else f"ещё {max(1, r['left'] // 86400)} дн.") for r in rows)
+                    or "Привилегий нет. Выдать: /zmvip ID vip 30")
+            elif args[0] == "del" and len(args) == 2 and args[1].isdigit():
+                await in_db(survival_mod.set_privilege, int(args[1]), "", 0, 0, "bot", True)
+                await message.answer("✅ Привилегия снята.")
+            elif len(args) == 3 and args[0].isdigit() and args[1] in survival_mod.PRIVILEGES and (args[2].isdigit() or args[2] == "forever"):
+                seconds = 0 if args[2] == "forever" else int(args[2]) * 86400
+                result = await in_db(survival_mod.set_privilege, int(args[0]), args[1], seconds, 0, "bot", True)
+                await message.answer(f"✅ {survival_mod.PRIVILEGES[args[1]]} выдана игроку ID {args[0]}"
+                                     + (" навсегда." if not seconds else f" на {args[2]} дн.")
+                                     + ("" if result["privilege"] else " (не сохранилась)"))
+            else:
+                await message.answer("Так: /zmvip 9 vip 30 · /zmvip 9 premium forever · /zmvip del 9 · /zmvip — список")
+        except accounts.AuthError as error:
+            await message.answer("Нет такого игрока." if error.code == "player" else "Так: /zmvip 9 vip 30")
+
+    async def on_zmlog(self, message: Message) -> None:
+        if not self.allowed(message.from_user and message.from_user.id):
+            return
+        from . import survival_mod
+        rows = await in_db(survival_mod.staff_log_list, 30)
+        lines = [f"{datetime.fromtimestamp(r['time'], MSK).strftime('%d.%m %H:%M')} {html.escape(r['by_name'] or '?')}: "
+                 f"{html.escape(r['action'])}" + (f" → {html.escape(r['target_name'])}" if r["target_name"] else "")
+                 + (f" ({html.escape(r['detail'])})" if r["detail"] else "") for r in reversed(rows)]
+        if not lines:
+            await message.answer("Администрация пока ничего не делала.")
+            return
+        await self._chunks(message, lines)
+
     async def on_message(self, message: Message) -> None:
         if not self.allowed(message.from_user and message.from_user.id):
             await message.answer("Это служебный бот Counter Zombie Mobile.")
@@ -867,6 +908,8 @@ def build(settings: Settings) -> tuple[Bot, Dispatcher, OwnerBot]:
     router.message.register(owner.on_zmbans, Command("zmbans"))
     router.message.register(owner.on_zmunban, Command("zmunban"))
     router.message.register(owner.on_zmnews, Command("zmnews"))
+    router.message.register(owner.on_zmvip, Command("zmvip"))
+    router.message.register(owner.on_zmlog, Command("zmlog"))
     router.message.register(owner.on_news, Command("news"))
     router.message.register(owner.on_delnews, Command("delnews"))
     router.message.register(owner.on_editnews, Command("editnews"))
