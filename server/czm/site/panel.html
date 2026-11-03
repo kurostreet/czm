@@ -106,6 +106,13 @@
 </section>
 
 <section class="view" data-view="shop" hidden>
+<form class="card sell" id="promoForm">
+<h2 data-i18n="promoTitle">Промокод</h2>
+<div class="row promo-row">
+<input id="promoCode" maxlength="32" autocomplete="off" data-i18n-ph="promoPh" placeholder="Например, free20lvl">
+<button class="btn" type="submit" data-i18n="promoUse">Активировать</button>
+</div>
+</form>
 <h2 data-i18n="upgrades">Прокачка</h2>
 <div class="grid offers" id="upgrades"></div>
 <div id="shopCats"></div>

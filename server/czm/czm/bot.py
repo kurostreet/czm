@@ -48,6 +48,7 @@ HELP = (
     "/mod_pause <i>ID</i> — приостановить; /mod_resume <i>ID</i> — проверить и вернуть права\n"
     "/mod_undo <i>ID [all]</i> — отмена текущей серии или всей истории с подтверждением\n"
     "/tester <i>число</i> — сколько тестировщиков в бете Google Play показывает сайт, /tester — сколько сейчас\n"
+    "/promo — промокоды Survival; /promo <i>код</i> tokens|lvl <i>сколько</i> — создать; /promo del <i>код</i> — удалить\n"
     "/stats — сводка"
 )
 
@@ -649,6 +650,31 @@ class OwnerBot:
                  + (f", {html.escape(b['reason'])}" if b["reason"] else "") for b in bans]
         await message.answer("\n".join(lines))
 
+    async def on_promo(self, message: Message, command: CommandObject) -> None:
+        """Promo codes of the Survival server: players type /promo CODE in the game or the panel."""
+        if not self.allowed(message.from_user and message.from_user.id):
+            return
+        from . import survival
+        args = (command.args or "").split()
+        try:
+            if not args:
+                promos = await in_db(survival.promo_list)
+                await message.answer("\n".join(f"<code>{html.escape(p['code'])}</code> — +{p['amount']} "
+                                                f"{'LVL' if p['kind'] == 'lvl' else 'токенов'}, использовали {p['uses']}"
+                                                for p in promos) or "Промокодов нет.")
+            elif args[0] == "del" and len(args) == 2:
+                await in_db(survival.promo_delete, args[1])
+                await message.answer("✅ Промокод удалён.")
+            elif len(args) == 3 and args[1] in ("tokens", "lvl") and args[2].isdigit():
+                promo = await in_db(survival.promo_create, args[0], args[1], int(args[2]), 0)
+                await message.answer(f"✅ Промокод <code>{html.escape(promo['code'])}</code>: +{promo['amount']} "
+                                     f"{'LVL' if promo['kind'] == 'lvl' else 'токенов'}. Игроки вводят в игре /promo {html.escape(promo['code'])}")
+            else:
+                await message.answer("Так: /promo free50k tokens 50000 · /promo free20lvl lvl 20 · /promo del free50k · /promo — список")
+        except accounts.AuthError as error:
+            texts = {"promo_exists": "Такой промокод уже есть.", "promo_bad": "Код из 3–32 букв и цифр, токенов до 1 000 000, LVL до 1000."}
+            await message.answer(texts.get(error.code, "Не получилось."))
+
     async def on_message(self, message: Message) -> None:
         if not self.allowed(message.from_user and message.from_user.id):
             await message.answer("Это служебный бот Counter Zombie Mobile.")
@@ -756,6 +782,7 @@ def build(settings: Settings) -> tuple[Bot, Dispatcher, OwnerBot]:
     router.message.register(owner.on_start, CommandStart())
     router.message.register(owner.on_start, Command("help"))
     router.message.register(owner.on_stats, Command("stats"))
+    router.message.register(owner.on_promo, Command("promo"))
     router.message.register(owner.on_news, Command("news"))
     router.message.register(owner.on_delnews, Command("delnews"))
     router.message.register(owner.on_editnews, Command("editnews"))

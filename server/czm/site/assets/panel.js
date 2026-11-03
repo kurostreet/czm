@@ -37,14 +37,14 @@
       nothingToSell: 'Нечего выставить: в лавку идут купленные вещи.', seller: 'Продавец', daysLeft: '{d} дн.',
       withdraw: 'Снять', mine: 'Твоё', marketEmpty: 'В лавке пока пусто.', payLead: 'С {lvl} LVL, до {limit} токенов в день. Сегодня отправлено: {today}.',
       topEmpty: 'Пока никого.', liveEmpty: 'Сервер сейчас не в сети или на нём никого нет.', liveNow: '{n} из {max}', leftMin: '{m} мин до смены карты',
-      zombie: 'Зомби', human: 'Человек', frags: 'Фраги', lvl: 'LVL', player: 'Игрок', place: '{n} место', crate: 'Ящик с оружием', crateLead: 'на 30 минут, выдаётся при каждом спавне человеком', charges: 'зарядов: {n}', minLeft: 'ещё {m} мин', extend: 'Продлить', hCrate: 'Ящик с оружием', hAirdrop: 'Аирдроп', done: 'Готово', bought: 'Куплено и надето', on: 'Надето', off: 'Снято',
+      zombie: 'Зомби', human: 'Человек', frags: 'Фраги', lvl: 'LVL', player: 'Игрок', place: '{n} место', promoTitle: 'Промокод', promoPh: 'Например, free20lvl', promoUse: 'Активировать', promoDone: 'Промокод: +{n} {what}', tokensWord: 'токенов', crate: 'Ящик с оружием', crateLead: 'на 30 минут, выдаётся при каждом спавне человеком', charges: 'зарядов: {n}', minLeft: 'ещё {m} мин', extend: 'Продлить', hCrate: 'Ящик с оружием', hAirdrop: 'Аирдроп', done: 'Готово', bought: 'Куплено и надето', on: 'Надето', off: 'Снято',
       paid: 'Передано {n} токенов', listed: 'Выставлено в лавку', boughtMarket: 'Куплено в лавке', withdrawn: 'Вещь вернулась к тебе',
       hBuy: 'Покупка', hUpgrade: 'Прокачка', hPay: 'Перевод', hPromo: 'Промокод', hPass: 'Боевой пропуск', hMarketBuy: 'Покупка в лавке',
       hMarketSell: 'Продажа в лавке', hMapTop: 'Топ карты', noHistory: 'Событий пока нет: зайди на сервер Survival.',
       e: { tokens: 'Не хватает токенов.', not_owned: 'Этого у тебя нет.', admin_only: 'Только для администраторов.', not_for_sale: 'Это не продаётся.',
         pay_lvl: 'Перевод доступен с 10 LVL.', pay_limit: 'Дневной лимит переводов исчерпан.', bp_active: 'Пропуск уже активен.',
         bp_inactive: 'Сначала купи боевой пропуск.', bp_daily_done: 'Сегодня награда уже получена.', bp_tasks: 'Сначала выполни все задания.',
-        bp_final_done: 'Эта награда уже получена.', player: 'Игрок с таким ID ещё не играл на Survival.', self: 'Себе нельзя.',
+        bp_final_done: 'Эта награда уже получена.', promo: 'Нет такого промокода.', promo_used: 'Этот промокод ты уже использовал.', player: 'Игрок с таким ID ещё не играл на Survival.', self: 'Себе нельзя.',
         market_max: 'Не больше 3 предложений сразу.', listing: 'Этого предложения уже нет.', owned: 'Это у тебя уже есть.', price: 'Проверь цену.',
         amount: 'Проверь сумму.', credentials: 'Неверный ник или пароль.', code: 'Неверный код.', email: 'Проверь почту.',
         slow: 'Слишком много попыток, подожди немного.', mail_unavailable: 'Письма сейчас не отправляются, войди по нику.',
@@ -74,14 +74,14 @@
       nothingToSell: 'Nothing to sell: bought items go to the market.', seller: 'Seller', daysLeft: '{d} d',
       withdraw: 'Take back', mine: 'Yours', marketEmpty: 'The market is empty for now.', payLead: 'From LVL {lvl}, up to {limit} tokens a day. Sent today: {today}.',
       topEmpty: 'Nobody yet.', liveEmpty: 'The server is offline or empty right now.', liveNow: '{n} of {max}', leftMin: '{m} min to the next map',
-      zombie: 'Zombie', human: 'Human', frags: 'Frags', lvl: 'LVL', player: 'Player', place: 'place {n}', crate: 'Weapon crate', crateLead: 'for 30 minutes, given at every spawn as a human', charges: '{n} charges', minLeft: '{m} min left', extend: 'Extend', hCrate: 'Weapon crate', hAirdrop: 'Airdrop', done: 'Done', bought: 'Bought and put on', on: 'Put on', off: 'Taken off',
+      zombie: 'Zombie', human: 'Human', frags: 'Frags', lvl: 'LVL', player: 'Player', place: 'place {n}', promoTitle: 'Promo code', promoPh: 'For example, free20lvl', promoUse: 'Activate', promoDone: 'Promo code: +{n} {what}', tokensWord: 'tokens', crate: 'Weapon crate', crateLead: 'for 30 minutes, given at every spawn as a human', charges: '{n} charges', minLeft: '{m} min left', extend: 'Extend', hCrate: 'Weapon crate', hAirdrop: 'Airdrop', done: 'Done', bought: 'Bought and put on', on: 'Put on', off: 'Taken off',
       paid: '{n} tokens sent', listed: 'Put up for sale', boughtMarket: 'Bought on the market', withdrawn: 'The item is back with you',
       hBuy: 'Purchase', hUpgrade: 'Upgrade', hPay: 'Transfer', hPromo: 'Promo code', hPass: 'Battle pass', hMarketBuy: 'Market purchase',
       hMarketSell: 'Market sale', hMapTop: 'Map top', noHistory: 'Nothing yet: join the Survival server.',
       e: { tokens: 'Not enough tokens.', not_owned: 'You do not own it.', admin_only: 'Administrators only.', not_for_sale: 'Not for sale.',
         pay_lvl: 'Transfers open at LVL 10.', pay_limit: "Today's transfer limit is used up.", bp_active: 'The pass is already active.',
         bp_inactive: 'Buy the battle pass first.', bp_daily_done: "Today's reward is already taken.", bp_tasks: 'Finish every task first.',
-        bp_final_done: 'This reward is already taken.', player: 'Nobody with this ID has played Survival yet.', self: 'Not to yourself.',
+        bp_final_done: 'This reward is already taken.', promo: 'No such promo code.', promo_used: 'You have used this promo code.', player: 'Nobody with this ID has played Survival yet.', self: 'Not to yourself.',
         market_max: 'No more than 3 offers at once.', listing: 'This offer is gone.', owned: 'You already own it.', price: 'Check the price.',
         amount: 'Check the amount.', credentials: 'Wrong nick or password.', code: 'Wrong code.', email: 'Check the email.',
         slow: 'Too many tries, wait a little.', mail_unavailable: 'Emails are not sent right now, sign in with your nick.',
@@ -364,6 +364,15 @@
     ev.preventDefault();
     var v = $('sellItem').value.split('|'); if (v.length !== 2) return;
     act('market_sell', { cat: v[0], item: v[1], price: parseInt($('sellPrice').value, 10) }, t('listed')).then(loadMarket, function () {});
+  });
+
+  $('promoForm').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var code = $('promoCode').value.trim(); if (!code) return;
+    api('/survival/action', { method: 'POST', body: { op: op(), action: 'promo', args: { code: code } } }).then(function (r) {
+      me.state = r.state; render(); $('promoCode').value = '';
+      toast(t('promoDone', { n: fmt(r.amount), what: r.kind === 'lvl' ? 'LVL' : t('tokensWord') }));
+    }).catch(function (e) { toast(errorText(e.code), true); });
   });
 
   $('payForm').addEventListener('submit', function (ev) {
