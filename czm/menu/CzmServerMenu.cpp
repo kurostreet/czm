@@ -901,6 +901,421 @@ void UI_CzmServer_Menu( void )
 {
 }
 
+/*
+=================
+The team menu: a compact card instead of the stock window. The map with its picture, the mode
+and the players, two lines about the map in the menu's language (maps/<map>.txt), then the
+buttons: on our servers "Play" and "Spectate" (the side and the model are the server's business),
+on other servers Terrorists / Auto / Counter-terrorists with the players of each side.
+=================
+*/
+class CCzmTeamCard : public CMenuBaseClientWindow
+{
+public:
+	typedef CMenuBaseClientWindow BaseClass;
+	CCzmTeamCard() : BaseClass( "CzmTeamCard" ), m_bSpectate( false ), m_bCancel( false ), m_iSlot( -1 ),
+		m_iPressed( 0 ), m_iOpenTime( 0 ), m_bClosing( false ), W( 0 ), H( 0 ) { m_szMap[0] = m_szText[0] = 0; }
+
+	void Open( int param1 );
+	void Show() override;
+	void Hide() override;
+	void Draw() override;
+	bool KeyDown( int key ) override;
+	bool KeyUp( int key ) override;
+
+private:
+	enum { BTN_PLAY = 1, BTN_SPECTATE, BTN_T, BTN_AUTO, BTN_CT, BTN_CLOSE, BTN_COUNT };
+	void Layout( void );
+	int HitTest( void ) const;
+	void Press( int button );
+	void ReadDescription( void );
+
+	char m_szMap[64];
+	char m_szText[512];
+	bool m_bSpectate, m_bCancel;
+	int m_iSlot;               // our server (CZM_OFFICIAL_*), -1 another
+	int m_iCounts[2];
+	int m_iPressed;
+	int m_iOpenTime;
+	bool m_bClosing;
+	int W, H;
+	CzmRect m_card, m_map, m_btn[BTN_COUNT];
+	int m_iTextY;
+};
+
+void CCzmTeamCard::ReadDescription( void )
+{
+	char path[96];
+	char *file;
+	bool ru = CZM_IsRussian();
+
+	m_szText[0] = 0;
+	snprintf( path, sizeof( path ), "maps/%s.txt", m_szMap );
+	file = (char *)EngFuncs::COM_LoadFile( path );
+	if( !file )
+		return;
+
+	// ours: the map name, then a Russian and an English block; others: any text after the name
+	const char *blocks[4] = { NULL, NULL, NULL, NULL };
+	int count = 0;
+	for( char *p = file; *p && count < 4; )
+	{
+		while( *p == '\n' || *p == '\r' )
+			p++;
+		if( !*p )
+			break;
+		blocks[count++] = p;
+		char *end = strstr( p, "\n\n" );
+		char *endr = strstr( p, "\r\n\r\n" );
+		if( endr && ( !end || endr < end ))
+			end = endr;
+		if( !end )
+			break;
+		*end = 0;
+		p = end + 1;
+	}
+
+	const char *text = NULL;
+	if( count >= 3 )
+		text = ru ? blocks[1] : blocks[2];
+	else if( count == 2 )
+		text = blocks[1];
+	else if( count == 1 && strcmp( blocks[0], m_szMap ))
+		text = blocks[0];
+	if( text )
+	{
+		// the first line only: ours carry the commands on the next one, the card has them below
+		size_t n = 0;
+		for( const char *c = text; *c && *c != '\n' && *c != '\r' && n < sizeof( m_szText ) - 1; c++ )
+			m_szText[n++] = *c;
+		m_szText[n] = 0;
+	}
+	EngFuncs::COM_FreeFile( file );
+}
+
+void CCzmTeamCard::Open( int param1 )
+{
+	const char *map = g_pClient ? g_pClient->GetLevelName() : NULL;
+	const char *counts = EngFuncs::GetCvarString( "czm_team_counts" );
+
+	Q_strncpy( m_szMap, map && map[0] ? map : "", sizeof( m_szMap ));
+	ReadDescription();
+	m_bSpectate = ( param1 & 1 ) != 0;
+	m_bCancel = ( param1 & 4 ) != 0;
+	m_iSlot = CZM_OfficialSlotNow();
+	m_iCounts[0] = m_iCounts[1] = 0;
+	if( counts )
+		sscanf( counts, "%d %d", &m_iCounts[0], &m_iCounts[1] );
+	m_iPressed = 0;
+	m_iOpenTime = uiStatic.realTime;
+	m_bClosing = false;
+	// our welcome is on the card: the MOTD box goes
+	if( m_iSlot >= 0 )
+		EngFuncs::CvarSetString( "czm_motd_off", "1" );
+	CZM_KeepClientMenu( this );
+	Show();
+}
+
+void CCzmTeamCard::Show()
+{
+	EngFuncs::KEY_SetDest( KEY_MENU );
+	EngFuncs::ClientCmd( true, "touch_setclientonly 1" );
+	BaseClass::Show();
+}
+
+void CCzmTeamCard::Hide()
+{
+	if( m_bClosing )
+		return;
+	m_bClosing = true;
+	CZM_CloseClientMenuSoon( this );
+}
+
+void CCzmTeamCard::Layout( void )
+{
+	W = ScreenWidth;
+	H = ScreenHeight;
+
+	int cw = Q_min( (int)( W * 0.40f ), (int)( H * 0.80f ));
+	int pad = H * 0.034f, mapH = cw * 0.27f, btnH = H * 0.088f, gap = H * 0.016f;
+	HFont nameFont = CZM_Font( CZMF_MENU_TITLE ), textFont = CZM_Font( CZMF_PANEL_TEXT ), hintFont = CZM_Font( CZMF_UI_META );
+	int starts[4], lines = m_szText[0] ? CZM_WrapText( textFont, m_szText, cw - pad * 2, starts, 3 ) : 0;
+	int rows = m_iSlot >= 0 ? 1 : ( m_bSpectate ? 2 : 1 );
+	int ch = H * 0.014f + mapH + CZM_FontHeight( nameFont ) * 0.6f + lines * ( CZM_FontHeight( textFont ) + H * 0.004f ) + gap * 1.6f
+		+ rows * btnH + ( rows - 1 ) * gap + ( m_iSlot >= 0 ? CZM_FontHeight( hintFont ) + gap * 2 : 0 ) + pad;
+
+	m_card = CZM_Rect(( W - cw ) / 2, ( H - ch ) / 2, cw, ch );
+	m_map = CZM_Rect( m_card.x + H * 0.014f, m_card.y + H * 0.014f, cw - H * 0.028f, mapH );
+	m_iTextY = m_map.y + mapH + CZM_FontHeight( nameFont ) * 0.6f;
+
+	int y = m_iTextY + lines * ( CZM_FontHeight( textFont ) + H * 0.004f ) + gap * 1.6f;
+	int x = m_card.x + pad, w = cw - pad * 2;
+
+	for( int i = 0; i < BTN_COUNT; i++ )
+		m_btn[i] = CZM_Rect( 0, 0, 0, 0 );
+
+	if( m_iSlot >= 0 )
+	{
+		int playW = m_bSpectate ? ( w - gap ) * 0.62f : w;
+		m_btn[BTN_PLAY] = CZM_Rect( x, y, playW, btnH );
+		if( m_bSpectate )
+			m_btn[BTN_SPECTATE] = CZM_Rect( x + playW + gap, y, w - playW - gap, btnH );
+	}
+	else
+	{
+		int third = ( w - gap * 2 ) / 3;
+		m_btn[BTN_T] = CZM_Rect( x, y, third, btnH );
+		m_btn[BTN_AUTO] = CZM_Rect( x + third + gap, y, third, btnH );
+		m_btn[BTN_CT] = CZM_Rect( x + ( third + gap ) * 2, y, w - ( third + gap ) * 2, btnH );
+		if( m_bSpectate )
+			m_btn[BTN_SPECTATE] = CZM_Rect( x, y + btnH + gap, w, btnH );
+	}
+
+	if( m_bCancel )
+	{
+		int c = H * 0.06f;
+		m_btn[BTN_CLOSE] = CZM_Rect( m_card.x + m_card.w - c - H * 0.024f, m_map.y + H * 0.014f, c, c );
+	}
+}
+
+int CCzmTeamCard::HitTest( void ) const
+{
+	for( int i = 1; i < BTN_COUNT; i++ )
+	{
+		if( m_btn[i].Grown( i == BTN_CLOSE ? H * 0.02f : 0 ).Contains( uiStatic.cursorX, uiStatic.cursorY ))
+			return i;
+	}
+	return 0;
+}
+
+void CCzmTeamCard::Press( int button )
+{
+	static const char *commands[BTN_COUNT] = { NULL, "jointeam 5", "jointeam 6", "jointeam 1", "jointeam 5", "jointeam 2", NULL };
+
+	if( button <= 0 || button >= BTN_COUNT )
+		return;
+	CZM_PlayClick();
+	if( commands[button] )
+		EngFuncs::ClientCmdF( false, "%s\n", commands[button] );
+	Hide();
+}
+
+bool CCzmTeamCard::KeyDown( int key )
+{
+	if( UI::Key::IsEscape( key ))
+	{
+		if( m_bCancel )
+			Hide();
+		return true;
+	}
+	if( UI::Key::IsLeftMouse( key ))
+	{
+		Layout();
+		m_iPressed = HitTest();
+		return true;
+	}
+	// the keys of the stock menu
+	if( key == '1' && m_iSlot < 0 ) Press( BTN_T );
+	else if( key == '2' && m_iSlot < 0 ) Press( BTN_CT );
+	else if( key == '5' ) Press( m_iSlot >= 0 ? BTN_PLAY : BTN_AUTO );
+	else if( key == '6' && m_bSpectate ) Press( BTN_SPECTATE );
+	return true;
+}
+
+bool CCzmTeamCard::KeyUp( int key )
+{
+	if( UI::Key::IsLeftMouse( key ))
+	{
+		int pressed = m_iPressed;
+
+		Layout();
+		m_iPressed = 0;
+		if( pressed && pressed == HitTest( ))
+			Press( pressed );
+	}
+	return true;
+}
+
+void CCzmTeamCard::Draw()
+{
+	if( m_bClosing )
+		return;
+	if( !CL_IsActive( ))
+	{
+		Hide();
+		return;
+	}
+
+	Layout();
+
+	float t = Q_min( 1.0f, ( uiStatic.realTime - m_iOpenTime ) / 180.0f );
+	int a = 255 * ( 1.0f - ( 1.0f - t ) * ( 1.0f - t ));
+	bool ru = CZM_IsRussian();
+	HFont nameFont = CZM_Font( CZMF_MENU_TITLE ), textFont = CZM_Font( CZMF_PANEL_TEXT ), chipFont = CZM_Font( CZMF_UI_LABEL );
+	HFont btnFont = CZM_Font( CZMF_SHOP_CARD ), smallBtn = CZM_Font( CZMF_TILE_STATUS ), hintFont = CZM_Font( CZMF_UI_META );
+	int pad = H * 0.034f;
+
+	UI_FillRect( 0, 0, W, H, PackRGBA( 4, 6, 10, a * 170 / 255 ));
+	CZM_DrawImage( UI_DIR "glow.png", m_card.x - H * 0.05f, m_card.y - H * 0.05f, m_card.w + H * 0.1f, m_card.h + H * 0.1f, PackRGBA( 229, 63, 77, a * 45 / 255 ));
+	CZM_DrawSliced( UI_DIR "smenu_frame.png", m_card.x, m_card.y, m_card.w, m_card.h, 48, H * 0.03f, CZM_White( a ));
+
+	// the map, fading into the card
+	if( m_szMap[0] )
+		CZM_DrawMapPreview( m_szMap, m_map.x, m_map.y, m_map.w, m_map.h );
+	CZM_DrawImage( "gfx/czm/fade_bottom.png", m_map.x, m_map.y + m_map.h * 0.35f, m_map.w, m_map.h * 0.65f + 2, PackRGBA( 18, 22, 29, a ));
+
+	// the mode and the players
+	{
+		char mode[48], online[48];
+		int chH = H * 0.048f, cx = m_map.x + H * 0.02f, cy = m_map.y + H * 0.018f;
+
+		if( m_iSlot >= 0 )
+			Q_strncpy( mode, m_iSlot == CZM_OFFICIAL_ESCAPE ? "ZE · Escape" : "ZM · Survival", sizeof( mode ));
+		else if( !strncmp( m_szMap, "zm_", 3 ))
+			Q_strncpy( mode, ru ? "Зомби" : "Zombie", sizeof( mode ));
+		else if( !strncmp( m_szMap, "ze_", 3 ))
+			Q_strncpy( mode, "Escape", sizeof( mode ));
+		else
+			Q_strncpy( mode, ru ? "Классика" : "Classic", sizeof( mode ));
+		int mw = CZM_TextWidth( chipFont, mode ) + chH;
+		CZM_DrawImage( UI_DIR "glow.png", cx - chH * 0.5f, cy - chH * 0.5f, mw + chH, chH * 2, PackRGBA( 229, 63, 77, a * 90 / 255 ));
+		CZM_DrawPill( UI_DIR "pill_lang_on.png", cx, cy, mw, chH, CZM_White( a ));
+		CZM_DrawText( chipFont, cx, cy + ( chH - CZM_FontHeight( chipFont )) / 2, mw, mode, CZM_White( a ), QM_CENTER );
+
+		int players = m_iCounts[0] + m_iCounts[1], max = 0;
+		if( m_iSlot >= 0 )
+		{
+			CzmServer *server = CZM_OfficialServer( m_iSlot );
+			if( server && server->answerTime > 0.0 )
+			{
+				players = server->players;
+				max = server->maxplayers;
+			}
+		}
+		if( max > 0 )
+			snprintf( online, sizeof( online ), ru ? "%d/%d игроков" : "%d/%d players", players, max );
+		else
+			snprintf( online, sizeof( online ), ru ? "игроков: %d" : "players: %d", players );
+		int ow = CZM_TextWidth( chipFont, online ) + chH * 1.2f;
+		int ox = m_map.x + m_map.w - ow - H * 0.02f - ( m_bCancel ? m_btn[BTN_CLOSE].w + H * 0.016f : 0 );
+		int dot = chH * 0.22f;
+		CZM_DrawPill( UI_DIR "button_secondary.png", ox, cy, ow, chH, CZM_White( a ));
+		CZM_DrawImage( UI_DIR "dot.png", ox + chH * 0.4f - dot / 2, cy + ( chH - dot ) / 2, dot, dot, PackRGBA( 107, 218, 167, a ));
+		CZM_DrawText( chipFont, ox + chH * 0.62f, cy + ( chH - CZM_FontHeight( chipFont )) / 2, ow - chH * 0.8f, online, PackRGBA( 220, 226, 234, a ));
+	}
+
+	if( m_bCancel )
+	{
+		const CzmRect &c = m_btn[BTN_CLOSE];
+		int ci = c.w * 0.42f;
+		CZM_DrawImage( UI_DIR "chip_round.png", c.x, c.y, c.w, c.h, m_iPressed == BTN_CLOSE ? CZM_Grey() : CZM_White( a ));
+		CZM_DrawImage( UI_DIR "icon_close.png", c.x + ( c.w - ci ) / 2, c.y + ( c.h - ci ) / 2, ci, ci, CZM_White( a ));
+	}
+
+	// the map's name over the bottom of its picture, then what it is about
+	CZM_DrawText( nameFont, m_card.x + pad, m_map.y + m_map.h - CZM_FontHeight( nameFont ) * 0.55f, m_card.w - pad * 2,
+		m_szMap[0] ? m_szMap : "Counter Zombie", CZM_White( a ));
+	if( m_szText[0] )
+	{
+		int starts[4], lines = CZM_WrapText( textFont, m_szText, m_card.w - pad * 2, starts, 3 );
+		for( int l = 0; l < lines; l++ )
+		{
+			char line[256];
+			CZM_WrapLine( m_szText, starts, l, line, sizeof( line ));
+			CZM_DrawText( textFont, m_card.x + pad, m_iTextY + l * ( CZM_FontHeight( textFont ) + H * 0.004f ), m_card.w - pad * 2, line,
+				PackRGBA( 195, 203, 214, a ));
+		}
+	}
+
+	// the buttons
+	for( int i = 1; i < BTN_CLOSE; i++ )
+	{
+		const CzmRect &r = m_btn[i];
+		if( r.w <= 0 )
+			continue;
+
+		bool pressed = m_iPressed == i && HitTest() == i;
+		CzmRect b = pressed ? CZM_Rect( r.x + r.w * 0.01f, r.y + r.h * 0.04f, r.w - r.w * 0.02f, r.h - r.h * 0.08f ) : r;
+		int corner = b.h * 0.24f;
+		char label[48];
+		const char *icon = NULL;
+		unsigned int color = CZM_White( a );
+		HFont font = smallBtn;
+
+		switch( i )
+		{
+		case BTN_PLAY:
+			Q_strncpy( label, ru ? "Играть" : "Play", sizeof( label ));
+			icon = UI_DIR "icon_play.png";
+			font = btnFont;
+			CZM_DrawImage( UI_DIR "glow.png", b.x - b.h * 0.4f, b.y - b.h * 0.4f, b.w + b.h * 0.8f, b.h * 1.8f, PackRGBA( 229, 63, 77, a * ( pressed ? 170 : 110 ) / 255 ));
+			CZM_DrawSliced( UI_DIR "tab_on.png", b.x, b.y, b.w, b.h, 30, corner, CZM_White( a ));
+			break;
+		case BTN_SPECTATE:
+			Q_strncpy( label, ru ? "Наблюдать" : "Spectate", sizeof( label ));
+			icon = UI_DIR "icon_users.png";
+			color = PackRGBA( 207, 214, 224, a );
+			CZM_DrawSliced( UI_DIR "card.png", b.x, b.y, b.w, b.h, 30, corner, CZM_White( a ));
+			break;
+		case BTN_T:
+		case BTN_CT:
+		{
+			bool t = i == BTN_T;
+			snprintf( label, sizeof( label ), "%s · %d", t ? ( ru ? "Т" : "T" ) : ( ru ? "КТ" : "CT" ), m_iCounts[t ? 0 : 1] );
+			CZM_DrawSliced( UI_DIR "card.png", b.x, b.y, b.w, b.h, 30, corner, CZM_White( a ));
+			UI_FillRect( b.x + b.w * 0.2f, b.y + b.h - Q_max( 3, H / 200 ) - b.h * 0.08f, b.w * 0.6f, Q_max( 3, H / 200 ),
+				t ? PackRGBA( 248, 113, 80, a ) : PackRGBA( 96, 165, 250, a ));
+			color = t ? PackRGBA( 254, 202, 186, a ) : PackRGBA( 191, 219, 254, a );
+			break;
+		}
+		case BTN_AUTO:
+			Q_strncpy( label, ru ? "Авто" : "Auto", sizeof( label ));
+			CZM_DrawSliced( UI_DIR "tab_on.png", b.x, b.y, b.w, b.h, 30, corner, CZM_White( a ));
+			break;
+		}
+
+		int tw = CZM_TextWidth( font, label ), iw = icon ? b.h * 0.36f : 0, space = icon ? b.h * 0.18f : 0;
+		int sx = b.x + ( b.w - tw - iw - space ) / 2;
+		if( icon )
+			CZM_DrawImage( icon, sx, b.y + ( b.h - iw ) / 2, iw, iw, color );
+		CZM_DrawText( font, sx + iw + space, b.y + ( b.h - CZM_FontHeight( font )) / 2, tw + 2, label, color );
+	}
+
+	// our servers: the welcome in one line
+	if( m_iSlot >= 0 )
+	{
+		const char *hint = ru ? "Меню: menu  ·  Уровень и магазин: lvl  ·  Панель: counter-zombie.ru"
+			: "Menu: menu  ·  Level and shop: lvl  ·  Panel: counter-zombie.ru";
+		int y = m_card.y + m_card.h - pad * 0.5f - CZM_FontHeight( hintFont ) - H * 0.012f;
+		UI_FillRect( m_card.x + pad, y - H * 0.014f, m_card.w - pad * 2, Q_max( 1, H / 700 ), PackRGBA( 255, 255, 255, a * 20 / 255 ));
+		CZM_DrawText( hintFont, m_card.x + pad, y, m_card.w - pad * 2, hint, PackRGBA( 141, 152, 168, a ));
+	}
+}
+
+ADD_MENU3( menu_czmteam, CCzmTeamCard, UI_CzmTeam_Menu );
+
+void UI_CzmTeam_Menu( void )
+{
+}
+
+#define CZM_MENU_TEAM     2
+#define CZM_MENU_CLASS_T  26
+#define CZM_MENU_CLASS_CT 27
+
+bool CZM_TeamShow( int menuType, int param1 )
+{
+	// our servers choose the model: no class menu after the team
+	if(( menuType == CZM_MENU_CLASS_T || menuType == CZM_MENU_CLASS_CT ) && CZM_OfficialSlotNow() >= 0 )
+	{
+		EngFuncs::ClientCmd( false, "joinclass 5\n" );
+		return true;
+	}
+	if( menuType != CZM_MENU_TEAM || !menu_czmteam )
+		return false;
+	menu_czmteam->Open( param1 );
+	return true;
+}
+
 // Our menus get the window; returns true when the cards overlay must leave the menu alone.
 static bool ServerWindowFrame( const char *value )
 {
@@ -949,7 +1364,7 @@ void CZM_DrawGameOverlay( void )
 	const char *value = EngFuncs::GetCvarString( "czm_menu" );
 	int serial = -1;
 
-	if( ServerWindowFrame( value ))
+	if( ServerWindowFrame( value ) || CZM_ShopWeaponFrame( value ))
 	{
 		RemoveButtons();
 		return;

@@ -584,16 +584,21 @@ void CZM_PrepareConnect( const char *address )
 static int s_panelRequest;
 static double s_panelNext;
 
-static bool CZM_OnOfficialServer( void )
+int CZM_OfficialSlotNow( void )
 {
 	const char *address = EngFuncs::GetCvarString( "czm_connect_adr" );
 	for( int i = 0; address && address[0] && i < CZM_OFFICIAL_COUNT; i++ )
 	{
 		CzmServer *server = CZM_OfficialServer( i );
 		if( server && server->address[0] && !strcmp( server->address, address ))
-			return true;
+			return i;
 	}
-	return false;
+	return -1;
+}
+
+static bool CZM_OnOfficialServer( void )
+{
+	return CZM_OfficialSlotNow() >= 0;
 }
 
 static void CZM_PanelOpen_f( void )

@@ -366,6 +366,19 @@ void CHudMenu::ShowVGUIMenu( int menuType )
 		case MENU_TEAM:
 		{
 			int param = 0;
+			int counts[3] = { 0, 0, 0 };
+			char buf[32];
+
+			// Counter Zombie Mobile: the team card shows how many play on each side
+			gHUD.m_Scoreboard.GetAllPlayersInfo();
+			for( int i = 1; i <= MAX_PLAYERS; i++ )
+			{
+				if( g_PlayerInfoList[i].name && g_PlayerInfoList[i].name[0]
+					&& ( g_PlayerExtraInfo[i].teamnumber == TEAM_TERRORIST || g_PlayerExtraInfo[i].teamnumber == TEAM_CT ))
+					counts[g_PlayerExtraInfo[i].teamnumber]++;
+			}
+			snprintf( buf, sizeof( buf ), "%d %d", counts[TEAM_TERRORIST], counts[TEAM_CT] );
+			gEngfuncs.Cvar_Set( "czm_team_counts", buf );
 			if( m_bAllowSpec )
 			{
 				if( g_iTeamNumber == TEAM_UNASSIGNED ||

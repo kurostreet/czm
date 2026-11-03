@@ -75,6 +75,14 @@ int CHudMOTD :: Draw( float fTime )
 		return 1;
 	}
 
+	// the team card of our servers shows the welcome itself (czm/menu/CzmServerMenu.cpp)
+	if( gEngfuncs.pfnGetCvarFloat( "czm_motd_off" ) != 0.0f )
+	{
+		gEngfuncs.Cvar_Set( "czm_motd_off", "0" );
+		Reset();
+		return 1;
+	}
+
 	gHUD.m_iNoConsolePrint |= 1 << 1;
 	// find the top of where the MOTD should be drawn,  so the whole thing is centered in the screen
 	int ypos = (ScreenHeight - LINE_HEIGHT * m_iLines)/2; // shift it up slightly

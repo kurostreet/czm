@@ -338,6 +338,8 @@ void CHud :: Init( void )
 	// Counter Zombie Mobile: what the shop and the server menu cards in the menu library need
 	CVAR_CREATE( "czm_buy_state", "", 0 ); // money team weaponbits armor helmet alive
 	CVAR_CREATE( "czm_menu", "", 0 );      // serial validslots, then the server menu text
+	CVAR_CREATE( "czm_team_counts", "", 0 ); // terrorists and counter-terrorists, for the team card
+	CVAR_CREATE( "czm_motd_off", "0", 0 );   // the team card of our server has the welcome, the MOTD box goes
 	cl_minmodels = CVAR_CREATE( "cl_minmodels", "0", FCVAR_ARCHIVE );
 	cl_min_t     = CVAR_CREATE( "cl_min_t", "1", FCVAR_ARCHIVE );
 	cl_min_ct    = CVAR_CREATE( "cl_min_ct", "2", FCVAR_ARCHIVE );

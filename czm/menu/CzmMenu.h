@@ -140,6 +140,7 @@ void CZM_OfficialSet( bool enabled, const char *survival, const char *escape );
 bool CZM_OfficialEnabled( void );
 CzmServer *CZM_OfficialServer( int slot );   // NULL when off or while the slot has no address
 bool CZM_IsOfficial( const char *address );
+int CZM_OfficialSlotNow( void );             // our server the game is on (CZM_OFFICIAL_*), -1 another
 void CZM_ConnectOfficial( int slot );
 // before every connect: our server gets the player's CZM ticket (setinfo _czm), any other gets none
 void CZM_PrepareConnect( const char *address );
@@ -318,6 +319,10 @@ const char *CZM_SpectatorStyleName( int style );
  */
 // the client asks for a buy menu; true if our shop took it
 bool CZM_ShopShow( int menuType, int team );
+// weapon menus of servers (Zombie Plague "Primary Weapon [1-7]") in the shop window: wheel or grid
+bool CZM_ShopWeaponFrame( const char *value );
+// the team menu as our card; on our servers the class is picked by itself
+bool CZM_TeamShow( int menuType, int param1 );
 // the client asks for the radio selector; true if our radio wheel took it (CzmWheels.cpp)
 bool CZM_RadioShow( int menuType );
 // the touch wheels over the game, drawn from the engine's czm_wheel (CzmWheels.cpp)
