@@ -194,8 +194,20 @@ public cmd_say(id)
 	read_args(text, charsmax(text));
 	remove_quotes(text);
 	trim(text);
-	new start = (text[0] == '/' || text[0] == '!') ? 1 : 0, cmd[16];
-	parse(text[start], cmd, charsmax(cmd));
+	if (text[0] != '/' && text[0] != '!')
+	{
+		// plain chat: only the bare words, so "menu please" stays a chat line
+		if (equali(text, "menu") || equali(text, "меню"))
+			return game_menu(id);
+		if (equali(text, "rtv"))
+		{
+			vote_map(id);
+			return PLUGIN_HANDLED;
+		}
+		return PLUGIN_CONTINUE;
+	}
+	new cmd[16];
+	parse(text[1], cmd, charsmax(cmd));
 	if (equali(cmd, "menu") || equali(cmd, "меню"))
 		return game_menu(id);
 	if (equali(cmd, "rtv") || equali(cmd, "rockthevote"))
@@ -203,8 +215,6 @@ public cmd_say(id)
 		vote_map(id);
 		return PLUGIN_HANDLED;
 	}
-	if (!start)
-		return PLUGIN_CONTINUE;
 	if (equali(cmd, "tp"))
 	{
 		tp_menu(id);
