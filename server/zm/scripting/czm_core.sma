@@ -108,6 +108,7 @@ public plugin_init()
 	register_clcmd("sound_off", "cmd_sound_off");
 	register_clcmd("info_on", "cmd_info_on");
 	register_clcmd("info_off", "cmd_info_off");
+	register_event("HLTV", "on_new_round", "a", "1=0", "2=0");
 
 	g_vault = nvault_open("czm_prefs");
 	load_ticket_key();
@@ -307,8 +308,28 @@ public on_czm_lang(id, const cvar[], const value[])
 		set_lang(id, CZM_EN, LANG_GAME);
 	else if (containi(value, "Bad CVAR") != -1)
 		query_client_cvar(id, "ui_language", "on_ui_language");
-	// empty: the CZM game follows the phone and does not say which; ui_language may be a leftover
-	// "english" there, so the server default stays until the player chats or picks /rus /eng
+	else
+		// empty: the CZM game follows the phone; czm_lang_ui says what the player sees (games
+		// before it leave the server default until the player writes a sentence or picks /rus /eng)
+		query_client_cvar(id, "czm_lang_ui", "on_czm_lang_ui");
+}
+
+public on_czm_lang_ui(id, const cvar[], const value[])
+{
+	if (!is_user_connected(id))
+		return;
+	if (equali(value, "ru"))
+		set_lang(id, CZM_RU, LANG_GAME);
+	else if (equali(value, "en"))
+		set_lang(id, CZM_EN, LANG_GAME);
+}
+
+// a player may switch the language in the game's menu between rounds
+public on_new_round()
+{
+	for (new id = 1; id <= MaxClients; id++)
+		if (is_user_connected(id) && !is_user_bot(id) && g_ready[id] && g_langSource[id] < LANG_CHOSEN)
+			query_client_cvar(id, "czm_lang", "on_czm_lang");
 }
 
 public on_ui_language(id, const cvar[], const value[])
@@ -523,23 +544,27 @@ public cmd_say(id)
 	}
 
 	// Kontra picked the language from what a player writes; the game tells it more reliably,
-	// so the guess only matters for players whose client does not.
+	// so the guess only matters for players whose client does not. Commands in Latin letters
+	// ("menu", "lvl", "rtv") say nothing about the language: English needs a sentence.
 	if (g_langSource[id] <= LANG_CHAT)
 	{
-		new cyr, lat;
-		count_letters(text, cyr, lat);
+		new cyr, lat, words;
+		count_letters(text, cyr, lat, words);
 		if (cyr)
 			set_lang(id, CZM_RU, LANG_CHAT);
-		else if (lat >= 3)
+		else if (lat >= 8 && words >= 2)
 			set_lang(id, CZM_EN, LANG_CHAT);
 	}
 	return PLUGIN_CONTINUE;
 }
 
-count_letters(const text[], &cyr, &lat)
+// words: runs of two and more Latin letters
+count_letters(const text[], &cyr, &lat, &words)
 {
 	cyr = 0;
 	lat = 0;
+	words = 0;
+	new run = 0;
 	for (new i = 0; text[i]; i++)
 	{
 		new c = text[i] & 0xFF;
@@ -548,9 +573,16 @@ count_letters(const text[], &cyr, &lat)
 			// UTF-8 Cyrillic: А-я and Ё/ё start with 0xD0 or 0xD1.
 			cyr++;
 			i++;
+			run = 0;
 		}
 		else if (('a' <= c <= 'z') || ('A' <= c <= 'Z'))
+		{
 			lat++;
+			if (++run == 2)
+				words++;
+		}
+		else
+			run = 0;
 	}
 }
 

@@ -444,6 +444,19 @@ static const struct { const char *key, *ru, *en; } s_strings[] =
 };
 
 static bool s_bInitialized;
+static bool CZM_LocaleIsRussian( void );
+
+// czm_lang is empty while the game follows the phone; servers ask czm_lang_ui for the language the
+// player actually sees (czm_core.amxx), so they never have to guess it from the chat
+static void CZM_SyncLanguageCvar( void )
+{
+	const char *lang = EngFuncs::GetCvarString( "czm_lang" );
+	bool russian = lang && lang[0] ? !strcmp( lang, "ru" ) : CZM_LocaleIsRussian();
+	const char *now = EngFuncs::GetCvarString( "czm_lang_ui" );
+
+	if( !now || strcmp( now, russian ? "ru" : "en" ))
+		EngFuncs::CvarSetString( "czm_lang_ui", russian ? "ru" : "en" );
+}
 
 void CZM_Init( void )
 {
@@ -456,11 +469,15 @@ void CZM_Init( void )
 		EngFuncs::CvarSetValue( "con_notifytime", 0.0f );
 
 	if( s_bInitialized )
+	{
+		CZM_SyncLanguageCvar();
 		return;
+	}
 
 	// archived cvars must exist before config.cfg runs, the menu creates its fonts early enough
 	s_bInitialized = true;
 	EngFuncs::CvarRegister( "czm_lang", "", FCVAR_ARCHIVE );
+	EngFuncs::CvarRegister( "czm_lang_ui", "", 0 );
 	EngFuncs::CvarRegister( "czm_setup", "0", FCVAR_ARCHIVE );
 	EngFuncs::CvarRegister( "czm_defaults", "0", FCVAR_ARCHIVE );
 	EngFuncs::CvarRegister( "czm_zoom_sens", "1.2", FCVAR_ARCHIVE );
