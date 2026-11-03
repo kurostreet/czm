@@ -101,6 +101,7 @@ public plugin_init()
 
 	register_clcmd("say", "cmd_say");
 	register_clcmd("say_team", "cmd_say");
+	register_srvcmd("czm_ticket_check", "cmd_ticket_check", -1, "<ticket> - what a joining player with this ticket would be");
 	register_clcmd("czm_rus", "cmd_rus");
 	register_clcmd("czm_eng", "cmd_eng");
 	register_clcmd("sound_on", "cmd_sound_on");
@@ -388,16 +389,30 @@ load_ticket_key()
 
 check_ticket(id)
 {
-	if (!g_ticketKey[0])
-		return 0;
-	new ticket[96], address[64];
+	new ticket[96], why[32];
 	get_user_info(id, "_czm", ticket, charsmax(ticket));
-	get_pcvar_string(g_cvarAddress, address, charsmax(address));
-	if (!ticket[0] || !address[0])
-		return 0;
+	if (!ticket[0])
+		return 0;   // a guest: the game sent no ticket
+	new profile = ticket_profile(ticket, why, charsmax(why));
+	if (!profile)
+	{
+		new name[32];
+		get_user_name(id, name, charsmax(name));
+		log_amx("ticket of %s refused: %s", name, why);
+	}
+	return profile;
+}
 
-	new part[3][48], count, start, len = strlen(ticket);
-	for (new i = 0; i <= len && count < 3; i++)
+// The CZM profile a ticket proves for this server's address, or 0 with the reason in why.
+ticket_profile(const ticket[], why[], len)
+{
+	new address[64];
+	get_pcvar_string(g_cvarAddress, address, charsmax(address));
+	if (!g_ticketKey[0] || !address[0])
+		return copy(why, len, "no key or czm_public_address") * 0;
+
+	new part[3][48], count, start, size = strlen(ticket);
+	for (new i = 0; i <= size && count < 3; i++)
 	{
 		if (ticket[i] == '.' || ticket[i] == 0)
 		{
@@ -406,19 +421,32 @@ check_ticket(id)
 			start = i + 1;
 		}
 	}
-	if (count != 3 || start <= len || !is_str_num(part[0]) || !is_str_num(part[1]) || strlen(part[2]) != 32)
-		return 0;
+	if (count != 3 || start <= size || !is_str_num(part[0]) || !is_str_num(part[1]) || strlen(part[2]) != 32)
+		return copy(why, len, "bad format") * 0;
 
 	new profile = str_to_num(part[0]), expires = str_to_num(part[1]), now = get_systime();
 	if (profile <= 0 || expires < now - TICKET_SKEW || expires > now + 3600)
-		return 0;
+		return copy(why, len, "expired or from the future") * 0;
 
 	new message[256], digest[65];
 	formatex(message, charsmax(message), "%s|v1|%d|%d|%s|%s", g_ticketKey, profile, expires, address, g_ticketKey);
 	hash_string(message, Hash_Sha256, digest, charsmax(digest));
 	digest[32] = 0;
 	strtolower(part[2]);
-	return equal(digest, part[2]) ? profile : 0;
+	if (!equal(digest, part[2]))
+		return copy(why, len, "signature (another address or key)") * 0;
+	copy(why, len, "ok");
+	return profile;
+}
+
+// czm_ticket_check <ticket>: what a joining player with this ticket would be (for checks from the host)
+public cmd_ticket_check()
+{
+	new ticket[96], why[40];
+	read_argv(1, ticket, charsmax(ticket));
+	new profile = ticket_profile(ticket, why, charsmax(why));
+	server_print("czm ticket: profile %d (%s)", profile, why);
+	return PLUGIN_HANDLED;
 }
 
 // ---------------------------------------------------------------- commands
