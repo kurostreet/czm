@@ -283,13 +283,20 @@ int CHudMenu :: MsgFunc_ShowMenu( const char *pszName, int iSize, void *pbuf )
 	}
 
 	if ( !NeedMore )
-	{  // we have the whole string, so we can localise it now
-		strlcpy( g_szMenuString, gHUD.m_TextMessage.BufferedLocaliseTextString( g_szPrelocalisedMenuString ), sizeof( g_szMenuString ) );
-		// Swap in characters
-		if ( KB_ConvertString( g_szMenuString, &temp ) )
+	{  // We have the whole message, including all ShowMenu fragments.
+		// #czm1 is a wire header, not a titles.txt/localization key. The stock localizer
+		// replaces it with "czm1" and stops, and its 1024-byte buffer also cuts the cards.
+		// Preserve tabs, captions and colours exactly for the window parser.
+		if( !strncmp( g_szPrelocalisedMenuString, "#czm1\t", 6 ))
+			strlcpy( g_szMenuString, g_szPrelocalisedMenuString, sizeof( g_szMenuString ));
+		else
 		{
-			strlcpy( g_szMenuString, temp, sizeof( g_szMenuString ) );
-			free( temp );
+			strlcpy( g_szMenuString, gHUD.m_TextMessage.BufferedLocaliseTextString( g_szPrelocalisedMenuString ), sizeof( g_szMenuString ) );
+			if ( KB_ConvertString( g_szMenuString, &temp ) )
+			{
+				strlcpy( g_szMenuString, temp, sizeof( g_szMenuString ) );
+				free( temp );
+			}
 		}
 		CZM_PlainMenuText();
 	}

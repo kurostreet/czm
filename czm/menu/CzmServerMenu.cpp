@@ -1284,8 +1284,8 @@ void CCzmTeamCard::Draw()
 	// our servers: the welcome in one line
 	if( m_iSlot >= 0 )
 	{
-		const char *hint = ru ? "Меню: menu  ·  Уровень и магазин: lvl  ·  Панель: counter-zombie.ru"
-			: "Menu: menu  ·  Level and shop: lvl  ·  Panel: counter-zombie.ru";
+		const char *hint = ru ? "Честная игра · Чистый сервер · Приятное общение"
+			: "Fair play · Clean server · Friendly chat";
 		int y = m_card.y + m_card.h - pad * 0.5f - CZM_FontHeight( hintFont ) - H * 0.012f;
 		UI_FillRect( m_card.x + pad, y - H * 0.014f, m_card.w - pad * 2, Q_max( 1, H / 700 ), PackRGBA( 255, 255, 255, a * 20 / 255 ));
 		CZM_DrawText( hintFont, m_card.x + pad, y, m_card.w - pad * 2, hint, PackRGBA( 141, 152, 168, a ));
@@ -1359,10 +1359,60 @@ static bool ServerWindowFrame( const char *value )
 	return rich;
 }
 
+// A real spectator can return through the same auto-team action as the entry card.
+// Dead T/CT players also have an observer camera, so use their team, not the camera mode.
+static void SpectatorExitFrame( const char *menuValue )
+{
+	static bool added;
+	static int oldW, oldH;
+	int money = 0, team = 0;
+	const char *state = EngFuncs::GetCvarString( "czm_buy_state" );
+	if( state )
+		sscanf( state, "%d %d", &money, &team );
+	const bool show = team == 3 && CL_IsActive() && !gpGlobals->demoplayback
+		&& !uiStatic.menu.IsActive() && !uiStatic.client.IsActive()
+		&& !( menuValue && menuValue[0] ) && EngFuncs::GetCvarFloat( "hud_draw" ) != 0.0f;
+
+	if( !show )
+	{
+		if( added )
+			EngFuncs::ClientCmd( true, "touch_removebutton \"_czm_spec_exit\"\n" );
+		added = false;
+		return;
+	}
+
+	const int W = ScreenWidth, H = ScreenHeight;
+	const char *label = CZM_IsRussian() ? "Выйти с наблюдателей" : "Leave spectator mode";
+	const HFont font = CZM_Font( CZMF_TILE_NAME );
+	const int icon = H * 0.032f, gap = H * 0.018f;
+	const int w = Q_min( (int)( W * 0.55f ), Q_max( (int)( H * 0.48f ), CZM_TextWidth( font, label ) + icon + gap + (int)( H * 0.065f )));
+	const int h = Q_max( (int)( H * 0.075f ), CZM_FontHeight( font ) + (int)( H * 0.035f ));
+	const CzmRect r = CZM_Rect( ( W - w ) / 2, H * 0.735f, w, h );
+
+	if( !added || oldW != W || oldH != H )
+	{
+		if( added )
+			EngFuncs::ClientCmd( true, "touch_removebutton \"_czm_spec_exit\"\n" );
+		EngFuncs::ClientCmdF( true, "touch_addbutton \"_czm_spec_exit\" \"\" \"jointeam 5\" %f %f %f %f 255 255 255 0 4\n",
+			r.x / (float)W, r.y / (float)H, ( r.x + r.w ) / (float)W, ( r.y + r.h ) / (float)H );
+		oldW = W;
+		oldH = H;
+		added = true;
+	}
+
+	CZM_DrawImage( UI_DIR "glow.png", r.x - gap, r.y - gap, r.w + gap * 2, r.h + gap * 2, PackRGBA( 229, 48, 62, 55 ));
+	CZM_DrawSliced( UI_DIR "button_primary.png", r.x, r.y, r.w, r.h, 30, h * 0.24f, CZM_White() );
+	const int textW = CZM_TextWidth( font, label ), x = r.x + ( r.w - textW - icon - gap ) / 2;
+	CZM_DrawImage( UI_DIR "icon_play.png", x, r.y + ( h - icon ) / 2, icon, icon, CZM_White() );
+	CZM_DrawText( font, x + icon + gap, r.y + ( h - CZM_FontHeight( font )) / 2, textW + 2, label, CZM_White() );
+}
+
 void CZM_DrawGameOverlay( void )
 {
 	const char *value = EngFuncs::GetCvarString( "czm_menu" );
 	int serial = -1;
+
+	SpectatorExitFrame( value );
 
 	if( ServerWindowFrame( value ) || CZM_ShopWeaponFrame( value ))
 	{
