@@ -283,6 +283,7 @@ public client_putinserver(id)
 	g_profile[id] = check_ticket(id);
 	load_prefs(id);
 	g_ready[id] = true;
+	amxx_lang(id);
 	new ret;
 	ExecuteForward(g_fwReady, ret, id, g_profile[id]);
 	// the CZM game keeps the player's choice in czm_lang; other Xash3D clients have ui_language
@@ -334,11 +335,37 @@ set_lang(id, lang, source)
 	new changed = g_lang[id] != lang || g_langSource[id] == LANG_NONE;
 	g_lang[id] = lang;
 	g_langSource[id] = source;
+	amxx_lang(id);
 	if (changed)
 	{
 		new ret;
 		ExecuteForward(g_fwLang, ret, id, lang);
 	}
+}
+
+// AMX Mod X translates the texts of other plugins (Zombie Plague) by the player's "lang" key:
+// it follows our language, so the whole game speaks one language
+amxx_lang(id)
+{
+	if (!is_user_connected(id) || is_user_bot(id))
+		return;
+	new have[4], want[4];
+	copy(want, charsmax(want), g_lang[id] == CZM_EN ? "en" : "ru");
+	get_user_info(id, "lang", have, charsmax(have));
+	if (!equal(have, want))
+		set_user_info(id, "lang", want);
+}
+
+// a userinfo update from the game replaces the whole string, our key with it
+public client_infochanged(id)
+{
+	if (g_ready[id])
+		set_task(0.1, "task_amxx_lang", id + 7300);
+}
+
+public task_amxx_lang(taskid)
+{
+	amxx_lang(taskid - 7300);
 }
 
 player_key(id, out[], len)

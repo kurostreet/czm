@@ -1,0 +1,9 @@
+COUNTER ZOMBIE - SURVIVAL
+
+Люди держатся вместе и выживают до конца раунда, зомби заражают всех.
+menu - меню сервера, lvl - уровень, токены и магазин.
+Панель игрока: counter-zombie.ru/panel
+
+Humans stick together and live through the round, zombies infect everyone.
+menu - server menu, lvl - level, tokens and shop.
+Player panel: counter-zombie.ru/panel

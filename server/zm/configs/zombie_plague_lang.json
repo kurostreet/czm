@@ -1,0 +1,38 @@
+{
+  "_about": "Lines of addons/amxmodx/data/lang/zombie_plague.txt that deploy/install.sh replaces: mobile hints instead of keys, the usual Russian names of the modes, typos of the stock translation.",
+  "en": {
+    "NOTICE_INFO1": "Type menu in chat for the server menu",
+    "NOTICE_INFO2": "Ammo refills by itself, LVL MOD: type lvl"
+  },
+  "ru": {
+    "NOTICE_INFO1": "Меню сервера: напиши menu в чат",
+    "NOTICE_INFO2": "Патроны пополняются сами, LVL MOD: напиши lvl",
+    "NOTICE_FIRST": "%s — первый зомби !!!",
+    "NOTICE_INFECT": "%s заражён...",
+    "NOTICE_INFECT2": "%s заражён зомби %s...",
+    "NOTICE_NEMESIS": "%s — Немезида !!!",
+    "NOTICE_SURVIVOR": "%s — Выживший !!!",
+    "NOTICE_SWARM": "Рой !!!",
+    "NOTICE_MULTI": "Массовое заражение !!!",
+    "CMD_NEMESIS": "стал Немезидой !!!",
+    "CMD_SURVIVAL": "стал Выжившим !!!",
+    "CMD_SWARM": "Рой!",
+    "CMD_MULTI": "Массовое заражение!",
+    "MENU_ADMIN2": "Сделать Немезидой",
+    "MENU_ADMIN3": "Сделать Выжившим",
+    "MENU_ADMIN4": "Возродить игрока",
+    "MENU_ADMIN5": "Режим «Рой»",
+    "MENU_ADMIN6": "Массовое заражение",
+    "MENU_ADMIN7": "Режим «Чума»",
+    "MENU_EXTRA1": "Ночное видение (на раунд)",
+    "MENU_NEXT": "Далее",
+    "MOTD_INFO2": "<meta charset=UTF-8><body bgcolor=000000><font color=FF0505><b>Люди:</b> их главная задача — убить всех зомби. В их распоряжении большой выбор оружия и специальных вещей. Без командной игры не выжить.<br><br><br><u>Текущие настройки сервера:</u><br>",
+    "MOTD_INFO2_G": "<br>Огненные гранаты: %L",
+    "MOTD_INFO3": "<meta charset=UTF-8><body bgcolor=000000><font color=FF0505><b>Зомби:</b> их задача — заразить всех людей и убить последнего. Они хорошо видят в темноте, но атакуют только когтями. Классов зомби много, у каждого свои характеристики.<br><br><br><u>Настройки:</u><br>",
+    "MOTD_INFO4_A": "<u>Немезида:</u> %L",
+    "MOTD_INFO4_O": "<br><u>Рой:</u> %L",
+    "MOTD_INFO4_Q": "<br><u>Массовое заражение:</u> %L",
+    "MOTD_ROTATING": "Вращающиеся двери убраны",
+    "CLASS_NEMESIS": "Немезида"
+  }
+}

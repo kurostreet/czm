@@ -61,7 +61,8 @@ echo "COMPILE_OK"
 echo "== backup"
 mkdir -p /var/backups/czm-zm
 (cd "$CS" && tar -czf "/var/backups/czm-zm/before-$STAMP.tgz" --ignore-failed-read \
-	server.cfg mapcycle.txt addons/amxmodx/configs addons/amxmodx/plugins 2>/dev/null) || true
+	server.cfg mapcycle.txt motd.txt addons/amxmodx/configs addons/amxmodx/plugins \
+	addons/amxmodx/data/lang/zombie_plague.txt 2>/dev/null) || true
 echo "/var/backups/czm-zm/before-$STAMP.tgz"
 
 if [ "$CONTENT" = 1 ]; then
@@ -123,9 +124,47 @@ open(path, "w", encoding="utf-8", errors="surrogateescape").write("\n".join(line
 for name in ("mapcycle.txt",):
     shutil.copyfile(os.path.join(src, name), os.path.join(cs, name))
 shutil.copyfile(os.path.join(src, "mapcycle.txt"), os.path.join(configs, "maps.ini"))
+
+# AMX Mod X speaks Russian unless the player's language says otherwise (czm_core sets it per player)
+path = os.path.join(configs, "amxx.cfg")
+text = open(path, encoding="utf-8", errors="surrogateescape").read()
+text, count = re.subn(r'(?m)^amx_language\s+"?\w+"?', 'amx_language "ru"', text)
+if not count:
+    raise SystemExit("amxx.cfg has no amx_language")
+open(path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+
+# The stock translation of Zombie Plague, with our lines: the file mixes encodings by language,
+# so it is changed as bytes, one "KEY = value" line at a time
+edits = json.load(open(os.path.join(src, "zombie_plague_lang.json"), encoding="utf-8"))
+path = os.path.join(os.path.dirname(configs), "data", "lang", "zombie_plague.txt")
+lines = open(path, "rb").read().split(b"\n")
+section, done = None, set()
+for i, line in enumerate(lines):
+    bare = line.rstrip(b"\r")
+    m = re.fullmatch(rb"\[(\w+)\]\s*", bare)
+    if m:
+        section = m.group(1).decode()
+        continue
+    if section in edits and b"=" in bare:
+        key = bare.split(b"=", 1)[0].strip().decode("ascii", "replace")
+        if key in edits[section]:
+            lines[i] = f"{key} = {edits[section][key]}".encode() + line[len(bare):]
+            done.add((section, key))
+missing = [(s, k) for s in edits if not s.startswith("_") for k in edits[s] if (s, k) not in done]
+if missing:
+    raise SystemExit(f"zombie_plague.txt has no {missing}")
+open(path + ".part", "wb").write(b"\n".join(lines))
+shutil.copystat(path, path + ".part")
+os.replace(path + ".part", path)
+
+# The welcome text: ours replaces the test placeholder, a text the owner wrote in the panel stays
+path = os.path.join(cs, "motd.txt")
+if not os.path.exists(path) or b"CZM Zombie Test" in open(path, "rb").read():
+    shutil.copyfile(os.path.join(src, "motd.txt"), path)
 print("configs ok")
 EOF
-chown "$OWNER" "$CS/server.cfg" "$CS/mapcycle.txt" "$A/configs/zombieplague.cfg" "$A/configs/zombieplague.ini" "$A/configs/maps.ini"
+chown "$OWNER" "$CS/server.cfg" "$CS/mapcycle.txt" "$CS/motd.txt" "$A/configs/zombieplague.cfg" "$A/configs/zombieplague.ini" \
+	"$A/configs/maps.ini" "$A/configs/amxx.cfg" "$A/data/lang/zombie_plague.txt"
 
 echo "== restart"
 systemctl restart czm-zm-test.service

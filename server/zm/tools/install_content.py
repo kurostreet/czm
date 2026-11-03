@@ -78,6 +78,46 @@ RES = {
     "zm_sln_mariozomb": ["silezn.wad"],
 }
 
+# What the team menu shows about a map (maps/<map>.txt, downloaded with the map), Russian then English
+MAP_INFO = {
+    "zm_3rooms": ("Три комнаты - три рубежа обороны. Держитесь вместе и отступайте по очереди.",
+                  "Three rooms, three lines of defence. Stick together and fall back one by one."),
+    "zm_ark_bhzrdbase_v2": ("База Biohazard в версии Ark: коридоры, ангары и лестницы наверх.",
+                            "Ark's Biohazard base: corridors, hangars and stairs up."),
+    "zm_ark_deko2_v1": ("Ночной deko2 в версии Ark: темно, следите за спиной.",
+                        "Ark's deko2 at night: it is dark, watch your back."),
+    "zm_battleground_extreme": ("Поле боя в тумане: длинные линии огня, лестницы и высоты.",
+                                "A battleground in the fog: long lines of fire, stairs and high ground."),
+    "zm_bhzrd_base_rmk": ("Ремейк Biohazard Base: колонны, мостки и узкие проходы.",
+                          "Biohazard Base remade: pillars, walkways and narrow passages."),
+    "zm_biohazard_base_mx": ("Biohazard Base: тесные коридоры и комнаты для обороны.",
+                             "Biohazard Base: tight corridors and rooms to hold."),
+    "zm_chatoyant": ("Открытая карта с бункерами под пасмурным небом.",
+                     "An open map with bunkers under a grey sky."),
+    "zm_cubeworld_mini": ("Маленький кубический мир: всё рядом, бой с первых секунд.",
+                          "A small cube world: everything is close, the fight starts at once."),
+    "zm_defense": ("Двор с ящиками и баррикадами: занимайте углы и держите оборону.",
+                   "A yard of crates and barricades: take the corners and hold."),
+    "zm_deko2": ("Песчаный городок deko2: улицы, дома и крыши.",
+                 "The sandy town of deko2: streets, houses and roofs."),
+    "zm_dust_world_summer_f": ("Летний Dust World: мосты над улицами и высокие точки.",
+                               "Dust World in summer: bridges over the streets and high spots."),
+    "zm_ground_sg": ("Площадки и стеклянные стены вокруг центрального блока.",
+                     "Platforms and glass walls around a central block."),
+    "zm_mini_re": ("Маленькая деревня с домиками и деревьями.",
+                   "A small village of huts and trees."),
+    "zm_mnx_summer": ("Летняя карта с пальмами, мостками и водой.",
+                      "A summer map of palms, walkways and water."),
+    "zm_ntc_water_fall": ("Водопад под космическим небом: уступы и деревянные мостки.",
+                          "A waterfall under a space sky: ledges and wooden walkways."),
+    "zm_sln_mariozomb": ("Карта в стиле Марио: трубы, кирпичи и платформы.",
+                         "A Mario-style map: pipes, bricks and platforms."),
+    "zm_tc_death": ("Бетонная арена в тумане: центральная площадка и проходы вокруг.",
+                    "A concrete arena in the fog: a central platform and passages around it."),
+    "zm_zombust": ("Песчаный Dust для зомби: ящики, арки и узкие улицы.",
+                   "A sandy Dust for zombies: crates, arches and narrow streets."),
+}
+
 MAPS = ["zm_3rooms", "zm_ark_bhzrdbase_v2", "zm_ark_deko2_v1", "zm_battleground_extreme", "zm_bhzrd_base_rmk",
         "zm_biohazard_base_mx", "zm_chatoyant", "zm_cubeworld_mini", "zm_defense", "zm_deko2",
         "zm_dust_world_summer_f", "zm_ground_sg", "zm_mini_re", "zm_mnx_summer", "zm_ntc_water_fall",
@@ -165,7 +205,17 @@ def main(src, game, fastdl):
                         if re.search(pattern, member):
                             placed.append(place(os.path.join(root, f), target, cstrike, fastdl, owner))
 
-    for name, items in RES.items():
+    for name in MAPS:
+        ru, en = MAP_INFO[name]
+        info = (f"{name}\n\n{ru}\nmenu - меню сервера, lvl - уровень и магазин.\n\n"
+                f"{en}\nmenu - server menu, lvl - level and shop.\n")
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as fh:
+            fh.write(info)
+        placed.append(place(fh.name, f"maps/{name}.txt", cstrike, fastdl, owner))
+        os.unlink(fh.name)
+
+    for name in MAPS:
+        items = RES.get(name, [])
         lines = []
         for item in items:
             if item.startswith("sky:"):
@@ -177,6 +227,7 @@ def main(src, game, fastdl):
             have = os.path.join(cstrike, line)
             if os.path.exists(have) and not os.path.exists(os.path.join(fastdl, line)):
                 place(have, line, cstrike, fastdl, owner)
+        lines.append(f"maps/{name}.txt")
         body = "// Files players download with this map\n" + "\n".join(lines) + "\n"
         for root in (cstrike, fastdl):
             path = os.path.join(root, "maps", name + ".res")
