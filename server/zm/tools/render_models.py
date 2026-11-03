@@ -38,6 +38,11 @@ KNIVES = {
     "sickle": "models/czm_survival/v_sickle.mdl",
 }
 GLOW = {"survivor": (0, 136, 255)}  # the skins that shine in the game (survival.py "glow")
+# what each skin holds in the picture: the weapon model and the upper body sequence of the game,
+# the legs stand in idle1 as in the game (the Zombie Plague survivor carries the M249)
+RIFLE, AK47, M249 = ("models/p_m4a1.mdl", "ref_aim_rifle"), ("models/p_ak47.mdl", "ref_aim_ak47"), ("models/p_m249.mdl", "ref_aim_m249")
+WEAPON = {"sas": RIFLE, "gsg9": RIFLE, "gsg9_admin": RIFLE, "gign": RIFLE, "sas_custom": RIFLE,
+          "elite_arctic": AK47, "leet": AK47, "leet_pirate": AK47, "professional": AK47, "survivor": M249}
 
 SKIN_SIZE = (320, 480)
 KNIFE_SIZE = (480, 360)
@@ -59,13 +64,14 @@ class Studio:
         for i in range(nb):
             o = bi + i * 112
             self.bones.append((struct.unpack_from("<i", d, o + 32)[0], struct.unpack_from("<6f", d, o + 64),
-                               struct.unpack_from("<6f", d, o + 88)))
+                               struct.unpack_from("<6f", d, o + 88), d[o:o + 32].split(b"\0")[0].decode("latin-1").lower()))
         ns, si = struct.unpack_from("<2i", d, 164)
         self.seqs = []
         for i in range(ns):
             o = si + i * 176
             label = d[o:o + 32].split(b"\0")[0].decode("latin-1").lower()
-            self.seqs.append((label, struct.unpack_from("<i", d, o + 124)[0], struct.unpack_from("<i", d, o + 156)[0]))
+            blends, anim = struct.unpack_from("<2i", d, o + 120)
+            self.seqs.append((label, anim, struct.unpack_from("<i", d, o + 156)[0], max(1, blends)))
         self.textures, self.skins = self._textures(d)
         if not self.textures:
             base = path[:-4]
@@ -87,12 +93,18 @@ class Studio:
         skins = struct.unpack_from("<%dh" % nref, d, ski) if nref > 0 and nfam > 0 else ()
         return textures, skins
 
-    def sequence(self, names):
+    def sequence(self, names, fallback=0):
         labels = [s[0] for s in self.seqs]
         for n in names:
             if n in labels:
                 return labels.index(n)
-        return 0 if self.seqs else None
+        return fallback if self.seqs else None
+
+    def _anim(self, seq, blend):
+        """Where the bones' channels of that blend start, None for the rest pose."""
+        if seq is None or self.seqs[seq][2] != 0:
+            return None
+        return self.seqs[seq][1] + min(blend, self.seqs[seq][3] - 1) * len(self.bones) * 12
 
     def _animvalue(self, p):
         """Frame 0 of a run-length coded channel."""
@@ -102,14 +114,23 @@ class Studio:
             return 0
         return struct.unpack_from("<h", d, p + 2)[0]
 
-    def pose(self, seq):
-        """World matrices (3x4, row-major) of every bone at frame 0 of the sequence."""
+    def pose(self, seq, blend=0, gait=None, merge=None):
+        """World matrices (3x4, row-major) of every bone at frame 0 of the sequence.
+
+        As the game draws a player: with a gait sequence, the bones before "Bip01 Spine" (the legs)
+        take it. merge {bone name: matrix} puts a weapon's bones on the player's (bone merge).
+        """
         d = self.d
-        anim = None
-        if seq is not None and self.seqs[seq][2] == 0:
-            anim = self.seqs[seq][1]
+        split = 0
+        if gait is not None:
+            split = next((i for i, b in enumerate(self.bones) if b[3] == "bip01 spine"), 0)
+        upper, legs = self._anim(seq, blend), self._anim(gait, 0)
         mats = []
-        for b, (parent, value, scale) in enumerate(self.bones):
+        for b, (parent, value, scale, name) in enumerate(self.bones):
+            if merge and name in merge:
+                mats.append(merge[name])
+                continue
+            anim = legs if b < split else upper
             ch = list(value)
             if anim is not None:
                 p = anim + b * 12
@@ -430,10 +451,25 @@ def write_png(path, px, w, h):
     os.replace(tmp, path)
 
 
-def render_skin(path, glow=None):
+def render_skin(path, glow=None, weapon=None):
     model = Studio(path)
-    seq = model.sequence(["idle1", "idle", "ref_aim_knife"])
-    tris = model.triangles(model.pose(seq))
+    if os.environ.get("CZM_RENDER_DEBUG"):
+        print(path, [(q[0], q[3]) for q in model.seqs])
+    idle = model.sequence(["idle1", "idle"])
+    tris = None
+    if weapon and os.path.exists(weapon[0]):
+        aim = model.sequence([weapon[1]], None)
+        if aim is not None:
+            mats = model.pose(aim, model.seqs[aim][3] // 2, idle)  # the middle blend looks straight ahead
+            tris = model.triangles(mats)
+            gun = Studio(weapon[0])
+            names = {b[3]: m for b, m in zip(model.bones, mats)}
+            gun_tris = gun.triangles(gun.pose(0 if gun.seqs else None, merge=names))
+            base = len(model.textures)
+            tris += [(tex + base, v) for tex, v in gun_tris]
+            model.textures = model.textures + gun.textures
+    if tris is None:
+        tris = model.triangles(model.pose(idle))
     pts = [v[0] for _t, vs in tris for v in vs]
     lo = [min(p[k] for p in pts) for k in range(3)]
     hi = [max(p[k] for p in pts) for k in range(3)]
@@ -515,7 +551,11 @@ def main(game, out, only=()):
             if not only and os.path.exists(dst) and os.path.getmtime(dst) >= max(me, os.path.getmtime(src)):
                 continue
             try:
-                px, w, h = render_skin(src, GLOW.get(pid)) if folder == "skins" else render_knife(src)
+                if folder == "skins":
+                    gun = WEAPON.get(pid)
+                    px, w, h = render_skin(src, GLOW.get(pid), gun and (os.path.join(game, gun[0]), gun[1]))
+                else:
+                    px, w, h = render_knife(src)
                 write_png(dst, px, w, h)
                 done += 1
                 print("render:", folder, pid)
