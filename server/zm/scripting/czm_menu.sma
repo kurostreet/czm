@@ -347,7 +347,7 @@ open(id, const key[], page)
 	g_building = 0;
 
 	new list[MAX_ITEMS], count = section_items(id, s, list);
-	new bool:en = czm_lang(id) == CZM_EN, bool:main = equali(g_sections[s][SecKey], "main");
+	new bool:en = czm_lang(id) == CZM_EN, bool:main = equali(g_sections[s][SecKey], "main") != 0;
 	// nine cards, or eight and "more" / "back"
 	new perPage = count > 9 ? 8 : 9, pages = max(1, (count + perPage - 1) / perPage);
 	page = clamp(page, 0, pages - 1);
@@ -360,7 +360,7 @@ open(id, const key[], page)
 	if (g_rich[id])
 		len = rich_head(id, s, en, text, charsmax(text));
 	else
-		len = plain_head(id, s, en, text, charsmax(text));
+		len = plain_head(s, en, text, charsmax(text));
 
 	new first = page * perPage, slot;
 	for (new n = first; n < count && n < first + perPage; n++)
@@ -371,8 +371,18 @@ open(id, const key[], page)
 		if (!off)
 			keys |= (1 << slot);
 		new name[40], sub[48];
-		copy(name, charsmax(name), g_stName[i][0] ? g_stName[i] : (en ? g_items[i][ItEn] : g_items[i][ItRu]));
-		copy(sub, charsmax(sub), g_stSub[i][0] ? g_stSub[i] : (en ? g_items[i][ItSubEn] : g_items[i][ItSubRu]));
+		if (g_stName[i][0])
+			copy(name, charsmax(name), g_stName[i]);
+		else if (en)
+			copy(name, charsmax(name), g_items[i][ItEn]);
+		else
+			copy(name, charsmax(name), g_items[i][ItRu]);
+		if (g_stSub[i][0])
+			copy(sub, charsmax(sub), g_stSub[i]);
+		else if (en)
+			copy(sub, charsmax(sub), g_items[i][ItSubEn]);
+		else
+			copy(sub, charsmax(sub), g_items[i][ItSubRu]);
 		if (g_rich[id])
 			len += formatex(text[len], charsmax(text) - len, "%s%d.%s %s^t%s^t%s^t%s^t%s^n", off ? "\d" : "\r", slot + 1, off ? "" : "\w",
 				name, sub, g_items[i][ItIcon], g_items[i][ItColor], g_stBadge[i]);
@@ -437,7 +447,7 @@ rich_head(id, s, bool:en, text[], max)
 	return len;
 }
 
-plain_head(id, s, bool:en, text[], max)
+plain_head(s, bool:en, text[], max)
 {
 	new chip[96];
 	chip_text(chip, charsmax(chip));
