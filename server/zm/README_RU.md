@@ -14,15 +14,19 @@
 | ADS_HUD | `czm_info.amxx` |
 | LVL_MOD (уровни, токены, магазин, прокачка, пропуск, перевод, промокоды, топ карты, лавка) | `czm_lvl.amxx` + API `server/czm/czm/survival.py` |
 | Ящик с оружием, критические пули, звуки оружия, аирдроп | `czm_lvl_fx.amxx` |
-| GAME_MENU (часть) | меню `menu` / `меню` в `czm_lvl.amxx` |
+| GAME_MENU, голосования (кик, мут, карта, rtv), TeleportRequest, сообщения админам, новости | `czm_game.amxx` |
+| A_ADMIN_MENU, A_BAN_MANAGER, привилегии VIP+ / PREMIUM / DELUXE / TESTER, LogsServer | `czm_admin.amxx` + API `server/czm/czm/survival_mod.py` |
 | WEB_AUTH_BRIDGE, WEB_CONTROL_BRIDGE, сайт kontra-main | `/panel` на counter-zombie.ru |
 
-Ещё не перенесено: админ-меню и баны A_ADMIN_MENU / A_BAN_MANAGER, голосования, TeleportRequest,
-PropsManager, Strafes, отчёты LogsServer, мини-карта (в CS есть свой радар).
+Ещё не перенесено: PropsManager, Strafes, дуэли, мини-карта (в CS есть свой радар).
 
 Скины Gsg9 admin, Sas custom, Leet pirate, Professional и Survivor — свои модели
 `models/player/czm_*` (откуда — в `CREDITS.md`); остальные скины — стоковые модели CS.
 Если своей модели на сервере нет, игрок получает стоковую из поля `base` каталога.
+
+Картинки скинов и ножей в панели рисует `tools/render_models.py` из этих же моделей (поза и
+оружие как в игре, ножи — как их видит игрок) при установке контента: `/zm-test-files/czm-art/`.
+Пока картинки нет, панель показывает прежнюю из `site/assets/lvl/`.
 
 ## Профиль игрока
 

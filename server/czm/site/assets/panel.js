@@ -197,6 +197,16 @@
   });
 
   /* ---------- the panel ---------- */
+  // pictures drawn from the game's own models (render_models.py on the game host); the older art
+  // stays until the server has drawn one
+  var ART = '/zm-test-files/czm-art/';
+  document.addEventListener('error', function (ev) {
+    var img = ev.target;
+    if (img.tagName !== 'IMG' || !img.getAttribute('data-old')) return;
+    img.src = img.getAttribute('data-old'); img.removeAttribute('data-old'); img.classList.remove('render');
+    if (img.parentNode) img.parentNode.classList.remove('art');
+  }, true);
+
   function start() {
     // the game opens the panel with a one-time link: trade it for a session, then forget it
     var link = /^#login=([A-Za-z0-9_-]{20,128})$/.exec(location.hash);
@@ -331,7 +341,7 @@
       var have = owned.indexOf(it.id) >= 0, on = s.equipped[catKey] === it.id;
       return '<article class="item card' + (on ? ' on' : '') + '">' +
         (on ? '<span class="badge on">' + esc(t('worn')) + '</span>' : have ? '<span class="badge">' + esc(t('owned')) + '</span>' : '') +
-        '<div class="pic"><img loading="lazy" src="/assets/lvl/' + folder + '/' + esc(it.id) + '.webp" alt=""></div>' +
+        '<div class="pic art"><img class="render" loading="lazy" src="' + ART + folder + '/' + esc(it.id) + '.png" data-old="/assets/lvl/' + folder + '/' + esc(it.id) + '.webp" alt=""></div>' +
         '<div class="meta"><div class="name">' + esc(name(it)) + '</div>' + wearButton(catKey, it, have, on) + '</div></article>';
     }).join('');
   }

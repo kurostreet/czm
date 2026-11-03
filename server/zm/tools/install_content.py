@@ -8,7 +8,8 @@ Runs as root on the game host:
 SRC_DIR holds kontra-content.zip (the owner's maps and sounds) and gb/ with the original map
 archives from GameBanana (wads, skies, models the maps need). Only our own files are written:
 none of them shares a name with a stock file. Each map that needs a file the game does not ship gets a
-maps/<map>.res, so players download it with the map.
+maps/<map>.res, so players download it with the map. Then render_models.py draws the panel's pictures
+of the skins and knives into FASTDL_DIR/czm-art/ (served as /zm-test-files/czm-art/).
 """
 import json
 import os
@@ -234,6 +235,14 @@ def main(src, game, fastdl):
             with open(path, "w") as fh:
                 fh.write(body)
             os.chown(path, *owner)
+
+    # the panel's pictures of the skins and knives, drawn from these models at the lowest priority
+    art = os.path.join(fastdl, "czm-art")
+    subprocess.run(["nice", "-n", "19", sys.executable, "-I", os.path.join(HERE, "render_models.py"), cstrike, art],
+                   check=False)
+    for root, dirs, files in os.walk(art):
+        for f in dirs + files:
+            os.chown(os.path.join(root, f), *owner)
 
     missing = [m for m in MAPS if not os.path.exists(os.path.join(cstrike, "maps", m + ".bsp"))]
     print(f"placed {len(placed)} files; maps missing: {missing or 'none'}")

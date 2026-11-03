@@ -120,6 +120,9 @@ input:focus,select:focus{outline:none;border-color:var(--gold)}
 .items.wide .item .pic{aspect-ratio:4/3;align-items:center}
 .item .pic img{width:100%;height:100%;object-fit:cover;transition:transform .5s ease}
 .item:hover .pic img{transform:scale(1.04)}
+/* pictures drawn from the game's models: transparent, so the card lights them like the older art */
+.item .pic.art{background:radial-gradient(34% 50% at 32% 44%,rgba(40,140,255,.30),transparent 72%),radial-gradient(34% 50% at 68% 44%,rgba(255,120,50,.24),transparent 72%),radial-gradient(90% 70% at 50% 35%,var(--surface2),var(--surface))}
+.item .pic img.render{object-fit:contain;filter:drop-shadow(0 8px 14px rgba(0,0,0,.3))}
 .item .meta{padding:12px 12px 14px;display:grid;gap:8px}
 .item .name{font-weight:600}
 .item .price{color:var(--gold);font-weight:600;font-variant-numeric:tabular-nums}
