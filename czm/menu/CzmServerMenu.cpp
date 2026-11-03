@@ -269,7 +269,7 @@ A card sends slotN like a key, a tab asks the server for its section (czm_menu_t
 sends slot10. The window is modal: the menu is opened on purpose and closes with a pick.
 =================
 */
-#define SM_MAX_TABS  12
+#define SM_MAX_TABS  32
 #define SM_MAX_CARDS 10
 
 struct CzmMenuTab
@@ -290,7 +290,7 @@ struct CzmMenuCard
 struct CzmRichMenu
 {
 	int serial, validSlots;
-	char tab[16], head[64], sub[64], chip[96], foot[192];
+	char tab[16], head[64], sub[96], chip[96], foot[192], parent[16], root[16];
 	CzmMenuTab tabs[SM_MAX_TABS];
 	int numTabs;
 	CzmMenuCard cards[SM_MAX_CARDS];
@@ -384,6 +384,8 @@ static void ParseRich( const char *value, CzmRichMenu &m )
 			NextField( p, end, m.sub, sizeof( m.sub ));
 			NextField( p, end, m.chip, sizeof( m.chip ));
 			NextField( p, end, m.foot, sizeof( m.foot ));
+			NextField( p, end, m.parent, sizeof( m.parent ));
+			NextField( p, end, m.root, sizeof( m.root ));
 		}
 		else if( !strncmp( line, "#tabs", 5 ))
 		{
@@ -440,6 +442,49 @@ static void ParseRich( const char *value, CzmRichMenu &m )
 	}
 }
 
+// Native AMXX selectors (players, duration, shop categories) keep their real slot
+// commands while using the same window as the registered server sections.
+static void PlainAsRich( const char *value, const CzmRichMenu *previous, CzmRichMenu &m )
+{
+	ParseMenu( value );
+	if( previous )
+		m = *previous;
+	else
+		memset( &m, 0, sizeof( m ));
+	m.serial = s_menu.serial;
+	m.validSlots = s_menu.validSlots;
+	Q_strncpy( m.parent, previous && previous->tab[0] ? previous->tab : previous && previous->parent[0] ? previous->parent : "main", sizeof( m.parent ));
+	Q_strncpy( m.root, previous && previous->root[0] ? previous->root : previous && previous->tab[0] ? previous->tab : "main", sizeof( m.root ));
+	m.tab[0] = 0;
+	Q_strncpy( m.head, CZM_IsRussian() ? "МЕНЮ СЕРВЕРА" : "SERVER MENU", sizeof( m.head ));
+	Q_strncpy( m.sub, s_menu.title, sizeof( m.sub ));
+	if( !previous )
+		Q_strncpy( m.foot, "COUNTER ZOMBIE MOBILE", sizeof( m.foot ));
+	// Plain menus can carry a selected player or a confirmation above the choices.
+	// Preserve it visibly instead of hiding that context in the underlying HUD.
+	if( s_menu.numLines )
+	{
+		char context[256];
+		snprintf( context, sizeof( context ), "%s · %s", s_menu.title, s_menu.lines[0] );
+		Q_strncpy( m.sub, context, sizeof( m.sub ));
+	}
+	m.numCards = 0;
+	for( int i = 0; i < s_menu.numCards && m.numCards < SM_MAX_CARDS; i++ )
+	{
+		const CzmCard &plain = s_menu.cards[i];
+		if( plain.key == 10 )
+			continue;
+		CzmMenuCard &card = m.cards[m.numCards++];
+		memset( &card, 0, sizeof( card ));
+		card.key = plain.key;
+		card.enabled = plain.enabled;
+		card.color = PackRGBA( 229, 63, 77, 255 );
+		Q_strncpy( card.name, plain.text, sizeof( card.name ));
+		Q_strncpy( card.sub, plain.right, sizeof( card.sub ));
+		Q_strncpy( card.icon, "chevron_right", sizeof( card.icon ));
+	}
+}
+
 class CCzmServerWindow : public CMenuBaseClientWindow
 {
 public:
@@ -452,6 +497,7 @@ public:
 	// a card was picked: the next menu of the server may still come
 	bool Waiting( void ) const { return m_iPicked >= 0 && uiStatic.realTime - m_iPickTime < 700; }
 	int Serial( void ) const { return m_menu.serial; }
+	const CzmRichMenu &Menu( void ) const { return m_menu; }
 
 	void Show() override;
 	void Hide() override;
@@ -464,8 +510,11 @@ private:
 	{
 		HIT_NONE = 0,
 		HIT_CLOSE,
+		HIT_BACK,
+		HIT_TABS_UP,
+		HIT_TABS_DOWN,
 		HIT_TAB = 10,    // + tab
-		HIT_CARD = 40,   // + card
+		HIT_CARD = 100,  // + card, separate from all 32 possible tabs
 	};
 
 	void Layout( int shift );
@@ -482,10 +531,11 @@ private:
 	int m_iPressed;
 	int m_iPicked;           // card, -1 none
 	int m_iOpenTime, m_iChangeTime, m_iPickTime;
+	int m_iTabFirst, m_iTabRows;
 	bool m_bClosing;
 
 	int W, H;
-	CzmRect m_win, m_head, m_side, m_body, m_foot, m_close;
+	CzmRect m_win, m_head, m_side, m_body, m_foot, m_close, m_back, m_tabsUp, m_tabsDown;
 };
 
 static int s_iClosedSerial = -1;
@@ -497,6 +547,8 @@ CCzmServerWindow::CCzmServerWindow() : BaseClass( "CzmServerWindow" )
 	m_iPressed = HIT_NONE;
 	m_iPicked = -1;
 	m_iOpenTime = m_iChangeTime = m_iPickTime = 0;
+	m_iTabFirst = 0;
+	m_iTabRows = 10;
 	m_bClosing = false;
 	W = H = 0;
 }
@@ -504,7 +556,8 @@ CCzmServerWindow::CCzmServerWindow() : BaseClass( "CzmServerWindow" )
 void CCzmServerWindow::Open( const CzmRichMenu &menu )
 {
 	m_menu = menu;
-	Q_strncpy( m_szTab, menu.tab, sizeof( m_szTab ));
+	Q_strncpy( m_szTab, menu.root[0] ? menu.root : menu.tab, sizeof( m_szTab ));
+	m_iTabFirst = 0;
 	m_iPressed = HIT_NONE;
 	m_iPicked = -1;
 	m_iOpenTime = m_iChangeTime = uiStatic.realTime;
@@ -518,7 +571,10 @@ void CCzmServerWindow::Update( const CzmRichMenu &menu )
 	bool sameTab = !strcmp( menu.tab, m_menu.tab );
 
 	m_menu = menu;
-	Q_strncpy( m_szTab, menu.tab, sizeof( m_szTab ));
+	Q_strncpy( m_szTab, menu.root[0] ? menu.root : menu.tab, sizeof( m_szTab ));
+	for( int i = 0; i < menu.numTabs; i++ )
+		if( !strcmp( menu.tabs[i].key, m_szTab ) && ( i < m_iTabFirst || i >= m_iTabFirst + m_iTabRows ))
+			m_iTabFirst = i;
 	m_iPressed = HIT_NONE;
 	m_iPicked = -1;
 	// another section slides in, the same one (a toggle, a new count) just changes
@@ -574,18 +630,40 @@ void CCzmServerWindow::Layout( int shift )
 	m_close = CZM_Rect( m_head.x + m_head.w - closeS - H * 0.025f, m_head.y + ( headH - closeS ) / 2, closeS, closeS );
 
 	int pad = H * 0.016f, tabH = H * 0.064f, tabGap = H * 0.008f;
+	int tabTop = m_side.y + pad;
+	m_tabsUp = m_tabsDown = CZM_Rect( 0, 0, 0, 0 );
+	if( m_menu.numTabs > 10 )
+	{
+		int scrollH = H * 0.036f;
+		m_iTabRows = Q_max( 1, ( m_side.h - pad * 2 - scrollH * 2 - tabGap * 2 ) / ( tabH + tabGap ));
+		m_iTabFirst = bound( 0, m_iTabFirst, Q_max( 0, m_menu.numTabs - m_iTabRows ));
+		m_tabsUp = CZM_Rect( m_side.x + pad, tabTop, m_side.w - pad * 2, scrollH );
+		m_tabsDown = CZM_Rect( m_side.x + pad, m_side.y + m_side.h - pad - scrollH, m_side.w - pad * 2, scrollH );
+		tabTop += scrollH + tabGap;
+	}
+	else
+	{
+		m_iTabFirst = 0;
+		m_iTabRows = m_menu.numTabs;
+		if( m_menu.numTabs )
+			tabH = Q_min( tabH, ( m_side.h - pad * 2 - tabGap * ( m_menu.numTabs - 1 )) / m_menu.numTabs );
+	}
 	for( int i = 0; i < m_menu.numTabs; i++ )
-		m_menu.tabs[i].rect = CZM_Rect( m_side.x + pad, m_side.y + pad + i * ( tabH + tabGap ), m_side.w - pad * 2, tabH );
+		m_menu.tabs[i].rect = i >= m_iTabFirst && i < m_iTabFirst + m_iTabRows
+			? CZM_Rect( m_side.x + pad, tabTop + ( i - m_iTabFirst ) * ( tabH + tabGap ), m_side.w - pad * 2, tabH )
+			: CZM_Rect( 0, 0, 0, 0 );
 
 	// two columns, the first filled first, five rows at most like the server sends nine cards
 	int cpad = H * 0.02f, gap = H * 0.015f;
 	int cardW = ( m_body.w - cpad * 2 - gap ) / 2;
-	int cardH = Q_min( (int)( H * 0.10f ), ( m_body.h - cpad * 2 - gap * 4 ) / 5 );
+	int navigation = m_menu.parent[0] ? H * 0.066f : 0;
+	m_back = navigation ? CZM_Rect( m_body.x + cpad, m_body.y + cpad, H * 0.24f, H * 0.05f ) : CZM_Rect( 0, 0, 0, 0 );
+	int cardH = Q_min( (int)( H * 0.10f ), ( m_body.h - navigation - cpad * 2 - gap * 4 ) / 5 );
 	int perColumn = Q_max( 1, ( m_menu.numCards + 1 ) / 2 );
 	for( int i = 0; i < m_menu.numCards; i++ )
 	{
 		int col = i / perColumn, row = i % perColumn;
-		m_menu.cards[i].rect = CZM_Rect( m_body.x + cpad + col * ( cardW + gap ), m_body.y + cpad + row * ( cardH + gap ), cardW, cardH );
+		m_menu.cards[i].rect = CZM_Rect( m_body.x + cpad + col * ( cardW + gap ), m_body.y + cpad + navigation + row * ( cardH + gap ), cardW, cardH );
 	}
 }
 
@@ -595,9 +673,15 @@ int CCzmServerWindow::HitTest( void ) const
 
 	if( m_close.Grown( H * 0.02f ).Contains( x, y ))
 		return HIT_CLOSE;
+	if( m_back.w && m_back.Contains( x, y ))
+		return HIT_BACK;
+	if( m_tabsUp.w && m_tabsUp.Contains( x, y ))
+		return HIT_TABS_UP;
+	if( m_tabsDown.w && m_tabsDown.Contains( x, y ))
+		return HIT_TABS_DOWN;
 	for( int i = 0; i < m_menu.numTabs; i++ )
 	{
-		if( m_menu.tabs[i].rect.Contains( x, y ))
+		if( m_menu.tabs[i].rect.w > 0 && m_menu.tabs[i].rect.Contains( x, y ))
 			return HIT_TAB + i;
 	}
 	for( int i = 0; i < m_menu.numCards; i++ )
@@ -616,12 +700,23 @@ void CCzmServerWindow::Activate( int hit )
 		Close( true );
 		return;
 	}
+	if( hit == HIT_BACK && m_menu.parent[0] )
+	{
+		CZM_PlayClick();
+		EngFuncs::ClientCmdF( false, "czm_menu_tab %s\n", m_menu.parent );
+		return;
+	}
+	if( hit == HIT_TABS_UP || hit == HIT_TABS_DOWN )
+	{
+		m_iTabFirst = bound( 0, m_iTabFirst + ( hit == HIT_TABS_UP ? -1 : 1 ), Q_max( 0, m_menu.numTabs - m_iTabRows ));
+		return;
+	}
 
 	if( hit >= HIT_TAB && hit < HIT_TAB + m_menu.numTabs )
 	{
 		const CzmMenuTab &t = m_menu.tabs[hit - HIT_TAB];
 
-		if( !strcmp( t.key, m_szTab ))
+		if( !strcmp( t.key, m_menu.tab ))
 			return;
 		CZM_PlayClick();
 		Q_strncpy( m_szTab, t.key, sizeof( m_szTab ));
@@ -646,7 +741,13 @@ bool CCzmServerWindow::KeyDown( int key )
 {
 	if( UI::Key::IsEscape( key ))
 	{
-		Close( true );
+		if( m_menu.parent[0] ) Activate( HIT_BACK );
+		else Close( true );
+		return true;
+	}
+	if( key == K_MWHEELUP || key == K_MWHEELDOWN )
+	{
+		Activate( key == K_MWHEELUP ? HIT_TABS_UP : HIT_TABS_DOWN );
 		return true;
 	}
 
@@ -761,6 +862,8 @@ void CCzmServerWindow::DrawTabs( int a )
 	{
 		const CzmMenuTab &t = m_menu.tabs[i];
 		const CzmRect &r = t.rect;
+		if( r.w <= 0 )
+			continue;
 		bool on = !strcmp( t.key, m_szTab ), pressed = IsPressed( HIT_TAB + i );
 		int icon = r.h * 0.42f, ix = r.x + r.h * 0.30f;
 
@@ -785,6 +888,13 @@ void CCzmServerWindow::DrawTabs( int a )
 		}
 		CZM_DrawText( font, lx, r.y + ( r.h - CZM_FontHeight( font )) / 2, lw, t.name, on ? CZM_White( a ) : PackRGBA( 201, 209, 220, a ));
 	}
+	if( m_tabsUp.w )
+	{
+		CZM_DrawButton( UI_DIR "button_secondary.png", m_tabsUp, CZM_IsRussian() ? "Выше" : "Up",
+			CZM_White( m_iTabFirst > 0 ? a : a / 3 ), IsPressed( HIT_TABS_UP ), CZMF_UI_META );
+		CZM_DrawButton( UI_DIR "button_secondary.png", m_tabsDown, CZM_IsRussian() ? "Ниже" : "Down",
+			CZM_White( m_iTabFirst + m_iTabRows < m_menu.numTabs ? a : a / 3 ), IsPressed( HIT_TABS_DOWN ), CZMF_UI_META );
+	}
 }
 
 void CCzmServerWindow::DrawCards( int a )
@@ -793,6 +903,9 @@ void CCzmServerWindow::DrawCards( int a )
 	float t = Q_min( 1.0f, ( uiStatic.realTime - m_iChangeTime ) / 160.0f );
 	int ca = a * t;
 	int slide = ( 1.0f - t ) * H * 0.02f;
+	if( m_back.w )
+		CZM_DrawButton( UI_DIR "button_secondary.png", m_back, CZM_IsRussian() ? "‹ Назад" : "‹ Back",
+			CZM_White( a ), IsPressed( HIT_BACK ), CZMF_UI_META );
 
 	for( int i = 0; i < m_menu.numCards; i++ )
 	{
@@ -1320,6 +1433,7 @@ bool CZM_TeamShow( int menuType, int param1 )
 static bool ServerWindowFrame( const char *value )
 {
 	bool rich = IsRichMenu( value );
+	bool plain = !rich && value && value[0] && CL_IsActive() && CZM_OfficialSlotNow() >= 0 && !CZM_IsWeaponMenu( value );
 	bool open = menu_czmserver && CZM_ClientMenuOpen( menu_czmserver );
 	int serial = -1;
 
@@ -1328,12 +1442,13 @@ static bool ServerWindowFrame( const char *value )
 
 	if( open )
 	{
-		if( rich )
+		if( rich || plain )
 		{
 			if( serial != menu_czmserver->Serial( ))
 			{
 				CzmRichMenu menu;
-				ParseRich( value, menu );
+				if( rich ) ParseRich( value, menu );
+				else PlainAsRich( value, &menu_czmserver->Menu(), menu );
 				menu_czmserver->Update( menu );
 			}
 			return true;
@@ -1345,18 +1460,20 @@ static bool ServerWindowFrame( const char *value )
 				menu_czmserver->Close( false );
 			return true;
 		}
-		// a menu of another plugin: the cards take it
+		// Weapon selection retains the shop's wheel/grid handling.
 		menu_czmserver->Close( false );
 		return false;
 	}
 
-	if( rich && serial != s_iClosedSerial && menu_czmserver && CL_IsActive() && !uiStatic.menu.IsActive( ))
+	if(( rich || plain ) && serial != s_iClosedSerial && menu_czmserver && CL_IsActive() && !uiStatic.menu.IsActive()
+		&& !uiStatic.client.IsActive( ))
 	{
 		CzmRichMenu menu;
-		ParseRich( value, menu );
+		if( rich ) ParseRich( value, menu );
+		else PlainAsRich( value, NULL, menu );
 		menu_czmserver->Open( menu );
 	}
-	return rich;
+	return rich || plain;
 }
 
 // A real spectator can return through the same auto-team action as the entry card.

@@ -97,22 +97,25 @@ inline void PaintProgress(Canvas &c,const Rect &p,const ProgressInfo &s,bool ru,
         Max(0,s.killsLeft),seconds/60,seconds%60);
     c.Blend(x,y,w,h,10,14,22,205*p.opacity);
     c.Blend(x,y,edge,h,r,g,b,a);
-    float lh=h*.32f,nh=h*.32f;
+    const int footerY=y+h-pad-c.LabelHeight();
+    const int by=footerY-Max(2,pad/2)-barH,bw=w-pad*2;
+    float rowH=by-y-pad-Max(2,pad/2);
+    if(rowH<1)rowH=1;
+    float lh=h*.32f<rowH?h*.32f:rowH,nh=lh;
     const float half=(w-pad*3)/2.0f;
     if(GlyphWidth(level,lh)>half) lh=half/(strlen(level)*.65f);
     if(GlyphWidth(tokens,nh)>half-h*.24f) nh=(half-h*.24f)/(strlen(tokens)*.65f);
-    const float top=y+pad,coin=h*.17f;
+    const float top=y+pad,coin=h*.17f<rowH?h*.17f:rowH;
     c.Glyphs(x+pad,top,lh,level,r,g,b,p.opacity);
     const float nx=x+w-pad-GlyphWidth(tokens,nh);
-    c.Blend((int)(nx-coin-pad*.5f),(int)(top+(h*.32f-coin)/2),coin,coin,231,187,96,a);
-    c.Blend((int)(nx-coin-pad*.5f+coin*.3f),(int)(top+(h*.32f-coin)/2+coin*.2f),Max(1,coin*.2f),Max(1,coin*.6f),120,76,20,a);
+    c.Blend((int)(nx-coin-pad*.5f),(int)top,coin,coin,231,187,96,a);
+    c.Blend((int)(nx-coin-pad*.5f+coin*.3f),(int)(top+coin*.2f),Max(1,coin*.2f),Max(1,coin*.6f),120,76,20,a);
     c.Glyphs(nx,top,nh,tokens,231,187,96,p.opacity);
-    const int by=y+h*.53f,bw=w-pad*2;
     c.Blend(x+pad,by,bw,barH,255,255,255,30*p.opacity);
     int filled=bw*ProgressFraction(s);
     if(filled>0)c.Blend(x+pad,by,filled,barH,r,g,b,a);
     Fit(c,hint,bw,fitted,sizeof(fitted));
-    if(fitted[0])c.Label(x+pad,y+h-pad-c.LabelHeight(),fitted,161*p.opacity,172*p.opacity,191*p.opacity);
+    if(fitted[0])c.Label(x+pad,footerY,fitted,161*p.opacity,172*p.opacity,191*p.opacity);
 }
 
 // a soft dark band at the top (down = true) or the bottom edge of the screen

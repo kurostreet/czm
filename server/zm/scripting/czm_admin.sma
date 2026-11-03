@@ -45,7 +45,7 @@ enum
 	SCOPE_ALL
 }
 
-new g_staff[MAX_PLAYERS + 1], g_session[MAX_PLAYERS + 1], g_priv[MAX_PLAYERS + 1];
+new g_staff[MAX_PLAYERS + 1], g_session[MAX_PLAYERS + 1], g_priv[MAX_PLAYERS + 1], g_privUntil[MAX_PLAYERS + 1];
 
 // Kontra's privileges: index 0 is none (the same order as czm_admin.inc and the API)
 new const PRIV_KEYS[][] = { "", "vip", "premium", "deluxe", "tester" };
@@ -190,13 +190,13 @@ public native_admin_menu(plugin, params)
 public native_privilege(plugin, params)
 {
 	new id = get_param(1);
-	return (1 <= id <= MaxClients) ? g_priv[id] : 0;
+	return privilege_of(id);
 }
 
 public native_privilege_name(plugin, params)
 {
 	new id = get_param(1);
-	return set_string(2, (1 <= id <= MaxClients) ? PRIV_NAMES[g_priv[id]] : "", get_param(3));
+	return set_string(2, (1 <= id <= MaxClients) ? PRIV_NAMES[privilege_of(id)] : "", get_param(3));
 }
 
 // What the staff did goes to the owner (bot /zmlog), as LogsServer of Kontra kept it
@@ -242,6 +242,7 @@ public czm_player_ready(id, profile)
 	g_session[id]++;
 	g_staff[id] = CZM_STAFF_NONE;
 	g_priv[id] = 0;
+	g_privUntil[id] = 0;
 	set_mute(id, false);
 	if (is_user_bot(id) || is_user_hltv(id) || !czm_api_ready())
 		return;
@@ -271,11 +272,14 @@ public on_check(EzHttpRequest:request)
 	ezjson_object_get_string(root, "role", role, charsmax(role));
 	g_staff[id] = equal(role, "admin") ? CZM_STAFF_ADMIN : (equal(role, "moderator") ? CZM_STAFF_MODERATOR : CZM_STAFF_NONE);
 	g_priv[id] = 0;
+	g_privUntil[id] = 0;
 	if (ezjson_object_has_value(root, "privilege", EzJSONObject))
 	{
 		new kind[16];
 		ezjson_object_get_string(root, "privilege.kind", kind, charsmax(kind), true);
 		g_priv[id] = priv_index(kind);
+		new left = ezjson_object_get_number(root, "privilege.left", true);
+		if (left >= 0) g_privUntil[id] = get_systime() + left;
 	}
 	if (ezjson_object_has_value(root, "ban", EzJSONObject))
 	{
@@ -300,6 +304,7 @@ public client_disconnected(id)
 	g_session[id]++;
 	g_staff[id] = CZM_STAFF_NONE;
 	g_priv[id] = 0;
+	g_privUntil[id] = 0;
 	g_muted[id] = false;
 	g_frozen[id] = false;
 	remove_task(TASK_UNMUTE + id);
@@ -538,33 +543,118 @@ texts(menu, id)
 // the admin tab of the server menu (czm_menu): the staff only, some cards for head administrators
 menu_register()
 {
-	czm_menu_section("admin", "Админ", "Admin", "shield", 90, CZM_MENU_STAFF);
-	czm_menu_item("main", "go_admin", "Админ-меню", "Admin menu", "Только для администрации", "The staff only", "shield", "E53F4D", "#admin", 5, CZM_MENU_STAFF);
-	czm_menu_item("admin", "adm_punish", "Наказать игрока", "Punish a player", "Кик, бан, мут, убить", "Kick, ban, mute, kill", "block", "E53F4D", "on_czm_menu_admin", 10, CZM_MENU_STAFF);
-	czm_menu_item("admin", "adm_give", "Выдать игроку", "Give a player", "HP, оружие, паки, предметы", "HP, weapons, packs, items", "gift", "6BDAA7", "on_czm_menu_admin", 20, CZM_MENU_HEAD);
-	czm_menu_item("admin", "adm_mode", "Режим раунда", "Round mode", "Немезида, выживший, рой", "Nemesis, survivor, swarm", "skull", "A855F7", "on_czm_menu_admin", 30, CZM_MENU_HEAD);
-	czm_menu_item("admin", "adm_say", "Сообщение всем", "Message to everyone", "Крупно на экране", "Big on the screen", "chat", "63A1EF", "on_czm_menu_admin", 40, CZM_MENU_STAFF);
-	czm_menu_item("admin", "adm_poll", "Опрос ДА / НЕТ", "Yes / no poll", "Спросить всех", "Ask everyone", "flag", "F59E0B", "on_czm_menu_admin", 50, CZM_MENU_STAFF);
-	czm_menu_item("admin", "adm_map", "Сменить карту", "Change the map", "Сразу или после раунда", "Now or after the round", "map", "22D3EE", "on_czm_menu_admin", 60, CZM_MENU_STAFF);
-	czm_menu_item("admin", "adm_airdrop", "Сбросить аирдроп", "Drop an airdrop", "Ящик с наградой", "A box with a reward", "box", "E7BB60", "on_czm_menu_admin", 70, CZM_MENU_HEAD);
-	czm_menu_item("admin", "adm_board", "Нарушители", "Violators", "Снять бан или мут", "Lift a ban or a mute", "block", "9BA6B8", "on_czm_menu_admin", 80, CZM_MENU_STAFF);
-	czm_menu_item("admin", "adm_inbox", "Сообщения игроков", "Players' messages", "Что писали админам", "What they wrote", "send", "F97316", "on_czm_menu_admin", 90, CZM_MENU_STAFF);
-	czm_menu_item("admin", "adm_news", "Новость сервера", "Server news", "В меню и на сайте", "In the menu and on the site", "bell", "63A1EF", "on_czm_menu_admin", 100, CZM_MENU_HEAD);
-	czm_menu_item("admin", "adm_priv", "Привилегия игроку", "Give a privilege", "VIP+, PREMIUM, DELUXE", "VIP+, PREMIUM, DELUXE", "crown", "E7BB60", "on_czm_menu_admin", 110, CZM_MENU_HEAD);
+    czm_menu_section("moderator", "Модератор", "Moderator", "shield", 80, CZM_MENU_MODERATOR);
+    czm_menu_section("admin", "Админ", "Admin", "shield", 90, CZM_MENU_ADMIN);
+    czm_menu_item("main", "go_moderator", "Модерация", "Moderation", "Игроки и порядок на сервере", "Players and server order", "shield", "63A1EF", "#moderator", 44, CZM_MENU_MODERATOR);
+    czm_menu_item("main", "go_admin", "Админ-меню", "Admin menu", "Управление сервером", "Server administration", "shield", "E53F4D", "#admin", 45, CZM_MENU_ADMIN);
+
+    czm_menu_section("mod_players", "Игроки", "Players", "users", 10, CZM_MENU_MODERATOR, "moderator");
+    czm_menu_section("mod_server", "Сервер", "Server", "globe", 20, CZM_MENU_MODERATOR, "moderator");
+    czm_menu_section("mod_messages", "Обращения", "Inbox", "send", 30, CZM_MENU_MODERATOR, "moderator");
+    czm_menu_item("moderator", "mod_go_players", "Игроки", "Players", "Наказания и нарушители", "Sanctions and violators", "users", "E53F4D", "#mod_players", 10);
+    czm_menu_item("moderator", "mod_go_server", "Сервер", "Server", "Сообщения, опросы, карты", "Messages, polls, maps", "globe", "63A1EF", "#mod_server", 20);
+    czm_menu_item("moderator", "mod_go_messages", "Обращения игроков", "Players' messages", "Сообщения администрации", "Messages to the staff", "send", "F97316", "#mod_messages", 30);
+    czm_menu_item("mod_players", "mod_punish", "Наказать игрока", "Punish a player", "Кик, бан, мут, убить", "Kick, ban, mute, kill", "block", "E53F4D", "on_czm_menu_admin", 10, CZM_MENU_MODERATOR);
+    czm_menu_item("mod_players", "mod_board", "Нарушители", "Violators", "Баны и муты", "Bans and mutes", "block", "9BA6B8", "on_czm_menu_admin", 20, CZM_MENU_MODERATOR);
+    czm_menu_item("mod_server", "mod_say", "Сообщение всем", "Message to everyone", "Крупно на экране", "Big on the screen", "chat", "63A1EF", "on_czm_menu_admin", 10, CZM_MENU_MODERATOR);
+    czm_menu_item("mod_server", "mod_poll", "Опрос ДА / НЕТ", "Yes / no poll", "Спросить всех", "Ask everyone", "flag", "F59E0B", "on_czm_menu_admin", 20, CZM_MENU_MODERATOR);
+    czm_menu_item("mod_server", "mod_map", "Сменить карту", "Change the map", "Сразу или после раунда", "Now or after the round", "map", "22D3EE", "on_czm_menu_admin", 30, CZM_MENU_MODERATOR);
+    czm_menu_item("mod_messages", "mod_inbox", "Сообщения игроков", "Players' messages", "Прочитать обращения", "Read messages", "send", "F97316", "on_czm_menu_admin", 10, CZM_MENU_MODERATOR);
+
+    czm_menu_section("admin_players", "Игроки", "Players", "users", 10, CZM_MENU_ADMIN, "admin");
+    czm_menu_section("admin_server", "Сервер", "Server", "globe", 20, CZM_MENU_ADMIN, "admin");
+    czm_menu_section("admin_messages", "Обращения", "Inbox", "send", 30, CZM_MENU_ADMIN, "admin");
+    czm_menu_item("admin", "adm_go_players", "Игроки", "Players", "Выдача, привилегии, наказания", "Grants, privileges, sanctions", "users", "E53F4D", "#admin_players", 10);
+    czm_menu_item("admin", "adm_go_server", "Сервер", "Server", "Режимы, карты, новости", "Modes, maps, news", "globe", "63A1EF", "#admin_server", 20);
+    czm_menu_item("admin", "adm_go_messages", "Обращения игроков", "Players' messages", "Сообщения администрации", "Messages to the staff", "send", "F97316", "#admin_messages", 30);
+    czm_menu_item("admin_players", "adm_punish", "Наказать игрока", "Punish a player", "Кик, бан, мут, убить", "Kick, ban, mute, kill", "block", "E53F4D", "on_czm_menu_admin", 10, CZM_MENU_ADMIN);
+    czm_menu_item("admin_players", "adm_give", "Выдать игроку", "Give a player", "HP, оружие, паки, предметы", "HP, weapons, packs, items", "gift", "6BDAA7", "on_czm_menu_admin", 20, CZM_MENU_ADMIN);
+    czm_menu_item("admin_players", "adm_board", "Нарушители", "Violators", "Снять бан или мут", "Lift a ban or a mute", "block", "9BA6B8", "on_czm_menu_admin", 30, CZM_MENU_ADMIN);
+    czm_menu_item("admin_players", "adm_priv", "Привилегия игроку", "Give a privilege", "VIP+, PREMIUM, DELUXE", "VIP+, PREMIUM, DELUXE", "crown", "E7BB60", "on_czm_menu_admin", 40, CZM_MENU_ADMIN);
+    czm_menu_item("admin_server", "adm_mode", "Режим раунда", "Round mode", "Немезида, выживший, рой", "Nemesis, survivor, swarm", "skull", "A855F7", "on_czm_menu_admin", 10, CZM_MENU_ADMIN);
+    czm_menu_item("admin_server", "adm_say", "Сообщение всем", "Message to everyone", "Крупно на экране", "Big on the screen", "chat", "63A1EF", "on_czm_menu_admin", 20, CZM_MENU_ADMIN);
+    czm_menu_item("admin_server", "adm_poll", "Опрос ДА / НЕТ", "Yes / no poll", "Спросить всех", "Ask everyone", "flag", "F59E0B", "on_czm_menu_admin", 30, CZM_MENU_ADMIN);
+    czm_menu_item("admin_server", "adm_map", "Сменить карту", "Change the map", "Сразу или после раунда", "Now or after the round", "map", "22D3EE", "on_czm_menu_admin", 40, CZM_MENU_ADMIN);
+    czm_menu_item("admin_server", "adm_airdrop", "Сбросить аирдроп", "Drop an airdrop", "Ящик с наградой", "A box with a reward", "box", "E7BB60", "on_czm_menu_admin", 50, CZM_MENU_ADMIN);
+    czm_menu_item("admin_server", "adm_news", "Новость сервера", "Server news", "В меню и на сайте", "In the menu and on the site", "bell", "63A1EF", "on_czm_menu_admin", 60, CZM_MENU_ADMIN);
+    czm_menu_item("admin_messages", "adm_inbox", "Сообщения игроков", "Players' messages", "Что писали админам", "What they wrote", "send", "F97316", "on_czm_menu_admin", 10, CZM_MENU_ADMIN);
+
+    new const access[] = {CZM_MENU_ALL, CZM_MENU_VIP, CZM_MENU_PREMIUM, CZM_MENU_DELUXE};
+    for (new role = 1; role <= 3; role++)
+    {
+        new child[16], key[24];
+        formatex(child, charsmax(child), "%s_info", PRIV_KEYS[role]);
+        czm_menu_section(PRIV_KEYS[role], PRIV_NAMES[role], PRIV_NAMES[role], "crown", 60 + role, access[role]);
+        czm_menu_section(child, "Привилегия", "Privilege", "crown", 10, access[role], PRIV_KEYS[role]);
+        formatex(key, charsmax(key), "%s_details", PRIV_KEYS[role]);
+        new target[20];
+        formatex(target, charsmax(target), "#%s", child);
+        czm_menu_item(PRIV_KEYS[role], key, "Моя привилегия", "My privilege", "Статус и срок действия", "Status and duration", "crown", "E7BB60", target, 10, access[role]);
+        formatex(key, charsmax(key), "%s_panel", PRIV_KEYS[role]);
+        czm_menu_item(PRIV_KEYS[role], key, "Панель на сайте", "Player panel", "Раздел вашего сервера", "Your server's panel", "globe", "6BDAA7", "on_czm_menu_priv", 20, access[role]);
+        formatex(key, charsmax(key), "%s_status", PRIV_KEYS[role]);
+        czm_menu_item(child, key, "Срок действия", "Time remaining", "Ваша активная привилегия", "Your active privilege", "clock", "E7BB60", "on_czm_menu_priv", 10, access[role]);
+        formatex(key, charsmax(key), "%s_lvl", PRIV_KEYS[role]);
+        czm_menu_item(child, key, "LVL MOD", "LVL MOD", "Уровень и предметы сервера", "Level and server items", "crown", "63A1EF", "#lvl", 20, access[role]);
+    }
+}
+
+privilege_of(id)
+{
+    if (!(1 <= id <= MaxClients) || (g_privUntil[id] > 0 && g_privUntil[id] <= get_systime()))
+        return 0;
+    return g_priv[id];
+}
+
+public on_czm_menu_priv(id, const key[])
+{
+    new role = privilege_of(id);
+    if (role < 1 || role > 3)
+        return;
+    new expected[24];
+    formatex(expected, charsmax(expected), "%s_panel", PRIV_KEYS[role]);
+    if (equal(key, expected))
+    {
+        client_cmd(id, "czm_panel");
+        czm_chat(id, "^4[CZM]^1 Панель сервера: ^4%s/panel", "^4[CZM]^1 Server panel: ^4%s/panel", CZM_SITE);
+        return;
+    }
+    formatex(expected, charsmax(expected), "%s_status", PRIV_KEYS[role]);
+    if (equal(key, expected))
+    {
+        new left[32];
+        czm_api_left(g_privUntil[id] > 0 ? max(0, g_privUntil[id] - get_systime()) : -1, left, charsmax(left), czm_lang(id));
+        czm_chat(id, "^4[CZM]^1 %s: ^4%s", "^4[CZM]^1 %s: ^4%s", PRIV_NAMES[role], left);
+        new child[16];
+        formatex(child, charsmax(child), "%s_info", PRIV_KEYS[role]);
+        czm_menu_open(id, child);
+    }
 }
 
 public czm_menu_build(id, const section[])
 {
-	if (g_staff[id] != CZM_STAFF_NONE)
-		czm_menu_state(id, "go_admin", _, g_staff[id] == CZM_STAFF_ADMIN ? (czm_lang(id) == CZM_EN ? "Head administrator" : "Главный администратор")
-			: (czm_lang(id) == CZM_EN ? "Moderator" : "Модератор"));
+	if (g_staff[id] >= CZM_STAFF_MODERATOR)
+		czm_menu_state(id, "go_moderator", _, czm_lang(id) == CZM_EN ? "Players and server order" : "Игроки и порядок на сервере");
+	if (g_staff[id] >= CZM_STAFF_ADMIN)
+		czm_menu_state(id, "go_admin", _, czm_lang(id) == CZM_EN ? "Head administrator" : "Главный администратор");
+	new role = privilege_of(id);
+	if (role >= 1 && role <= 3)
+	{
+		new key[24], left[32];
+		formatex(key, charsmax(key), "%s_status", PRIV_KEYS[role]);
+		czm_api_left(g_privUntil[id] > 0 ? max(0, g_privUntil[id] - get_systime()) : -1, left, charsmax(left), czm_lang(id));
+		czm_menu_state(id, key, _, left);
+	}
 }
 
 public admin_menu(id)
 {
 	if (!staff(id))
 		return PLUGIN_HANDLED;
-	czm_menu_open(id, "admin");
+	if (g_staff[id] >= CZM_STAFF_ADMIN)
+		czm_menu_open(id, "admin");
+	else
+		czm_menu_open(id, "moderator");
 	return PLUGIN_HANDLED;
 }
 
@@ -1196,6 +1286,14 @@ public on_privilege(EzHttpRequest:request)
 		{
 			new name[32];
 			g_priv[target] = kind;
+			g_privUntil[target] = 0;
+			new EzJSON:priv = ezjson_object_get_value(root, "privilege");
+			if (kind && CZM_JSON_OK(priv))
+			{
+				new left = ezjson_object_get_number(priv, "left");
+				if (left >= 0) g_privUntil[target] = get_systime() + left;
+			}
+			if (CZM_JSON_OK(priv)) ezjson_free(priv);
 			get_user_name(target, name, charsmax(name));
 			if (kind)
 				czm_chat(0, "^4[CZM]^3 %s^1 получил привилегию ^4%s^1!", "^4[CZM]^3 %s^1 got the ^4%s^1 privilege!", name, PRIV_NAMES[kind]);

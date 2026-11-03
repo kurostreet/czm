@@ -108,6 +108,7 @@ inline Rect ProgressLayout(float sw, float sh, float x, float y, float scale, fl
     opacity = Clamp(opacity,.25f,1,1);
     const float unit=Base(sw,sh)/480.0f*scale;
     float w=220*unit, h=48*unit;
+    if(h<32) h=32; // header, progress bar and footer keep separate rows at the smallest scale
     if(h<lineHeight*2.6f) h=lineHeight*2.6f;
     if(h>sh*.25f) h=sh*.25f;
     if(w<h*3.8f) w=h*3.8f;

@@ -587,6 +587,12 @@ static bool ParseWeaponMenu( const char *value, CzmWeaponMenu &m )
 	return m.count >= 2 && unknown <= 2;
 }
 
+bool CZM_IsWeaponMenu( const char *value )
+{
+	CzmWeaponMenu menu;
+	return ParseWeaponMenu( value, menu );
+}
+
 class CCzmShop : public CMenuBaseClientWindow
 {
 public:

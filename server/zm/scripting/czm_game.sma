@@ -10,7 +10,6 @@
 	  Голосования  → change the map [x/4], ban [x/5] or mute [x/4] a player, the violators
 	  Сервер       → news (bot /zmnews or the admin menu), the player panel, the next map, a message
 	                 to the staff (the owner's bot gets it, online staff see it at once)
-	  Настройки    → language, music and sounds, the hints on the left
 
 	A vote holds one voice per player (the CZM profile, else the address) and resets with the
 	map. A ban by vote lasts 30 minutes, a mute an hour; staff are immune. Two minutes before the
@@ -249,10 +248,8 @@ menu_register()
 	czm_menu_section("players", "Игроки", "Players", "users", 30);
 	czm_menu_section("votes", "Голосования", "Voting", "flag", 40);
 	czm_menu_section("server", "Сервер", "Server", "globe", 50);
-	czm_menu_section("settings", "Настройки", "Settings", "gear", 60);
 
 	czm_menu_item("main", "panel", "Панель на сайте", "Player panel", "Скины, магазин, топ", "Skins, shop, top", "globe", "6BDAA7", "on_czm_menu", 20);
-	czm_menu_item("main", "go_settings", "Настройки", "Settings", "Язык, звуки, подсказки", "Language, sounds, hints", "gear", "F59E0B", "#settings", 30);
 	czm_menu_item("main", "go_votes", "Голосования", "Voting", "Карта, бан, мут", "Map, ban, mute", "flag", "A855F7", "#votes", 40);
 	czm_menu_item("main", "tp", "Телепорт", "Teleport", "К другу по запросу", "To a friend, on request", "target", "22D3EE", "on_czm_menu", 50);
 	czm_menu_item("main", "invite", "Приглашения", "Invitations", "Позвать друга на сервер", "Call a friend here", "person_add", "E53F4D", "on_czm_menu", 60);
@@ -273,9 +270,6 @@ menu_register()
 	czm_menu_item("server", "sv_next", "Следующая карта", "Next map", "После голосования", "After the vote", "play", "22D3EE", "on_czm_menu", 30);
 	czm_menu_item("server", "sv_msg", "Сообщение админу", "Message to the staff", "Прочитает владелец", "The owner reads it", "chat", "F97316", "on_czm_menu", 40);
 
-	czm_menu_item("settings", "set_lang", "Язык", "Language", "Русский или English", "Русский or English", "globe", "63A1EF", "on_czm_menu", 10);
-	czm_menu_item("settings", "set_sound", "Музыка и звуки", "Music and sounds", "Звуки и музыка сервера", "The server's sounds and music", "sound", "A855F7", "on_czm_menu", 20);
-	czm_menu_item("settings", "set_info", "Подсказки слева", "Hints on the left", "Строки слева вверху", "The lines at the top left", "info", "F59E0B", "on_czm_menu", 30);
 }
 
 public game_menu(id)
@@ -305,9 +299,6 @@ public czm_menu_build(id, const section[])
 	czm_menu_state(id, "v_map", _, _, line);
 	if (g_nextMap[0])
 		czm_menu_state(id, "sv_next", _, g_nextMap);
-	czm_menu_state(id, "set_lang", _, _, en(id) ? "EN" : "RU");
-	czm_menu_state(id, "set_sound", _, _, czm_sound_on(id) ? (en(id) ? "on" : "вкл") : (en(id) ? "off" : "выкл"));
-	czm_menu_state(id, "set_info", _, _, czm_info_on(id) ? (en(id) ? "on" : "вкл") : (en(id) ? "off" : "выкл"));
 }
 
 public on_czm_menu(id, const key[])
@@ -342,21 +333,6 @@ public on_czm_menu(id, const key[])
 	{
 		czm_chat(id, "^4[CZM]^1 Следующая карта: ^4%s", "^4[CZM]^1 Next map: ^4%s", g_nextMap[0] ? g_nextMap : (en(id) ? "after the vote" : "после голосования"));
 		czm_menu_open(id, "server");
-	}
-	else if (equal(key, "set_lang"))
-	{
-		czm_set_lang(id, en(id) ? CZM_RU : CZM_EN);
-		czm_menu_open(id, "settings");
-	}
-	else if (equal(key, "set_sound"))
-	{
-		amxclient_cmd(id, czm_sound_on(id) ? "sound_off" : "sound_on");
-		czm_menu_open(id, "settings");
-	}
-	else if (equal(key, "set_info"))
-	{
-		amxclient_cmd(id, "say", czm_info_on(id) ? "/info_off" : "/info_on");
-		czm_menu_open(id, "settings");
 	}
 }
 

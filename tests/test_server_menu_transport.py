@@ -1,5 +1,6 @@
 """Exercise the actual ShowMenu receiver with fragmented rich and localized stock menus."""
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 import unittest
@@ -100,6 +101,149 @@ class ServerMenuTransportTests(unittest.TestCase):
             (path / "check.cpp").write_text(code)
             subprocess.run(["g++", "-std=c++11", "-Wall", str(path / "check.cpp"), "-o", str(path / "check")], check=True)
             subprocess.run([str(path / "check")], check=True)
+
+
+CPP_MENU = r"""
+#include <cassert>
+#include <cstdio>
+#include <cstring>
+#include <algorithm>
+#include <string>
+#include <initializer_list>
+#define Q_min(a,b) std::min(a,b)
+#define Q_max(a,b) std::max(a,b)
+inline void Q_strncpy(char*d,const char*s,size_t n){if(n){size_t k=std::min(n-1,strlen(s));memcpy(d,s,k);d[k]=0;}}
+inline void Q_strncat(char*d,const char*s,size_t n){size_t k=strlen(d);if(k<n)snprintf(d+k,n-k,"%s",s);}
+inline bool CZM_IsRussian(){return true;}
+inline unsigned int PackRGBA(int r,int g,int b,int a){return r|(g<<8)|(b<<16)|((unsigned)a<<24);}
+inline int bound(int lo,int x,int hi){return std::max(lo,std::min(x,hi));}
+struct CzmRect{int x,y,w,h;};
+inline CzmRect CZM_Rect(int x,int y,int w,int h){return {x,y,w,h};}
+"""
+
+
+def run_cpp(code):
+    with tempfile.TemporaryDirectory(prefix="czm-menu-policy-") as folder:
+        path = Path(folder)
+        (path / "check.cpp").write_text(code)
+        subprocess.run(["g++", "-std=c++11", "-Wall", str(path / "check.cpp"), "-o", str(path / "check")], check=True)
+        subprocess.run([str(path / "check")], check=True)
+
+
+class ServerMenuStructureTests(unittest.TestCase):
+    def test_current_roles_ancestor_access_and_expiry_guard_dispatch(self):
+        source = (ROOT / 'server/zm/scripting/czm_menu.sma').read_text()
+        api = (ROOT / 'server/zm/scripting/include/czm_menu.inc').read_text()
+        admin = (ROOT / 'server/zm/scripting/czm_admin.sma').read_text()
+        code = CPP_MENU + '\n'.join(re.findall(r'^#define CZM_MENU_.*$', api, re.M))
+        code += r"""
+#define MAX_SECTIONS 32
+#define MaxClients 32
+#define LibType_Library 1
+static int role,clockNow=100,g_priv[33],g_privUntil[33],g_numSections=4,g_numItems=2;
+static int get_systime(){return clockNow;}
+static int staff_of(int){return role;}
+static bool LibraryExists(const char*,int){return true;}
+struct Section{const char*SecKey;const char*SecParent;int SecAccess;};
+static Section g_sections[32]={{"main","",0},{"admin","",CZM_MENU_ADMIN},{"child","admin",0},{"vip","",CZM_MENU_VIP}};
+struct Item{int ItAccess;const char*ItOpen;};
+static Item g_items[2]={{0,""},{0,"admin"}};
+static int find_section(const char*key){for(int i=0;i<g_numSections;i++)if(!strcmp(key,g_sections[i].SecKey))return i;return -1;}
+"""
+        privilege = function(admin, '\nprivilege_of(id)\n').replace('privilege_of(id)', 'int czm_privilege(int id)')
+        privilege = privilege.replace('1 <= id <= MaxClients', '1 <= id && id <= MaxClients')
+        code += privilege + '\n'
+        for signature, cpp in [('bool:allowed(id, access)', 'bool allowed(int id,int access)'),
+                               ('bool:section_allowed(id, s)', 'bool section_allowed(int id,int s)'),
+                               ('section_root(s)', 'int section_root(int s)'),
+                               ('bool:item_allowed(id, i)', 'bool item_allowed(int id,int i)'),
+                               ('bool:can_dispatch(id, s, i)', 'bool can_dispatch(int id,int s,int i)')]:
+            body = function(source, signature).replace(signature, cpp).replace('new ', 'int ')
+            body = re.sub(r'(g_sections|g_items)\[([a-z]+)\]\[([A-Za-z]+)\]', r'\1[\2].\3', body)
+            code += body + '\n'
+        code += r"""
+int main(){
+ const int paid[]={0,CZM_MENU_VIP,CZM_MENU_PREMIUM,CZM_MENU_DELUXE,CZM_MENU_TESTER};
+ for(role=0;role<=2;role++)for(int p=0;p<=4;p++){
+   g_priv[1]=p;g_privUntil[1]=0;
+   int granted=paid[p]|(role?CZM_MENU_STAFF:0)|(role==2?CZM_MENU_HEAD:0)|((role||p)?CZM_MENU_PRIV:0);
+   assert(allowed(1,0));
+   for(int mask=1;mask<128;mask++)assert(allowed(1,mask)==!!(mask&granted));
+   assert(!allowed(1,128));assert(!allowed(1,CZM_MENU_ALL|128));
+   assert(section_allowed(1,2)==(role==2));
+   assert(can_dispatch(1,2,0)==(role==2));
+   assert(can_dispatch(1,0,1)==(role==2));
+ }
+ role=2;assert(can_dispatch(1,2,0));role=0;assert(!can_dispatch(1,2,0));
+ g_priv[1]=1;g_privUntil[1]=101;assert(section_allowed(1,3));
+ clockNow=101;assert(!section_allowed(1,3));assert(!czm_privilege(0)&&!czm_privilege(33));
+ assert(section_root(2)==1);
+ g_sections[1].SecParent="child";assert(!section_allowed(1,2)&&section_root(2)==-1);
+ g_sections[2].SecParent="missing";assert(!section_allowed(1,2)&&section_root(2)==-1);
+}
+"""
+        run_cpp(code)
+
+    def test_old_and_new_headers_and_native_submenus_preserve_real_slots(self):
+        source = (ROOT / 'czm/menu/CzmServerMenu.cpp').read_text()
+        code = CPP_MENU + '\n'.join(re.findall(r'^#define (?:MAX_CARDS|MAX_LINES|SM_MAX_TABS|SM_MAX_CARDS) .*$', source, re.M)) + '\n'
+        code += source[source.index('struct CzmCard'):source.index('static void TrimCopy')]
+        code += source[source.index('struct CzmMenuTab'):source.index('static bool IsRichMenu')]
+        for sig in ('static void TrimCopy(', 'static void SplitLine(', 'static void ParseMenu(',
+                    'static void NextField(', 'static unsigned int HexColor(', 'static void ParseRich(', 'static void PlainAsRich('):
+            code += function(source,sig)+'\n'
+        code += r"""
+int main(){
+ CzmRichMenu root,child,plain;
+ ParseRich("1 3\n#czm1\tmenu\tadmin\tSERVER MENU\tSurvival\t1/32\tFair\n#tabs\tmain:Home:star:\tadmin:Admin:shield:\n\\r1.\\w Players\tPick\tusers\tFF8800\tNEW\n",root);
+ assert(root.numTabs==2&&root.numCards==1&&!root.parent[0]&&!root.root[0]);
+ ParseRich("2 3\n#czm1\tmenu\tadmin_players\tSERVER MENU\tAdmin / Players\t1/32\tFair\tadmin\tadmin\n#tabs\tmain:Home:star:\tadmin:Admin:shield:\n\\r1.\\w Punish\tPick\tusers\tFF8800\t\n",child);
+ assert(!strcmp(child.parent,"admin")&&!strcmp(child.root,"admin"));
+ PlainAsRich("3 5\n\\yPick player\n\\w1. Alice\n\\d2. Disabled\n\\w3. Bob\\R37 LVL\n\\w0. Exit",&child,plain);
+ assert(plain.serial==3&&plain.numTabs==2&&plain.numCards==3&&!plain.tab[0]);
+ assert(!strcmp(plain.parent,"admin_players")&&!strcmp(plain.root,"admin"));
+ assert(plain.cards[0].key==1&&plain.cards[0].enabled&&!plain.cards[1].enabled&&plain.cards[2].key==3&&plain.cards[2].enabled);
+ assert(!strcmp(plain.cards[2].sub,"37 LVL"));
+ CzmRichMenu next;PlainAsRich("4 1\nDuration\n1. One hour",&plain,next);
+ assert(!strcmp(next.parent,"admin_players"));
+ PlainAsRich("5 1\nVote\n1. Yes",NULL,next);assert(next.numTabs==0&&!strcmp(next.parent,"main"));
+}
+"""
+        run_cpp(code)
+
+    def test_sidebar_scroll_and_back_button_fit_all_supported_screens(self):
+        source = (ROOT/'czm/menu/CzmServerMenu.cpp').read_text()
+        code = CPP_MENU + '\n'.join(re.findall(r'^#define (?:SM_MAX_TABS|SM_MAX_CARDS) .*$', source, re.M)) + '\n'
+        code += source[source.index('struct CzmMenuTab'):source.index('static bool IsRichMenu')]
+        code += r"""
+static int ScreenWidth,ScreenHeight;
+struct CCzmServerWindow{
+ CzmRichMenu m_menu={};int m_iTabFirst=0,m_iTabRows=0,W,H;
+ CzmRect m_win,m_head,m_side,m_body,m_foot,m_close,m_back,m_tabsUp,m_tabsDown;
+ void Layout(int);
+};
+"""
+        code += function(source,'void CCzmServerWindow::Layout(')
+        code += r"""
+static bool inside(CzmRect a,CzmRect b){return a.w>0&&a.h>0&&a.x>=b.x&&a.y>=b.y&&a.x+a.w<=b.x+b.w&&a.y+a.h<=b.y+b.h;}
+int main(){
+ for(auto wh:{std::make_pair(640,360),std::make_pair(1536,716),std::make_pair(2340,1080),std::make_pair(1024,768)})
+ for(int tabs:{0,5,10,11,32})for(int first:{0,5,31})for(int nested:{0,1}){
+  ScreenWidth=wh.first;ScreenHeight=wh.second;CCzmServerWindow w;w.m_menu.numTabs=tabs;w.m_menu.numCards=9;
+  if(nested)strcpy(w.m_menu.parent,"admin");
+  w.m_iTabFirst=first;w.Layout(0);
+  for(int i=0;i<tabs;i++){
+   auto t=w.m_menu.tabs[i].rect;
+   if(i>=w.m_iTabFirst&&i<w.m_iTabFirst+w.m_iTabRows)assert(inside(t,w.m_side));else assert(t.w==0&&t.h==0);
+  }
+  for(int i=0;i<9;i++){assert(inside(w.m_menu.cards[i].rect,w.m_body));if(nested)assert(w.m_menu.cards[i].rect.y>=w.m_back.y+w.m_back.h);}
+  if(nested)assert(inside(w.m_back,w.m_body));
+  if(tabs>10){assert(inside(w.m_tabsUp,w.m_side)&&inside(w.m_tabsDown,w.m_side));assert(w.m_iTabRows>0);}
+  if(tabs==32&&first==31)assert(w.m_menu.tabs[31].rect.w>0);
+ }
+}
+"""
+        run_cpp(code)
 
 
 if __name__ == "__main__":

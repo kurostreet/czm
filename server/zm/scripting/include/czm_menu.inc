@@ -13,6 +13,12 @@
 #define CZM_MENU_STAFF   1   // moderators and head administrators
 #define CZM_MENU_HEAD    2   // head administrators only
 #define CZM_MENU_PRIV    4   // players with a privilege (VIP+, PREMIUM, DELUXE, TESTER) and the staff
+#define CZM_MENU_VIP     8
+#define CZM_MENU_PREMIUM 16
+#define CZM_MENU_DELUXE  32
+#define CZM_MENU_TESTER  64
+#define CZM_MENU_MODERATOR CZM_MENU_STAFF
+#define CZM_MENU_ADMIN     CZM_MENU_HEAD
 
 #if defined CZM_MENU_PLUGIN
 	#endinput
@@ -21,7 +27,10 @@
 
 // A tab on the left of the window. icon: one of the game's icons (star, crown, users, flag, globe,
 // gear, shield, bell, chat, target, ...); order: smaller first.
-native czm_menu_section(const key[], const ru[], const en[], const icon[], order = 50, access = CZM_MENU_ALL);
+// parent: "" for a sidebar tab, or another section's key for a subsection. All ancestors' access
+// rules apply. Add a card with handler "#child" to open a subsection from its parent.
+// Access flags may be ORed to accept any listed role; paid flags match the actual privilege.
+native czm_menu_section(const key[], const ru[], const en[], const icon[], order = 50, access = CZM_MENU_ALL, const parent[] = "");
 
 // A card of a section. color: "RRGGBB". handler: a public function of the calling plugin,
 // handler(id, const key[]); "#section" instead opens that section.

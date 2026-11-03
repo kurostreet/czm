@@ -10,18 +10,22 @@ ROOT = Path(__file__).resolve().parents[1]
 HARNESS = r'''
 #include "czm_hud_overlay.h"
 #include <cassert>
+#include <algorithm>
 #include <cmath>
 #include <climits>
 #include <initializer_list>
 static float SW,SH;
 static void Inside(float x,float y,float w,float h){assert(std::isfinite(x+y+w+h)&&w>=0&&h>=0&&x>=-1&&y>=-1&&x+w<=SW+1&&y+h<=SH+1);}
 struct Check:CzmHud::Canvas {
- int lh;Check(int h):lh(h){}
- void Blend(int x,int y,int w,int h,int,int,int,int a)override{assert(a>=0&&a<=255);Inside(x,y,w,h);}
- void Glyphs(float x,float y,float h,const char *s,int,int,int,float)override{assert(h>0);Inside(x,y,CzmHud::GlyphWidth(s,h),h);}
+ int lh;float glyphBottom=-1,barBottom=-1;Check(int h):lh(h){}
+ void Blend(int x,int y,int w,int h,int r,int g,int b,int a)override{
+  assert(a>=0&&a<=255);Inside(x,y,w,h);
+  if(r==255&&g==255&&b==255){assert(glyphBottom<y);barBottom=y+h;}
+ }
+ void Glyphs(float x,float y,float h,const char *s,int,int,int,float)override{assert(h>0);Inside(x,y,CzmHud::GlyphWidth(s,h),h);glyphBottom=std::max(glyphBottom,y+h);}
  int LabelWidth(const char *s)override{int n=0;for(;*s;s++)if((*s&0xc0)!=0x80)n++;return n*lh/2;}
  int LabelHeight()override{return lh;}
- void Label(int x,int y,const char *s,int,int,int)override{Inside(x,y,LabelWidth(s),lh);}
+ void Label(int x,int y,const char *s,int,int,int)override{assert(y>barBottom);Inside(x,y,LabelWidth(s),lh);}
  bool Avatar(int,int,int)override{return false;}
 };
 int main(){
@@ -49,6 +53,7 @@ class LevelProgressTests(unittest.TestCase):
         code = r'''
 #include "czm_hud_overlay.h"
 #include <cassert>
+#include <algorithm>
 #include <cstdint>
 #define MAX_PLAYERS 32
 static CzmHud::ProgressInfo s_progress;

@@ -23,8 +23,8 @@
 #define VERSION "1.0"
 #define AUTHOR  "Counter Zombie Mobile"
 
-#define MAX_SECTIONS 16
-#define MAX_ITEMS    96
+#define MAX_SECTIONS 32
+#define MAX_ITEMS    192
 #define MENU_ID      "CZM Menu"
 
 // czm_admin.amxx tells who is staff; without it nobody is
@@ -34,9 +34,11 @@ native czm_privilege(id);
 enum _:Section
 {
 	SecKey[16],
-	SecRu[24],
-	SecEn[24],
+	SecRu[40],
+	SecEn[40],
 	SecIcon[16],
+	SecParent[16],
+	SecPlugin,
 	SecOrder,
 	SecAccess
 }
@@ -155,9 +157,15 @@ clean(text[])
 
 public native_section(plugin, params)
 {
-	new key[16];
+	new key[32], parent[32];
 	get_string(1, key, charsmax(key));
+	if (params >= 7)
+		get_string(7, parent, charsmax(parent));
+	if (!valid_key(key) || (parent[0] && (!valid_key(parent) || equali(key, parent))))
+		return 0;
 	new s = find_section(key);
+	if (s >= 0 && g_sections[s][SecPlugin] != plugin)
+		return 0;
 	if (s < 0)
 	{
 		if (g_numSections >= MAX_SECTIONS)
@@ -165,6 +173,8 @@ public native_section(plugin, params)
 		s = g_numSections++;
 	}
 	copy(g_sections[s][SecKey], charsmax(g_sections[][SecKey]), key);
+	copy(g_sections[s][SecParent], charsmax(g_sections[][SecParent]), parent);
+	g_sections[s][SecPlugin] = plugin;
 	get_string(2, g_sections[s][SecRu], charsmax(g_sections[][SecRu]));
 	get_string(3, g_sections[s][SecEn], charsmax(g_sections[][SecEn]));
 	get_string(4, g_sections[s][SecIcon], charsmax(g_sections[][SecIcon]));
@@ -183,6 +193,8 @@ public native_item(plugin, params)
 	new key[24];
 	get_string(2, key, charsmax(key));
 	new i = find_item(key);
+	if (i >= 0 && g_items[i][ItPlugin] != plugin)
+		return 0;
 	if (i < 0)
 	{
 		if (g_numItems >= MAX_ITEMS)
@@ -259,6 +271,17 @@ public native_rich(plugin, params)
 
 // ---------------------------------------------------------------- who sees what
 
+bool:valid_key(const key[])
+{
+	new len = strlen(key);
+	if (!len || len > 15)
+		return false;
+	for (new k = 0; k < len; k++)
+		if (!(('a' <= key[k] <= 'z') || ('A' <= key[k] <= 'Z') || ('0' <= key[k] <= '9') || key[k] == '_'))
+			return false;
+	return true;
+}
+
 staff_of(id)
 {
 	return LibraryExists("czm_admin", LibType_Library) ? czm_staff(id) : 0;
@@ -268,22 +291,61 @@ bool:allowed(id, access)
 {
 	if (access == CZM_MENU_ALL)
 		return true;
-	new staff = staff_of(id);
-	if (access & CZM_MENU_HEAD)
-		return staff >= 2;
-	if (access & CZM_MENU_STAFF)
-		return staff >= 1;
-	if (access & CZM_MENU_PRIV)
-		return staff >= 1 || (LibraryExists("czm_admin", LibType_Library) && czm_privilege(id) > 0);
-	return true;
+	if (access & ~(CZM_MENU_STAFF | CZM_MENU_HEAD | CZM_MENU_PRIV | CZM_MENU_VIP | CZM_MENU_PREMIUM | CZM_MENU_DELUXE | CZM_MENU_TESTER))
+		return false;
+	new staff = staff_of(id), privilege = LibraryExists("czm_admin", LibType_Library) ? czm_privilege(id) : 0;
+	return ((access & CZM_MENU_HEAD) && staff >= 2)
+		|| ((access & CZM_MENU_STAFF) && staff >= 1)
+		|| ((access & CZM_MENU_PRIV) && (staff >= 1 || privilege > 0))
+		|| ((access & CZM_MENU_VIP) && privilege == 1)
+		|| ((access & CZM_MENU_PREMIUM) && privilege == 2)
+		|| ((access & CZM_MENU_DELUXE) && privilege == 3)
+		|| ((access & CZM_MENU_TESTER) && privilege == 4);
+}
+
+// Access to a child never bypasses its parent; invalid parents and cycles fail closed.
+bool:section_allowed(id, s)
+{
+	for (new depth = 0; depth < MAX_SECTIONS; depth++)
+	{
+		if (s < 0 || s >= g_numSections || !allowed(id, g_sections[s][SecAccess]))
+			return false;
+		if (!g_sections[s][SecParent][0])
+			return true;
+		s = find_section(g_sections[s][SecParent]);
+	}
+	return false;
+}
+
+section_root(s)
+{
+	for (new depth = 0; depth < MAX_SECTIONS && s >= 0 && s < g_numSections; depth++)
+	{
+		if (!g_sections[s][SecParent][0])
+			return s;
+		s = find_section(g_sections[s][SecParent]);
+	}
+	return -1;
+}
+
+bool:item_allowed(id, i)
+{
+	if (i < 0 || i >= g_numItems || !allowed(id, g_items[i][ItAccess]))
+		return false;
+	return !g_items[i][ItOpen][0] || section_allowed(id, find_section(g_items[i][ItOpen]));
+}
+
+bool:can_dispatch(id, s, i)
+{
+	return section_allowed(id, s) && item_allowed(id, i);
 }
 
 bool:section_visible(id, s)
 {
-	if (!allowed(id, g_sections[s][SecAccess]))
+	if (!section_allowed(id, s))
 		return false;
 	for (new i = 0; i < g_numItems; i++)
-		if (equali(g_items[i][ItSection], g_sections[s][SecKey]) && allowed(id, g_items[i][ItAccess]))
+		if (equali(g_items[i][ItSection], g_sections[s][SecKey]) && item_allowed(id, i))
 			return true;
 	return false;
 }
@@ -310,7 +372,7 @@ section_items(id, s, out[MAX_ITEMS])
 	new n;
 	for (new i = 0; i < g_numItems; i++)
 	{
-		if (!equali(g_items[i][ItSection], g_sections[s][SecKey]) || !allowed(id, g_items[i][ItAccess]) || g_stHide[i])
+		if (!equali(g_items[i][ItSection], g_sections[s][SecKey]) || !item_allowed(id, i) || g_stHide[i])
 			continue;
 		new at = n++;
 		while (at > 0 && g_items[out[at - 1]][ItOrder] > g_items[i][ItOrder])
@@ -348,28 +410,30 @@ open(id, const key[], page)
 
 	new list[MAX_ITEMS], count = section_items(id, s, list);
 	new bool:en = czm_lang(id) == CZM_EN, bool:main = equali(g_sections[s][SecKey], "main") != 0;
-	// nine cards, or eight and "more" / "back"
-	new perPage = count > 9 ? 8 : 9, pages = max(1, (count + perPage - 1) / perPage);
+	new text[4096], len, keys = (1 << 9);
+	if (g_rich[id])
+		len = rich_head(id, s, en, text, charsmax(text));
+	else
+		len = plain_head(s, en, text, charsmax(text));
+	// A growing sidebar must not cut the final cards or the exit off the wire message.
+	new capacity = g_rich[id] ? clamp((charsmax(text) - len - 128) / 160, 2, 9) : 9;
+	new perPage = count > capacity ? capacity - 1 : capacity, pages = max(1, (count + perPage - 1) / perPage);
 	page = clamp(page, 0, pages - 1);
 	g_shown[id] = s;
 	g_page[id] = page;
 	for (new k = 0; k < 10; k++)
 		g_slot[id][k] = SLOT_NONE;
 
-	new text[3072], len, keys = (1 << 9);
-	if (g_rich[id])
-		len = rich_head(id, s, en, text, charsmax(text));
-	else
-		len = plain_head(s, en, text, charsmax(text));
-
 	new first = page * perPage, slot;
 	for (new n = first; n < count && n < first + perPage; n++)
 	{
 		new i = list[n];
-		g_slot[id][slot] = i;
 		new bool:off = g_stOff[i] || (g_items[i][ItFunc] < 0 && !g_items[i][ItOpen][0]);
 		if (!off)
+		{
+			g_slot[id][slot] = i;
 			keys |= (1 << slot);
+		}
 		new name[40], sub[48];
 		if (g_stName[i][0])
 			copy(name, charsmax(name), g_stName[i]);
@@ -424,22 +488,26 @@ open(id, const key[], page)
 
 rich_head(id, s, bool:en, text[], max)
 {
-	new mode[24], sub[48], chip[96], motto[160], ru[80], eng[80];
+	new mode[24], sub[96], chip[96], motto[160], ru[80], eng[80];
+	new root = section_root(s), parent = find_section(g_sections[s][SecParent]);
 	get_cvar_string("czm_server_name", mode, charsmax(mode));
 	strtoupper(mode);
 	formatex(sub, charsmax(sub), "COUNTER ZOMBIE · %s", mode[0] ? mode : "SURVIVAL");
+	if (parent >= 0)
+		formatex(sub, charsmax(sub), "%s / %s", en ? g_sections[parent][SecEn] : g_sections[parent][SecRu], en ? g_sections[s][SecEn] : g_sections[s][SecRu]);
 	chip_text(chip, charsmax(chip));
 	get_pcvar_string(g_cvarMotto, motto, charsmax(motto));
 	strtok(motto, ru, charsmax(ru), eng, charsmax(eng), '|');
 	trim(ru);
 	trim(eng);
-	new len = formatex(text, max, "#czm1^tmenu^t%s^t%s^t%s^t%s^t%s^n#tabs", g_sections[s][SecKey],
-		en ? "SERVER MENU" : "МЕНЮ СЕРВЕРА", sub, chip, en && eng[0] ? eng : ru);
+	new len = formatex(text, max, "#czm1^tmenu^t%s^t%s^t%s^t%s^t%s^t%s^t%s^n#tabs", g_sections[s][SecKey],
+		en ? "SERVER MENU" : "МЕНЮ СЕРВЕРА", sub, chip, en && eng[0] ? eng : ru,
+		g_sections[s][SecParent], root >= 0 ? g_sections[root][SecKey] : g_sections[s][SecKey]);
 	new order[MAX_SECTIONS], n = sorted_sections(order);
 	for (new k = 0; k < n; k++)
 	{
 		new t = order[k];
-		if (section_visible(id, t))
+		if (!g_sections[t][SecParent][0] && section_visible(id, t))
 			len += formatex(text[len], max - len, "^t%s:%s:%s:%s", g_sections[t][SecKey],
 				en ? g_sections[t][SecEn] : g_sections[t][SecRu], g_sections[t][SecIcon], g_tabBadge[t]);
 	}
@@ -467,18 +535,18 @@ public on_key(id, key)
 {
 	new s = g_shown[id];
 	g_shown[id] = -1;
-	if (key == 9 || s < 0)
+	if (key < 0 || key >= 9 || s < 0)
 		return PLUGIN_HANDLED;
 	new i = g_slot[id][key];
 	switch (i)
 	{
 		case SLOT_NEXT: open(id, g_sections[s][SecKey], g_page[id] + 1);
 		case SLOT_BACK: open(id, g_sections[s][SecKey], 0);
-		case SLOT_MAIN: open(id, "main", 0);
+		case SLOT_MAIN: open(id, g_sections[s][SecParent][0] ? g_sections[s][SecParent] : "main", 0);
 		case SLOT_NONE: {}
 		default:
 		{
-			if (!allowed(id, g_items[i][ItAccess]))
+			if (!can_dispatch(id, s, i))
 				return PLUGIN_HANDLED;
 			if (g_items[i][ItOpen][0])
 				open(id, g_items[i][ItOpen], 0);

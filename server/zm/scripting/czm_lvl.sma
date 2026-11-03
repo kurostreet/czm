@@ -1361,8 +1361,8 @@ use_promo(id, const code[])
 // the LVL MOD tab of the server menu (czm_menu)
 menu_register()
 {
-	czm_menu_section("lvl", "LVL MOD", "LVL MOD", "chart", 10);
-	czm_menu_item("main", "go_lvl", "LVL MOD", "LVL MOD", "Уровень, токены, магазин", "Level, tokens, shop", "chart", "E7BB60", "#lvl", 10);
+	czm_menu_section("lvl", "LVL MOD", "LVL MOD", "crown", 10);
+	czm_menu_item("main", "go_lvl", "LVL MOD", "LVL MOD", "Уровень, токены, магазин", "Level, tokens, shop", "crown", "E7BB60", "#lvl", 10);
 	czm_menu_item("lvl", "lvl_profile", "Профиль", "Profile", "Уровень, время, победы", "Level, time, wins", "user", "63A1EF", "on_czm_menu_lvl", 10);
 	czm_menu_item("lvl", "lvl_shop", "Магазин", "Shop", "Скины, ножи, префиксы", "Skins, knives, prefixes", "cart", "E7BB60", "on_czm_menu_lvl", 20);
 	czm_menu_item("lvl", "lvl_upgrades", "Прокачка", "Upgrades", "LVL и токены ×2", "LVL and tokens ×2", "bolt", "F59E0B", "on_czm_menu_lvl", 30);

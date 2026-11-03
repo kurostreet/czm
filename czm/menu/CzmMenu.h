@@ -321,6 +321,7 @@ const char *CZM_SpectatorStyleName( int style );
 bool CZM_ShopShow( int menuType, int team );
 // weapon menus of servers (Zombie Plague "Primary Weapon [1-7]") in the shop window: wheel or grid
 bool CZM_ShopWeaponFrame( const char *value );
+bool CZM_IsWeaponMenu( const char *value );
 // the team menu as our card; on our servers the class is picked by itself
 bool CZM_TeamShow( int menuType, int param1 );
 // the client asks for the radio selector; true if our radio wheel took it (CzmWheels.cpp)
