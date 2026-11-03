@@ -196,6 +196,14 @@ api(const method[], const path[], EzJSON:body, const callback[], const data[] = 
 	get_pcvar_string(g_cvarApi, url, charsmax(url));
 	add(url, charsmax(url), "/api/v1");
 	add(url, charsmax(url), path);
+	// every server mode (survival, escape) keeps its own economy in the API
+	new mode[24];
+	get_pcvar_string(g_cvarServer, mode, charsmax(mode));
+	if (mode[0])
+	{
+		add(url, charsmax(url), contain(path, "?") != -1 ? "&mode=" : "?mode=");
+		add(url, charsmax(url), mode);
+	}
 	new EzHttpOptions:opt = ezhttp_create_options();
 	ezhttp_option_set_header(opt, "Content-Type", "application/json");
 	ezhttp_option_set_header(opt, "X-CZM-Server", g_serverToken);

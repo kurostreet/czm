@@ -1,4 +1,4 @@
-/* Player panel of the Survival server (/panel): CZM account sign-in, then the LVL MOD of the player.
+/* Player panel of our servers, Survival and Escape (/panel): CZM account sign-in, then the LVL MOD of the player.
    Every number comes from the API (/api/v1/survival/*); the page only shows it and sends choices. */
 (function () {
   'use strict';
@@ -15,7 +15,7 @@
   var S = {
     ru: {
       theme: 'День или ночь', logout: 'Выйти', loginTitle: 'Панель игрока',
-      loginLead: 'Войди в аккаунт CZM — уровень, токены, магазин и пропуск сервера Survival откроются сразу.',
+      loginLead: 'Войди в аккаунт CZM — уровень, токены, магазин и пропуск на наших серверах Survival и Escape откроются сразу.',
       byEmail: 'По почте', byNick: 'Ник и пароль', email: 'Почта', code: 'Код из письма', sendCode: 'Получить код',
       confirm: 'Войти', nick: 'Ник аккаунта', password: 'Пароль', signIn: 'Войти',
       loginHint: 'Аккаунта ещё нет? Создай его в игре: Профиль → Аккаунт. Почту привяжи там же — по ней приходит код входа.',
@@ -37,16 +37,18 @@
       nothingToSell: 'Нечего выставить: в лавку идут купленные вещи.', seller: 'Продавец', daysLeft: '{d} дн.',
       withdraw: 'Снять', mine: 'Твоё', marketEmpty: 'В лавке пока пусто.', payLead: 'С {lvl} LVL, до {limit} токенов в день. Сегодня отправлено: {today}.',
       topEmpty: 'Пока никого.', liveEmpty: 'Сервер сейчас не в сети или на нём никого нет.', liveNow: '{n} из {max}', leftMin: '{m} мин до смены карты',
+      modeOnline: '{n} из {max} онлайн', modeOffline: 'не в сети', modeSoon: 'скоро открытие',
+      soonTitle: '{name} скоро откроется', soonText: 'На этом сервере будут свои уровень, токены, магазин и пропуск. Когда сервер заработает, он появится здесь сам.',
       newsTitle: 'Новости сервера', newsEmpty: 'Новостей пока нет.', boardTitle: 'Доска нарушителей', boardEmpty: 'Нарушителей нет — играем честно.',
       ban: 'бан', mute: 'мут', forever: 'навсегда', byVote: 'голосование игроков', leftShort: 'ещё {t}',
       zombie: 'Зомби', human: 'Человек', frags: 'Фраги', lvl: 'LVL', player: 'Игрок', place: '{n} место', promoTitle: 'Промокод', promoPh: 'Например, free20lvl', promoUse: 'Активировать', promoDone: 'Промокод: +{n} {what}', tokensWord: 'токенов', crate: 'Ящик с оружием', crateLead: 'на 30 минут, выдаётся при каждом спавне человеком', charges: 'зарядов: {n}', minLeft: 'ещё {m} мин', extend: 'Продлить', hCrate: 'Ящик с оружием', hAirdrop: 'Аирдроп', done: 'Готово', bought: 'Куплено и надето', on: 'Надето', off: 'Снято',
       paid: 'Передано {n} токенов', listed: 'Выставлено в лавку', boughtMarket: 'Куплено в лавке', withdrawn: 'Вещь вернулась к тебе',
       hBuy: 'Покупка', hUpgrade: 'Прокачка', hPay: 'Перевод', hPromo: 'Промокод', hPass: 'Боевой пропуск', hMarketBuy: 'Покупка в лавке',
-      hMarketSell: 'Продажа в лавке', hMapTop: 'Топ карты', hGrant: 'Подарок администрации', noHistory: 'Событий пока нет: зайди на сервер Survival.',
+      hMarketSell: 'Продажа в лавке', hMapTop: 'Топ карты', hGrant: 'Подарок администрации', noHistory: 'Событий пока нет: зайди на этот сервер.',
       e: { tokens: 'Не хватает токенов.', not_owned: 'Этого у тебя нет.', admin_only: 'Только для администраторов.', not_for_sale: 'Это не продаётся.',
         pay_lvl: 'Перевод доступен с 10 LVL.', pay_limit: 'Дневной лимит переводов исчерпан.', bp_active: 'Пропуск уже активен.',
         bp_inactive: 'Сначала купи боевой пропуск.', bp_daily_done: 'Сегодня награда уже получена.', bp_tasks: 'Сначала выполни все задания.',
-        bp_final_done: 'Эта награда уже получена.', promo: 'Нет такого промокода.', promo_used: 'Этот промокод ты уже использовал.', player: 'Игрок с таким ID ещё не играл на Survival.', self: 'Себе нельзя.',
+        bp_final_done: 'Эта награда уже получена.', promo: 'Нет такого промокода.', promo_used: 'Этот промокод ты уже использовал.', player: 'Игрок с таким ID ещё не играл на этом сервере.', self: 'Себе нельзя.',
         market_max: 'Не больше 3 предложений сразу.', listing: 'Этого предложения уже нет.', owned: 'Это у тебя уже есть.', price: 'Проверь цену.',
         amount: 'Проверь сумму.', credentials: 'Неверный ник или пароль.', code: 'Неверный код.', email: 'Проверь почту.',
         slow: 'Слишком много попыток, подожди немного.', mail_unavailable: 'Письма сейчас не отправляются, войди по нику.',
@@ -54,7 +56,7 @@
     },
     en: {
       theme: 'Day or night', logout: 'Sign out', loginTitle: 'Player panel',
-      loginLead: 'Sign in with your CZM account: the level, tokens, shop and pass of the Survival server open right away.',
+      loginLead: 'Sign in with your CZM account: your level, tokens, shop and pass on our Survival and Escape servers open right away.',
       byEmail: 'By email', byNick: 'Nick and password', email: 'Email', code: 'Code from the email', sendCode: 'Get a code',
       confirm: 'Sign in', nick: 'Account nick', password: 'Password', signIn: 'Sign in',
       loginHint: 'No account yet? Create it in the game: Profile → Account. Add your email there: the sign-in code comes to it.',
@@ -76,16 +78,18 @@
       nothingToSell: 'Nothing to sell: bought items go to the market.', seller: 'Seller', daysLeft: '{d} d',
       withdraw: 'Take back', mine: 'Yours', marketEmpty: 'The market is empty for now.', payLead: 'From LVL {lvl}, up to {limit} tokens a day. Sent today: {today}.',
       topEmpty: 'Nobody yet.', liveEmpty: 'The server is offline or empty right now.', liveNow: '{n} of {max}', leftMin: '{m} min to the next map',
+      modeOnline: '{n} of {max} online', modeOffline: 'offline', modeSoon: 'opens soon',
+      soonTitle: '{name} opens soon', soonText: 'This server keeps its own level, tokens, shop and pass. Once it is running, it shows up here by itself.',
       newsTitle: 'Server news', newsEmpty: 'No news yet.', boardTitle: 'Violators board', boardEmpty: 'Nobody is banned or muted: fair play.',
       ban: 'ban', mute: 'mute', forever: 'forever', byVote: 'players\' vote', leftShort: '{t} left',
       zombie: 'Zombie', human: 'Human', frags: 'Frags', lvl: 'LVL', player: 'Player', place: 'place {n}', promoTitle: 'Promo code', promoPh: 'For example, free20lvl', promoUse: 'Activate', promoDone: 'Promo code: +{n} {what}', tokensWord: 'tokens', crate: 'Weapon crate', crateLead: 'for 30 minutes, given at every spawn as a human', charges: '{n} charges', minLeft: '{m} min left', extend: 'Extend', hCrate: 'Weapon crate', hAirdrop: 'Airdrop', done: 'Done', bought: 'Bought and put on', on: 'Put on', off: 'Taken off',
       paid: '{n} tokens sent', listed: 'Put up for sale', boughtMarket: 'Bought on the market', withdrawn: 'The item is back with you',
       hBuy: 'Purchase', hUpgrade: 'Upgrade', hPay: 'Transfer', hPromo: 'Promo code', hPass: 'Battle pass', hMarketBuy: 'Market purchase',
-      hMarketSell: 'Market sale', hMapTop: 'Map top', hGrant: 'Gift from the staff', noHistory: 'Nothing yet: join the Survival server.',
+      hMarketSell: 'Market sale', hMapTop: 'Map top', hGrant: 'Gift from the staff', noHistory: 'Nothing yet: join this server.',
       e: { tokens: 'Not enough tokens.', not_owned: 'You do not own it.', admin_only: 'Administrators only.', not_for_sale: 'Not for sale.',
         pay_lvl: 'Transfers open at LVL 10.', pay_limit: "Today's transfer limit is used up.", bp_active: 'The pass is already active.',
         bp_inactive: 'Buy the battle pass first.', bp_daily_done: "Today's reward is already taken.", bp_tasks: 'Finish every task first.',
-        bp_final_done: 'This reward is already taken.', promo: 'No such promo code.', promo_used: 'You have used this promo code.', player: 'Nobody with this ID has played Survival yet.', self: 'Not to yourself.',
+        bp_final_done: 'This reward is already taken.', promo: 'No such promo code.', promo_used: 'You have used this promo code.', player: 'Nobody with this ID has played on this server yet.', self: 'Not to yourself.',
         market_max: 'No more than 3 offers at once.', listing: 'This offer is gone.', owned: 'You already own it.', price: 'Check the price.',
         amount: 'Check the amount.', credentials: 'Wrong nick or password.', code: 'Wrong code.', email: 'Check the email.',
         slow: 'Too many tries, wait a little.', mail_unavailable: 'Emails are not sent right now, sign in with your nick.',
@@ -103,8 +107,11 @@
   var hm = function (sec) { var h = Math.floor(sec / 3600), m = Math.floor(sec / 60) % 60; return lang === 'en' ? h + ' h ' + m + ' min' : h + ' ч ' + m + ' мин'; };
   var op = function () { var a = new Uint8Array(12); (window.crypto || window.msCrypto).getRandomValues(a); return Array.prototype.map.call(a, function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''); };
 
+  // each of our servers (Survival, Escape) keeps its own economy: the API takes the mode
+  var mode = store.get('czm-panel-mode') || 'survival', servers = [];
   function api(path, opts) {
     opts = opts || {};
+    if (path.indexOf('/survival/') === 0) path += (path.indexOf('?') >= 0 ? '&' : '?') + 'mode=' + encodeURIComponent(mode);
     var headers = { 'Content-Type': 'application/json' };
     if (token) headers['X-CZM-Key'] = token;
     return fetch('/api/v1' + path, { method: opts.method || 'GET', headers: headers, body: opts.body ? JSON.stringify(opts.body) : undefined, cache: 'no-store' })
@@ -133,7 +140,7 @@
     if (me) render();
   }
   document.querySelectorAll('[data-lang]').forEach(function (b) {
-    b.addEventListener('click', function () { lang = b.getAttribute('data-lang'); store.set('czm-lang', lang); applyLang(); });
+    b.addEventListener('click', function () { lang = b.getAttribute('data-lang'); store.set('czm-lang', lang); applyLang(); if (servers.length) { renderModes(); if (!$('soon').hidden) showMode(mode); } });
   });
   $('lamp').addEventListener('click', function () {
     var light = !root.classList.contains('light');
@@ -188,15 +195,49 @@
   /* ---------- the panel ---------- */
   function start() {
     if (!token) { showLogin(); return; }
-    Promise.all([api('/auth/me', { method: 'POST', body: {} }), api('/survival/catalog'), api('/survival/me')]).then(function (r) {
-      myProfile = r[0].profile || r[0]; catalog = r[1]; me = r[2];
+    var none = function () { return { servers: [] }; };
+    Promise.all([api('/auth/me', { method: 'POST', body: {} }), api('/survival/catalog'), api('/survival/servers').catch(none)]).then(function (r) {
+      myProfile = r[0].profile || r[0]; catalog = r[1]; servers = r[2].servers || [];
       $('login').hidden = true; $('panel').hidden = false; $('logout').hidden = false;
-      render(); openTab(store.get('czm-panel-tab') || 'overview');
+      return showMode(mode);
     }).catch(function (e) {
       if (e.status === 401) { token = ''; store.set('czm-session', null); }
       showLogin(); if (e.status && e.status !== 401) note(errorText(e.code), 'bad');
     });
   }
+
+  /* ---------- the server switch ---------- */
+  function server(m) { return servers.filter(function (s) { return s.mode === m; })[0]; }
+  function renderModes() {
+    $('modes').innerHTML = servers.map(function (s) {
+      var live = s.live, state;
+      if (!s.open) state = '<i></i>' + esc(t('modeSoon'));
+      else if (live) state = '<i class="on"></i>' + esc(t('modeOnline', { n: (live.players || []).filter(function (p) { return !p.bot; }).length, max: live.max || 32 }));
+      else state = '<i></i>' + esc(t('modeOffline'));
+      return '<button class="mode" type="button" data-mode="' + esc(s.mode) + '" aria-pressed="' + (s.mode === mode) + '"><span class="mode-tag">' + esc(s.short) +
+        '</span><span class="mode-name">' + esc(s.name) + '</span><small>' + state + '</small></button>';
+    }).join('');
+    $('modes').hidden = servers.length < 2;
+  }
+  function showMode(m) {
+    var s = server(m) || server('survival') || { mode: 'survival', open: true };
+    mode = s.mode; store.set('czm-panel-mode', mode);
+    renderModes();
+    var open = s.open || !servers.length;
+    $('soon').hidden = open; $('modeBody').hidden = !open;
+    if (!open) {
+      $('soonTag').textContent = s.short || '';
+      $('soonTitle').textContent = t('soonTitle', { name: s.name });
+      $('soonText').textContent = t('soonText');
+      clearInterval(liveTimer);
+      return Promise.resolve();
+    }
+    return api('/survival/me').then(function (r) { me = r; render(); openTab(store.get('czm-panel-tab') || 'overview'); });
+  }
+  $('modes').addEventListener('click', function (ev) {
+    var b = ev.target.closest('[data-mode]'); if (!b || b.getAttribute('data-mode') === mode) return;
+    showMode(b.getAttribute('data-mode')).catch(function (e) { toast(errorText(e.code), true); });
+  });
 
   function refresh() {
     return api('/survival/me').then(function (r) { me = r; render(); });
@@ -404,8 +445,8 @@
 
   function loadLive() {
     api('/survival/live').then(function (r) {
-      var servers = r.servers || [];
-      $('live').innerHTML = servers.map(function (sv) {
+      var here = (r.servers || []).filter(function (sv) { return sv.server === mode; });
+      $('live').innerHTML = here.map(function (sv) {
         var players = (sv.players || []).filter(function (p) { return !p.bot; });
         var all = (sv.players || []).slice().sort(function (a, b) { return b.frags - a.frags; });
         var rows = all.map(function (p) {

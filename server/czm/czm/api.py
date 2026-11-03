@@ -464,9 +464,24 @@ async def survival_catalog():
     return JSONResponse(survival.catalog(), headers={"Cache-Control": "public, max-age=60"})
 
 
+@router.get("/survival/servers")
+async def survival_servers(request: Request):
+    """Our servers for the player panel: each mode with its own economy, its address when the head
+    administrator opened it (the official slots of the game) and what is going on there now."""
+    def run(c):
+        state = official.state(c)
+        live = {s.get("server"): s for s in survival.live(c)}
+        names = {"survival": ("ZM", "Survival"), "escape": ("ZE", "Escape")}
+        return {"servers": [{"mode": m, "short": names[m][0], "name": names[m][1],
+                             "address": state.get(m, "") if state.get("enabled") else "",
+                             "open": bool(state.get("enabled") and state.get(m)), "live": live.get(m)}
+                            for m in survival.MODES]}
+    return await social_result(request, run)
+
+
 @router.get("/survival/top")
-async def survival_top(request: Request, kind: str = "lvl", limit: int = 10):
-    return await social_result(request, lambda c: {"top": survival.top(c, kind, limit)})
+async def survival_top(request: Request, kind: str = "lvl", limit: int = 10, mode: str = "survival"):
+    return await social_result(request, lambda c: {"top": survival.top(c, kind, limit, mode=mode)})
 
 
 @router.get("/survival/live")
@@ -475,10 +490,10 @@ async def survival_live(request: Request):
 
 
 @router.get("/survival/market")
-async def survival_market(request: Request, x_czm_key: str | None = Header(default=None)):
+async def survival_market(request: Request, mode: str = "survival", x_czm_key: str | None = Header(default=None)):
     def run(c):
         player = service.player_by_key(c, x_czm_key or "") if x_czm_key else None
-        return survival.market(c, player["id"] if player else 0)
+        return survival.market(c, player["id"] if player else 0, mode=mode)
     return await social_result(request, run)
 
 
@@ -490,56 +505,66 @@ def _survival_player(c, key):
 
 
 @router.get("/survival/me")
-async def survival_me(request: Request, x_czm_key: str | None = Header(default=None)):
+async def survival_me(request: Request, mode: str = "survival", x_czm_key: str | None = Header(default=None)):
     def run(c):
         player = _survival_player(c, x_czm_key)
-        survival.ensure(c, player["id"], player["nick"])
-        return {"state": survival.state(c, player["id"]), "history": survival.history(c, player["id"])}
+        with survival.on_mode(mode):
+            survival.ensure(c, player["id"], player["nick"])
+            return {"mode": survival.mode_name(mode), "state": survival.state(c, player["id"]),
+                    "history": survival.history(c, player["id"])}
     return await social_result(request, run)
 
 
 @router.post("/survival/action")
-async def survival_action(body: SurvivalActionIn, request: Request, x_czm_key: str | None = Header(default=None)):
+async def survival_action(body: SurvivalActionIn, request: Request, mode: str = "survival",
+                          x_czm_key: str | None = Header(default=None)):
     def run(c):
         player = _survival_player(c, x_czm_key)
-        survival.ensure(c, player["id"], player["nick"])
-        return survival.action(c, player["id"], "web:" + body.op, body.action, body.args)
+        with survival.on_mode(mode):
+            survival.ensure(c, player["id"], player["nick"])
+            return survival.action(c, player["id"], "web:" + body.op, body.action, body.args)
     return await social_result(request, run)
 
 
 @router.post("/survival/server/join")
-async def survival_server_join(body: SurvivalActionIn, request: Request, x_czm_server: str | None = Header(default=None)):
+async def survival_server_join(body: SurvivalActionIn, request: Request, mode: str = "survival",
+                               x_czm_server: str | None = Header(default=None)):
     def run(c):
         survival.check_server(x_czm_server)
-        survival.ensure(c, body.player, str(body.args.get("nick") or ""))
-        return {"state": survival.state(c, body.player)}
+        with survival.on_mode(mode):
+            survival.ensure(c, body.player, str(body.args.get("nick") or ""))
+            return {"state": survival.state(c, body.player)}
     return await social_result(request, run)
 
 
 @router.post("/survival/server/report")
-async def survival_server_report(body: SurvivalReportIn, request: Request, x_czm_server: str | None = Header(default=None)):
+async def survival_server_report(body: SurvivalReportIn, request: Request, mode: str = "survival",
+                                 x_czm_server: str | None = Header(default=None)):
     def run(c):
         survival.check_server(x_czm_server)
+        mode_ = survival.mode_name(mode)
         if body.live is not None:
-            survival.set_live(c, body.server, body.live)
-        return survival.report(c, "game:" + body.batch, body.entries)
+            survival.set_live(c, mode_, body.live)
+        return survival.report(c, "game:" + body.batch, body.entries, mode=mode_)
     return await social_result(request, run)
 
 
 @router.post("/survival/server/action")
-async def survival_server_action(body: SurvivalActionIn, request: Request, x_czm_server: str | None = Header(default=None)):
+async def survival_server_action(body: SurvivalActionIn, request: Request, mode: str = "survival",
+                                 x_czm_server: str | None = Header(default=None)):
     def run(c):
         survival.check_server(x_czm_server)
-        return survival.action(c, body.player, "game:" + body.op, body.action, body.args, server=True)
+        return survival.action(c, body.player, "game:" + body.op, body.action, body.args, server=True, mode=mode)
     return await social_result(request, run)
 
 
 @router.post("/survival/server/map_end")
-async def survival_server_map_end(body: SurvivalMapEndIn, request: Request, x_czm_server: str | None = Header(default=None)):
+async def survival_server_map_end(body: SurvivalMapEndIn, request: Request, mode: str = "survival",
+                                  x_czm_server: str | None = Header(default=None)):
     def run(c):
         survival.check_server(x_czm_server)
         kills = {int(k): v for k, v in body.kills.items() if k.isdigit()}
-        return {"top": survival.map_end(c, "map:" + body.batch, kills)}
+        return {"top": survival.map_end(c, "map:" + body.batch, kills, mode=mode)}
     return await social_result(request, run)
 
 

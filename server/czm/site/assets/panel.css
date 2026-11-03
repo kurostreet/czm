@@ -38,6 +38,23 @@ header{position:sticky;top:0;z-index:30;background:var(--glass);-webkit-backdrop
 
 main{padding-top:22px;padding-bottom:60px}
 
+/* the server switch: each server keeps its own level, tokens and shop */
+.modes{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 0 16px}
+.mode{display:grid;grid-template-columns:auto 1fr;grid-template-areas:"tag name" "tag state";align-items:center;column-gap:12px;text-align:left;padding:12px 14px;border-radius:16px;border:1px solid var(--line);background:var(--surface);cursor:pointer;color:var(--text);transition:border-color .2s ease,background .2s ease}
+.mode-tag{grid-area:tag;font:900 italic 26px/1 "CZM Display",system-ui,sans-serif;color:var(--muted);letter-spacing:.5px}
+.mode-name{grid-area:name;font-weight:600;font-size:15px;line-height:1.2}
+.mode small{grid-area:state;color:var(--muted);font-size:12px;line-height:1.3}
+.mode small i{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--muted);margin-right:6px;vertical-align:1px}
+.mode small i.on{background:var(--green)}
+.mode[aria-pressed="true"]{border-color:var(--red);background:linear-gradient(135deg,color-mix(in srgb,var(--red) 16%,var(--surface)),var(--surface) 70%)}
+.mode[aria-pressed="true"] .mode-tag{color:var(--red)}
+.soon{padding:34px 24px;text-align:center;position:relative;overflow:hidden}
+.soon::before{content:"";position:absolute;inset:0;background:radial-gradient(90% 120% at 50% 0,rgba(239,40,52,.16),transparent 60%);pointer-events:none}
+.soon-tag{display:block;font-size:64px;color:var(--red);opacity:.9}
+.soon h1{font-size:30px;margin:10px 0 8px}
+.soon p{max-width:440px;margin:0 auto}
+@media (max-width:400px){.mode{padding:10px 12px;column-gap:9px}.mode-tag{font-size:21px}}
+
 /* buttons and forms */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 18px;border:0;border-radius:12px;background:var(--red);color:#fff;font-weight:600;cursor:pointer;transition:filter .15s ease,transform .15s ease}
 .btn:hover{filter:brightness(1.08)}

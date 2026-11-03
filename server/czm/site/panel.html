@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Панель игрока — Counter Zombie Mobile</title>
-<meta name="description" content="Панель игрока сервера Survival: уровень, токены, магазин, скины, боевой пропуск, лавка и топ.">
+<meta name="description" content="Панель игрока серверов Survival и Escape: уровень, токены, магазин, скины, боевой пропуск, лавка и топ.">
 <meta name="theme-color" content="#09090c">
 <meta name="robots" content="noindex">
 <link rel="icon" type="image/png" href="/assets/favicon-64.png">
@@ -35,7 +35,7 @@
 <!-- sign in -->
 <section class="login card" id="login" hidden>
 <h1 class="h-game" data-i18n="loginTitle">Панель игрока</h1>
-<p class="muted" data-i18n="loginLead">Войди в аккаунт CZM — уровень, токены, магазин и пропуск сервера Survival откроются сразу.</p>
+<p class="muted" data-i18n="loginLead">Войди в аккаунт CZM — уровень, токены, магазин и пропуск на наших серверах Survival и Escape откроются сразу.</p>
 <div class="tabs small" role="tablist">
 <button class="tab" role="tab" aria-selected="true" data-login="email" data-i18n="byEmail">По почте</button>
 <button class="tab" role="tab" aria-selected="false" data-login="nick" data-i18n="byNick">Ник и пароль</button>
@@ -56,6 +56,13 @@
 
 <!-- the player -->
 <section id="panel" hidden>
+<nav class="modes" id="modes" aria-label="Серверы"></nav>
+<section class="soon card" id="soon" hidden>
+<span class="soon-tag h-game" id="soonTag">ZE</span>
+<h1 class="h-game" id="soonTitle"></h1>
+<p class="muted" id="soonText"></p>
+</section>
+<div id="modeBody">
 <div class="hero card">
 <img class="avatar" id="avatar" src="/assets/avatar-1.png" alt="">
 <div class="who">
@@ -159,6 +166,7 @@
 <div id="live"></div>
 <div id="notes"></div>
 </section>
+</div>
 </section>
 
 <div class="toast" id="toast" role="status" hidden></div>

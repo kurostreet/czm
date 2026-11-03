@@ -91,3 +91,18 @@ class SurvivalApiTests(GameTicketTests):
         catalog = self.client.get("/api/v1/survival/catalog").json()
         self.assertEqual(catalog["categories"][0]["key"], "prefix")
         self.assertEqual(self.client.get("/api/v1/survival/top").json()["top"][0]["id"], self.ids[1])
+
+    def test_each_server_mode_has_its_own_economy(self):
+        from czm import survival
+        body = {"batch": "api-batch-ze01", "entries": [{"player": self.ids[1], "nick": "One", "kills": 5, "zkills": 5}],
+                "live": {"map": "ze_test", "players": [], "max": 32}}
+        answer = self.client.post("/api/v1/survival/server/report?mode=escape", json=body,
+                                  headers={"X-CZM-Server": survival.server_token("ab" * 32)})
+        self.assertEqual(answer.status_code, 200, answer.text)
+        self.assertEqual(self.request("GET", "survival/me?mode=escape", 1).json()["state"]["tokens"], 5)
+        self.assertEqual(self.request("GET", "survival/me", 1).json()["state"]["tokens"], 0)
+        self.assertEqual(self.request("GET", "survival/me?mode=nope", 1).status_code, 404)
+        servers = {s["mode"]: s for s in self.client.get("/api/v1/survival/servers").json()["servers"]}
+        self.assertEqual(sorted(servers), ["escape", "survival"])
+        self.assertEqual(servers["escape"]["live"]["map"], "ze_test")
+        self.assertEqual(self.client.get("/api/v1/survival/top?mode=escape").json()["top"][0]["id"], self.ids[1])

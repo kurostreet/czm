@@ -11,7 +11,7 @@
 #define CZM_JSON_OK(%1) (%1 != EzInvalid_JSON)
 
 stock g_czmApiToken[65];
-stock g_czmApiCvar;
+stock g_czmApiCvar, g_czmApiMode;
 
 // Call in plugin_cfg: reads the ticket key once. Returns false when the key is missing.
 stock bool:czm_api_init()
@@ -19,6 +19,10 @@ stock bool:czm_api_init()
 	g_czmApiCvar = get_cvar_pointer("czm_api_url");
 	if (!g_czmApiCvar)
 		g_czmApiCvar = create_cvar("czm_api_url", "http://127.0.0.1:8200", FCVAR_PROTECTED, "Where the CZM API answers");
+	// the server mode: survival or escape, each with its own economy in the API
+	g_czmApiMode = get_cvar_pointer("czm_server_name");
+	if (!g_czmApiMode)
+		g_czmApiMode = create_cvar("czm_server_name", "survival", FCVAR_SERVER, "survival or escape");
 	new path[128], key[96], message[128];
 	get_localinfo("amxx_configsdir", path, charsmax(path));
 	add(path, charsmax(path), "/czm_ticket.key");
@@ -45,6 +49,13 @@ stock czm_api(const method[], const path[], EzJSON:body, const callback[], const
 	get_pcvar_string(g_czmApiCvar, url, charsmax(url));
 	add(url, charsmax(url), "/api/v1");
 	add(url, charsmax(url), path);
+	new mode[24];
+	get_pcvar_string(g_czmApiMode, mode, charsmax(mode));
+	if (mode[0])
+	{
+		add(url, charsmax(url), contain(path, "?") != -1 ? "&mode=" : "?mode=");
+		add(url, charsmax(url), mode);
+	}
 	new EzHttpOptions:opt = ezhttp_create_options();
 	ezhttp_option_set_header(opt, "Content-Type", "application/json");
 	ezhttp_option_set_header(opt, "X-CZM-Server", g_czmApiToken);

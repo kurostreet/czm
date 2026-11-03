@@ -206,5 +206,21 @@ class SurvivalTests(unittest.TestCase):
         with self.assertRaises(survival.Error):
             self.act(self.b, "grant", by=self.a, cat="skin", item="sas")   # players cannot call it
 
+    def test_each_mode_keeps_its_own_economy(self):
+        self.report("m1", time=1200, kills=10, zkills=10)
+        escape = self.run_in(lambda c: survival.report(c, "m2", [{"player": self.a, "nick": "Alpha", "kills": 3, "zkills": 3}],
+                                                       mode="escape"))
+        self.assertEqual(escape["states"][self.a]["tokens"], 3)
+        self.assertEqual(escape["states"][self.a]["kills"], 3)
+        self.assertEqual(self.state()["kills"], 10)                      # Survival did not change
+        with db.db() as c:
+            self.assertEqual(survival.state(c, self.a, mode="escape")["tokens"], 3)
+            survival.action(c, self.a, "op-escape-1", "equip", {"cat": "skin", "item": ""}, mode="escape")
+            self.assertEqual([r["id"] for r in survival.top(c, "kills", mode="escape")], [self.a])
+            self.assertEqual(survival.history(c, self.a, mode="escape"), [])
+            with self.assertRaises(survival.Error):
+                survival.state(c, self.a, mode="ze")
+        self.assertEqual(survival._mode.get(), "survival")              # the mode never leaks out
+
 if __name__ == "__main__":
     unittest.main()

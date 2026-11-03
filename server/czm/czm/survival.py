@@ -15,11 +15,20 @@ Rules from the Kontra configuration:
 
 Every action that spends tokens carries an operation id from its caller; repeating it returns
 the first result and spends nothing twice.
+
+Each of our servers keeps its own economy, as on Kontra: MODES are "survival" (ZM) and "escape"
+(ZE), each with its own players, market and history tables (<mode>_players, <mode>_market,
+<mode>_log). The public functions take mode="..."; without it they work on the mode already
+chosen by the caller, "survival" by default. Promo codes, operation ids, report batches and the
+live state are shared.
 """
+import contextvars
+import functools
 import json
 import secrets
 import sqlite3
 import time
+from contextlib import contextmanager
 
 from . import accounts
 from .db import now
@@ -151,7 +160,10 @@ CRATE = {
 # Airdrop packs a game server may hand out (Kontra AIR_TOKEN_TABLE)
 AIRDROP_TOKENS = (10, 25, 50, 75, 100, 150, 250, 500)
 
-SCHEMA = """
+MODES = ("survival", "escape")
+
+# one economy per server mode; "survival_" is replaced by the mode
+_MODE_SCHEMA = """
 CREATE TABLE IF NOT EXISTS survival_players (
  player INTEGER PRIMARY KEY, nick TEXT NOT NULL DEFAULT '',
  time_sec INTEGER NOT NULL DEFAULT 0, kills INTEGER NOT NULL DEFAULT 0, deaths INTEGER NOT NULL DEFAULT 0,
@@ -162,17 +174,6 @@ CREATE TABLE IF NOT EXISTS survival_players (
  first_seen INTEGER NOT NULL DEFAULT 0, last_seen INTEGER NOT NULL DEFAULT 0, revision INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS survival_players_lvl ON survival_players(bonus_lvl, time_sec, kills);
-CREATE TABLE IF NOT EXISTS survival_ops (
- op TEXT PRIMARY KEY, player INTEGER NOT NULL, result TEXT NOT NULL, time INTEGER NOT NULL
-);
-CREATE TABLE IF NOT EXISTS survival_reports (batch TEXT PRIMARY KEY, time INTEGER NOT NULL);
-CREATE TABLE IF NOT EXISTS survival_promos (
- code TEXT PRIMARY KEY, kind TEXT NOT NULL, amount INTEGER NOT NULL, created INTEGER NOT NULL,
- actor INTEGER NOT NULL DEFAULT 0
-);
-CREATE TABLE IF NOT EXISTS survival_promo_uses (
- code TEXT NOT NULL, player INTEGER NOT NULL, time INTEGER NOT NULL, PRIMARY KEY (code, player)
-);
 CREATE TABLE IF NOT EXISTS survival_market (
  id INTEGER PRIMARY KEY AUTOINCREMENT, seller INTEGER NOT NULL, cat TEXT NOT NULL, item TEXT NOT NULL,
  price INTEGER NOT NULL, created INTEGER NOT NULL, expires INTEGER NOT NULL, state TEXT NOT NULL DEFAULT 'open',
@@ -184,22 +185,75 @@ CREATE TABLE IF NOT EXISTS survival_log (
  amount INTEGER NOT NULL DEFAULT 0, detail TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS survival_log_player ON survival_log(player, id);
+"""
+_SHARED_SCHEMA = """
+CREATE TABLE IF NOT EXISTS survival_ops (
+ op TEXT PRIMARY KEY, player INTEGER NOT NULL, result TEXT NOT NULL, time INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS survival_reports (batch TEXT PRIMARY KEY, time INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS survival_promos (
+ code TEXT PRIMARY KEY, kind TEXT NOT NULL, amount INTEGER NOT NULL, created INTEGER NOT NULL,
+ actor INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS survival_promo_uses (
+ code TEXT NOT NULL, player INTEGER NOT NULL, time INTEGER NOT NULL, PRIMARY KEY (code, player)
+);
 CREATE TABLE IF NOT EXISTS survival_live (server TEXT PRIMARY KEY, data TEXT NOT NULL, time INTEGER NOT NULL);
 """
+SCHEMA = "".join(_MODE_SCHEMA.replace("survival_", f"{m}_") for m in MODES) + _SHARED_SCHEMA
 
 
 def migrate(conn: sqlite3.Connection):
-    have = {r[1] for r in conn.execute("PRAGMA table_info(survival_players)")}
-    if "crate" not in have:
-        try:
-            conn.execute("ALTER TABLE survival_players ADD COLUMN crate TEXT NOT NULL DEFAULT '{}'")
-        except sqlite3.OperationalError as error:  # the other process was first
-            if "duplicate column" not in str(error):
-                raise
+    for mode in MODES:
+        have = {r[1] for r in conn.execute(f"PRAGMA table_info({mode}_players)")}
+        if "crate" not in have:
+            try:
+                conn.execute(f"ALTER TABLE {mode}_players ADD COLUMN crate TEXT NOT NULL DEFAULT '{{}}'")
+            except sqlite3.OperationalError as error:  # the other process was first
+                if "duplicate column" not in str(error):
+                    raise
 
 
 class Error(accounts.AuthError):
     """A refused action; the code is what the game and the site translate."""
+
+
+# ---------------------------------------------------------------- server modes
+
+_mode = contextvars.ContextVar("czm_survival_mode", default="survival")
+
+
+def mode_name(value) -> str:
+    """A mode from a request ("survival" when none is given); anything else is refused."""
+    value = str(value or "survival").strip().lower()
+    if value not in MODES:
+        raise Error("mode", 404)
+    return value
+
+
+@contextmanager
+def on_mode(mode):
+    token = _mode.set(mode_name(mode))
+    try:
+        yield
+    finally:
+        _mode.reset(token)
+
+
+def _T(name: str) -> str:
+    """The table of the current mode's economy: players, market or log."""
+    return f"{_mode.get()}_{name}"
+
+
+def _per_mode(fn):
+    """Lets a public function take mode="escape" and run on that economy."""
+    @functools.wraps(fn)
+    def run(*args, mode=None, **kwargs):
+        if mode is None:
+            return fn(*args, **kwargs)
+        with on_mode(mode):
+            return fn(*args, **kwargs)
+    return run
 
 
 # ---------------------------------------------------------------- the catalog
@@ -241,17 +295,18 @@ def catalog() -> dict:
 # ---------------------------------------------------------------- players
 
 def _row(conn, player: int):
-    return conn.execute("SELECT * FROM survival_players WHERE player=?", (player,)).fetchone()
+    return conn.execute(f"SELECT * FROM {_T('players')} WHERE player=?", (player,)).fetchone()
 
 
+@_per_mode
 def ensure(conn: sqlite3.Connection, player: int, nick: str = "") -> sqlite3.Row:
     if not conn.execute("SELECT 1 FROM players WHERE id=?", (player,)).fetchone():
         raise Error("player", 404)
     t = now()
-    conn.execute("INSERT INTO survival_players(player, nick, first_seen, last_seen) VALUES (?, ?, ?, ?) "
+    conn.execute(f"INSERT INTO {_T('players')}(player, nick, first_seen, last_seen) VALUES (?, ?, ?, ?) "
                  "ON CONFLICT(player) DO NOTHING", (player, (nick or "")[:32], t, t))
     if nick:
-        conn.execute("UPDATE survival_players SET nick=? WHERE player=? AND nick<>?", (nick[:32], player, nick[:32]))
+        conn.execute(f"UPDATE {_T('players')} SET nick=? WHERE player=? AND nick<>?", (nick[:32], player, nick[:32]))
     return _row(conn, player)
 
 
@@ -280,6 +335,7 @@ def _today(t: int) -> str:
     return time.strftime("%Y%m%d", time.gmtime(t + 3 * 3600))
 
 
+@_per_mode
 def state(conn, player: int, t: int | None = None) -> dict:
     row = _row(conn, player)
     if row is None:
@@ -316,11 +372,11 @@ def _save(conn, player: int, **fields):
         if key in fields:
             fields[key] = json.dumps(fields[key], ensure_ascii=False, separators=(",", ":"), sort_keys=True)
     sets = ", ".join(f"{k}=?" for k in fields)
-    conn.execute(f"UPDATE survival_players SET {sets}, revision=revision+1 WHERE player=?", (*fields.values(), player))
+    conn.execute(f"UPDATE {_T('players')} SET {sets}, revision=revision+1 WHERE player=?", (*fields.values(), player))
 
 
 def _log(conn, player: int, kind: str, amount: int = 0, detail: str = ""):
-    conn.execute("INSERT INTO survival_log(time, player, kind, amount, detail) VALUES (?, ?, ?, ?, ?)",
+    conn.execute(f"INSERT INTO {_T('log')}(time, player, kind, amount, detail) VALUES (?, ?, ?, ?, ?)",
                  (now(), player, kind, amount, detail[:200]))
 
 
@@ -338,6 +394,7 @@ def _bp_claim(bp: dict) -> int:
 
 # ---------------------------------------------------------------- what the game reports
 
+@_per_mode
 def report(conn: sqlite3.Connection, batch: str, entries: list[dict]) -> dict:
     """Applies one batch from a game server. A repeated batch changes nothing.
 
@@ -392,6 +449,7 @@ def report(conn: sqlite3.Connection, batch: str, entries: list[dict]) -> dict:
     return {"events": events, "states": states}
 
 
+@_per_mode
 def map_end(conn: sqlite3.Connection, batch: str, kills: dict[int, int]) -> list[dict]:
     """The map is over: the three best killers get 15, 10 and 5 tokens. Returns the top."""
     if conn.execute("SELECT 1 FROM survival_reports WHERE batch=?", (batch,)).fetchone():
@@ -423,6 +481,7 @@ def _spend(row, amount: int):
         raise Error("tokens", 409)
 
 
+@_per_mode
 def action(conn: sqlite3.Connection, player: int, op: str, name: str, args: dict, server: bool = False) -> dict:
     """One action of a player, from the game menu or the site. Idempotent by op."""
     op = (op or "").strip()
@@ -620,7 +679,7 @@ def _market_sell(conn, row, args, t):
     if entry["id"] not in owned.get(cat, []):
         raise Error("not_owned", 409)
     expire_market(conn, t)
-    if conn.execute("SELECT COUNT(*) FROM survival_market WHERE seller=? AND state='open'", (row["player"],)).fetchone()[0] >= MARKET_MAX:
+    if conn.execute(f"SELECT COUNT(*) FROM {_T('market')} WHERE seller=? AND state='open'", (row["player"],)).fetchone()[0] >= MARKET_MAX:
         raise Error("market_max", 409)
     # the item waits on the market: it leaves the seller until it is sold or taken back
     owned[cat] = [x for x in owned[cat] if x != entry["id"]]
@@ -628,7 +687,7 @@ def _market_sell(conn, row, args, t):
     if equipped.get(cat) == entry["id"]:
         equipped.pop(cat)
     _save(conn, row["player"], owned=owned, equipped=equipped)
-    cur = conn.execute("INSERT INTO survival_market(seller, cat, item, price, created, expires) VALUES (?, ?, ?, ?, ?, ?)",
+    cur = conn.execute(f"INSERT INTO {_T('market')}(seller, cat, item, price, created, expires) VALUES (?, ?, ?, ?, ?, ?)",
                        (row["player"], cat, entry["id"], cost, t, t + MARKET_DAYS * 86400))
     return {"listing": cur.lastrowid}
 
@@ -641,16 +700,17 @@ def _give_back(conn, listing, t):
         _save(conn, listing["seller"], owned=owned)
 
 
+@_per_mode
 def expire_market(conn, t=None):
     t = t or now()
-    for listing in conn.execute("SELECT * FROM survival_market WHERE state='open' AND expires<=?", (t,)).fetchall():
-        conn.execute("UPDATE survival_market SET state='expired', closed=? WHERE id=?", (t, listing["id"]))
+    for listing in conn.execute(f"SELECT * FROM {_T('market')} WHERE state='open' AND expires<=?", (t,)).fetchall():
+        conn.execute(f"UPDATE {_T('market')} SET state='expired', closed=? WHERE id=?", (t, listing["id"]))
         _give_back(conn, listing, t)
 
 
 def _market_buy(conn, row, args, t):
     expire_market(conn, t)
-    listing = conn.execute("SELECT * FROM survival_market WHERE id=? AND state='open'", (int(args.get("listing") or 0),)).fetchone()
+    listing = conn.execute(f"SELECT * FROM {_T('market')} WHERE id=? AND state='open'", (int(args.get("listing") or 0),)).fetchone()
     if listing is None:
         raise Error("listing", 404)
     if listing["seller"] == row["player"]:
@@ -670,17 +730,17 @@ def _market_buy(conn, row, args, t):
     income = listing["price"] - listing["price"] * MARKET_TAX // 100
     if seller is not None:
         _save(conn, listing["seller"], tokens=seller["tokens"] + income)
-    conn.execute("UPDATE survival_market SET state='sold', buyer=?, closed=? WHERE id=?", (row["player"], t, listing["id"]))
+    conn.execute(f"UPDATE {_T('market')} SET state='sold', buyer=?, closed=? WHERE id=?", (row["player"], t, listing["id"]))
     _log(conn, row["player"], "market_buy", -listing["price"], f"{listing['cat']}:{listing['item']}")
     _log(conn, listing["seller"], "market_sell", income, f"{listing['cat']}:{listing['item']}")
     return {"listing": listing["id"], "price": listing["price"]}
 
 
 def _market_withdraw(conn, row, args, t):
-    listing = conn.execute("SELECT * FROM survival_market WHERE id=? AND state='open'", (int(args.get("listing") or 0),)).fetchone()
+    listing = conn.execute(f"SELECT * FROM {_T('market')} WHERE id=? AND state='open'", (int(args.get("listing") or 0),)).fetchone()
     if listing is None or listing["seller"] != row["player"]:
         raise Error("listing", 404)
-    conn.execute("UPDATE survival_market SET state='withdrawn', closed=? WHERE id=?", (t, listing["id"]))
+    conn.execute(f"UPDATE {_T('market')} SET state='withdrawn', closed=? WHERE id=?", (t, listing["id"]))
     _give_back(conn, listing, t)
     return {"listing": listing["id"]}
 
@@ -769,10 +829,11 @@ ACTIONS = {
 
 # ---------------------------------------------------------------- lists for the site and the game
 
+@_per_mode
 def market(conn, viewer: int = 0, t=None) -> dict:
     t = t or now()
     expire_market(conn, t)
-    rows = conn.execute("SELECT m.*, s.nick FROM survival_market m LEFT JOIN survival_players s ON s.player=m.seller "
+    rows = conn.execute(f"SELECT m.*, s.nick FROM {_T('market')} m LEFT JOIN {_T('players')} s ON s.player=m.seller "
                         "WHERE m.state='open' ORDER BY m.price, m.id LIMIT 200").fetchall()
     def show(r):
         entry = item(r["cat"], r["item"]) or {"ru": r["item"], "en": r["item"]}
@@ -782,18 +843,20 @@ def market(conn, viewer: int = 0, t=None) -> dict:
     return {"listings": [show(r) for r in rows]}
 
 
+@_per_mode
 def top(conn, kind: str = "lvl", limit: int = 10) -> list[dict]:
     order = {"lvl": f"(time_sec/{LVL_TIME} + kills/{LVL_KILLS} + bonus_lvl) DESC, kills DESC",
              "kills": "kills DESC", "tokens": "tokens DESC", "time": "time_sec DESC"}.get(kind)
     if order is None:
         raise Error("kind")
-    rows = conn.execute(f"SELECT * FROM survival_players ORDER BY {order}, player LIMIT ?", (max(1, min(limit, 100)),)).fetchall()
+    rows = conn.execute(f"SELECT * FROM {_T('players')} ORDER BY {order}, player LIMIT ?", (max(1, min(limit, 100)),)).fetchall()
     return [{"place": i, "id": r["player"], "nick": r["nick"], "lvl": lvl(r), "kills": r["kills"],
              "tokens": r["tokens"], "time": r["time_sec"]} for i, r in enumerate(rows, 1)]
 
 
+@_per_mode
 def history(conn, player: int, limit: int = 30) -> list[dict]:
-    rows = conn.execute("SELECT * FROM survival_log WHERE player=? ORDER BY id DESC LIMIT ?", (player, limit)).fetchall()
+    rows = conn.execute(f"SELECT * FROM {_T('log')} WHERE player=? ORDER BY id DESC LIMIT ?", (player, limit)).fetchall()
     return [{"time": r["time"], "kind": r["kind"], "amount": r["amount"], "detail": r["detail"]} for r in rows]
 
 

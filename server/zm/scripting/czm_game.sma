@@ -242,10 +242,12 @@ public cmd_say(id)
 
 public game_menu(id)
 {
-	new title[160], map[32], left = get_timeleft(), staff = czm_staff(id);
+	new title[160], map[32], mode[24], left = get_timeleft(), staff = czm_staff(id);
 	get_mapname(map, charsmax(map));
-	formatex(title, charsmax(title), en(id) ? "\yCOUNTER ZOMBIE  SURVIVAL^n\d%s  |  %d:%02d left  |  %d/%d players" : "\yCOUNTER ZOMBIE  SURVIVAL^n\d%s  |  осталось %d:%02d  |  игроков %d/%d",
-		map, max(left, 0) / 60, max(left, 0) % 60, get_playersnum(), MaxClients);
+	get_cvar_string("czm_server_name", mode, charsmax(mode));
+	strtoupper(mode);
+	formatex(title, charsmax(title), en(id) ? "\yCOUNTER ZOMBIE  %s^n\d%s  |  %d:%02d left  |  %d/%d players" : "\yCOUNTER ZOMBIE  %s^n\d%s  |  осталось %d:%02d  |  игроков %d/%d",
+		mode[0] ? mode : "SURVIVAL", map, max(left, 0) / 60, max(left, 0) % 60, get_playersnum(), MaxClients);
 	new menu = menu_create(title, "on_game_menu"), line[64];
 	// the staff see their menu first, so it never hides on the second page
 	if (staff != CZM_STAFF_NONE)
