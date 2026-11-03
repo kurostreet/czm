@@ -4,11 +4,6 @@
 #endif
 #define _czm_survival_included
 
-#pragma reqlib czm_core
-#if !defined AMXMODX_NOAUTOLOAD
-	#pragma loadlib czm_core
-#endif
-
 #define CZM_SITE "counter-zombie.ru"
 
 enum
@@ -23,6 +18,13 @@ enum
 	CZM_SND_EFFECT,
 	CZM_SND_MUSIC
 }
+
+// czm_core itself takes only the constants above.
+#if defined CZM_CORE_PLUGIN
+	#endinput
+#endif
+
+#pragma reqlib czm_core
 
 // The player's language: CZM_RU or CZM_EN.
 native czm_lang(id);

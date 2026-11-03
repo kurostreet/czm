@@ -18,6 +18,9 @@
 #include <json>
 #include <nvault>
 
+#define CZM_CORE_PLUGIN
+#include <czm_survival>
+
 #define PLUGIN "CZM Core"
 #define VERSION "1.0"
 #define AUTHOR "kurostreet"

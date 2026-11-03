@@ -33,7 +33,10 @@ for f in "$R"/scripting/*.sma; do
 		exit 1
 	fi
 	grep -iE "warning|error" "$BUILD/$n.log" | sed "s#^#$n: #" || true
-	[ -s "$BUILD/$n.amxx" ] || { cat "$BUILD/$n.log"; echo "COMPILE_FAIL $n"; exit 1; }
+	if grep -qE "(error|fatal error) [0-9]+:" "$BUILD/$n.log" || [ ! -s "$BUILD/$n.amxx" ]; then
+		echo "COMPILE_FAIL $n"
+		exit 1
+	fi
 done
 echo "COMPILE_OK"
 
