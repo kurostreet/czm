@@ -21,9 +21,11 @@ GNU General Public License for more details.
 #include "extdll_menu.h"
 #include "BaseMenu.h"
 #include "BaseClientWindow.h"
+#include "PlayerModelView.h"
 #include "Utils.h"
 #include "keydefs.h"
 #include "CzmMenu.h"
+#include "../../common/czm_player_model.h"
 
 #define UI_DIR "gfx/czm/ui/"
 #define SHOP_DIR "gfx/czm/shop/"
@@ -637,6 +639,7 @@ private:
 	void DrawQuick( void );
 	void DrawWheel( void );
 	void DrawInfo( const CzmShopItem *item );
+	bool DrawPlayerSkin( const CzmRect &rect );
 	void DrawGrid( void );
 
 	int m_iTeam;
@@ -664,6 +667,9 @@ private:
 	int W, H;
 	CzmRect m_top, m_close, m_tabs[CAT_COUNT], m_quick[CZM_QUICK], m_info, m_buy, m_cards[CZM_MAX_SECTORS];
 	int m_iWheelX, m_iWheelY, m_iWheelR;
+	CMenuPlayerModelView m_skinView;
+	char m_szSkinPath[128];
+	CzmRect m_skinRect;
 };
 
 static int s_iLastCategory = CAT_RIFLES;
@@ -690,6 +696,8 @@ CCzmShop::CCzmShop() : BaseClass( "CzmShop" )
 	W = H = 0;
 	m_iWheelX = m_iWheelY = m_iWheelR = 0;
 	memset( m_slots, 0, sizeof( m_slots ));
+	m_szSkinPath[0] = 0;
+	m_skinRect = CZM_Rect( 0, 0, 0, 0 );
 }
 
 void CCzmShop::Init()
@@ -812,6 +820,7 @@ void CCzmShop::Open( int team )
 
 void CCzmShop::Show()
 {
+	m_szSkinPath[0] = 0; // other menu previews share the engine's preview entity
 	EngFuncs::KEY_SetDest( KEY_MENU );
 	EngFuncs::ClientCmd( true, "touch_setclientonly 1" );
 	BaseClass::Show();
@@ -1334,6 +1343,36 @@ void CCzmShop::DrawWheel( void )
 	}
 }
 
+bool CCzmShop::DrawPlayerSkin( const CzmRect &rect )
+{
+	char path[128];
+	if( !CzmPlayerModel::Path( EngFuncs::GetCvarString( "czm_player_model" ), path, sizeof( path ))
+		|| !EngFuncs::FileExists( path ))
+		return false;
+
+	if( strcmp( path, m_szSkinPath ) || rect.x != m_skinRect.x || rect.y != m_skinRect.y
+		|| rect.w != m_skinRect.w || rect.h != m_skinRect.h || !m_skinView.ent )
+	{
+		m_skinView.iFlags |= QMF_DISABLESCAILING | QMF_INACTIVE;
+		m_skinView.m_bCanCaptureFocus = false;
+		m_skinView.eOverrideMode = CMenuPlayerModelView::PMV_SHOWMODEL;
+		m_skinView.SetRect( rect.x, rect.y, rect.w, rect.h );
+		m_skinView.VidInit();
+		m_skinView.backgroundColor.SetDefault( 0 );
+		m_skinView.colorStroke.SetDefault( 0 );
+		m_skinView.iStrokeWidth = 0;
+		if( !m_skinView.ent )
+			return false;
+		EngFuncs::SetModel( m_skinView.ent, path );
+		Q_strncpy( m_szSkinPath, path, sizeof( m_szSkinPath ));
+		m_skinRect = rect;
+	}
+	if( !m_skinView.ent->model )
+		return false;
+	m_skinView.Draw();
+	return true;
+}
+
 void CCzmShop::DrawInfo( const CzmShopItem *item )
 {
 	HFont bigFont = CZM_Font( CZMF_SHOP_BIG );
@@ -1361,6 +1400,16 @@ void CCzmShop::DrawInfo( const CzmShopItem *item )
 			item->price <= m_iMoney ? PackRGBA( 74, 222, 128, 255 ) : PackRGBA( 248, 113, 113, 255 ), QM_RIGHT );
 	}
 	y += CZM_FontHeight( bigFont ) + H * 0.02f;
+
+	const int skinW = w * 0.30f, skinGap = H * 0.018f;
+	CzmRect skin = CZM_Rect( x + w - skinW, y, skinW, H * 0.31f );
+	if( DrawPlayerSkin( skin ))
+	{
+		CZM_DrawText( CZM_Font( CZMF_UI_META ), skin.x, skin.y + skin.h + H * 0.008f, skin.w,
+			ru ? "Ваш скин" : "Your skin", PackRGBA( 155, 166, 184, 255 ), QM_CENTER );
+		w -= skinW + skinGap;
+		textFont = CZM_Font( CZMF_UI_META );
+	}
 
 	DrawSilhouette( item->image, x + w * 0.08f, y, w * 0.84f, H * 0.15f, CZM_White());
 	y += H * 0.17f;

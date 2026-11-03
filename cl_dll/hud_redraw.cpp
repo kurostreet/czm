@@ -27,6 +27,7 @@
 
 #include "draw_util.h"
 #include "strl.h"
+#include "../common/czm_player_model.h"
 
 #define MAX_LOGO_FRAMES 56
 
@@ -110,6 +111,18 @@ static void CZM_UpdateShopState( void )
 		strlcpy( last, state, sizeof( last ));
 		gEngfuncs.Cvar_Set( "czm_buy_state", state );
 	}
+
+	// User info contains the skin assigned by the server, including its custom models.
+	// The menu's profile cvar "model" is not necessarily what the player is wearing here.
+	hud_player_info_t info = {};
+	cl_entity_t *local = gEngfuncs.GetLocalPlayer();
+	if( local && local->index > 0 && local->index <= MAX_PLAYERS )
+		GetPlayerInfo( local->index, &info );
+	char modelPath[128];
+	const char *model = CzmPlayerModel::Path( info.model, modelPath, sizeof( modelPath )) ? info.model : "";
+	const char *oldModel = gEngfuncs.pfnGetCvarString( "czm_player_model" );
+	if( !oldModel || strcmp( model, oldModel ))
+		gEngfuncs.Cvar_Set( "czm_player_model", model );
 }
 
 // Counter Zombie Mobile: label in the middle of the screen while auto run is on
