@@ -55,6 +55,13 @@ new g_scope[MAX_PLAYERS + 1];        // give: SCOPE_*
 new g_seconds[MAX_PLAYERS + 1];      // ban or mute: how long
 
 new g_mapNext[32], g_mapLeft;
+
+// the LVL MOD shop, for giving items (from the API catalog)
+#define MAX_CATS 8
+#define MAX_ITEMS 16
+new g_catKey[MAX_CATS][12], g_catName[MAX_CATS][2][40], g_catCount;
+new g_itemId[MAX_CATS][MAX_ITEMS][24], g_itemName[MAX_CATS][MAX_ITEMS][2][40], g_itemCount[MAX_CATS];
+new g_grantCat[MAX_PLAYERS + 1];
 new g_pollText[128], g_pollYes, g_pollNo, g_pollLeft, bool:g_pollRunning;
 new g_hud;
 
@@ -99,6 +106,50 @@ public plugin_cfg()
 {
 	if (!czm_api_init())
 		log_amx("czm_ticket.key is missing: no staff, bans and mutes are not checked");
+	set_task(3.0, "task_catalog");
+}
+
+public task_catalog()
+{
+	czm_api("GET", "/survival/catalog", CZM_JSON_NONE, "on_catalog");
+}
+
+public on_catalog(EzHttpRequest:request)
+{
+	new code, EzJSON:root = czm_api_answer(request, code);
+	if (code != 200 || !CZM_JSON_OK(root))
+	{
+		if (CZM_JSON_OK(root)) ezjson_free(root);
+		set_task(60.0, "task_catalog");
+		return;
+	}
+	new EzJSON:cats = ezjson_object_get_value(root, "categories");
+	g_catCount = 0;
+	for (new c = 0; c < ezjson_array_get_count(cats) && g_catCount < MAX_CATS; c++)
+	{
+		new EzJSON:cat = ezjson_array_get_value(cats, c), EzJSON:items = ezjson_object_get_value(cat, "items"), k = g_catCount++;
+		ezjson_object_get_string(cat, "key", g_catKey[k], charsmax(g_catKey[]));
+		ezjson_object_get_string(cat, "ru", g_catName[k][0], charsmax(g_catName[][]));
+		ezjson_object_get_string(cat, "en", g_catName[k][1], charsmax(g_catName[][]));
+		g_itemCount[k] = 0;
+		for (new i = 0; i < ezjson_array_get_count(items) && g_itemCount[k] < MAX_ITEMS; i++)
+		{
+			new EzJSON:it = ezjson_array_get_value(items, i);
+			// the head administrators' own items are never given
+			if (!ezjson_object_has_value(it, "admin"))
+			{
+				new n = g_itemCount[k]++;
+				ezjson_object_get_string(it, "id", g_itemId[k][n], charsmax(g_itemId[][]));
+				ezjson_object_get_string(it, "ru", g_itemName[k][n][0], charsmax(g_itemName[][][]));
+				ezjson_object_get_string(it, "en", g_itemName[k][n][1], charsmax(g_itemName[][][]));
+			}
+			ezjson_free(it);
+		}
+		ezjson_free(items);
+		ezjson_free(cat);
+	}
+	ezjson_free(cats);
+	ezjson_free(root);
 }
 
 // ---------------------------------------------------------------- natives
@@ -747,6 +798,8 @@ give_menu(id)
 		menu_additem(menu, GIVE_NAMES[w], info);
 	}
 	item_add(menu, id, "+50 аммо-паков", "+50 ammo packs", "packs");
+	if (g_scope[id] <= SCOPE_SELF && g_catCount)
+		item_add(menu, id, "\yПредмет LVL MOD (скин, префикс, нож)", "\yLVL MOD item (skin, prefix, knife)", "lvl");
 	item_add(menu, id, "Телепорт ко мне", "Teleport to me", "tp");
 	item_add(menu, id, "Сделать зомби", "Make a zombie", "zombie");
 	item_add(menu, id, "Сделать человеком", "Make a human", "human");
@@ -766,6 +819,11 @@ public on_give_menu(id, menu, item)
 	menu_destroy(menu);
 	if (!staff(id, CZM_STAFF_ADMIN))
 		return PLUGIN_HANDLED;
+	if (equal(info, "lvl"))
+	{
+		grant_cat_menu(id);
+		return PLUGIN_HANDLED;
+	}
 	new targets[MAX_PLAYERS], count = scope_players(id, targets), done = 0;
 	for (new k = 0; k < count; k++)
 		done += give(id, targets[k], info);
@@ -841,6 +899,107 @@ give(id, target, const what[])
 	else if (equal(what, "human"))
 		return (zombie && zp_disinfect_user(target, 0)) ? 1 : 0;
 	return 1;
+}
+
+// ---------------------------------------------------------------- giving LVL MOD items
+
+grant_target(id)
+{
+	return g_scope[id] == SCOPE_SELF ? id : find_player_ex(FindPlayer_MatchUserId, g_target[id]);
+}
+
+grant_cat_menu(id)
+{
+	new target = grant_target(id), title[96], name[32], info[4], bool:en = czm_lang(id) == CZM_EN;
+	if (!target || !czm_profile(target))
+	{
+		czm_chat(id, "^4[CZM]^1 Предметы LVL MOD — только игрокам с профилем CZM.", "^4[CZM]^1 LVL MOD items go to players with a CZM profile only.");
+		return;
+	}
+	get_user_name(target, name, charsmax(name));
+	formatex(title, charsmax(title), "\y%s^n\w%s", en ? "Give an item" : "Подарить предмет", name);
+	new menu = menu_create(title, "on_grant_cat");
+	for (new c = 0; c < g_catCount; c++)
+		if (g_itemCount[c])
+		{
+			num_to_str(c, info, charsmax(info));
+			menu_additem(menu, g_catName[c][en ? 1 : 0], info);
+		}
+	texts(menu, id);
+	menu_display(id, menu);
+}
+
+public on_grant_cat(id, menu, item)
+{
+	if (item < 0)
+	{
+		menu_destroy(menu);
+		return PLUGIN_HANDLED;
+	}
+	new info[4], access, callback, title[64], bool:en = czm_lang(id) == CZM_EN;
+	menu_item_getinfo(menu, item, access, info, charsmax(info), _, _, callback);
+	menu_destroy(menu);
+	new c = g_grantCat[id] = str_to_num(info);
+	formatex(title, charsmax(title), "\y%s", g_catName[c][en ? 1 : 0]);
+	new items = menu_create(title, "on_grant_item");
+	for (new i = 0; i < g_itemCount[c]; i++)
+	{
+		num_to_str(i, info, charsmax(info));
+		menu_additem(items, g_itemName[c][i][en ? 1 : 0], info);
+	}
+	texts(items, id);
+	menu_display(id, items);
+	return PLUGIN_HANDLED;
+}
+
+public on_grant_item(id, menu, item)
+{
+	if (item < 0)
+	{
+		menu_destroy(menu);
+		return PLUGIN_HANDLED;
+	}
+	new info[4], access, callback;
+	menu_item_getinfo(menu, item, access, info, charsmax(info), _, _, callback);
+	menu_destroy(menu);
+	new target = grant_target(id), c = g_grantCat[id], i = str_to_num(info);
+	if (!staff(id, CZM_STAFF_ADMIN) || !target || !czm_profile(target) || i >= g_itemCount[c])
+		return PLUGIN_HANDLED;
+	new EzJSON:body = ezjson_init_object(), EzJSON:args = ezjson_init_object(), op[40], data[4];
+	formatex(op, charsmax(op), "grant-%d-%d-%d", get_systime(), czm_profile(target), random(1000000));
+	ezjson_object_set_number(body, "player", czm_profile(target));
+	ezjson_object_set_string(body, "op", op);
+	ezjson_object_set_string(body, "action", "grant");
+	ezjson_object_set_number(args, "by", czm_profile(id));
+	ezjson_object_set_string(args, "cat", g_catKey[c]);
+	ezjson_object_set_string(args, "item", g_itemId[c][i]);
+	ezjson_object_set_value(body, "args", args);
+	ezjson_free(args);
+	data[0] = id; data[1] = get_user_userid(id); data[2] = c; data[3] = i;
+	czm_api("POST", "/survival/server/action", body, "on_grant", data, sizeof data);
+	ezjson_free(body);
+	return PLUGIN_HANDLED;
+}
+
+public on_grant(EzHttpRequest:request)
+{
+	new data[4];
+	ezhttp_get_user_data(request, data);
+	new id = data[0], c = data[2], i = data[3], code, EzJSON:root = czm_api_answer(request, code);
+	if (is_user_connected(id) && get_user_userid(id) == data[1])
+	{
+		new error[24];
+		if (CZM_JSON_OK(root) && code != 200)
+			ezjson_object_get_string(root, "error", error, charsmax(error));
+		if (code == 200)
+			czm_chat(id, "^4[CZM]^1 Подарено: ^4%s^1. Наденется в начале следующей жизни.", "^4[CZM]^1 Given: ^4%s^1. It goes on with the next life.", g_itemName[c][i][czm_lang(id) == CZM_EN ? 1 : 0]);
+		else if (equal(error, "owned"))
+			czm_chat(id, "^4[CZM]^1 Это у игрока уже есть.", "^4[CZM]^1 The player has it already.");
+		else
+			czm_chat(id, "^4[CZM]^1 Не получилось (%s).", "^4[CZM]^1 It did not work (%s).", error[0] ? error : "API");
+	}
+	if (CZM_JSON_OK(root))
+		ezjson_free(root);
 }
 
 // Puts a player next to another one, on a spot where nobody is stuck.

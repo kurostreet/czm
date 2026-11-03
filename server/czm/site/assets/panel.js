@@ -42,7 +42,7 @@
       zombie: 'Зомби', human: 'Человек', frags: 'Фраги', lvl: 'LVL', player: 'Игрок', place: '{n} место', promoTitle: 'Промокод', promoPh: 'Например, free20lvl', promoUse: 'Активировать', promoDone: 'Промокод: +{n} {what}', tokensWord: 'токенов', crate: 'Ящик с оружием', crateLead: 'на 30 минут, выдаётся при каждом спавне человеком', charges: 'зарядов: {n}', minLeft: 'ещё {m} мин', extend: 'Продлить', hCrate: 'Ящик с оружием', hAirdrop: 'Аирдроп', done: 'Готово', bought: 'Куплено и надето', on: 'Надето', off: 'Снято',
       paid: 'Передано {n} токенов', listed: 'Выставлено в лавку', boughtMarket: 'Куплено в лавке', withdrawn: 'Вещь вернулась к тебе',
       hBuy: 'Покупка', hUpgrade: 'Прокачка', hPay: 'Перевод', hPromo: 'Промокод', hPass: 'Боевой пропуск', hMarketBuy: 'Покупка в лавке',
-      hMarketSell: 'Продажа в лавке', hMapTop: 'Топ карты', noHistory: 'Событий пока нет: зайди на сервер Survival.',
+      hMarketSell: 'Продажа в лавке', hMapTop: 'Топ карты', hGrant: 'Подарок администрации', noHistory: 'Событий пока нет: зайди на сервер Survival.',
       e: { tokens: 'Не хватает токенов.', not_owned: 'Этого у тебя нет.', admin_only: 'Только для администраторов.', not_for_sale: 'Это не продаётся.',
         pay_lvl: 'Перевод доступен с 10 LVL.', pay_limit: 'Дневной лимит переводов исчерпан.', bp_active: 'Пропуск уже активен.',
         bp_inactive: 'Сначала купи боевой пропуск.', bp_daily_done: 'Сегодня награда уже получена.', bp_tasks: 'Сначала выполни все задания.',
@@ -81,7 +81,7 @@
       zombie: 'Zombie', human: 'Human', frags: 'Frags', lvl: 'LVL', player: 'Player', place: 'place {n}', promoTitle: 'Promo code', promoPh: 'For example, free20lvl', promoUse: 'Activate', promoDone: 'Promo code: +{n} {what}', tokensWord: 'tokens', crate: 'Weapon crate', crateLead: 'for 30 minutes, given at every spawn as a human', charges: '{n} charges', minLeft: '{m} min left', extend: 'Extend', hCrate: 'Weapon crate', hAirdrop: 'Airdrop', done: 'Done', bought: 'Bought and put on', on: 'Put on', off: 'Taken off',
       paid: '{n} tokens sent', listed: 'Put up for sale', boughtMarket: 'Bought on the market', withdrawn: 'The item is back with you',
       hBuy: 'Purchase', hUpgrade: 'Upgrade', hPay: 'Transfer', hPromo: 'Promo code', hPass: 'Battle pass', hMarketBuy: 'Market purchase',
-      hMarketSell: 'Market sale', hMapTop: 'Map top', noHistory: 'Nothing yet: join the Survival server.',
+      hMarketSell: 'Market sale', hMapTop: 'Map top', hGrant: 'Gift from the staff', noHistory: 'Nothing yet: join the Survival server.',
       e: { tokens: 'Not enough tokens.', not_owned: 'You do not own it.', admin_only: 'Administrators only.', not_for_sale: 'Not for sale.',
         pay_lvl: 'Transfers open at LVL 10.', pay_limit: "Today's transfer limit is used up.", bp_active: 'The pass is already active.',
         bp_inactive: 'Buy the battle pass first.', bp_daily_done: "Today's reward is already taken.", bp_tasks: 'Finish every task first.',
@@ -245,7 +245,7 @@
       [t('rounds'), fmt(s.matches)], [t('wins'), fmt(s.wins)], [t('wr'), s.wr + '%'],
       [t('since'), s.first_seen ? new Date(s.first_seen * 1000).toLocaleDateString(lang === 'en' ? 'en-GB' : 'ru-RU') : '—']];
     $('stats').innerHTML = stats.map(function (x) { return '<div class="stat card"><small>' + esc(x[0]) + '</small><b>' + esc(x[1]) + '</b></div>'; }).join('');
-    var kinds = { buy: 'hBuy', upgrade: 'hUpgrade', pay: 'hPay', promo: 'hPromo', battlepass: 'hPass', market_buy: 'hMarketBuy', market_sell: 'hMarketSell', map_top: 'hMapTop', crate: 'hCrate', airdrop: 'hAirdrop' };
+    var kinds = { buy: 'hBuy', upgrade: 'hUpgrade', pay: 'hPay', promo: 'hPromo', battlepass: 'hPass', market_buy: 'hMarketBuy', market_sell: 'hMarketSell', map_top: 'hMapTop', crate: 'hCrate', airdrop: 'hAirdrop', grant: 'hGrant' };
     var rows = (me.history || []).map(function (h) {
       var when = new Date(h.time * 1000).toLocaleString(lang === 'en' ? 'en-GB' : 'ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
       var amount = h.amount ? '<span class="amount ' + (h.amount > 0 ? 'plus' : 'minus') + '">' + (h.amount > 0 ? '+' : '') + fmt(h.amount) + '</span>' : '';

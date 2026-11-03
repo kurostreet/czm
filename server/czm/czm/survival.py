@@ -735,8 +735,29 @@ def _reward(conn, row, args, t):
     return {"amount": amount}
 
 
+def _grant(conn, row, args, t):
+    """A head administrator gives a shop item for free from the admin menu (Kontra: «Выдать префикс»).
+    The items of the head administrators themselves are never given."""
+    if not _admin(conn, int(args.get("by") or 0)):
+        raise Error("admin_only", 403)
+    cat, entry = args.get("cat", ""), item(args.get("cat", ""), args.get("item", ""))
+    if entry is None or entry.get("admin"):
+        raise Error("item", 404)
+    owned = _json(row["owned"])
+    have = set(owned.get(cat, []))
+    if entry["id"] in have:
+        raise Error("owned", 409)
+    have.add(entry["id"])
+    owned[cat] = sorted(have)
+    equipped = _json(row["equipped"])
+    equipped[cat] = entry["id"]
+    _save(conn, row["player"], owned=owned, equipped=equipped)
+    _log(conn, row["player"], "grant", 0, f"{cat}:{entry['id']}")
+    return {"cat": cat, "item": entry["id"]}
+
+
 # what only a game server may ask for
-ACTIONS_SERVER = {"crate_use": _crate_use, "reward": _reward}
+ACTIONS_SERVER = {"crate_use": _crate_use, "reward": _reward, "grant": _grant}
 
 ACTIONS = {
     "buy": _buy, "equip": _equip, "upgrade": _upgrade, "pay": _pay,

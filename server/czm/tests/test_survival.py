@@ -191,5 +191,20 @@ class SurvivalTests(unittest.TestCase):
         self.assertEqual(self.state(self.b)["tokens"], 15)
 
 
+    def test_head_admins_give_items(self):
+        grant = lambda by, **a: self.run_in(survival.action, self.b, f"grant-{self.ops}-{by}-{a.get('item')}", "grant",
+                                            {"by": by, **a}, True)
+        with patch("czm.survival._admin", side_effect=lambda c, p: p == self.a):
+            with self.assertRaises(survival.Error):
+                grant(self.b, cat="prefix", item=survival.CATEGORIES["prefix"]["items"][0]["id"])
+            out = grant(self.a, cat="skin", item="survivor")
+            self.assertEqual(out["state"]["equipped"]["skin"], "survivor")
+            self.assertIn("survivor", out["state"]["owned"]["skin"])
+            self.assertEqual(out["state"]["tokens"], 0)
+            with self.assertRaises(survival.Error):
+                grant(self.a, cat="knife", item="sickle")      # their own knife is never given
+        with self.assertRaises(survival.Error):
+            self.act(self.b, "grant", by=self.a, cat="skin", item="sas")   # players cannot call it
+
 if __name__ == "__main__":
     unittest.main()
