@@ -405,7 +405,7 @@ bool:has_kit(id, kit)
 {
 	new have[24];
 	czm_lvl_item(id, "wsound", have, charsmax(have));
-	return equal(have, KIT_ID[kit]);
+	return bool:equal(have, KIT_ID[kit]);
 }
 
 owner_of(weapon)
