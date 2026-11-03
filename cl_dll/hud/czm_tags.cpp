@@ -11,6 +11,8 @@ prefix in its colour, the privilege) and gives a player toasts for "+N tokens" a
 #include "parsemsg.h"
 #include "draw_util.h"
 #include "czm_tags.h"
+#include "czm_hud.h"
+#include "../../common/czm_hud_overlay.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -20,6 +22,7 @@ static inline int CzmMin( int a, int b ) { return a < b ? a : b; }
 static CzmTag s_tags[MAX_PLAYERS + 1];
 static bool s_have[MAX_PLAYERS + 1];
 static bool s_aimShown;
+static CzmHud::ProgressInfo s_progress;
 
 struct CzmToast
 {
@@ -77,10 +80,25 @@ static int MsgFunc_CzmToast( const char *pszName, int iSize, void *pbuf )
 	return 1;
 }
 
+static int MsgFunc_CzmProgress( const char *pszName, int iSize, void *pbuf )
+{
+	if( iSize != 24 )
+		return 1;
+	BufferReader reader( pszName, pbuf, iSize );
+	s_progress.level = reader.ReadLong();
+	s_progress.tokens = reader.ReadLong();
+	s_progress.killsLeft = reader.ReadLong();
+	s_progress.killsStep = reader.ReadLong();
+	s_progress.secondsLeft = reader.ReadLong();
+	s_progress.secondsStep = reader.ReadLong();
+	return 1;
+}
+
 void CZM_TagsInit( void )
 {
 	gEngfuncs.pfnHookUserMsg( "CzmTag", MsgFunc_CzmTag );
 	gEngfuncs.pfnHookUserMsg( "CzmToast", MsgFunc_CzmToast );
+	gEngfuncs.pfnHookUserMsg( "CzmProgress", MsgFunc_CzmProgress );
 	CZM_TagsReset();
 }
 
@@ -89,6 +107,9 @@ void CZM_TagsReset( void )
 	memset( s_tags, 0, sizeof( s_tags ));
 	memset( s_have, 0, sizeof( s_have ));
 	memset( s_toasts, 0, sizeof( s_toasts ));
+	memset( &s_progress, 0, sizeof( s_progress ));
+	s_progress.level = -1; // unset is separate from a server reporting level zero
+	s_aimShown = false;
 }
 
 const CzmTag *CZM_TagFor( int index )
@@ -252,6 +273,7 @@ static void DrawToasts( float flTime )
 
 void CZM_TagsDraw( float flTime )
 {
+	CZM_ProgressDraw( s_progress );
 	DrawAimTag();
 	DrawToasts( flTime );
 }

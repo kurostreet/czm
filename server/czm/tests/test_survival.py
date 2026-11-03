@@ -64,6 +64,21 @@ class SurvivalTests(unittest.TestCase):
         s = self.report("b3", kills=10, zkills=10)["states"][self.a]
         self.assertEqual((s["tokens"], s["lvl"]), (30, 3))  # both boosts are over
 
+    def test_progress_reports_remaining_kills_time_and_their_actual_steps(self):
+        self.give(self.a)
+        initial = self.state()
+        self.assertEqual((initial['lvl'], initial['tokens']), (1, 0))
+        self.assertEqual((initial['next_lvl_kills'], initial['next_lvl_time']),
+                         (initial['lvl_kills_step'], initial['lvl_time_step']))
+        self.report('progress', kills=7, time=360)
+        current = self.state()
+        self.assertEqual((current['next_lvl_kills'], current['next_lvl_time']), (3, 240))
+        # Publishing rules rather than embedding them in the client also supports a different server policy.
+        with patch.object(survival, 'LVL_KILLS', 20), patch.object(survival, 'LVL_TIME', 900):
+            current = self.state()
+            self.assertEqual((current['lvl_kills_step'], current['lvl_time_step']), (20, 900))
+            self.assertEqual((current['next_lvl_kills'], current['next_lvl_time']), (13, 540))
+
     def test_shop_spends_once_and_equips(self):
         self.give(self.a, tokens=3000)
         with self.assertRaises(survival.Error) as e:

@@ -36,6 +36,17 @@ struct SpecInfo {
 inline float GlyphWidth(const char *s, float h) { return (float)strlen(s) * h * .65f; }
 inline int Max(int a, int b) { return a > b ? a : b; }
 
+// Confirmed by the API, never inferred from kills or token toasts on the client.
+struct ProgressInfo {
+    int level, tokens, killsLeft, killsStep, secondsLeft, secondsStep;
+};
+
+inline float ProgressFraction(const ProgressInfo &s) {
+    float kills=s.killsStep>0 ? 1.0f-(float)s.killsLeft/s.killsStep : 0;
+    float time=s.secondsStep>0 ? 1.0f-(float)s.secondsLeft/s.secondsStep : 0;
+    return Clamp(kills>time?kills:time,0,1,0);
+}
+
 inline void TeamColor(int team, int &r, int &g, int &b) {
     if(team == 1) { r = 236; g = 72; b = 78; }
     else if(team == 2) { r = 86; g = 156; b = 255; }
@@ -73,6 +84,35 @@ inline void Fit(Canvas &c, const char *s, float width, char *out, size_t n) {
         snprintf(cut, sizeof(cut), "%s...", out);
         if(c.LabelWidth(cut) <= width || !len) { snprintf(out, n, "%s", len ? cut : ""); return; }
     }
+}
+
+inline void PaintProgress(Canvas &c,const Rect &p,const ProgressInfo &s,bool ru,int r,int g,int b) {
+    const int x=p.x,y=p.y,w=p.w,h=p.h,a=255*p.opacity;
+    const int pad=Max(3,h/10),edge=Max(2,h/24),barH=Max(3,h/16);
+    char level[32],tokens[24],hint[128],fitted[128];
+    snprintf(level,sizeof(level),"LVL %d",Max(0,s.level));
+    snprintf(tokens,sizeof(tokens),"%d",Max(0,s.tokens));
+    const int seconds=Max(0,s.secondsLeft);
+    snprintf(hint,sizeof(hint),ru?"До LVL: %d убийств / %d:%02d":"Next LVL: %d kills / %d:%02d",
+        Max(0,s.killsLeft),seconds/60,seconds%60);
+    c.Blend(x,y,w,h,10,14,22,205*p.opacity);
+    c.Blend(x,y,edge,h,r,g,b,a);
+    float lh=h*.32f,nh=h*.32f;
+    const float half=(w-pad*3)/2.0f;
+    if(GlyphWidth(level,lh)>half) lh=half/(strlen(level)*.65f);
+    if(GlyphWidth(tokens,nh)>half-h*.24f) nh=(half-h*.24f)/(strlen(tokens)*.65f);
+    const float top=y+pad,coin=h*.17f;
+    c.Glyphs(x+pad,top,lh,level,r,g,b,p.opacity);
+    const float nx=x+w-pad-GlyphWidth(tokens,nh);
+    c.Blend((int)(nx-coin-pad*.5f),(int)(top+(h*.32f-coin)/2),coin,coin,231,187,96,a);
+    c.Blend((int)(nx-coin-pad*.5f+coin*.3f),(int)(top+(h*.32f-coin)/2+coin*.2f),Max(1,coin*.2f),Max(1,coin*.6f),120,76,20,a);
+    c.Glyphs(nx,top,nh,tokens,231,187,96,p.opacity);
+    const int by=y+h*.53f,bw=w-pad*2;
+    c.Blend(x+pad,by,bw,barH,255,255,255,30*p.opacity);
+    int filled=bw*ProgressFraction(s);
+    if(filled>0)c.Blend(x+pad,by,filled,barH,r,g,b,a);
+    Fit(c,hint,bw,fitted,sizeof(fitted));
+    if(fitted[0])c.Label(x+pad,y+h-pad-c.LabelHeight(),fitted,161*p.opacity,172*p.opacity,191*p.opacity);
 }
 
 // a soft dark band at the top (down = true) or the bottom edge of the screen

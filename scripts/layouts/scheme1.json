@@ -51,7 +51,12 @@
   "czm_hud_time_opacity": "1",
   "czm_hud_time_scale": "1",
   "czm_hud_time_x": "0.500000",
-  "czm_hud_time_y": "0.936200"
+  "czm_hud_time_y": "0.936200",
+  "czm_hud_progress_x": "0.500000",
+  "czm_hud_progress_y": "0.840000",
+  "czm_hud_progress_scale": "1",
+  "czm_hud_progress_opacity": "1",
+  "czm_hud_progress_hidden": "0"
  },
  "layouts": {
   "1": [

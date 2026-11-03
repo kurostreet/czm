@@ -342,6 +342,7 @@ static const struct
 	{ "Чат", "Chat" },
 	{ "Сообщения сервера", "Server messages" },
 	{ "Загрузка файлов", "Downloads" },
+	{ "Уровень и токены", "Level and tokens" },
 }, s_hudStyles[HUD_STYLES] =
 {
 	{ "Классический", "Classic" },
@@ -785,6 +786,13 @@ static void DrawDownloadSample( const CzmHud::Rect &p, int ox = 0, int oy = 0 )
 	CzmHud::PaintDownload( canvas, p, CZM_IsRussian() ? "Файлы сервера: 2" : "Server files: 2", 64.0f );
 }
 
+static void DrawProgressSample( const CzmHud::Rect &p, bool mini = false )
+{
+	CzmMenuCanvas canvas( 0, 0, CZM_Font( mini ? CZMF_TINY : CZMF_SMALL ));
+	CzmHud::ProgressInfo info = { 37, 1250, 3, 10, 240, 600 };
+	CzmHud::PaintProgress( canvas, p, info, CZM_IsRussian(), 0, 255, 255 );
+}
+
 // The clip on the reload button as the match shows it (engine patch czm-reload-ammo): a full clip here.
 static void DrawReloadPreview( const CzmRect &r )
 {
@@ -1192,6 +1200,8 @@ CzmHud::Rect CCzmTouchEditor::HudLayout( int kind ) const
 		return CzmHud::MessageFrame( W, H, b.x, b.y, b.scale, b.opacity );
 	if( kind == CzmHud::DOWNLOADS )
 		return CzmHud::DownloadLayout( W, H, b.x, b.y, b.scale, b.opacity, CZM_FontHeight( CZM_Font( CZMF_SMALL )));
+	if( kind == CzmHud::PROGRESS )
+		return CzmHud::ProgressLayout( W, H, b.x, b.y, b.scale, b.opacity, CZM_FontHeight( CZM_Font( CZMF_SMALL )));
 	return CzmHud::Layout( kind, m_iHudStyle, W, H, b.x, b.y, b.scale, b.opacity, (int)strlen( CzmHud::samples[kind] ));
 }
 
@@ -1648,7 +1658,7 @@ int CCzmTouchEditor::HitTest( void ) const
 			return HIT_OPACITY;
 		if( m_iHudSelected >= 0 )
 		{
-			for( int i = 0; i < HUD_STYLES && m_iHudSelected != CzmHud::DOWNLOADS; i++ )
+			for( int i = 0; i < HUD_STYLES && m_iHudSelected != CzmHud::DOWNLOADS && m_iHudSelected != CzmHud::PROGRESS; i++ )
 			{
 				if( m_hudStyles[i].Contains( x, y ))
 					return HIT_HUD_STYLE + i;
@@ -2170,6 +2180,8 @@ void CCzmTouchEditor::DrawHud( void )
 			DrawChatSample( m_iMsgStyle, r.x, r.y + r.h, (int)ChatLineHeight( H ), p.opacity, CZM_Font( CZMF_SMALL ));
 		else if( i == CzmHud::DOWNLOADS )
 			DrawDownloadSample( p );
+		else if( i == CzmHud::PROGRESS )
+			DrawProgressSample( p );
 		else
 			CzmHud::Paint( painter, i, m_iHudStyle, p, CzmHud::samples[i], false );
 
@@ -2367,6 +2379,7 @@ void CCzmTouchEditor::DrawHudPanel( void )
 	const int kind = m_iHudSelected;
 	const bool radar = kind == CzmHud::RADAR, messages = kind == CzmHud::CHAT || kind == CzmHud::MESSAGES;
 	const bool downloads = kind == CzmHud::DOWNLOADS;
+	const bool progress = kind == CzmHud::PROGRESS;
 	const CzmHudBlock &b = m_hud[kind];
 	const int current = radar ? m_iRadarStyle : messages ? m_iMsgStyle : m_iHudStyle;
 	CzmMenuHudPainter painter;
@@ -2413,6 +2426,11 @@ void CCzmTouchEditor::DrawHudPanel( void )
 		CzmHud::Rect mini = { (float)( m_panel.x + pad ), (float)( m_panel.y + H * 0.02f + icon * 0.2f ), (float)miniW, icon * 0.6f, 1.0f, 1.0f };
 		DrawDownloadSample( mini );
 	}
+	else if( progress )
+	{
+		CzmHud::Rect mini = { (float)( m_panel.x + pad ), (float)( m_panel.y + H * 0.02f ), (float)miniW, (float)icon, 1.0f, 1.0f };
+		DrawProgressSample( mini, true );
+	}
 	else
 	{
 		CzmHud::Rect mini = { (float)( m_panel.x + pad ), (float)( m_panel.y + H * 0.02f ), (float)miniW, (float)icon, 1.0f, 1.0f };
@@ -2433,6 +2451,7 @@ void CCzmTouchEditor::DrawHudPanel( void )
 			: kind == CzmHud::CHAT ? ( ru ? "Новые строки внизу, ширина — ползунком" : "New lines at the bottom, the width with the slider" )
 			: kind == CzmHud::MESSAGES ? ( ru ? "Тексты сервера останутся внутри рамки" : "Server texts stay inside the frame" )
 			: downloads ? ( ru ? "Видна, пока скачиваются файлы сервера" : "Shown while server files download" )
+			: progress ? ( ru ? "Ваш LVL, прогресс и токены на сервере" : "Your level, progress and server tokens" )
 			: ( ru ? "Интерфейс матча, один на все схемы" : "Match HUD, the same in every layout" ), PackRGBA( 140, 146, 156, 255 ));
 	}
 
@@ -2449,7 +2468,7 @@ void CCzmTouchEditor::DrawHudPanel( void )
 	DrawSlider( m_opacity, ( b.opacity - 0.25f ) / 0.75f, CZM_IsRussian() ? "Видимость" : "Opacity", text );
 
 	// the radar looks, or the style of all text blocks; the download indicator has one look
-	for( int i = 0; i < HUD_STYLES && !downloads; i++ )
+	for( int i = 0; i < HUD_STYLES && !downloads && !progress; i++ )
 	{
 		bool active = i == current;
 		const char *name = radar ? CZM_RadarStyleName( i ) : messages ? CZM_MessageStyleName( i ) : CZM_IsRussian() ? s_hudStyles[i].ru : s_hudStyles[i].en;

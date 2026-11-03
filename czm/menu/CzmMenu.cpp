@@ -480,6 +480,7 @@ void CZM_Init( void )
 	EngFuncs::CvarRegister( "czm_lang_ui", "", 0 );
 	// the server menu window this game draws (CzmServerMenu.cpp), servers ask it (czm_menu.amxx)
 	EngFuncs::CvarRegister( "czm_menu_ui", "1", 0 );
+	EngFuncs::CvarRegister( "czm_progress_ui", "1", 0 );
 	EngFuncs::CvarRegister( "czm_setup", "0", FCVAR_ARCHIVE );
 	EngFuncs::CvarRegister( "czm_defaults", "0", FCVAR_ARCHIVE );
 	EngFuncs::CvarRegister( "czm_zoom_sens", "1.2", FCVAR_ARCHIVE );

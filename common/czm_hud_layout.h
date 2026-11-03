@@ -6,19 +6,19 @@
 namespace CzmHud {
 // COUNT text blocks, then the radar, the match chat, the frame of server messages and the
 // indicator of server files downloading in a match; BLOCKS is everything the editor moves
-enum { HEALTH, ARMOR, TIMER, MONEY, AMMO, COUNT, RADAR = COUNT, CHAT, MESSAGES, DOWNLOADS, BLOCKS };
+enum { HEALTH, ARMOR, TIMER, MONEY, AMMO, COUNT, RADAR = COUNT, CHAT, MESSAGES, DOWNLOADS, PROGRESS, BLOCKS };
 enum { RADAR_CLASSIC, RADAR_TACTICAL, RADAR_MINIMAL, RADAR_STYLES };
 // the chat and the server messages: as in CS, on dark plates, with a dark outline
 enum { MSG_CLASSIC, MSG_CZM, MSG_OUTLINE, MSG_STYLES };
-static const char *const keys[BLOCKS] = { "hp", "armor", "time", "money", "ammo", "radar", "chat", "msgs", "dl" };
+static const char *const keys[BLOCKS] = { "hp", "armor", "time", "money", "ammo", "radar", "chat", "msgs", "dl", "progress" };
 // The default layout, made by the owner in the game (scripts/layouts/scheme1.json): health, time
 // and armor in the bottom row, money under the radar on the left, the ammo shown on the reload
 // button instead of its own block. The frame of server messages is the whole screen, so they
 // stay where the server put them. The download indicator sits at the bottom left, beside the
 // health block. A reset in the editor brings these back.
-static const float defaults[BLOCKS][2] = {{.3944f,.9474f},{.6033f,.9474f},{.5f,.9362f},{.0553f,.3273f},{.6681f,.9477f},{.068f,.138f},{.156f,.6858f},{.5f,.5f},{.176813f,.952833f}};
-static const float defaultScale[BLOCKS] = { .7535f, .7547f, 1, .7484f, .7484f, 1, .6f, 1, 1 };
-static const bool defaultHidden[BLOCKS] = { false, false, false, false, true, false, false, false, false };
+static const float defaults[BLOCKS][2] = {{.3944f,.9474f},{.6033f,.9474f},{.5f,.9362f},{.0553f,.3273f},{.6681f,.9477f},{.068f,.138f},{.156f,.6858f},{.5f,.5f},{.176813f,.952833f},{.5f,.84f}};
+static const float defaultScale[BLOCKS] = { .7535f, .7547f, 1, .7484f, .7484f, 1, .6f, 1, 1, 1 };
+static const bool defaultHidden[BLOCKS] = { false, false, false, false, true, false, false, false, false, false };
 static const int defaultHudStyle = 0, defaultRadarStyle = RADAR_MINIMAL, defaultMessageStyle = MSG_CZM;
 static const int chatLines = 5;
 // The HUD grows with the screen height, but on screens narrower than 2.1:1 (16:9 phones, tablets)
@@ -98,6 +98,22 @@ inline Rect DownloadLayout(float sw, float sh, float x, float y, float scale, fl
     if(h>sh*.15f) h=sh*.15f;
     x=Clamp(x,.01f,.99f,defaults[DOWNLOADS][0])*sw-w/2;
     y=Clamp(y,.01f,.99f,defaults[DOWNLOADS][1])*sh-h/2;
+    x=Clamp(x,sw*.012f,sw-sw*.012f-w,sw*.012f);
+    y=Clamp(y,sh*.018f,sh-sh*.018f-h,sh*.018f);
+    return {x,y,w,h,unit,opacity};
+}
+// Personal server progression, separate from the fixed spectator card and movable in the editor.
+inline Rect ProgressLayout(float sw, float sh, float x, float y, float scale, float opacity, float lineHeight) {
+    scale = Clamp(scale,.65f,1.6f,1);
+    opacity = Clamp(opacity,.25f,1,1);
+    const float unit=Base(sw,sh)/480.0f*scale;
+    float w=220*unit, h=48*unit;
+    if(h<lineHeight*2.6f) h=lineHeight*2.6f;
+    if(h>sh*.25f) h=sh*.25f;
+    if(w<h*3.8f) w=h*3.8f;
+    if(w>sw*.65f) w=sw*.65f;
+    x=Clamp(x,.01f,.99f,defaults[PROGRESS][0])*sw-w/2;
+    y=Clamp(y,.01f,.99f,defaults[PROGRESS][1])*sh-h/2;
     x=Clamp(x,sw*.012f,sw-sw*.012f-w,sw*.012f);
     y=Clamp(y,sh*.018f,sh-sh*.018f-h,sh*.018f);
     return {x,y,w,h,unit,opacity};

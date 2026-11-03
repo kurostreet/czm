@@ -4,6 +4,7 @@
 #include "draw_util.h"
 #include "czm_hud.h"
 #include "czm_avatars.h"
+#include "czm_tags.h"
 #include "../../common/czm_hud_overlay.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -120,6 +121,21 @@ bool CZM_SpectatorDraw( int target, const char *timer, int scoreCT, int scoreT, 
 	GameCanvas canvas( name[0] ? target : 0, self );
 	CzmHud::PaintSpectator( canvas, CZM_SpectatorStyle(), ScreenWidth, ScreenHeight, s );
 	return true;
+}
+
+void CZM_ProgressDraw( const CzmHud::ProgressInfo &info )
+{
+	if( info.level < 0 || g_iUser1 || !CZM_HudReady()
+		|| CZM_HudValue( CzmHud::PROGRESS, "hidden", 0 ) > 0.5f )
+		return;
+	GameCanvas canvas;
+	CzmHud::Rect p = CzmHud::ProgressLayout( ScreenWidth, ScreenHeight,
+		CZM_HudValue( CzmHud::PROGRESS, "x", CzmHud::defaults[CzmHud::PROGRESS][0] ),
+		CZM_HudValue( CzmHud::PROGRESS, "y", CzmHud::defaults[CzmHud::PROGRESS][1] ),
+		CZM_HudValue( CzmHud::PROGRESS, "scale", 1 ), CZM_HudValue( CzmHud::PROGRESS, "opacity", 1 ), canvas.LabelHeight() );
+	int r, g, b;
+	CZM_LevelColor( info.level, &r, &g, &b );
+	CzmHud::PaintProgress( canvas, p, info, Russian(), r, g, b );
 }
 
 // server files downloading in a match: the engine keeps the percent in scr_download and the

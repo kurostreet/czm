@@ -352,6 +352,7 @@ def state(conn, player: int, t: int | None = None) -> dict:
         "kd": round(row["kills"] / row["deaths"], 2) if row["deaths"] else float(row["kills"]),
         "next_lvl_kills": LVL_KILLS - row["kills"] % LVL_KILLS,
         "next_lvl_time": LVL_TIME - row["time_sec"] % LVL_TIME,
+        "lvl_kills_step": LVL_KILLS, "lvl_time_step": LVL_TIME,
         "boosts": {"lvl": max(0, row["lvl_boost_until"] - t), "tokens": max(0, row["tok_boost_until"] - t)},
         "owned": {cat: sorted(owned.get(cat, [])) for cat in CATEGORIES},
         "equipped": _json(row["equipped"]),

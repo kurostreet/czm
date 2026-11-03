@@ -34,6 +34,12 @@ class SettingsTests(unittest.TestCase):
         old=copy.deepcopy(self.data);old['cvars']['sensitivity']='1'
         self.assertEqual(self.save(self.tokens[0],0,old).status_code,409)
         self.assertEqual(self.get(self.tokens[0]).json()['payload'],self.data)
+    def test_progress_hud_layout_round_trips_between_devices(self):
+        self.data['cvars'].update({'czm_hud_progress_x':'0.41','czm_hud_progress_y':'0.75',
+            'czm_hud_progress_scale':'1.25','czm_hud_progress_opacity':'0.5','czm_hud_progress_hidden':'1'})
+        response=self.save(self.tokens[0],0,self.data)
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertEqual(self.get(self.tokens[0]).json()['payload'],self.data)
     def test_import_does_not_execute_commands_or_include_credentials(self):
         for key,value in [('password','secret'),('rcon_password','secret'),('czm_hud_style','nan'),('cl_crosshair_color','256 0 0')]:
             bad=copy.deepcopy(self.data);bad['cvars'][key]=value

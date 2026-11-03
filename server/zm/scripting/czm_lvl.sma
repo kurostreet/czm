@@ -48,7 +48,9 @@ new g_lvl[MAX_PLAYERS + 1], g_tokens[MAX_PLAYERS + 1], Float:g_tokBoostUntil[MAX
 // the tag everyone sees with the CZM game (the player list, the player in the crosshair, the chat):
 // the level, the wins in %, the prefix in its colour, the privilege; toasts for "+tokens" and levels
 new g_wr[MAX_PLAYERS + 1], g_nextKills[MAX_PLAYERS + 1];
-new g_msgTag, g_msgToast;
+new g_msgTag, g_msgToast, g_msgProgress;
+new g_nextTime[MAX_PLAYERS + 1], g_killsStep[MAX_PLAYERS + 1], g_timeStep[MAX_PLAYERS + 1];
+new bool:g_progressUi[MAX_PLAYERS + 1], g_progressSent[MAX_PLAYERS + 1][96];
 new g_tagSent[MAX_PLAYERS + 1][64];
 new bool:g_tagSynced[MAX_PLAYERS + 1];
 new g_equip[MAX_PLAYERS + 1][MAX_CATS];              // item index or -1
@@ -105,9 +107,6 @@ public plugin_natives()
 
 public plugin_precache()
 {
-	// read by the CZM game only (cl_dll/hud/czm_tags.cpp); others never get them
-	g_msgTag = engfunc(EngFunc_RegUserMsg, "CzmTag", -1);
-	g_msgToast = engfunc(EngFunc_RegUserMsg, "CzmToast", -1);
 	g_hRank = czm_sound_precache(PULL_SOUND);
 	new path[64];
 	for (new k = 0; k < sizeof KNIFE_IDS; k++)
@@ -143,6 +142,12 @@ skin_model(c, i, out[], len)
 public plugin_init()
 {
 	register_plugin(PLUGIN, VERSION, AUTHOR);
+	// Register after the game DLL's standard messages. Custom engine registrations do not
+	// enter Metamod's user-message lookup; send them through Fakemeta as well, not message_begin.
+	g_msgTag = engfunc(EngFunc_RegUserMsg, "CzmTag", -1);
+	g_msgToast = engfunc(EngFunc_RegUserMsg, "CzmToast", -1);
+	g_msgProgress = engfunc(EngFunc_RegUserMsg, "CzmProgress", 24);
+	log_amx("Client messages: CzmTag=%d CzmToast=%d CzmProgress=%d", g_msgTag, g_msgToast, g_msgProgress);
 	g_cvarApi = create_cvar("czm_api_url", "http://127.0.0.1:8200", FCVAR_PROTECTED, "Where the CZM API answers");
 	g_cvarServer = create_cvar("czm_server_name", "survival");
 
@@ -348,6 +353,8 @@ reset_player(id)
 	g_lvl[id] = 0;
 	g_wr[id] = 0;
 	g_nextKills[id] = 0;
+	g_nextTime[id] = g_killsStep[id] = g_timeStep[id] = 0;
+	g_progressSent[id][0] = EOS;
 	g_tagSent[id][0] = EOS;
 	g_tagSynced[id] = false;
 	g_tokens[id] = 0;
@@ -364,6 +371,24 @@ reset_player(id)
 	}
 	for (new d = 0; d < D_COUNT; d++)
 		g_delta[id][d] = 0;
+	send_progress(id);
+}
+
+public client_putinserver(id)
+{
+	g_progressUi[id] = false;
+	if (!is_user_bot(id) && !is_user_hltv(id))
+		query_client_cvar(id, "czm_progress_ui", "on_progress_ui");
+}
+
+public on_progress_ui(id, const cvar[], const value[])
+{
+	if (is_user_connected(id))
+	{
+		g_progressUi[id] = str_to_num(value) >= 1;
+		g_progressSent[id][0] = EOS;
+		send_progress(id);
+	}
 }
 
 public czm_player_ready(id, profile)
@@ -398,6 +423,7 @@ public on_join(EzHttpRequest:request)
 		apply_state(id, st);
 		ezjson_free(st);
 		g_loaded[id] = true;
+		send_progress(id);
 		czm_chat(id, "^4[LVL]^1 Ваш уровень: ^4%d^1, токенов: ^4%d^1. Меню: ^4lvl", "^4[LVL]^1 Your level: ^4%d^1, tokens: ^4%d^1. Menu: ^4lvl", g_lvl[id], g_tokens[id]);
 		look(id);
 	}
@@ -411,6 +437,7 @@ public client_disconnected(id)
 	if (g_loaded[id])
 		keep_leaver(id);
 	g_session[id]++;
+	g_progressUi[id] = false;
 	reset_player(id);
 	remove_task(TASK_LOOK + id);
 }
@@ -438,6 +465,12 @@ apply_state(id, EzJSON:st)
 	g_tokens[id] = ezjson_object_get_number(st, "tokens");
 	g_wr[id] = ezjson_object_get_number(st, "wr", true);
 	g_nextKills[id] = ezjson_object_get_number(st, "next_lvl_kills", true);
+	g_nextTime[id] = ezjson_object_get_number(st, "next_lvl_time", true);
+	// Old API releases omit the step fields; these are their documented rules.
+	g_killsStep[id] = ezjson_object_get_number(st, "lvl_kills_step", true);
+	g_timeStep[id] = ezjson_object_get_number(st, "lvl_time_step", true);
+	if (g_killsStep[id] <= 0) g_killsStep[id] = 10;
+	if (g_timeStep[id] <= 0) g_timeStep[id] = 600;
 	new left = ezjson_object_get_number(st, "boosts.tokens", true);
 	g_tokBoostUntil[id] = left > 0 ? get_gametime() + float(left) : 0.0;
 	g_bpActive[id] = ezjson_object_get_bool(st, "battlepass.active", true);
@@ -487,6 +520,7 @@ apply_state(id, EzJSON:st)
 	}
 	if (J_OK(owned)) ezjson_free(owned);
 	if (J_OK(equipped)) ezjson_free(equipped);
+	send_progress(id);
 	new ret;
 	ExecuteForward(g_fwChanged, ret, id);
 }
@@ -915,7 +949,7 @@ knife_look(id)
 // a toast of the CZM game: kind 1 "+N tokens" (text: why), 2 a new level (text: the nick)
 toast(id, kind, value, const text[])
 {
-	message_begin(MSG_ONE, g_msgToast, _, id);
+	engfunc(EngFunc_MessageBegin, MSG_ONE, g_msgToast, Float:{0.0, 0.0, 0.0}, id);
 	write_byte(kind);
 	write_short(value);
 	write_string(text);
@@ -965,12 +999,32 @@ tag_parts(id, prefix[], len, &color)
 	}
 }
 
+// Private state goes only to its owner and only to a client that supports this message.
+send_progress(id)
+{
+	if (!g_progressUi[id] || !is_user_connected(id))
+		return;
+	new sig[96], level = g_loaded[id] ? g_lvl[id] : -1;
+	formatex(sig, charsmax(sig), "%d|%d|%d|%d|%d|%d", level, g_tokens[id], g_nextKills[id], g_killsStep[id], g_nextTime[id], g_timeStep[id]);
+	if (equal(sig, g_progressSent[id]))
+		return;
+	copy(g_progressSent[id], charsmax(g_progressSent[]), sig);
+	engfunc(EngFunc_MessageBegin, MSG_ONE, g_msgProgress, Float:{0.0, 0.0, 0.0}, id);
+	write_long(level);
+	write_long(g_tokens[id]);
+	write_long(g_nextKills[id]);
+	write_long(g_killsStep[id]);
+	write_long(g_nextTime[id]);
+	write_long(g_timeStep[id]);
+	message_end();
+}
+
 send_tag(id, to)
 {
 	new prefix[32], priv[12], color;
 	tag_parts(id, prefix, charsmax(prefix), color);
 	czm_privilege_name(id, priv, charsmax(priv));
-	message_begin(MSG_ONE, g_msgTag, _, to);
+	engfunc(EngFunc_MessageBegin, MSG_ONE, g_msgTag, Float:{0.0, 0.0, 0.0}, to);
 	write_byte(id);
 	write_short(g_loaded[id] ? g_lvl[id] : 0);
 	write_byte(g_loaded[id] ? clamp(g_wr[id], 0, 100) : 0);
@@ -985,6 +1039,8 @@ public task_tags()
 {
 	new players[MAX_PLAYERS], count, viewers[MAX_PLAYERS], seen;
 	get_players(players, count, "ch");
+	for (new k = 0; k < count; k++)
+		send_progress(players[k]);
 	for (new k = 0; k < count; k++)
 		if (czm_menu_rich(players[k]))
 			viewers[seen++] = players[k];

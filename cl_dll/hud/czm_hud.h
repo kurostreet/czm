@@ -26,3 +26,5 @@ int CZM_SpectatorStyle();
 // false: the CZM HUD cannot draw, use the stock overlay
 bool CZM_SpectatorDraw(int target, const char *timer, int scoreCT, int scoreT, bool status);
 void CZM_DownloadsDraw();
+namespace CzmHud { struct ProgressInfo; }
+void CZM_ProgressDraw(const CzmHud::ProgressInfo &info);
