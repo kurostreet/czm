@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="ru" data-v="__V__">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Панель игрока — Counter Zombie Mobile</title>
+<meta name="description" content="Панель игрока сервера Survival: уровень, токены, магазин, скины, боевой пропуск, лавка и топ.">
+<meta name="theme-color" content="#09090c">
+<meta name="robots" content="noindex">
+<link rel="icon" type="image/png" href="/assets/favicon-64.png">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+<script>try{if(localStorage.getItem("czm-theme")==="light")document.documentElement.classList.add("light")}catch(e){}</script>
+<link rel="preload" href="/assets/fonts/InterDisplay-BlackItalic.woff" as="font" type="font/woff" crossorigin>
+<link rel="stylesheet" href="/assets/panel.css?v=__V__">
+</head>
+<body>
+<header>
+<div class="wrap bar">
+<a class="brand" href="/"><img src="/assets/logo-96.png" alt=""><span class="h-game">Counter<br><span class="red">Zombie</span></span></a>
+<div class="langs" role="group" aria-label="Язык">
+<button class="pill" data-lang="ru" aria-pressed="true">RU</button>
+<button class="pill" data-lang="en" aria-pressed="false">EN</button>
+</div>
+<button class="icon-btn" id="lamp" data-i18n-aria="theme" aria-label="День или ночь">
+<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.7.5 1.1 1.3 1.1 2.2h5c0-.9.4-1.7 1.1-2.2A6 6 0 0 0 12 3z"/></svg>
+</button>
+<button class="icon-btn" id="logout" hidden data-i18n-aria="logout" aria-label="Выйти">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>
+</button>
+</div>
+</header>
+
+<main class="wrap">
+
+<!-- sign in -->
+<section class="login card" id="login" hidden>
+<h1 class="h-game" data-i18n="loginTitle">Панель игрока</h1>
+<p class="muted" data-i18n="loginLead">Войди в аккаунт CZM — уровень, токены, магазин и пропуск сервера Survival откроются сразу.</p>
+<div class="tabs small" role="tablist">
+<button class="tab" role="tab" aria-selected="true" data-login="email" data-i18n="byEmail">По почте</button>
+<button class="tab" role="tab" aria-selected="false" data-login="nick" data-i18n="byNick">Ник и пароль</button>
+</div>
+<form id="emailForm" class="form">
+<label><span data-i18n="email">Почта</span><input type="email" id="email" autocomplete="email" required maxlength="254"></label>
+<div id="codeRow" hidden><label><span data-i18n="code">Код из письма</span><input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="16"></label></div>
+<button class="btn" type="submit" id="emailBtn" data-i18n="sendCode">Получить код</button>
+</form>
+<form id="nickForm" class="form" hidden>
+<label><span data-i18n="nick">Ник аккаунта</span><input id="nick" autocomplete="username" required maxlength="64"></label>
+<label><span data-i18n="password">Пароль</span><input type="password" id="password" autocomplete="current-password" required maxlength="128"></label>
+<button class="btn" type="submit" data-i18n="signIn">Войти</button>
+</form>
+<p class="note" id="loginNote" role="status"></p>
+<p class="muted small-text" data-i18n="loginHint">Аккаунта ещё нет? Создай его в игре: Профиль → Аккаунт. Почту привяжи там же — по ней приходит код входа.</p>
+</section>
+
+<!-- the player -->
+<section id="panel" hidden>
+<div class="hero card">
+<img class="avatar" id="avatar" src="/assets/avatar-1.png" alt="">
+<div class="who">
+<div class="nick" id="pNick">—</div>
+<div class="muted small-text"><span data-i18n="profileId">Профиль CZM</span> <b id="pId">—</b></div>
+<div class="chips" id="pChips"></div>
+</div>
+<div class="lvl">
+<small>LVL</small>
+<b class="h-game" id="pLvl">—</b>
+</div>
+<div class="tokens">
+<small data-i18n="tokens">Токены</small>
+<b id="pTokens">—</b>
+</div>
+<div class="next">
+<div class="bar-track"><i id="pNextBar"></i></div>
+<small class="muted" id="pNext"></small>
+</div>
+</div>
+
+<nav class="tabs" role="tablist" id="tabs">
+<button class="tab" role="tab" data-tab="overview" aria-selected="true" data-i18n="tOverview">Обзор</button>
+<button class="tab" role="tab" data-tab="skins" data-i18n="tSkins">Скины</button>
+<button class="tab" role="tab" data-tab="knives" data-i18n="tKnives">Ножи</button>
+<button class="tab" role="tab" data-tab="shop" data-i18n="tShop">Магазин</button>
+<button class="tab" role="tab" data-tab="pass" data-i18n="tPass">Боевой пропуск</button>
+<button class="tab" role="tab" data-tab="market" data-i18n="tMarket">Лавка</button>
+<button class="tab" role="tab" data-tab="pay" data-i18n="tPay">Перевод</button>
+<button class="tab" role="tab" data-tab="top" data-i18n="tTop">Топ</button>
+<button class="tab" role="tab" data-tab="live" data-i18n="tLive">Сервер</button>
+</nav>
+
+<section class="view" data-view="overview">
+<div class="grid stats" id="stats"></div>
+<h2 data-i18n="history">Последние события</h2>
+<ul class="history card" id="history"></ul>
+</section>
+
+<section class="view" data-view="skins" hidden>
+<p class="muted" data-i18n="skinsLead">Скин надевается на твоего человека в начале каждого раунда. Купленный скин можно сменить в любой момент — здесь или в игре (lvl → Магазин).</p>
+<div class="grid items" id="skins"></div>
+</section>
+
+<section class="view" data-view="knives" hidden>
+<p class="muted" data-i18n="knivesLead">Нож людей. Модели ножей появятся в игре со следующим обновлением сервера — купленный нож уже твой.</p>
+<div class="grid items wide" id="knives"></div>
+</section>
+
+<section class="view" data-view="shop" hidden>
+<h2 data-i18n="upgrades">Прокачка</h2>
+<div class="grid offers" id="upgrades"></div>
+<div id="shopCats"></div>
+</section>
+
+<section class="view" data-view="pass" hidden>
+<div id="pass"></div>
+</section>
+
+<section class="view" data-view="market" hidden>
+<p class="muted" id="marketLead"></p>
+<form class="card sell" id="sellForm">
+<h2 data-i18n="sellTitle">Выставить на продажу</h2>
+<div class="row">
+<select id="sellItem" required></select>
+<input type="number" id="sellPrice" min="1" max="1000000" required data-i18n-ph="price" placeholder="Цена">
+<button class="btn" type="submit" data-i18n="sell">Выставить</button>
+</div>
+</form>
+<div class="grid offers" id="market"></div>
+</section>
+
+<section class="view" data-view="pay" hidden>
+<form class="card form narrow" id="payForm">
+<h2 data-i18n="payTitle">Перевод токенов</h2>
+<p class="muted" id="payLead"></p>
+<label><span data-i18n="payTarget">ID профиля получателя</span><input type="number" id="payTarget" min="1" required></label>
+<label><span data-i18n="payAmount">Сколько</span><input type="number" id="payAmount" min="1" max="100" required></label>
+<button class="btn" type="submit" data-i18n="send">Перевести</button>
+</form>
+</section>
+
+<section class="view" data-view="top" hidden>
+<div class="tabs small" id="topKinds">
+<button class="tab" data-kind="lvl" aria-selected="true">LVL</button>
+<button class="tab" data-kind="kills" data-i18n="kills">Убийства</button>
+<button class="tab" data-kind="tokens" data-i18n="tokens">Токены</button>
+<button class="tab" data-kind="time" data-i18n="time">Время</button>
+</div>
+<ol class="top card" id="top"></ol>
+</section>
+
+<section class="view" data-view="live" hidden>
+<div id="live"></div>
+</section>
+</section>
+
+<div class="toast" id="toast" role="status" hidden></div>
+</main>
+<script src="/assets/panel.js?v=__V__" defer></script>
+</body>
+</html>

@@ -14,7 +14,7 @@
     ru: {
       title: 'Counter Zombie Mobile — зомби-шутер для Android',
       description: 'Мобильный зомби-шутер: орды зомби, серверы до 32 игроков, свои кнопки, друзья и живой чат. Скачай бесплатно для Android.',
-      langLabel: 'Язык', themeLabel: 'День или ночь', share: 'Поделиться', copied: 'Ссылка скопирована', close: 'Закрыть', prev: 'Назад', next: 'Дальше',
+      langLabel: 'Язык', themeLabel: 'День или ночь', account: 'Войти в панель игрока', share: 'Поделиться', copied: 'Ссылка скопирована', close: 'Закрыть', prev: 'Назад', next: 'Дальше',
       tagline: 'Мобильный зомби-шутер: орды зомби, серверы до 32 игроков, свои кнопки, друзья и живой чат.',
       downloadCta: 'Принять участие в бета-тесте', createServerCta: 'Создать свой сервер', serverPanelCta: 'Панель сервера', statsLabel: 'Статистика', online: 'в игре', offline: 'не в сети', downloads: 'скачиваний', mb: 'МБ',
       launchStatus: 'Бета-тест уже идёт', launchFinished: '14-дневный этап завершён',
@@ -61,7 +61,7 @@
     en: {
       title: 'Counter Zombie Mobile — a zombie shooter for Android',
       description: 'A mobile zombie shooter: zombie hordes, servers for up to 32 players, your own buttons, friends and a live chat. Free for Android.',
-      langLabel: 'Language', themeLabel: 'Day or night', share: 'Share', copied: 'Link copied', close: 'Close', prev: 'Previous', next: 'Next',
+      langLabel: 'Language', themeLabel: 'Day or night', account: 'Sign in to the player panel', share: 'Share', copied: 'Link copied', close: 'Close', prev: 'Previous', next: 'Next',
       tagline: 'A mobile zombie shooter: zombie hordes, servers for up to 32 players, your own buttons, friends and a live chat.',
       downloadCta: 'Join the beta test', createServerCta: 'Create a server', serverPanelCta: 'Server panel', statsLabel: 'Statistics', online: 'playing', offline: 'offline', downloads: 'downloads', mb: 'MB',
       launchStatus: 'The beta is live', launchFinished: 'The 14-day stage has ended',

@@ -14,7 +14,9 @@ FILES="requirements.txt czm/__init__.py czm/config.py czm/db.py czm/profanity.py
        deploy/czm.service deploy/czm.caddy deploy/install.sh deploy/czm-set
        deploy/czm-assemble.service deploy/czm-assemble.path deploy/czm-assemble.timer deploy/czm-server-panel-agent.service deploy/czm-server-panel.service deploy/czm-zm-test-slots.conf deploy/server-panel-install.sh"
 # the public site (pages, pictures, fonts, script)
-SITE="site/index.html site/privacy.html site/rules.html site/create-server.html site/server-panel.html site/assets/server-panel.css site/assets/server-panel.js site/assets/server-panel-i18n.js site/assets/vendor/codemirror.js site/assets/vendor/codemirror.css site/assets/vendor/codemirror-LICENSE.txt site/assets/vendor/README.md site/assets/server-setup.css site/assets/server-setup.js site/assets/apple-touch-icon.png site/assets/art-3.webp
+SITE="site/index.html site/privacy.html site/rules.html site/create-server.html site/server-panel.html site/panel.html site/assets/panel.css site/assets/panel.js site/assets/server-panel.css site/assets/server-panel.js site/assets/server-panel-i18n.js site/assets/vendor/codemirror.js site/assets/vendor/codemirror.css site/assets/vendor/codemirror-LICENSE.txt site/assets/vendor/README.md site/assets/server-setup.css site/assets/server-setup.js
+      site/assets/lvl/knives/axe.webp site/assets/lvl/knives/glass.webp site/assets/lvl/knives/katana.webp site/assets/lvl/knives/sickle.webp site/assets/lvl/maps/zm_3rooms.webp site/assets/lvl/maps/zm_ark_bhzrdbase_v2.webp site/assets/lvl/maps/zm_ark_deko2_v1.webp site/assets/lvl/maps/zm_battleground_extreme.webp site/assets/lvl/maps/zm_bhzrd_base_rmk.webp site/assets/lvl/maps/zm_biohazard_base_mx.webp site/assets/lvl/maps/zm_chatoyant.webp site/assets/lvl/maps/zm_cubeworld_mini.webp site/assets/lvl/maps/zm_defense.webp site/assets/lvl/maps/zm_deko2.webp site/assets/lvl/maps/zm_dust_world_summer_f.webp site/assets/lvl/maps/zm_ground_sg.webp site/assets/lvl/maps/zm_mini_re.webp site/assets/lvl/maps/zm_mnx_summer.webp site/assets/lvl/maps/zm_ntc_water_fall.webp site/assets/lvl/maps/zm_sln_mariozomb.webp site/assets/lvl/maps/zm_tc_death.webp site/assets/lvl/maps/zm_zombust.webp site/assets/lvl/skins/elite_arctic.webp site/assets/lvl/skins/gign.webp site/assets/lvl/skins/gsg9.webp site/assets/lvl/skins/gsg9_admin.webp site/assets/lvl/skins/leet.webp site/assets/lvl/skins/leet_pirate.webp site/assets/lvl/skins/professional.webp site/assets/lvl/skins/sas.webp site/assets/lvl/skins/sas_custom.webp site/assets/lvl/skins/survivor.webp
+      site/assets/apple-touch-icon.png site/assets/art-3.webp
       site/assets/avatar-1.png site/assets/avatar-10.png site/assets/avatar-2.png site/assets/avatar-3.png
       site/assets/avatar-4.png site/assets/avatar-5.png site/assets/avatar-6.png site/assets/avatar-7.png
       site/assets/avatar-8.png site/assets/avatar-9.png site/assets/ct.webp site/assets/env.webp
@@ -34,10 +36,10 @@ DEST=/opt/czm/releases/$COMMIT
 id czm >/dev/null 2>&1 || useradd --system --home-dir /var/lib/czm --shell /usr/sbin/nologin czm
 mkdir -p "$DEST/czm" "$DEST/deploy" /var/lib/czm/avatars /var/lib/czm/apk /var/lib/czm/server-list \
          /var/lib/czm/incoming /var/lib/czm/signing /var/lib/czm/mappics /etc/czm
-mkdir -p "$DEST/site/assets/fonts" "$DEST/site/assets/vendor"
+mkdir -p "$DEST/site/assets/fonts" "$DEST/site/assets/vendor" "$DEST/site/assets/lvl/skins" "$DEST/site/assets/lvl/knives" "$DEST/site/assets/lvl/maps"
 for f in $FILES $SITE; do curl -fsSL "$REPO/$f" -o "$DEST/$f"; done
 # links to pictures and the script change with every release, so browsers fetch the new ones
-for page in "$DEST/site/index.html" "$DEST/site/create-server.html" "$DEST/site/server-panel.html"; do
+for page in "$DEST/site/index.html" "$DEST/site/create-server.html" "$DEST/site/server-panel.html" "$DEST/site/panel.html"; do
   sed -i "s/__V__/${COMMIT:0:7}/g" "$page"
 done
 
