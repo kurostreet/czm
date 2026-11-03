@@ -34,6 +34,18 @@ class GameTicketClientTests(unittest.TestCase):
         self.assertIn("t.requestIdentity == s_online.identity", frame)
         self.assertIn('"/api/v1/game/ticket"', frame)
 
+    def test_panel_opens_only_our_site_and_only_from_our_servers(self):
+        source = (MENU / "CzmOnline.cpp").read_text()
+        opener = source[source.index("static void CZM_PanelOpen_f("):source.index("ADD_COMMAND( czm_panel")]
+        # another server cannot make the game open a browser
+        self.assertIn("CL_IsActive( ) && !CZM_OnOfficialServer( )", opener)
+        self.assertIn('"/api/v1/auth/web-link"', opener)
+        frame = source[source.index("static void PanelFrame("):]
+        frame = frame[:frame.index("\n}\n")]
+        self.assertIn('"https://counter-zombie.ru/panel#login="', frame)
+        self.assertIn("!strncmp( url, prefix, sizeof( prefix ) - 1 )", frame)
+        self.assertIn("EngFuncs::ShellExecute( url", frame)
+
 
 if __name__ == "__main__":
     unittest.main()

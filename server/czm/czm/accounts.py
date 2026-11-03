@@ -361,6 +361,42 @@ def email_login_confirm(conn, address, code, ip):
     return new_session(conn, player)
 
 
+WEB_LINK_LIFE = 120
+
+
+def web_link(conn, key, ip):
+    """A one-time link that opens the player panel signed in, asked for by the game.
+
+    The game proves the account with its own key; the link lives two minutes and opens one browser.
+    """
+    player = service.player_by_key(conn, key)
+    if player is None:
+        raise AuthError("hello", 401)
+    if not conn.execute("SELECT 1 FROM accounts WHERE player=?", (player["id"],)).fetchone():
+        raise AuthError("account_required", 409)
+    rate(conn, "web-link", str(player["id"]), 10, 3600)
+    t = now()
+    token = secrets.token_urlsafe(32)
+    conn.execute("DELETE FROM web_links WHERE expires<=?", (t,))
+    conn.execute("INSERT INTO web_links(token_hash, player, expires) VALUES (?, ?, ?)",
+                 (service.hash_secret(token), player["id"], t + WEB_LINK_LIFE))
+    return {"url": f"{get_settings().public_url.rstrip('/')}/panel#login={token}", "expires": t + WEB_LINK_LIFE}
+
+
+def web_link_redeem(conn, token, ip):
+    """The browser trades the link for a session. Used or late, the link opens nothing."""
+    rate(conn, "web-link-ip", ip, 20)
+    t, token_hash = now(), service.hash_secret(token or "")
+    row = conn.execute("SELECT player FROM web_links WHERE token_hash=? AND expires>?", (token_hash, t)).fetchone()
+    conn.execute("DELETE FROM web_links WHERE token_hash=?", (token_hash,))
+    if row is None:
+        raise AuthError("link", 401)
+    player = conn.execute("SELECT * FROM players WHERE id=?", (row["player"],)).fetchone()
+    if player is None:
+        raise AuthError("link", 401)
+    return new_session(conn, player)
+
+
 def recover(conn, nick, ip):
     rate(conn, "recover-ip", ip, 5, 3600)
     rate(conn, "recover-name", nick_key(nick), 3, 3600)

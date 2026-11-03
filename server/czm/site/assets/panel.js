@@ -19,6 +19,7 @@
       byEmail: 'По почте', byNick: 'Ник и пароль', email: 'Почта', code: 'Код из письма', sendCode: 'Получить код',
       confirm: 'Войти', nick: 'Ник аккаунта', password: 'Пароль', signIn: 'Войти',
       loginHint: 'Аккаунта ещё нет? Создай его в игре: Профиль → Аккаунт. Почту привяжи там же — по ней приходит код входа.',
+      linkOld: 'Ссылка из игры уже использована или устарела. Нажми «Панель игрока» в игре ещё раз или войди здесь.',
       codeSent: 'Если почта привязана к аккаунту, код уже в письме.', profileId: 'Профиль CZM', tokens: 'Токены',
       tOverview: 'Обзор', tSkins: 'Скины', tKnives: 'Ножи', tShop: 'Магазин', tPass: 'Боевой пропуск', tMarket: 'Лавка',
       tPay: 'Перевод', tTop: 'Топ', tLive: 'Сервер', history: 'Последние события', upgrades: 'Прокачка',
@@ -60,6 +61,7 @@
       byEmail: 'By email', byNick: 'Nick and password', email: 'Email', code: 'Code from the email', sendCode: 'Get a code',
       confirm: 'Sign in', nick: 'Account nick', password: 'Password', signIn: 'Sign in',
       loginHint: 'No account yet? Create it in the game: Profile → Account. Add your email there: the sign-in code comes to it.',
+      linkOld: 'The link from the game was used or is too old. Tap «Player panel» in the game again or sign in here.',
       codeSent: 'If the email belongs to an account, the code is in your inbox.', profileId: 'CZM profile', tokens: 'Tokens',
       tOverview: 'Overview', tSkins: 'Skins', tKnives: 'Knives', tShop: 'Shop', tPass: 'Battle pass', tMarket: 'Market',
       tPay: 'Send', tTop: 'Top', tLive: 'Server', history: 'Recent events', upgrades: 'Upgrades',
@@ -194,6 +196,14 @@
 
   /* ---------- the panel ---------- */
   function start() {
+    // the game opens the panel with a one-time link: trade it for a session, then forget it
+    var link = /^#login=([A-Za-z0-9_-]{20,128})$/.exec(location.hash);
+    if (link) {
+      history.replaceState(null, '', location.pathname + location.search);
+      api('/auth/web-link-redeem', { method: 'POST', body: { token: link[1] } }).then(signedIn)
+        .catch(function () { if (token) start(); else { showLogin(); note(t('linkOld'), 'bad'); } });
+      return;
+    }
     if (!token) { showLogin(); return; }
     var none = function () { return { servers: [] }; };
     Promise.all([api('/auth/me', { method: 'POST', body: {} }), api('/survival/catalog'), api('/survival/servers').catch(none)]).then(function (r) {

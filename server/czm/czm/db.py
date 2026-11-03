@@ -51,6 +51,11 @@ CREATE TABLE IF NOT EXISTS account_sessions (
     expires INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS account_sessions_player ON account_sessions(player);
+CREATE TABLE IF NOT EXISTS web_links (
+    token_hash TEXT PRIMARY KEY,
+    player INTEGER NOT NULL,
+    expires INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS tab_bindings (
     tag TEXT PRIMARY KEY,
     owner TEXT NOT NULL,

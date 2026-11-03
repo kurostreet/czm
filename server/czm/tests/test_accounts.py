@@ -49,6 +49,26 @@ class AccountTests(unittest.TestCase):
             conn.execute("UPDATE accounts SET email=? WHERE player=?", (address, self.player))
         return token
 
+    def test_the_game_opens_the_panel_signed_in_once(self):
+        self.assertEqual(self.post("web-link").json(), {"error": "account_required"})
+        session = self.register()
+        link = self.post("web-link", token=session)
+        self.assertEqual(link.status_code, 200, link.text)
+        url = link.json()["url"]
+        self.assertTrue(url.startswith(get_settings().public_url.rstrip("/") + "/panel#login="))
+        token = url.split("#login=", 1)[1]
+        redeem = lambda value: self.client.post("/api/v1/auth/web-link-redeem", json={"token": value})
+        opened = redeem(token)
+        self.assertEqual(opened.status_code, 200, opened.text)
+        self.assertEqual(opened.json()["profile"]["id"], self.player)
+        web = opened.json()["token"]
+        self.assertNotEqual(web, session)
+        self.assertEqual(self.post("me", token=web).json()["id"], self.player)
+        # the link opens one browser only, and a made-up one opens none
+        self.assertEqual(redeem(token).status_code, 401)
+        self.assertEqual(redeem("x" * 43).status_code, 401)
+        self.assertEqual(self.post("web-link", token="nobody-" + "0" * 30).status_code, 401)
+
     def test_migration_preserves_profile_photo_history_and_bans(self):
         cfg = get_settings(); cfg.avatar_dir.mkdir(); (cfg.avatar_dir / f"{self.player}.png").write_bytes(b"photo")
         with db.db() as conn:

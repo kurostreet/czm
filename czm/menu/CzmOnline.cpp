@@ -578,6 +578,66 @@ void CZM_PrepareConnect( const char *address )
 	s_ticketClearAt = ticket[0] ? now + 60.0 : 0.0;
 }
 
+// ---------------------------------------------------------------- the player panel, signed in
+// czm_panel (the "Player panel" item of our servers' menu, or the console): the API gives a one-time
+// link that signs this account in on counter-zombie.ru/panel, and the phone's browser opens it.
+static int s_panelRequest;
+static double s_panelNext;
+
+static bool CZM_OnOfficialServer( void )
+{
+	const char *address = EngFuncs::GetCvarString( "czm_connect_adr" );
+	for( int i = 0; address && address[0] && i < CZM_OFFICIAL_COUNT; i++ )
+	{
+		CzmServer *server = CZM_OfficialServer( i );
+		if( server && server->address[0] && !strcmp( server->address, address ))
+			return true;
+	}
+	return false;
+}
+
+static void CZM_PanelOpen_f( void )
+{
+	double now = EngFuncs::DoubleTime();
+
+	// in a game only our servers may ask for it: no other server opens the browser
+	if( CL_IsActive( ) && !CZM_OnOfficialServer( ))
+		return;
+	if( s_panelRequest || now < s_panelNext || !s_online.key[0] )
+		return;
+	if( !CZM_OnlineAccount( ))
+	{
+		CZM_ShowNotice( CZM_IsRussian() ? "Панель игрока" : "Player panel", CZM_IsRussian()
+			? "Панель на сайте открывается для аккаунта CZM. Создай его: Профиль → Аккаунт."
+			: "The site panel opens for a CZM account. Create one: Profile → Account." );
+		return;
+	}
+	s_panelNext = now + 3.0;
+	s_panelRequest = CZM_NetRequest( "POST", CZM_OnlineUrl( "/api/v1/auth/web-link" ), s_online.key, "{}" );
+}
+ADD_COMMAND( czm_panel, CZM_PanelOpen_f );
+
+static void PanelFrame( void )
+{
+	int status;
+	CUtlString body;
+	static const char prefix[] = "https://counter-zombie.ru/panel#login=";
+
+	if( !s_panelRequest || !CZM_NetPoll( s_panelRequest, &status, body ))
+		return;
+	s_panelRequest = 0;
+	CzmJson j;
+	const char *url = status == 200 && j.Parse( body.Get( )) ? j.String( j.Get( 0, "url" )) : "";
+	if( !strncmp( url, prefix, sizeof( prefix ) - 1 ) && strlen( url ) < 256 )
+	{
+		EngFuncs::ShellExecute( url, NULL, false );
+		return;
+	}
+	CZM_ShowNotice( CZM_IsRussian() ? "Панель игрока" : "Player panel", CZM_IsRussian()
+		? "Панель не открылась. Проверь интернет и попробуй ещё раз."
+		: "The panel did not open. Check the connection and try again." );
+}
+
 void CZM_OnlineFrame( void )
 {
 	CZM_TranslationFrame();
@@ -604,6 +664,7 @@ void CZM_OnlineFrame( void )
 	if( !s_online.key[0] )
 		return;
 	TicketFrame( now );
+	PanelFrame();
 	StoreUpdateFrame( now );
 	if( CZM_DistributionChanged() )
 	{

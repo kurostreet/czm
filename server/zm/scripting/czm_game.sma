@@ -3,13 +3,14 @@
 	TeleportRequest_v2_5, save_money_v3 and the map vote of the Kontra rooms).
 
 	menu, меню, /menu:
-	  1 LVL MOD                    → the LVL menu of czm_lvl
-	  2 Настройки                  → language, music and sounds, the info lines
-	  3 Голосования                → change the map [x/4], ban [x/5] or mute [x/4] a player, the board
-	  4 Телепорт                   → call a human to you or go to one (they answer yes or no)
-	  5 Приглашения                → the site, the player panel and the Telegram channel in chat
-	  6 Новости сервера            → what the owner published (bot /zmnews or the admin menu)
-	  7 Сообщение админу           → the owner's bot gets it, online staff see it at once
+	  LVL MOD                    → the LVL menu of czm_lvl
+	  Панель игрока на сайте       → the CZM game opens it in the browser, signed in (czm_panel)
+	  Настройки                  → language, music and sounds, the info lines
+	  Голосования                → change the map [x/4], ban [x/5] or mute [x/4] a player, the board
+	  Телепорт                   → call a human to you or go to one (they answer yes or no)
+	  Приглашения                → the site, the player panel and the Telegram channel in chat
+	  Новости сервера            → what the owner published (bot /zmnews or the admin menu)
+	  Сообщение админу           → the owner's bot gets it, online staff see it at once
 	  Админ-меню                   → first in the list, staff only (czm_admin)
 
 	A vote holds one voice per player (the CZM profile, else the address) and resets with the
@@ -253,6 +254,7 @@ public game_menu(id)
 	if (staff != CZM_STAFF_NONE)
 		item(menu, id, "\rАдмин-меню", "\rAdmin menu", "admin");
 	item(menu, id, "LVL MOD", "LVL MOD", "lvl");
+	item(menu, id, "Панель игрока на сайте", "Player panel on the site", "panel");
 	item(menu, id, "Настройки", "Settings", "settings");
 	item(menu, id, "Голосования", "Voting", "votes");
 	new Float:wait = g_tpReady[id] - get_gametime();
@@ -266,6 +268,8 @@ public game_menu(id)
 	menu_additem(menu, line, "news");
 	item(menu, id, "Сообщение админу", "Message to the staff", "msg");
 	texts(menu, id);
+	// one page: up to nine items and the exit, the game shows them as cards
+	menu_setprop(menu, MPROP_PERPAGE, 0);
 	menu_display(id, menu);
 	return PLUGIN_HANDLED;
 }
@@ -282,6 +286,8 @@ public on_game_menu(id, menu, item_)
 	menu_destroy(menu);
 	if (equal(info, "lvl"))
 		amxclient_cmd(id, "lvl");
+	else if (equal(info, "panel"))
+		open_panel(id);
 	else if (equal(info, "settings"))
 		settings_menu(id);
 	else if (equal(info, "votes"))
@@ -316,7 +322,6 @@ settings_menu(id)
 	formatex(line, charsmax(line), en(id) ? "Hints on the left: \y%s" : "Подсказки слева: \y%s",
 		czm_info_on(id) ? (en(id) ? "on" : "вкл") : (en(id) ? "off" : "выкл"));
 	menu_additem(menu, line, "info");
-	item(menu, id, "Панель игрока на сайте", "Player panel on the site", "panel");
 	texts(menu, id);
 	menu_display(id, menu);
 }
@@ -337,13 +342,16 @@ public on_settings_menu(id, menu, item_)
 		amxclient_cmd(id, czm_sound_on(id) ? "sound_off" : "sound_on");
 	else if (equal(info, "info"))
 		amxclient_cmd(id, "say", czm_info_on(id) ? "/info_off" : "/info_on");
-	else if (equal(info, "panel"))
-	{
-		czm_chat(id, "^4[CZM]^1 Панель: ^4%s/panel^1 — вход по почте или нику CZM.", "^4[CZM]^1 Panel: ^4%s/panel^1 — sign in with your CZM email or nick.", CZM_SITE);
-		return PLUGIN_HANDLED;
-	}
 	settings_menu(id);
 	return PLUGIN_HANDLED;
+}
+
+// The CZM game opens the panel in the phone's browser already signed in (czm_panel asks the API for a
+// one-time link); other games get the address in chat.
+open_panel(id)
+{
+	client_cmd(id, "czm_panel");
+	czm_chat(id, "^4[CZM]^1 Панель игрока открывается в браузере. Если нет: ^4%s/panel", "^4[CZM]^1 The player panel opens in your browser. If not: ^4%s/panel", CZM_SITE);
 }
 
 invite(id)

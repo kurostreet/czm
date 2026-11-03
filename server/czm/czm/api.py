@@ -170,6 +170,7 @@ class AuthIn(BaseModel):
     repeat: str = Field(default="", max_length=128)
     email: str = Field(default="", max_length=254)
     code: str = Field(default="", max_length=16)
+    token: str = Field(default="", max_length=128)
 
 
 @router.post("/auth/{action}")
@@ -190,6 +191,8 @@ async def account_action(action: str, body: AuthIn, request: Request, background
         "password-change-confirm": lambda c: accounts.password_change_confirm(c, key, body.code, body.password, body.repeat, ip),
         "recover": lambda c: accounts.recover(c, body.nick, ip),
         "reset": lambda c: accounts.reset(c, body.nick, body.code, body.password, body.repeat, ip),
+        "web-link": lambda c: accounts.web_link(c, key, ip),
+        "web-link-redeem": lambda c: accounts.web_link_redeem(c, body.token, ip),
     }
     if action not in operations:
         raise HTTPException(404)
