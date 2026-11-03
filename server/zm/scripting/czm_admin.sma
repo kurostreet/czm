@@ -24,6 +24,7 @@
 #include <czm_api>
 #define CZM_ADMIN_PLUGIN
 #include <czm_admin>
+#include <czm_menu>
 
 #define PLUGIN "CZM Admin"
 #define VERSION "1.0"
@@ -104,6 +105,7 @@ public plugin_init()
 	register_clcmd("czm_say_all", "cmd_say_all");
 	register_clcmd("czm_poll", "cmd_poll");
 	register_clcmd("czm_news", "cmd_news");
+	menu_register();
 	RegisterHam(Ham_Spawn, "player", "fw_spawn_post", 1);
 	g_hud = CreateHudSyncObj();
 }
@@ -533,45 +535,47 @@ texts(menu, id)
 	menu_setprop(menu, MPROP_EXITNAME, en ? "Exit" : "Выход");
 }
 
+// the admin tab of the server menu (czm_menu): the staff only, some cards for head administrators
+menu_register()
+{
+	czm_menu_section("admin", "Админ", "Admin", "shield", 90, CZM_MENU_STAFF);
+	czm_menu_item("main", "go_admin", "Админ-меню", "Admin menu", "Только для администрации", "The staff only", "shield", "E53F4D", "#admin", 5, CZM_MENU_STAFF);
+	czm_menu_item("admin", "adm_punish", "Наказать игрока", "Punish a player", "Кик, бан, мут, убить", "Kick, ban, mute, kill", "block", "E53F4D", "on_czm_menu_admin", 10, CZM_MENU_STAFF);
+	czm_menu_item("admin", "adm_give", "Выдать игроку", "Give a player", "HP, оружие, паки, предметы", "HP, weapons, packs, items", "gift", "6BDAA7", "on_czm_menu_admin", 20, CZM_MENU_HEAD);
+	czm_menu_item("admin", "adm_mode", "Режим раунда", "Round mode", "Немезида, выживший, рой", "Nemesis, survivor, swarm", "skull", "A855F7", "on_czm_menu_admin", 30, CZM_MENU_HEAD);
+	czm_menu_item("admin", "adm_say", "Сообщение всем", "Message to everyone", "Крупно на экране", "Big on the screen", "chat", "63A1EF", "on_czm_menu_admin", 40, CZM_MENU_STAFF);
+	czm_menu_item("admin", "adm_poll", "Опрос ДА / НЕТ", "Yes / no poll", "Спросить всех", "Ask everyone", "flag", "F59E0B", "on_czm_menu_admin", 50, CZM_MENU_STAFF);
+	czm_menu_item("admin", "adm_map", "Сменить карту", "Change the map", "Сразу или после раунда", "Now or after the round", "map", "22D3EE", "on_czm_menu_admin", 60, CZM_MENU_STAFF);
+	czm_menu_item("admin", "adm_airdrop", "Сбросить аирдроп", "Drop an airdrop", "Ящик с наградой", "A box with a reward", "box", "E7BB60", "on_czm_menu_admin", 70, CZM_MENU_HEAD);
+	czm_menu_item("admin", "adm_board", "Нарушители", "Violators", "Снять бан или мут", "Lift a ban or a mute", "block", "9BA6B8", "on_czm_menu_admin", 80, CZM_MENU_STAFF);
+	czm_menu_item("admin", "adm_inbox", "Сообщения игроков", "Players' messages", "Что писали админам", "What they wrote", "send", "F97316", "on_czm_menu_admin", 90, CZM_MENU_STAFF);
+	czm_menu_item("admin", "adm_news", "Новость сервера", "Server news", "В меню и на сайте", "In the menu and on the site", "bell", "63A1EF", "on_czm_menu_admin", 100, CZM_MENU_HEAD);
+	czm_menu_item("admin", "adm_priv", "Привилегия игроку", "Give a privilege", "VIP+, PREMIUM, DELUXE", "VIP+, PREMIUM, DELUXE", "crown", "E7BB60", "on_czm_menu_admin", 110, CZM_MENU_HEAD);
+}
+
+public czm_menu_build(id, const section[])
+{
+	if (g_staff[id] != CZM_STAFF_NONE)
+		czm_menu_state(id, "go_admin", _, g_staff[id] == CZM_STAFF_ADMIN ? (czm_lang(id) == CZM_EN ? "Head administrator" : "Главный администратор")
+			: (czm_lang(id) == CZM_EN ? "Moderator" : "Модератор"));
+}
+
 public admin_menu(id)
 {
 	if (!staff(id))
 		return PLUGIN_HANDLED;
-	new title[96], bool:en = czm_lang(id) == CZM_EN, bool:head = g_staff[id] == CZM_STAFF_ADMIN;
-	formatex(title, charsmax(title), "\y%s^n\d%s", en ? "ADMIN MENU" : "АДМИН МЕНЮ",
-		head ? (en ? "head administrator" : "главный администратор") : (en ? "moderator" : "модератор"));
-	new menu = menu_create(title, "on_admin_menu");
-	item_add(menu, id, "Наказать игрока", "Punish a player", "punish");
-	if (head)
-		item_add(menu, id, "Выдать игроку", "Give a player", "give");
-	if (head)
-		item_add(menu, id, "Режим раунда", "Round mode", "mode");
-	item_add(menu, id, "Сообщение всем", "Message to everyone", "say");
-	item_add(menu, id, "Опрос ДА / НЕТ", "Yes / no poll", "poll");
-	item_add(menu, id, "Сменить карту", "Change the map", "map");
-	if (head)
-		item_add(menu, id, "Сбросить аирдроп", "Drop an airdrop", "airdrop");
-	item_add(menu, id, "Нарушители: снять бан или мут", "Violators: lift a ban or mute", "board");
-	item_add(menu, id, "Сообщения игроков", "Players' messages", "inbox");
-	if (head)
-		item_add(menu, id, "Новость сервера", "Server news", "news");
-	if (head)
-		item_add(menu, id, "Привилегия игроку (VIP+, PREMIUM...)", "Privilege (VIP+, PREMIUM...)", "priv");
-	texts(menu, id);
-	menu_display(id, menu);
+	czm_menu_open(id, "admin");
 	return PLUGIN_HANDLED;
 }
 
-public on_admin_menu(id, menu, item)
+public on_czm_menu_admin(id, const key[])
 {
-	if (item < 0)
-	{
-		menu_destroy(menu);
-		return PLUGIN_HANDLED;
-	}
-	new info[12], access, callback;
-	menu_item_getinfo(menu, item, access, info, charsmax(info), _, _, callback);
-	menu_destroy(menu);
+	// "adm_punish" → "punish"
+	admin_action(id, key[4]);
+}
+
+admin_action(id, const info[])
+{
 	if (!staff(id))
 		return PLUGIN_HANDLED;
 	if (equal(info, "punish"))

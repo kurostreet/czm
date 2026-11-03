@@ -19,6 +19,7 @@
 #include <easy_http>
 #include <czm_survival>
 #include <czm_admin>
+#include <czm_menu>
 
 #define PLUGIN "CZM LVL"
 #define VERSION "1.0"
@@ -139,6 +140,7 @@ public plugin_init()
 	register_clcmd("say", "cmd_say");
 	register_clcmd("say_team", "cmd_say_team");
 	register_clcmd("lvl", "menu_lvl");
+	menu_register();
 
 	RegisterHam(Ham_Killed, "player", "fw_killed_post", 1);
 	RegisterHam(Ham_Spawn, "player", "fw_spawn_post", 1);
@@ -1144,6 +1146,66 @@ use_promo(id, const code[])
 
 // ---------------------------------------------------------------- menus
 
+// the LVL MOD tab of the server menu (czm_menu)
+menu_register()
+{
+	czm_menu_section("lvl", "LVL MOD", "LVL MOD", "chart", 10);
+	czm_menu_item("main", "go_lvl", "LVL MOD", "LVL MOD", "Уровень, токены, магазин", "Level, tokens, shop", "chart", "E7BB60", "#lvl", 10);
+	czm_menu_item("lvl", "lvl_profile", "Профиль", "Profile", "Уровень, время, победы", "Level, time, wins", "user", "63A1EF", "on_czm_menu_lvl", 10);
+	czm_menu_item("lvl", "lvl_shop", "Магазин", "Shop", "Скины, ножи, префиксы", "Skins, knives, prefixes", "cart", "E7BB60", "on_czm_menu_lvl", 20);
+	czm_menu_item("lvl", "lvl_upgrades", "Прокачка", "Upgrades", "LVL и токены ×2", "LVL and tokens ×2", "bolt", "F59E0B", "on_czm_menu_lvl", 30);
+	czm_menu_item("lvl", "lvl_crate", "Ящик с оружием", "Weapon crate", "Помощь на 30 минут", "Help for 30 minutes", "box", "E53F4D", "on_czm_menu_lvl", 40);
+	czm_menu_item("lvl", "lvl_bp", "Боевой пропуск", "Battle pass", "Задания и награды", "Tasks and rewards", "ticket", "A855F7", "on_czm_menu_lvl", 50);
+	czm_menu_item("lvl", "lvl_pay", "Перевод токенов", "Send tokens", "Другу на сервере", "To a friend here", "coins", "6BDAA7", "on_czm_menu_lvl", 60);
+	czm_menu_item("lvl", "lvl_top", "Топ игроков", "Top players", "Лучшие на сервере", "The best here", "trophy", "E7BB60", "on_czm_menu_lvl", 70);
+	czm_menu_item("lvl", "lvl_promo", "Промокод", "Promo code", "Ввести код", "Enter a code", "gift", "22D3EE", "on_czm_menu_lvl", 80);
+}
+
+public czm_menu_build(id, const section[])
+{
+	new ru = czm_lang(id) == CZM_RU, line[48];
+	if (!g_loaded[id])
+	{
+		// guests: LVL MOD needs the CZM profile
+		czm_menu_state(id, "go_lvl", _, ru ? "Для игроков CZM" : "For CZM players", _, false, true);
+		static const keys[][] = {"lvl_profile", "lvl_shop", "lvl_upgrades", "lvl_crate", "lvl_bp", "lvl_pay", "lvl_top", "lvl_promo"};
+		for (new k = 0; k < sizeof keys; k++)
+			czm_menu_state(id, keys[k], _, _, _, false, true);
+		return;
+	}
+	formatex(line, charsmax(line), ru ? "LVL %d · токенов %d" : "LVL %d · %d tokens", g_lvl[id], g_tokens[id]);
+	czm_menu_state(id, "go_lvl", _, line);
+	czm_menu_state(id, "lvl_profile", _, line);
+	if (g_bpDailyReady[id])
+	{
+		czm_menu_state(id, "lvl_bp", _, _, ru ? "!НАГРАДА" : "!REWARD");
+		czm_menu_state(id, "#lvl", _, _, "1");
+	}
+}
+
+public on_czm_menu_lvl(id, const key[])
+{
+	if (!g_loaded[id])
+		return menu_lvl(id);
+	if (equal(key, "lvl_profile"))
+		show_profile(id);
+	else if (equal(key, "lvl_shop"))
+		menu_shop(id);
+	else if (equal(key, "lvl_upgrades"))
+		menu_upgrades(id);
+	else if (equal(key, "lvl_crate"))
+		menu_crate(id);
+	else if (equal(key, "lvl_bp"))
+		menu_bp(id);
+	else if (equal(key, "lvl_pay"))
+		menu_pay(id);
+	else if (equal(key, "lvl_top"))
+		show_top(id);
+	else if (equal(key, "lvl_promo"))
+		use_promo(id, "");
+	return PLUGIN_HANDLED;
+}
+
 public menu_lvl(id)
 {
 	if (!g_loaded[id])
@@ -1151,36 +1213,7 @@ public menu_lvl(id)
 		czm_chat(id, "^4[LVL]^1 LVL MOD работает для игроков CZM: зайди из игры Counter Zombie Mobile.", "^4[LVL]^1 LVL MOD works for Counter Zombie Mobile players.");
 		return PLUGIN_HANDLED;
 	}
-	new title[128], item[64], ru = czm_lang(id) == CZM_RU;
-	formatex(title, charsmax(title), ru ? "\yLVL MOD^n\wLVL \r%d\w  Токены \r%d" : "\yLVL MOD^n\wLVL \r%d\w  Tokens \r%d", g_lvl[id], g_tokens[id]);
-	new menu = menu_create(title, "on_menu_lvl");
-	menu_additem(menu, ru ? "Профиль" : "Profile");
-	menu_additem(menu, ru ? "Магазин" : "Shop");
-	menu_additem(menu, ru ? "Прокачка" : "Upgrades");
-	menu_additem(menu, ru ? "Ящик с оружием" : "Weapon crate");
-	formatex(item, charsmax(item), ru ? "Боевой пропуск%s" : "Battle pass%s", g_bpDailyReady[id] ? " \r!" : "");
-	menu_additem(menu, item);
-	menu_additem(menu, ru ? "Перевод токенов" : "Send tokens");
-	menu_additem(menu, ru ? "Топ игроков" : "Top players");
-	menu_additem(menu, ru ? "Промокод" : "Promo code");
-	menu_display(id, menu);
-	return PLUGIN_HANDLED;
-}
-
-public on_menu_lvl(id, menu, key)
-{
-	menu_destroy(menu);
-	switch (key)
-	{
-		case 0: show_profile(id);
-		case 1: menu_shop(id);
-		case 2: menu_upgrades(id);
-		case 3: menu_crate(id);
-		case 4: menu_bp(id);
-		case 5: menu_pay(id);
-		case 6: show_top(id);
-		case 7: use_promo(id, "");
-	}
+	czm_menu_open(id, "lvl");
 	return PLUGIN_HANDLED;
 }
 

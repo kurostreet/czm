@@ -13,13 +13,14 @@
 #define LINE_LEN 128
 
 // in the order of plugins-czm.ini
-new const NAMES[][] = {"czm_core", "czm_sounds", "czm_revive", "czm_ammo", "czm_info", "czm_admin", "czm_game",
-	"czm_lvl", "czm_lvl_fx"};
+new const NAMES[][] = {"czm_core", "czm_menu", "czm_sounds", "czm_revive", "czm_ammo", "czm_info", "czm_admin",
+	"czm_game", "czm_lvl", "czm_lvl_fx"};
 // what each one needs on: without them it does not load
-new const NEEDS[][] = {"", "czm_core", "czm_core", "czm_core", "czm_core", "czm_core", "czm_core czm_admin",
-	"czm_core czm_admin", "czm_core czm_lvl"};
+new const NEEDS[][] = {"", "czm_core", "czm_core", "czm_core", "czm_core", "czm_core", "czm_core czm_menu",
+	"czm_core czm_menu czm_admin", "czm_core czm_menu czm_admin", "czm_core czm_lvl"};
 new const ABOUT[][] = {
 	"профиль CZM, язык, /sound /info",
+	"меню сервера: вкладки остальных плагинов",
 	"музыка и звуки Kontra",
 	"автовозрождение зомби",
 	"патроны",
@@ -204,9 +205,9 @@ change(bool:on)
 	{
 		if (!is_on(NAMES[i]) || !NEEDS[i][0])
 			continue;
-		new need[2][24];
-		parse(NEEDS[i], need[0], charsmax(need[]), need[1], charsmax(need[]));
-		for (new k = 0; k < 2; k++)
+		new need[3][24];
+		parse(NEEDS[i], need[0], charsmax(need[]), need[1], charsmax(need[]), need[2], charsmax(need[]));
+		for (new k = 0; k < 3; k++)
 			if (need[k][0] && !is_on(need[k]))
 				server_print("[CZM] внимание: %s не загрузится без %s (czm_plugin_on %s)", NAMES[i], need[k], need[k]);
 	}

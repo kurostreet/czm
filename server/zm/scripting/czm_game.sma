@@ -2,16 +2,15 @@
 	Counter Zombie Mobile, Survival server: the game menu of the Kontra server (GAME_MENU_v31,
 	TeleportRequest_v2_5, save_money_v3 and the map vote of the Kontra rooms).
 
-	menu, меню, /menu:
-	  LVL MOD                    → the LVL menu of czm_lvl
-	  Панель игрока на сайте       → the CZM game opens it in the browser, signed in (czm_panel)
-	  Настройки                  → language, music and sounds, the info lines
-	  Голосования                → change the map [x/4], ban [x/5] or mute [x/4] a player, the board
-	  Телепорт                   → call a human to you or go to one (they answer yes or no)
-	  Приглашения                → the site, the player panel and the Telegram channel in chat
-	  Новости сервера            → what the owner published (bot /zmnews or the admin menu)
-	  Сообщение админу           → the owner's bot gets it, online staff see it at once
-	  Админ-меню                   → first in the list, staff only (czm_admin)
+	menu, меню, /menu open the server menu (czm_menu). This plugin adds the tabs
+	  Главное      → the panel on the site, settings, voting, teleport, invitations, news, a message
+	                 to the staff (LVL MOD and the admin menu come from czm_lvl and czm_admin)
+	  Игроки       → teleport (call a human to you or go to one, they answer yes or no),
+	                 invitations (the site, the player panel and Telegram in chat), the violators
+	  Голосования  → change the map [x/4], ban [x/5] or mute [x/4] a player, the violators
+	  Сервер       → news (bot /zmnews or the admin menu), the player panel, the next map, a message
+	                 to the staff (the owner's bot gets it, online staff see it at once)
+	  Настройки    → language, music and sounds, the hints on the left
 
 	A vote holds one voice per player (the CZM profile, else the address) and resets with the
 	map. A ban by vote lasts 30 minutes, a mute an hour; staff are immune. Two minutes before the
@@ -27,6 +26,7 @@
 #include <czm_survival>
 #include <czm_api>
 #include <czm_admin>
+#include <czm_menu>
 
 #define PLUGIN "CZM Game"
 #define VERSION "1.0"
@@ -100,6 +100,7 @@ public plugin_init()
 	register_clcmd("say_team", "cmd_say");
 	register_clcmd("menu", "game_menu");
 	register_clcmd("czm_admin_msg", "cmd_admin_msg");
+	menu_register();
 	register_message(SVC_INTERMISSION, "msg_intermission");
 	create_cvar("amx_nextmap", "", FCVAR_SERVER | FCVAR_SPONLY, "The next map, chosen by the players' vote");
 	g_mapVoters = TrieCreate();
@@ -241,109 +242,122 @@ public cmd_say(id)
 
 // ---------------------------------------------------------------- the game menu
 
+// the tabs and cards of this plugin in the server menu (czm_menu)
+menu_register()
+{
+	czm_menu_section("main", "Главное", "Main", "star", 0);
+	czm_menu_section("players", "Игроки", "Players", "users", 30);
+	czm_menu_section("votes", "Голосования", "Voting", "flag", 40);
+	czm_menu_section("server", "Сервер", "Server", "globe", 50);
+	czm_menu_section("settings", "Настройки", "Settings", "gear", 60);
+
+	czm_menu_item("main", "panel", "Панель на сайте", "Player panel", "Скины, магазин, топ", "Skins, shop, top", "globe", "6BDAA7", "on_czm_menu", 20);
+	czm_menu_item("main", "go_settings", "Настройки", "Settings", "Язык, звуки, подсказки", "Language, sounds, hints", "gear", "F59E0B", "#settings", 30);
+	czm_menu_item("main", "go_votes", "Голосования", "Voting", "Карта, бан, мут", "Map, ban, mute", "flag", "A855F7", "#votes", 40);
+	czm_menu_item("main", "tp", "Телепорт", "Teleport", "К другу по запросу", "To a friend, on request", "target", "22D3EE", "on_czm_menu", 50);
+	czm_menu_item("main", "invite", "Приглашения", "Invitations", "Позвать друга на сервер", "Call a friend here", "person_add", "E53F4D", "on_czm_menu", 60);
+	czm_menu_item("main", "news", "Новости сервера", "Server news", "Что нового на сервере", "What is new here", "bell", "63A1EF", "on_czm_menu", 70);
+	czm_menu_item("main", "msg", "Сообщение админу", "Message to the staff", "Прочитает владелец", "The owner reads it", "chat", "F97316", "on_czm_menu", 80);
+
+	czm_menu_item("players", "pl_tp", "Телепорт", "Teleport", "Позвать к себе или пойти к другу", "Call a human or go to one", "target", "22D3EE", "on_czm_menu", 10);
+	czm_menu_item("players", "pl_invite", "Приглашения", "Invitations", "Сайт, панель и Telegram в чат", "The site, panel and Telegram", "person_add", "E53F4D", "on_czm_menu", 20);
+	czm_menu_item("players", "pl_board", "Нарушители", "Violators", "Баны и муты сейчас", "Bans and mutes now", "block", "9BA6B8", "on_czm_menu", 30);
+
+	czm_menu_item("votes", "v_map", "За смену карты", "Change the map", "Голоса всех игроков", "Everyone's votes", "flag", "A855F7", "on_czm_menu", 10);
+	czm_menu_item("votes", "v_ban", "За бан игрока", "Ban a player", "На 30 минут", "For 30 minutes", "block", "E53F4D", "on_czm_menu", 20);
+	czm_menu_item("votes", "v_mute", "За мут игрока", "Mute a player", "На час, чат и голос", "For an hour, chat and voice", "sound", "F59E0B", "on_czm_menu", 30);
+	czm_menu_item("votes", "v_board", "Нарушители", "Violators", "Баны и муты сейчас", "Bans and mutes now", "block", "9BA6B8", "on_czm_menu", 40);
+
+	czm_menu_item("server", "sv_news", "Новости сервера", "Server news", "Что нового на сервере", "What is new here", "bell", "63A1EF", "on_czm_menu", 10);
+	czm_menu_item("server", "sv_panel", "Панель на сайте", "Player panel", "Вход одной кнопкой", "Signed in with one tap", "globe", "6BDAA7", "on_czm_menu", 20);
+	czm_menu_item("server", "sv_next", "Следующая карта", "Next map", "После голосования", "After the vote", "play", "22D3EE", "on_czm_menu", 30);
+	czm_menu_item("server", "sv_msg", "Сообщение админу", "Message to the staff", "Прочитает владелец", "The owner reads it", "chat", "F97316", "on_czm_menu", 40);
+
+	czm_menu_item("settings", "set_lang", "Язык", "Language", "Русский или English", "Русский or English", "globe", "63A1EF", "on_czm_menu", 10);
+	czm_menu_item("settings", "set_sound", "Музыка и звуки", "Music and sounds", "Звуки и музыка сервера", "The server's sounds and music", "sound", "A855F7", "on_czm_menu", 20);
+	czm_menu_item("settings", "set_info", "Подсказки слева", "Hints on the left", "Строки слева вверху", "The lines at the top left", "info", "F59E0B", "on_czm_menu", 30);
+}
+
 public game_menu(id)
 {
-	new title[160], map[32], mode[24], left = get_timeleft(), staff = czm_staff(id);
-	get_mapname(map, charsmax(map));
-	get_cvar_string("czm_server_name", mode, charsmax(mode));
-	strtoupper(mode);
-	formatex(title, charsmax(title), en(id) ? "\yCOUNTER ZOMBIE  %s^n\d%s  |  %d:%02d left  |  %d/%d players" : "\yCOUNTER ZOMBIE  %s^n\d%s  |  осталось %d:%02d  |  игроков %d/%d",
-		mode[0] ? mode : "SURVIVAL", map, max(left, 0) / 60, max(left, 0) % 60, get_playersnum(), MaxClients);
-	new menu = menu_create(title, "on_game_menu"), line[64];
-	// the staff see their menu first, so it never hides on the second page
-	if (staff != CZM_STAFF_NONE)
-		item(menu, id, "\rАдмин-меню", "\rAdmin menu", "admin");
-	item(menu, id, "LVL MOD", "LVL MOD", "lvl");
-	item(menu, id, "Панель игрока на сайте", "Player panel on the site", "panel");
-	item(menu, id, "Настройки", "Settings", "settings");
-	item(menu, id, "Голосования", "Voting", "votes");
-	new Float:wait = g_tpReady[id] - get_gametime();
-	if (wait > 0.0)
-		formatex(line, charsmax(line), en(id) ? "Teleport \d(%d s)" : "Телепорт \d(%d с)", floatround(wait, floatround_ceil));
-	else
-		copy(line, charsmax(line), en(id) ? "Teleport" : "Телепорт");
-	menu_additem(menu, line, "tp");
-	item(menu, id, "Приглашения", "Invitations", "invite");
-	formatex(line, charsmax(line), "%s%s", en(id) ? "Server news" : "Новости сервера", news_unseen(id) ? " \r[New]" : "");
-	menu_additem(menu, line, "news");
-	item(menu, id, "Сообщение админу", "Message to the staff", "msg");
-	texts(menu, id);
-	// one page: up to nine items and the exit, the game shows them as cards
-	menu_setprop(menu, MPROP_PERPAGE, 0);
-	menu_display(id, menu);
+	czm_menu_open(id, "main");
 	return PLUGIN_HANDLED;
 }
 
-public on_game_menu(id, menu, item_)
+// what changes from player to player: cooldowns, new news, votes, the settings
+public czm_menu_build(id, const section[])
 {
-	if (item_ < 0)
+	new line[48], Float:wait = g_tpReady[id] - get_gametime();
+	if (wait > 0.0)
 	{
-		menu_destroy(menu);
-		return PLUGIN_HANDLED;
+		new left = floatround(wait, floatround_ceil);
+		formatex(line, charsmax(line), "%d:%02d", left / 60, left % 60);
+		czm_menu_state(id, "tp", _, _, line);
+		czm_menu_state(id, "pl_tp", _, _, line);
 	}
-	new info[12];
-	menu_info(menu, item_, info, charsmax(info));
-	menu_destroy(menu);
-	if (equal(info, "lvl"))
-		amxclient_cmd(id, "lvl");
-	else if (equal(info, "panel"))
+	if (news_unseen(id))
+	{
+		czm_menu_state(id, "news", _, _, "!NEW");
+		czm_menu_state(id, "sv_news", _, _, "!NEW");
+		czm_menu_state(id, "#server", _, _, "1");
+	}
+	formatex(line, charsmax(line), "%d/%d", TrieGetSize(g_mapVoters), need(VOTES_MAP, 0, 1));
+	czm_menu_state(id, "v_map", _, _, line);
+	if (g_nextMap[0])
+		czm_menu_state(id, "sv_next", _, g_nextMap);
+	czm_menu_state(id, "set_lang", _, _, en(id) ? "EN" : "RU");
+	czm_menu_state(id, "set_sound", _, _, czm_sound_on(id) ? (en(id) ? "on" : "вкл") : (en(id) ? "off" : "выкл"));
+	czm_menu_state(id, "set_info", _, _, czm_info_on(id) ? (en(id) ? "on" : "вкл") : (en(id) ? "off" : "выкл"));
+}
+
+public on_czm_menu(id, const key[])
+{
+	if (equal(key, "panel") || equal(key, "sv_panel"))
 		open_panel(id);
-	else if (equal(info, "settings"))
-		settings_menu(id);
-	else if (equal(info, "votes"))
-		votes_menu(id);
-	else if (equal(info, "tp"))
+	else if (equal(key, "tp") || equal(key, "pl_tp"))
 		tp_menu(id);
-	else if (equal(info, "invite"))
+	else if (equal(key, "invite") || equal(key, "pl_invite"))
 		invite(id);
-	else if (equal(info, "news"))
+	else if (equal(key, "news") || equal(key, "sv_news"))
 		show_news(id);
-	else if (equal(info, "msg"))
+	else if (equal(key, "pl_board") || equal(key, "v_board"))
+		show_board(id);
+	else if (equal(key, "msg") || equal(key, "sv_msg"))
 	{
 		czm_chat(id, "^4[CZM]^1 Напиши сообщение администрации и отправь — его прочитает владелец сервера.",
 			"^4[CZM]^1 Type your message to the staff and send it: the server owner reads it.");
 		client_cmd(id, "messagemode czm_admin_msg");
 	}
-	else if (equal(info, "admin"))
-		czm_admin_menu(id);
-	return PLUGIN_HANDLED;
-}
-
-settings_menu(id)
-{
-	new title[64], line[64];
-	formatex(title, charsmax(title), "\y%s", en(id) ? "SETTINGS" : "НАСТРОЙКИ");
-	new menu = menu_create(title, "on_settings_menu");
-	formatex(line, charsmax(line), en(id) ? "Language: \yEN\w | RU" : "Язык: \yRU\w | EN");
-	menu_additem(menu, line, "lang");
-	formatex(line, charsmax(line), en(id) ? "Music and sounds: \y%s" : "Музыка и звуки: \y%s",
-		czm_sound_on(id) ? (en(id) ? "on" : "вкл") : (en(id) ? "off" : "выкл"));
-	menu_additem(menu, line, "sound");
-	formatex(line, charsmax(line), en(id) ? "Hints on the left: \y%s" : "Подсказки слева: \y%s",
-		czm_info_on(id) ? (en(id) ? "on" : "вкл") : (en(id) ? "off" : "выкл"));
-	menu_additem(menu, line, "info");
-	texts(menu, id);
-	menu_display(id, menu);
-}
-
-public on_settings_menu(id, menu, item_)
-{
-	if (item_ < 0)
+	else if (equal(key, "v_map"))
 	{
-		menu_destroy(menu);
-		return PLUGIN_HANDLED;
+		vote_map(id);
+		czm_menu_open(id, "votes");
 	}
-	new info[8];
-	menu_info(menu, item_, info, charsmax(info));
-	menu_destroy(menu);
-	if (equal(info, "lang"))
+	else if (equal(key, "v_ban") || equal(key, "v_mute"))
+	{
+		g_pickKind[id] = equal(key, "v_ban") ? 1 : 2;
+		pick_player(id);
+	}
+	else if (equal(key, "sv_next"))
+	{
+		czm_chat(id, "^4[CZM]^1 Следующая карта: ^4%s", "^4[CZM]^1 Next map: ^4%s", g_nextMap[0] ? g_nextMap : (en(id) ? "after the vote" : "после голосования"));
+		czm_menu_open(id, "server");
+	}
+	else if (equal(key, "set_lang"))
+	{
 		czm_set_lang(id, en(id) ? CZM_RU : CZM_EN);
-	else if (equal(info, "sound"))
+		czm_menu_open(id, "settings");
+	}
+	else if (equal(key, "set_sound"))
+	{
 		amxclient_cmd(id, czm_sound_on(id) ? "sound_off" : "sound_on");
-	else if (equal(info, "info"))
+		czm_menu_open(id, "settings");
+	}
+	else if (equal(key, "set_info"))
+	{
 		amxclient_cmd(id, "say", czm_info_on(id) ? "/info_off" : "/info_on");
-	settings_menu(id);
-	return PLUGIN_HANDLED;
+		czm_menu_open(id, "settings");
+	}
 }
 
 // The CZM game opens the panel in the phone's browser already signed in (czm_panel asks the API for a
@@ -364,46 +378,6 @@ invite(id)
 }
 
 // ---------------------------------------------------------------- votes
-
-votes_menu(id)
-{
-	new title[64], line[80];
-	formatex(title, charsmax(title), "\y%s", en(id) ? "VOTING" : "ГОЛОСОВАНИЯ");
-	new menu = menu_create(title, "on_votes_menu");
-	formatex(line, charsmax(line), en(id) ? "Change the map \d[%d/%d]" : "За смену карты \d[%d/%d]",
-		TrieGetSize(g_mapVoters), need(VOTES_MAP, 0, 1));
-	menu_additem(menu, line, "map");
-	item(menu, id, "За бан игрока", "Ban a player", "ban");
-	item(menu, id, "За мут игрока", "Mute a player", "mute");
-	item(menu, id, "Доска нарушителей", "Violators board", "board");
-	texts(menu, id);
-	menu_display(id, menu);
-}
-
-public on_votes_menu(id, menu, item_)
-{
-	if (item_ < 0)
-	{
-		menu_destroy(menu);
-		return PLUGIN_HANDLED;
-	}
-	new info[8];
-	menu_info(menu, item_, info, charsmax(info));
-	menu_destroy(menu);
-	if (equal(info, "map"))
-	{
-		vote_map(id);
-		votes_menu(id);
-	}
-	else if (equal(info, "ban") || equal(info, "mute"))
-	{
-		g_pickKind[id] = equal(info, "ban") ? 1 : 2;
-		pick_player(id);
-	}
-	else if (equal(info, "board"))
-		show_board(id);
-	return PLUGIN_HANDLED;
-}
 
 vote_map(id)
 {
