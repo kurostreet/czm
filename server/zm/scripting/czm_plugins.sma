@@ -7,6 +7,7 @@
 // The choice is kept in configs/plugins-czm.ini as ";off <name>.amxx"; a deploy keeps it.
 // This plugin needs none of the others, so it works while they are all off.
 #include <amxmodx>
+#include <amxmisc>
 
 #define MAX_LINES 64
 #define LINE_LEN 128
