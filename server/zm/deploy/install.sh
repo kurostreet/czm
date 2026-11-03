@@ -72,7 +72,13 @@ fi
 
 echo "== plugins"
 install -o "${OWNER%:*}" -g "${OWNER#*:}" -m 0644 "$BUILD"/*.amxx "$A/plugins/"
+# the plugins turned off for testing (czm_plugin_off, ";off name.amxx") stay off
+OFF=$(sed -n 's/^;off \([A-Za-z0-9_]*\.amxx\).*/\1/p' "$A/configs/plugins-czm.ini" 2>/dev/null || true)
 install -o "${OWNER%:*}" -g "${OWNER#*:}" -m 0644 "$R/configs/plugins-czm.ini" "$A/configs/plugins-czm.ini"
+for p in $OFF; do
+	sed -i "s/^$p\( .*\)\{0,1\}\$/;off &/" "$A/configs/plugins-czm.ini"
+	echo "off for testing: $p"
+done
 install -o "${OWNER%:*}" -g "${OWNER#*:}" -m 0644 "$R/scripting/include/czm_survival.inc" "$A/scripting/include/"
 
 # The key that signs the tickets of CZM players. The API reads the same file (group czm).
