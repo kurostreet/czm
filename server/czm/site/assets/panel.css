@@ -162,4 +162,16 @@ input:focus,select:focus{outline:none;border-color:var(--gold)}
 .toast.bad{background:var(--red);color:#fff}
 @keyframes toast{from{opacity:0;transform:translate(-50%,8px)}}
 .empty{padding:26px;text-align:center;color:var(--muted)}
+/* server news and the violators board */
+.news,.board{list-style:none;margin:12px 0 0;padding:6px 0}
+.news li,.board li{display:grid;gap:12px;align-items:center;padding:11px 16px;border-bottom:1px solid var(--line)}
+.news li{grid-template-columns:64px 1fr;align-items:baseline}
+.board li{grid-template-columns:52px 1fr auto}
+.news li:last-child,.board li:last-child{border-bottom:0}
+.news time{color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums}
+.board small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+.board .kind{justify-self:start;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;text-transform:lowercase;border:1px solid currentColor}
+.board .kind.ban{color:var(--red)}
+.board .kind.mute{color:var(--gold)}
+.board .amount{color:var(--muted);font-size:13px;white-space:nowrap}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}

@@ -37,6 +37,8 @@
       nothingToSell: 'Нечего выставить: в лавку идут купленные вещи.', seller: 'Продавец', daysLeft: '{d} дн.',
       withdraw: 'Снять', mine: 'Твоё', marketEmpty: 'В лавке пока пусто.', payLead: 'С {lvl} LVL, до {limit} токенов в день. Сегодня отправлено: {today}.',
       topEmpty: 'Пока никого.', liveEmpty: 'Сервер сейчас не в сети или на нём никого нет.', liveNow: '{n} из {max}', leftMin: '{m} мин до смены карты',
+      newsTitle: 'Новости сервера', newsEmpty: 'Новостей пока нет.', boardTitle: 'Доска нарушителей', boardEmpty: 'Нарушителей нет — играем честно.',
+      ban: 'бан', mute: 'мут', forever: 'навсегда', byVote: 'голосование игроков', leftShort: 'ещё {t}',
       zombie: 'Зомби', human: 'Человек', frags: 'Фраги', lvl: 'LVL', player: 'Игрок', place: '{n} место', promoTitle: 'Промокод', promoPh: 'Например, free20lvl', promoUse: 'Активировать', promoDone: 'Промокод: +{n} {what}', tokensWord: 'токенов', crate: 'Ящик с оружием', crateLead: 'на 30 минут, выдаётся при каждом спавне человеком', charges: 'зарядов: {n}', minLeft: 'ещё {m} мин', extend: 'Продлить', hCrate: 'Ящик с оружием', hAirdrop: 'Аирдроп', done: 'Готово', bought: 'Куплено и надето', on: 'Надето', off: 'Снято',
       paid: 'Передано {n} токенов', listed: 'Выставлено в лавку', boughtMarket: 'Куплено в лавке', withdrawn: 'Вещь вернулась к тебе',
       hBuy: 'Покупка', hUpgrade: 'Прокачка', hPay: 'Перевод', hPromo: 'Промокод', hPass: 'Боевой пропуск', hMarketBuy: 'Покупка в лавке',
@@ -74,6 +76,8 @@
       nothingToSell: 'Nothing to sell: bought items go to the market.', seller: 'Seller', daysLeft: '{d} d',
       withdraw: 'Take back', mine: 'Yours', marketEmpty: 'The market is empty for now.', payLead: 'From LVL {lvl}, up to {limit} tokens a day. Sent today: {today}.',
       topEmpty: 'Nobody yet.', liveEmpty: 'The server is offline or empty right now.', liveNow: '{n} of {max}', leftMin: '{m} min to the next map',
+      newsTitle: 'Server news', newsEmpty: 'No news yet.', boardTitle: 'Violators board', boardEmpty: 'Nobody is banned or muted: fair play.',
+      ban: 'ban', mute: 'mute', forever: 'forever', byVote: 'players\' vote', leftShort: '{t} left',
       zombie: 'Zombie', human: 'Human', frags: 'Frags', lvl: 'LVL', player: 'Player', place: 'place {n}', promoTitle: 'Promo code', promoPh: 'For example, free20lvl', promoUse: 'Activate', promoDone: 'Promo code: +{n} {what}', tokensWord: 'tokens', crate: 'Weapon crate', crateLead: 'for 30 minutes, given at every spawn as a human', charges: '{n} charges', minLeft: '{m} min left', extend: 'Extend', hCrate: 'Weapon crate', hAirdrop: 'Airdrop', done: 'Done', bought: 'Bought and put on', on: 'Put on', off: 'Taken off',
       paid: '{n} tokens sent', listed: 'Put up for sale', boughtMarket: 'Bought on the market', withdrawn: 'The item is back with you',
       hBuy: 'Purchase', hUpgrade: 'Upgrade', hPay: 'Transfer', hPromo: 'Promo code', hPass: 'Battle pass', hMarketBuy: 'Market purchase',
@@ -414,6 +418,31 @@
     }).catch(function () { $('live').innerHTML = '<div class="empty card">' + esc(t('liveEmpty')) + '</div>'; });
   }
 
+  /* news of the server and the violators board, under the live server */
+  function span(sec) {
+    if (sec < 0) return t('forever');
+    var d = Math.floor(sec / 86400), h = Math.floor(sec / 3600) % 24, m = Math.floor(sec / 60) % 60;
+    if (d) return lang === 'en' ? d + ' d ' + h + ' h' : d + ' д ' + h + ' ч';
+    if (h) return lang === 'en' ? h + ' h ' + m + ' min' : h + ' ч ' + m + ' мин';
+    return lang === 'en' ? Math.max(1, Math.ceil(sec / 60)) + ' min' : Math.max(1, Math.ceil(sec / 60)) + ' мин';
+  }
+  function loadNotes() {
+    var none = function () { return {}; };
+    Promise.all([api('/survival/news?limit=6').catch(none), api('/survival/board?limit=30').catch(none)]).then(function (r) {
+      var news = (r[0].news || []).map(function (n) {
+        var day = new Date(n.created * 1000).toLocaleDateString(lang === 'en' ? 'en-GB' : 'ru-RU', { day: 'numeric', month: 'short' });
+        return '<li><time>' + esc(day) + '</time><span>' + esc(lang === 'en' ? n.en : n.ru) + '</span></li>';
+      }).join('');
+      var board = (r[1].board || []).map(function (b) {
+        var why = [b.reason, b.vote ? t('byVote') : b.by].filter(Boolean).join(' · ');
+        return '<li><span class="kind ' + (b.kind === 'ban' ? 'ban' : 'mute') + '">' + esc(t(b.kind === 'ban' ? 'ban' : 'mute')) + '</span><span><b>' + esc(b.name) + '</b>' +
+          (why ? '<small>' + esc(why) + '</small>' : '') + '</span><span class="amount">' + esc(b.left < 0 ? t('forever') : t('leftShort', { t: span(b.left) })) + '</span></li>';
+      }).join('');
+      $('notes').innerHTML = '<h2>' + esc(t('newsTitle')) + '</h2>' + (news ? '<ul class="news card">' + news + '</ul>' : '<div class="empty card">' + esc(t('newsEmpty')) + '</div>') +
+        '<h2>' + esc(t('boardTitle')) + '</h2>' + (board ? '<ul class="board card">' + board + '</ul>' : '<div class="empty card">' + esc(t('boardEmpty')) + '</div>');
+    });
+  }
+
   /* ---------- tabs and buttons ---------- */
   var currentTab = 'overview';
   function openTab(name_) {
@@ -424,7 +453,7 @@
     clearInterval(liveTimer);
     if (name_ === 'market') loadMarket();
     if (name_ === 'top') loadTop();
-    if (name_ === 'live') { loadLive(); liveTimer = setInterval(function () { if (!document.hidden) loadLive(); }, 10000); }
+    if (name_ === 'live') { loadLive(); loadNotes(); liveTimer = setInterval(function () { if (!document.hidden) loadLive(); }, 10000); }
     if (name_ === 'overview') refresh();
   }
   document.querySelectorAll('#tabs .tab').forEach(function (b) { b.addEventListener('click', function () { openTab(b.getAttribute('data-tab')); }); });
