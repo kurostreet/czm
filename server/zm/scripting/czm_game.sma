@@ -538,7 +538,8 @@ vote_against(id, target, bool:ban)
 	clear_votes_for(voters, targetKey);
 	TrieSetCell(g_cooldown, gate, get_gametime() + VOTE_COOLDOWN);
 	czm_play_sound(0, g_hVoteStop);
-	czm_sanction(target, ban ? "ban" : "mute", ban ? VOTE_BAN_SECONDS : VOTE_MUTE_SECONDS, "Голосование игроков", 0);
+	// no reason: by 0 already tells everyone it was the players' vote
+	czm_sanction(target, ban ? "ban" : "mute", ban ? VOTE_BAN_SECONDS : VOTE_MUTE_SECONDS, "", 0);
 }
 
 // Forgets the voices about one player once the vote passed, so a later vote starts from zero.
@@ -591,6 +592,8 @@ public on_board(EzHttpRequest:request)
 		ezjson_object_get_string(it, "kind", kind, charsmax(kind));
 		ezjson_object_get_string(it, "name", name, charsmax(name));
 		ezjson_object_get_string(it, "reason", reason, charsmax(reason));
+		if (!reason[0] && ezjson_object_get_bool(it, "vote"))
+			copy(reason, charsmax(reason), en(id) ? "players' vote" : "голосование игроков");
 		czm_api_left(ezjson_object_get_number(it, "left"), left, charsmax(left), czm_lang(id));
 		if (equal(kind, "ban"))
 			czm_chat(id, "^3%s^1 — ^4бан^1 %s%s%s", "^3%s^1 — ^4ban^1 %s%s%s", name, left, reason[0] ? ", " : "", reason);

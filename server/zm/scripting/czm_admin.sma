@@ -360,11 +360,15 @@ public on_sanction(EzHttpRequest:request)
 				if (!is_user_connected(i) || is_user_bot(i))
 					continue;
 				czm_api_left(left, text, charsmax(text), czm_lang(i));
+				if (!by)
+					copy(reason, charsmax(reason), czm_lang(i) == CZM_EN ? "players' vote" : "голосование игроков");
 				if (ban)
 					czm_chat(i, "^4[CZM]^3 %s^1 забанен на ^4%s^1%s%s", "^4[CZM]^3 %s^1 is banned for ^4%s^1%s%s", name, text, reason[0] ? ": " : ".", reason);
 				else
 					czm_chat(i, "^4[CZM]^3 %s^1 получил мут на ^4%s^1%s%s", "^4[CZM]^3 %s^1 is muted for ^4%s^1%s%s", name, text, reason[0] ? ": " : ".", reason);
 			}
+			if (!by)
+				copy(reason, charsmax(reason), czm_lang(target) == CZM_EN ? "players' vote" : "голосование игроков");
 			if (ban)
 				kick_banned(target, left, reason);
 			else
