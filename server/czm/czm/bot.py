@@ -49,6 +49,8 @@ HELP = (
     "/mod_undo <i>ID [all]</i> — отмена текущей серии или всей истории с подтверждением\n"
     "/tester <i>число</i> — сколько тестировщиков в бете Google Play показывает сайт, /tester — сколько сейчас\n"
     "/promo — промокоды Survival; /promo <i>код</i> tokens|lvl <i>сколько</i> — создать; /promo del <i>код</i> — удалить\n"
+    "/zmbans — баны и муты сервера Survival; /zmunban <i>номер</i> — снять\n"
+    "/zmnews — новости сервера Survival; /zmnews <i>текст | english</i> — добавить; /zmnews del <i>номер</i> — удалить\n"
     "/stats — сводка"
 )
 
@@ -675,6 +677,85 @@ class OwnerBot:
             texts = {"promo_exists": "Такой промокод уже есть.", "promo_bad": "Код из 3–32 букв и цифр, токенов до 1 000 000, LVL до 1000."}
             await message.answer(texts.get(error.code, "Не получилось."))
 
+    # the Survival game server ------------------------------------------------
+
+    async def notify_survival_messages(self) -> None:
+        """Players' messages to the staff from the game menu."""
+        from . import survival_mod
+        pending = await in_db(survival_mod.pending_messages)
+        if not pending:
+            return
+        delivered = []
+        for item in pending:
+            who = html.escape(item["name"]) + (f" (ID {item['player']})" if item["player"] else " (гость)")
+            text = f"✉️ Survival, {who}:\n{html.escape(item['text'])}"
+            ok = False
+            for owner in self.owners:
+                try:
+                    await self.bot.send_message(owner, text)
+                    ok = True
+                except TelegramAPIError as e:
+                    log.warning("could not deliver a Survival message %s: %s", item["id"], e)
+            if ok:
+                delivered.append(item["id"])
+        if delivered:
+            await in_db(survival_mod.messages_delivered, delivered)
+
+    async def on_zmbans(self, message: Message) -> None:
+        if not self.allowed(message.from_user and message.from_user.id):
+            return
+        from . import survival_mod
+        board = await in_db(survival_mod.board, 40)
+        if not board:
+            await message.answer("На сервере Survival нет банов и мутов.")
+            return
+        lines = []
+        for b in board:
+            left = "навсегда" if b["left"] < 0 else f"ещё {max(1, b['left'] // 60)} мин"
+            who = "голосование" if b["vote"] else html.escape(b["by"])
+            lines.append(f"<b>{b['id']}</b>. {'🚫 бан' if b['kind'] == 'ban' else '🔇 мут'} {html.escape(b['name'])}"
+                         + (f" (ID {b['player']})" if b["player"] else "") + f" — {left}, {who}"
+                         + (f": {html.escape(b['reason'])}" if b["reason"] else ""))
+        await self._chunks(message, lines)
+        await message.answer("Снять: /zmunban номер")
+
+    async def on_zmunban(self, message: Message, command: CommandObject) -> None:
+        if not self.allowed(message.from_user and message.from_user.id):
+            return
+        from . import survival_mod
+        arg = (command.args or "").strip()
+        if not arg.isdigit():
+            await message.answer("Так: /zmunban номер (номер — в /zmbans)")
+            return
+        try:
+            result = await in_db(survival_mod.lift, int(arg), 0, True)
+        except accounts.AuthError:
+            await message.answer("Нет такого номера.")
+            return
+        what = "Бан" if result["kind"] == "ban" else "Мут"
+        await message.answer(f"✅ {what} {html.escape(result['name'])} снят." if result["changed"] else "Уже снят.")
+
+    async def on_zmnews(self, message: Message, command: CommandObject) -> None:
+        if not self.allowed(message.from_user and message.from_user.id):
+            return
+        from . import survival_mod
+        arg = (command.args or "").strip()
+        try:
+            if not arg:
+                items = await in_db(survival_mod.news, 15)
+                await message.answer("\n".join(f"<b>{n['id']}</b>. {datetime.fromtimestamp(n['created'], MSK).strftime('%d.%m %H:%M')} — {html.escape(n['ru'])}"
+                                                + (f" / {html.escape(n['en'])}" if n["en"] != n["ru"] else "")
+                                                for n in items) or "Новостей Survival нет.")
+            elif arg.startswith("del ") and arg[4:].strip().isdigit():
+                done = await in_db(survival_mod.news_delete, int(arg[4:].strip()))
+                await message.answer("✅ Новость удалена." if done else "Нет такой новости.")
+            else:
+                ru, _, en = arg.partition("|")
+                result = await in_db(survival_mod.news_add, ru.strip(), en.strip())
+                await message.answer(f"✅ Новость {result['id']} добавлена: игроки увидят её в меню сервера (menu → Новости).")
+        except accounts.AuthError:
+            await message.answer("Так: /zmnews Новая карта! | New map! — русский текст, потом английский через |")
+
     async def on_message(self, message: Message) -> None:
         if not self.allowed(message.from_user and message.from_user.id):
             await message.answer("Это служебный бот Counter Zombie Mobile.")
@@ -783,6 +864,9 @@ def build(settings: Settings) -> tuple[Bot, Dispatcher, OwnerBot]:
     router.message.register(owner.on_start, Command("help"))
     router.message.register(owner.on_stats, Command("stats"))
     router.message.register(owner.on_promo, Command("promo"))
+    router.message.register(owner.on_zmbans, Command("zmbans"))
+    router.message.register(owner.on_zmunban, Command("zmunban"))
+    router.message.register(owner.on_zmnews, Command("zmnews"))
     router.message.register(owner.on_news, Command("news"))
     router.message.register(owner.on_delnews, Command("delnews"))
     router.message.register(owner.on_editnews, Command("editnews"))
@@ -833,6 +917,7 @@ async def builds_loop(owner: OwnerBot) -> None:
             await owner.notify_server_reports()
             await owner.notify_moderation()
             await owner.notify_tickets()
+            await owner.notify_survival_messages()
         except asyncio.CancelledError:
             raise
         except Exception as e:

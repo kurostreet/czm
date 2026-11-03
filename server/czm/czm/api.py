@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, FileResponse, HTML
 from PIL import Image
 from pydantic import BaseModel, Field
 
-from . import service, mappics, accounts, settings, tab, social, website, distribution, lobbies, game_probe, voice_lobby, notifications, rules, moderation, play_feed, playtime, server_moderation, community, admin, official, game_ticket, survival
+from . import service, mappics, accounts, settings, tab, social, website, distribution, lobbies, game_probe, voice_lobby, notifications, rules, moderation, play_feed, playtime, server_moderation, community, admin, official, game_ticket, survival, survival_mod
 from .config import get_settings
 from .db import db
 
@@ -541,6 +541,97 @@ async def survival_server_map_end(body: SurvivalMapEndIn, request: Request, x_cz
         kills = {int(k): v for k, v in body.kills.items() if k.isdigit()}
         return {"top": survival.map_end(c, "map:" + body.batch, kills)}
     return await social_result(request, run)
+
+
+class SurvivalCheckIn(BaseModel):
+    player: int = 0
+    ip: str = Field(default="", max_length=64)
+    name: str = Field(default="", max_length=64)
+
+
+class SurvivalSanctionIn(BaseModel):
+    action: str = Field(pattern="^(add|lift)$")
+    kind: str = Field(default="ban", max_length=8)
+    player: int = 0
+    ip: str = Field(default="", max_length=64)
+    name: str = Field(default="", max_length=64)
+    seconds: int = 0
+    reason: str = Field(default="", max_length=128)
+    by_player: int = 0
+    by_name: str = Field(default="", max_length=64)
+    id: int = 0
+
+
+class SurvivalMessageIn(BaseModel):
+    player: int = 0
+    ip: str = Field(default="", max_length=64)
+    name: str = Field(default="", max_length=64)
+    text: str = Field(min_length=1, max_length=400)
+    server: str = Field(default="survival", max_length=32)
+
+
+class SurvivalNewsIn(BaseModel):
+    by_player: int
+    ru: str = Field(min_length=1, max_length=400)
+    en: str = Field(default="", max_length=400)
+
+
+@router.post("/survival/server/check")
+async def survival_server_check(body: SurvivalCheckIn, request: Request, x_czm_server: str | None = Header(default=None)):
+    """Someone joins the game server: the staff role and any active ban or mute."""
+    def run(c):
+        survival.check_server(x_czm_server)
+        return survival_mod.check(c, body.player, body.ip, body.name)
+    return await social_result(request, run)
+
+
+@router.post("/survival/server/sanction")
+async def survival_server_sanction(body: SurvivalSanctionIn, request: Request, x_czm_server: str | None = Header(default=None)):
+    def run(c):
+        survival.check_server(x_czm_server)
+        if body.action == "lift":
+            return survival_mod.lift(c, body.id, body.by_player)
+        return survival_mod.add(c, body.kind, body.player, body.ip, body.name, body.seconds, body.reason,
+                                body.by_player, body.by_name)
+    return await social_result(request, run)
+
+
+@router.post("/survival/server/message")
+async def survival_server_message(body: SurvivalMessageIn, request: Request, x_czm_server: str | None = Header(default=None)):
+    """A player's message to the staff (the owner's bot delivers it)."""
+    def run(c):
+        survival.check_server(x_czm_server)
+        return survival_mod.message(c, body.player, body.ip, body.name, body.text, body.server)
+    return await social_result(request, run)
+
+
+@router.get("/survival/server/messages")
+async def survival_server_messages(request: Request, limit: int = 8, x_czm_server: str | None = Header(default=None)):
+    def run(c):
+        survival.check_server(x_czm_server)
+        return {"messages": survival_mod.recent_messages(c, limit)}
+    return await social_result(request, run)
+
+
+@router.post("/survival/server/news")
+async def survival_server_news(body: SurvivalNewsIn, request: Request, x_czm_server: str | None = Header(default=None)):
+    def run(c):
+        survival.check_server(x_czm_server)
+        if survival_mod.role(c, body.by_player) != "admin":
+            raise survival_mod.Error("admin_only", 403)
+        return survival_mod.news_add(c, body.ru, body.en)
+    return await social_result(request, run)
+
+
+@router.get("/survival/board")
+async def survival_board(request: Request, limit: int = 30):
+    """Active bans and mutes of the Survival server, names only."""
+    return await social_result(request, lambda c: {"board": survival_mod.board(c, limit)})
+
+
+@router.get("/survival/news")
+async def survival_news(request: Request, limit: int = 10):
+    return await social_result(request, lambda c: {"news": survival_mod.news(c, limit)})
 
 
 class GameTicketIn(BaseModel):

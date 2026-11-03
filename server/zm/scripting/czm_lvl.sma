@@ -6,7 +6,7 @@
 	  is resent with the same id until the API answers, so nothing counts twice);
 	* shows what the API answers: "+N tokens", level ups, the map top at the end of the map;
 	* puts on what the player wears: the human skin, the glow colour, the prefix in chat;
-	* opens the LVL menu (lvl, /lvl) and the server menu (menu, меню).
+	* opens the LVL menu (lvl, /lvl); the server menu (menu, меню) is czm_game's.
 	Only players who came with a CZM ticket have a profile; the others are guests.
 */
 #include <amxmodx>
@@ -138,7 +138,6 @@ public plugin_init()
 	register_clcmd("say", "cmd_say");
 	register_clcmd("say_team", "cmd_say_team");
 	register_clcmd("lvl", "menu_lvl");
-	register_clcmd("czm_menu", "menu_server");
 
 	RegisterHam(Ham_Killed, "player", "fw_killed_post", 1);
 	RegisterHam(Ham_Spawn, "player", "fw_spawn_post", 1);
@@ -911,8 +910,6 @@ chat(id, bool:team)
 		parse(text[1], cmd, charsmax(cmd), arg, charsmax(arg));
 		if (equali(cmd, "lvl") || equali(cmd, "лвл"))
 			return menu_lvl(id);
-		if (equali(cmd, "menu") || equali(cmd, "меню"))
-			return menu_server(id);
 		if (equali(cmd, "top"))
 			return show_top(id);
 		if (equali(cmd, "promo"))
@@ -921,8 +918,6 @@ chat(id, bool:team)
 	}
 	if (equali(text, "lvl") || equali(text, "лвл"))
 		return menu_lvl(id);
-	if (equali(text, "menu") || equali(text, "меню"))
-		return menu_server(id);
 
 	// the message goes out with the level and the prefix, as on Kontra
 	new name[32], bool:zombie = bool:zp_get_user_zombie(id), bool:dead = !is_user_alive(id);
@@ -1136,43 +1131,6 @@ use_promo(id, const code[])
 }
 
 // ---------------------------------------------------------------- menus
-
-T(id, const ru[], const en[], out[], len)
-{
-	return copy(out, len, czm_lang(id) == CZM_EN ? en : ru);
-}
-
-public menu_server(id)
-{
-	new title[96], item[64];
-	formatex(title, charsmax(title), czm_lang(id) == CZM_EN ? "\ySERVER MENU" : "\yМЕНЮ СЕРВЕРА");
-	new menu = menu_create(title, "on_menu_server");
-	T(id, "LVL MOD", "LVL MOD", item, charsmax(item)); menu_additem(menu, item);
-	formatex(item, charsmax(item), czm_lang(id) == CZM_EN ? "Music and sounds: \y%s" : "Музыка и звуки: \y%s",
-		czm_sound_on(id) ? (czm_lang(id) == CZM_EN ? "on" : "вкл") : (czm_lang(id) == CZM_EN ? "off" : "выкл"));
-	menu_additem(menu, item);
-	formatex(item, charsmax(item), czm_lang(id) == CZM_EN ? "Info lines: \y%s" : "Подсказки слева: \y%s",
-		czm_info_on(id) ? (czm_lang(id) == CZM_EN ? "on" : "вкл") : (czm_lang(id) == CZM_EN ? "off" : "выкл"));
-	menu_additem(menu, item);
-	menu_additem(menu, "RU | EN");
-	T(id, "Панель игрока на сайте", "Player panel on the site", item, charsmax(item)); menu_additem(menu, item);
-	menu_display(id, menu);
-	return PLUGIN_HANDLED;
-}
-
-public on_menu_server(id, menu, key)
-{
-	menu_destroy(menu);
-	switch (key)
-	{
-		case 0: menu_lvl(id);
-		case 1: client_cmd(id, czm_sound_on(id) ? "say /sound_off" : "say /sound_on");
-		case 2: client_cmd(id, czm_info_on(id) ? "say /info_off" : "say /info_on");
-		case 3: czm_set_lang(id, czm_lang(id) == CZM_EN ? CZM_RU : CZM_EN);
-		case 4: czm_chat(id, "^4[CZM]^1 Панель: ^4%s^1 — вход по почте или нику CZM", "^4[CZM]^1 Panel: ^4%s^1 — sign in with your CZM email or nick", CZM_SITE);
-	}
-	return PLUGIN_HANDLED;
-}
 
 public menu_lvl(id)
 {

@@ -224,7 +224,7 @@ def catalog() -> dict:
     for key, cat in CATEGORIES.items():
         cats.append({"key": key, "ru": cat["ru"], "en": cat["en"], "items": [
             {"id": e["id"], "ru": e["ru"], "en": e["en"], "price": price(key, e), "shop": e.get("shop", True),
-             **({"model": e["model"]} if "model" in e else {}), **({"admin": True} if e.get("admin") else {})}
+             **{k: e[k] for k in ("model", "base", "glow") if k in e}, **({"admin": True} if e.get("admin") else {})}
             for e in cat["items"]]})
     return {
         "categories": cats,

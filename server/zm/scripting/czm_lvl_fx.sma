@@ -101,6 +101,7 @@ public plugin_init()
 	register_logevent("ev_round_start", 2, "1=Round_Start");
 	register_touch(AIRDROP_CLASS, "player", "on_airdrop_touch");
 	register_think(AIRDROP_CLASS, "on_airdrop_think");
+	register_srvcmd("czm_airdrop", "cmd_airdrop", -1, "- drops an airdrop now (the admin menu)");
 	g_hud = CreateHudSyncObj();
 	g_nextAirdrop = get_gametime() + random_float(300.0, 600.0);
 	set_task(0.3, "task_tick", _, _, _, "b");
@@ -460,6 +461,13 @@ public fw_deploy_post(weapon)
 }
 
 // ---------------------------------------------------------------- the airdrop
+
+public cmd_airdrop()
+{
+	drop_airdrop();
+	g_nextAirdrop = get_gametime() + random_float(300.0, 600.0);
+	return PLUGIN_HANDLED;
+}
 
 drop_airdrop()
 {
