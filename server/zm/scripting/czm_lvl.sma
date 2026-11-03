@@ -1,0 +1,1351 @@
+/*
+	Counter Zombie Mobile, Survival server: LVL MOD of the Kontra server (LVL_MOD_v82), in the game.
+
+	The API (server/czm/czm/survival.py) keeps every number. This plugin
+	* tells the API what happened: play time, kills, deaths, rounds, wins (every 10 seconds; a batch
+	  is resent with the same id until the API answers, so nothing counts twice);
+	* shows what the API answers: "+N tokens", level ups, the map top at the end of the map;
+	* puts on what the player wears: the human skin, the glow colour, the prefix in chat;
+	* opens the LVL menu (lvl, /lvl) and the server menu (menu, меню).
+	Only players who came with a CZM ticket have a profile; the others are guests.
+*/
+#include <amxmodx>
+#include <amxmisc>
+#include <cstrike>
+#include <fakemeta>
+#include <fun>
+#include <hamsandwich>
+#include <zombieplague>
+#include <easy_http>
+#include <czm_survival>
+
+#define PLUGIN "CZM LVL"
+#define VERSION "1.0"
+#define AUTHOR "kurostreet"
+
+#define MAX_CATS 8
+#define MAX_ITEMS 16
+#define TASK_LOOK 4600
+#define REPORT_EVERY 10.0
+#define J_NONE EzInvalid_JSON
+#define J_OK(%1) (%1 != EzInvalid_JSON)
+
+// ---------------------------------------------------------------- catalog (from the API)
+new g_catKey[MAX_CATS][12], g_catName[MAX_CATS][2][40], g_catCount;
+new g_itemId[MAX_CATS][MAX_ITEMS][24], g_itemName[MAX_CATS][MAX_ITEMS][2][40];
+new g_itemPrice[MAX_CATS][MAX_ITEMS], bool:g_itemShop[MAX_CATS][MAX_ITEMS], bool:g_itemAdmin[MAX_CATS][MAX_ITEMS];
+new g_itemModel[MAX_CATS][MAX_ITEMS][16], g_itemCount[MAX_CATS];
+new g_upId[3][12], g_upName[3][2][40], g_upPrice[3], g_upCount;
+new g_bpPrice, g_bpDays, g_bpDaily, g_payMinLvl, g_payDaily;
+new bool:g_catalogReady;
+
+// ---------------------------------------------------------------- players
+new g_profile[MAX_PLAYERS + 1], g_session[MAX_PLAYERS + 1], bool:g_loaded[MAX_PLAYERS + 1];
+new g_lvl[MAX_PLAYERS + 1], g_tokens[MAX_PLAYERS + 1], Float:g_tokBoostUntil[MAX_PLAYERS + 1];
+new g_equip[MAX_PLAYERS + 1][MAX_CATS];              // item index or -1
+new bool:g_owned[MAX_PLAYERS + 1][MAX_CATS][MAX_ITEMS];
+new bool:g_bpActive[MAX_PLAYERS + 1], bool:g_bpDailyReady[MAX_PLAYERS + 1], g_bpLeftDays[MAX_PLAYERS + 1];
+new g_bpProgress[MAX_PLAYERS + 1][6], g_bpClaimed[MAX_PLAYERS + 1];
+new g_payToday[MAX_PLAYERS + 1];
+
+enum { D_TIME = 0, D_KILLS, D_ZKILLS, D_DEATHS, D_ROUNDS, D_WINS, D_SURVIVED, D_CTWINS, D_COUNT };
+new const D_NAMES[D_COUNT][] = { "time", "kills", "zkills", "deaths", "rounds", "wins", "survived", "ctwins" };
+new g_delta[MAX_PLAYERS + 1][D_COUNT];
+new bool:g_inRound[MAX_PLAYERS + 1];
+
+new Trie:g_mapKills;              // profile -> kills on this map
+new EzJSON:g_pending = J_NONE;  // the batch the API has not confirmed yet
+new g_pendingId[48];
+new bool:g_sending;
+new g_batchSeq, g_mapStamp;
+new bool:g_mapEndSent;
+
+new g_serverToken[65];
+new g_cvarApi, g_cvarServer;
+new g_hudTokens, g_hudLevel;
+new g_hRank;
+new g_payTarget[MAX_PLAYERS + 1];
+
+new const PULL_SOUND[] = "s_change_rang.mp3";
+
+public plugin_precache()
+{
+	g_hRank = czm_sound_precache(PULL_SOUND);
+}
+
+public plugin_init()
+{
+	register_plugin(PLUGIN, VERSION, AUTHOR);
+	g_cvarApi = create_cvar("czm_api_url", "http://127.0.0.1:8200", FCVAR_PROTECTED, "Where the CZM API answers");
+	g_cvarServer = create_cvar("czm_server_name", "survival");
+
+	register_clcmd("say", "cmd_say");
+	register_clcmd("say_team", "cmd_say_team");
+	register_clcmd("lvl", "menu_lvl");
+	register_clcmd("czm_menu", "menu_server");
+
+	RegisterHam(Ham_Killed, "player", "fw_killed_post", 1);
+	RegisterHam(Ham_Spawn, "player", "fw_spawn_post", 1);
+	register_logevent("ev_round_start", 2, "1=Round_Start");
+	register_logevent("ev_round_end", 2, "1=Round_End");
+
+	g_hudTokens = CreateHudSyncObj();
+	g_hudLevel = CreateHudSyncObj();
+	g_mapKills = TrieCreate();
+	g_mapStamp = get_systime();
+	for (new i = 0; i <= MaxClients; i++)
+		reset_player(i);
+	set_task(REPORT_EVERY, "task_report", _, _, _, "b");
+	set_task(1.0, "task_map_end", _, _, _, "b");
+}
+
+public plugin_cfg()
+{
+	load_server_token();
+	set_task(1.0, "task_catalog");
+}
+
+public plugin_end()
+{
+	TrieDestroy(g_mapKills);
+	if (J_OK(g_pending))
+		ezjson_free(g_pending);
+}
+
+load_server_token()
+{
+	new path[128], key[96];
+	get_configsdir(path, charsmax(path));
+	add(path, charsmax(path), "/czm_ticket.key");
+	new fh = fopen(path, "rt");
+	if (!fh)
+	{
+		log_amx("czm_ticket.key is missing: LVL MOD cannot reach the API");
+		return;
+	}
+	fgets(fh, key, charsmax(key));
+	fclose(fh);
+	trim(key);
+	new message[128];
+	formatex(message, charsmax(message), "%s|server", key);
+	hash_string(message, Hash_Sha256, g_serverToken, charsmax(g_serverToken));
+}
+
+// ---------------------------------------------------------------- HTTP
+
+api(const method[], const path[], EzJSON:body, const callback[], const data[] = "", len = 0)
+{
+	new url[160];
+	get_pcvar_string(g_cvarApi, url, charsmax(url));
+	add(url, charsmax(url), "/api/v1");
+	add(url, charsmax(url), path);
+	new EzHttpOptions:opt = ezhttp_create_options();
+	ezhttp_option_set_header(opt, "Content-Type", "application/json");
+	ezhttp_option_set_header(opt, "X-CZM-Server", g_serverToken);
+	ezhttp_option_set_timeout(opt, 8000);
+	ezhttp_option_set_connect_timeout(opt, 3000);
+	if (len)
+		ezhttp_option_set_user_data(opt, data, len);
+	if (J_OK(body))
+		ezhttp_option_set_body_from_json(opt, body);
+	if (equal(method, "GET"))
+		ezhttp_get(url, callback, opt);
+	else
+		ezhttp_post(url, callback, opt);
+}
+
+EzJSON:answer(EzHttpRequest:request, &code)
+{
+	code = 0;
+	if (ezhttp_get_error_code(request) != EZH_OK)
+		return J_NONE;
+	code = ezhttp_get_http_code(request);
+	return ezhttp_parse_json_response(request);
+}
+
+// ---------------------------------------------------------------- catalog
+
+public task_catalog()
+{
+	api("GET", "/survival/catalog", J_NONE, "on_catalog");
+}
+
+public on_catalog(EzHttpRequest:request)
+{
+	new code, EzJSON:root = answer(request, code);
+	if (code != 200 || !J_OK(root))
+	{
+		if (J_OK(root)) ezjson_free(root);
+		set_task(30.0, "task_catalog");
+		return;
+	}
+	new EzJSON:cats = ezjson_object_get_value(root, "categories");
+	g_catCount = min(ezjson_array_get_count(cats), MAX_CATS);
+	for (new c = 0; c < g_catCount; c++)
+	{
+		new EzJSON:cat = ezjson_array_get_value(cats, c);
+		ezjson_object_get_string(cat, "key", g_catKey[c], charsmax(g_catKey[]));
+		ezjson_object_get_string(cat, "ru", g_catName[c][CZM_RU], charsmax(g_catName[][]));
+		ezjson_object_get_string(cat, "en", g_catName[c][CZM_EN], charsmax(g_catName[][]));
+		new EzJSON:items = ezjson_object_get_value(cat, "items");
+		g_itemCount[c] = min(ezjson_array_get_count(items), MAX_ITEMS);
+		for (new i = 0; i < g_itemCount[c]; i++)
+		{
+			new EzJSON:it = ezjson_array_get_value(items, i);
+			ezjson_object_get_string(it, "id", g_itemId[c][i], charsmax(g_itemId[][]));
+			ezjson_object_get_string(it, "ru", g_itemName[c][i][CZM_RU], charsmax(g_itemName[][][]));
+			ezjson_object_get_string(it, "en", g_itemName[c][i][CZM_EN], charsmax(g_itemName[][][]));
+			g_itemPrice[c][i] = ezjson_object_get_number(it, "price");
+			g_itemShop[c][i] = ezjson_object_get_bool(it, "shop");
+			g_itemAdmin[c][i] = ezjson_object_has_value(it, "admin") && ezjson_object_get_bool(it, "admin");
+			g_itemModel[c][i][0] = 0;
+			if (ezjson_object_has_value(it, "model"))
+				ezjson_object_get_string(it, "model", g_itemModel[c][i], charsmax(g_itemModel[][][]));
+			ezjson_free(it);
+		}
+		ezjson_free(items);
+		ezjson_free(cat);
+	}
+	ezjson_free(cats);
+
+	new EzJSON:ups = ezjson_object_get_value(root, "upgrades");
+	g_upCount = min(ezjson_array_get_count(ups), sizeof g_upId);
+	for (new u = 0; u < g_upCount; u++)
+	{
+		new EzJSON:it = ezjson_array_get_value(ups, u);
+		ezjson_object_get_string(it, "id", g_upId[u], charsmax(g_upId[]));
+		ezjson_object_get_string(it, "ru", g_upName[u][CZM_RU], charsmax(g_upName[][]));
+		ezjson_object_get_string(it, "en", g_upName[u][CZM_EN], charsmax(g_upName[][]));
+		g_upPrice[u] = ezjson_object_get_number(it, "price");
+		ezjson_free(it);
+	}
+	ezjson_free(ups);
+	g_bpPrice = ezjson_object_get_number(root, "battlepass.price", true);
+	g_bpDays = ezjson_object_get_number(root, "battlepass.days", true);
+	g_bpDaily = ezjson_object_get_number(root, "battlepass.daily", true);
+	g_payMinLvl = ezjson_object_get_number(root, "pay.min_lvl", true);
+	g_payDaily = ezjson_object_get_number(root, "pay.daily", true);
+	ezjson_free(root);
+	g_catalogReady = true;
+}
+
+cat_index(const key[])
+{
+	for (new c = 0; c < g_catCount; c++)
+		if (equal(g_catKey[c], key))
+			return c;
+	return -1;
+}
+
+item_index(c, const id[])
+{
+	for (new i = 0; i < g_itemCount[c]; i++)
+		if (equali(g_itemId[c][i], id))
+			return i;
+	return -1;
+}
+
+// ---------------------------------------------------------------- players and their state
+
+reset_player(id)
+{
+	g_profile[id] = 0;
+	g_loaded[id] = false;
+	g_lvl[id] = 0;
+	g_tokens[id] = 0;
+	g_tokBoostUntil[id] = 0.0;
+	g_inRound[id] = false;
+	for (new c = 0; c < MAX_CATS; c++)
+	{
+		g_equip[id][c] = -1;
+		for (new i = 0; i < MAX_ITEMS; i++)
+			g_owned[id][c][i] = false;
+	}
+	for (new d = 0; d < D_COUNT; d++)
+		g_delta[id][d] = 0;
+}
+
+public czm_player_ready(id, profile)
+{
+	reset_player(id);
+	g_session[id]++;
+	if (!profile || is_user_bot(id))
+		return;
+	g_profile[id] = profile;
+	new EzJSON:body = ezjson_init_object(), EzJSON:args = ezjson_init_object(), name[32];
+	get_user_name(id, name, charsmax(name));
+	ezjson_object_set_number(body, "player", profile);
+	ezjson_object_set_string(body, "op", "join-00000000");
+	ezjson_object_set_string(body, "action", "join");
+	ezjson_object_set_string(args, "nick", name);
+	ezjson_object_set_value(body, "args", args);
+	ezjson_free(args);
+	new data[3];
+	data[0] = id; data[1] = g_session[id]; data[2] = profile;
+	api("POST", "/survival/server/join", body, "on_join", data, sizeof data);
+	ezjson_free(body);
+}
+
+public on_join(EzHttpRequest:request)
+{
+	new data[3];
+	ezhttp_get_user_data(request, data);
+	new id = data[0], code, EzJSON:root = answer(request, code);
+	if (is_user_connected(id) && g_session[id] == data[1] && code == 200 && J_OK(root))
+	{
+		new EzJSON:st = ezjson_object_get_value(root, "state");
+		apply_state(id, st);
+		ezjson_free(st);
+		g_loaded[id] = true;
+		czm_chat(id, "^4[LVL]^1 Ваш уровень: ^4%d^1, токенов: ^4%d^1. Меню: ^4lvl", "^4[LVL]^1 Your level: ^4%d^1, tokens: ^4%d^1. Menu: ^4lvl", g_lvl[id], g_tokens[id]);
+		look(id);
+	}
+	if (J_OK(root))
+		ezjson_free(root);
+}
+
+public client_disconnected(id)
+{
+	// what the player did before leaving still goes with the next batch
+	if (g_loaded[id])
+		keep_leaver(id);
+	g_session[id]++;
+	reset_player(id);
+	remove_task(TASK_LOOK + id);
+}
+
+// Deltas of players who left are kept by profile until the next batch.
+new Trie:g_leavers;
+
+keep_leaver(id)
+{
+	if (!g_leavers)
+		g_leavers = TrieCreate();
+	new key[16], row[D_COUNT + 1];
+	num_to_str(g_profile[id], key, charsmax(key));
+	TrieGetArray(g_leavers, key, row, sizeof row);
+	for (new d = 0; d < D_COUNT; d++)
+		row[d] += g_delta[id][d];
+	TrieSetArray(g_leavers, key, row, sizeof row);
+}
+
+apply_state(id, EzJSON:st)
+{
+	if (!J_OK(st))
+		return;
+	g_lvl[id] = ezjson_object_get_number(st, "lvl");
+	g_tokens[id] = ezjson_object_get_number(st, "tokens");
+	new left = ezjson_object_get_number(st, "boosts.tokens", true);
+	g_tokBoostUntil[id] = left > 0 ? get_gametime() + float(left) : 0.0;
+	g_bpActive[id] = ezjson_object_get_bool(st, "battlepass.active", true);
+	g_bpDailyReady[id] = ezjson_object_get_bool(st, "battlepass.daily", true);
+	g_bpLeftDays[id] = (ezjson_object_get_number(st, "battlepass.left", true) + 86399) / 86400;
+	new const kinds[6][] = { "kills", "time", "ctwin", "spent", "sent", "days" };
+	for (new k = 0; k < 6; k++)
+	{
+		new path[40];
+		formatex(path, charsmax(path), "battlepass.progress.%s", kinds[k]);
+		g_bpProgress[id][k] = ezjson_object_get_number(st, path, true);
+	}
+	new EzJSON:claimed = ezjson_object_get_value(st, "battlepass.claimed", true);
+	g_bpClaimed[id] = J_OK(claimed) ? ezjson_array_get_count(claimed) : 0;
+	if (J_OK(claimed)) ezjson_free(claimed);
+	g_payToday[id] = ezjson_object_get_number(st, "pay.today", true);
+
+	new EzJSON:owned = ezjson_object_get_value(st, "owned");
+	new EzJSON:equipped = ezjson_object_get_value(st, "equipped");
+	for (new c = 0; c < g_catCount; c++)
+	{
+		for (new i = 0; i < MAX_ITEMS; i++)
+			g_owned[id][c][i] = false;
+		new EzJSON:list = J_OK(owned) ? ezjson_object_get_value(owned, g_catKey[c]) : J_NONE;
+		for (new n = 0, count = J_OK(list) ? ezjson_array_get_count(list) : 0; n < count; n++)
+		{
+			new item[24];
+			ezjson_array_get_string(list, n, item, charsmax(item));
+			new i = item_index(c, item);
+			if (i >= 0)
+				g_owned[id][c][i] = true;
+		}
+		if (J_OK(list)) ezjson_free(list);
+		new item[24];
+		item[0] = 0;
+		if (J_OK(equipped) && ezjson_object_has_value(equipped, g_catKey[c]))
+			ezjson_object_get_string(equipped, g_catKey[c], item, charsmax(item));
+		g_equip[id][c] = item[0] ? item_index(c, item) : -1;
+	}
+	if (J_OK(owned)) ezjson_free(owned);
+	if (J_OK(equipped)) ezjson_free(equipped);
+}
+
+bool:boosted(id)
+{
+	return g_tokBoostUntil[id] > get_gametime();
+}
+
+// ---------------------------------------------------------------- what happens in the game
+
+public fw_killed_post(victim, attacker, shouldgib)
+{
+	if (g_loaded[victim])
+		g_delta[victim][D_DEATHS]++;
+	if (!(1 <= attacker <= MaxClients) || attacker == victim || !g_loaded[attacker])
+		return;
+	g_delta[attacker][D_KILLS]++;
+	count_map_kill(attacker);
+	if (!zp_get_user_zombie(attacker) && zp_get_user_zombie(victim))
+	{
+		g_delta[attacker][D_ZKILLS]++;
+		new name[32];
+		get_user_name(victim, name, charsmax(name));
+		tokens_hud(attacker, boosted(attacker) ? 2 : 1, czm_lang(attacker) == CZM_EN ? "for the kill" : "за убийство", name);
+	}
+}
+
+public zp_user_infected_post(id, infector, nemesis)
+{
+	if (g_loaded[id])
+		g_delta[id][D_DEATHS]++;
+	if (1 <= infector <= MaxClients && infector != id && g_loaded[infector])
+	{
+		g_delta[infector][D_KILLS]++;
+		count_map_kill(infector);
+	}
+	if (!nemesis)
+		set_user_rendering(id);
+}
+
+count_map_kill(id)
+{
+	new key[16], kills;
+	num_to_str(g_profile[id], key, charsmax(key));
+	TrieGetCell(g_mapKills, key, kills);
+	TrieSetCell(g_mapKills, key, kills + 1);
+}
+
+public ev_round_start()
+{
+	for (new id = 1; id <= MaxClients; id++)
+		g_inRound[id] = g_loaded[id] && 1 <= get_user_team(id) <= 2;
+}
+
+public ev_round_end()
+{
+	new humans;
+	for (new id = 1; id <= MaxClients; id++)
+		if (is_user_alive(id) && !zp_get_user_zombie(id))
+			humans++;
+	for (new id = 1; id <= MaxClients; id++)
+	{
+		if (!g_inRound[id] || !g_loaded[id])
+			continue;
+		g_inRound[id] = false;
+		new bool:human = !zp_get_user_zombie(id);
+		new bool:won = humans > 0 ? human : !human;
+		g_delta[id][D_ROUNDS]++;
+		if (won)
+			g_delta[id][D_WINS]++;
+		if (won && human)
+			g_delta[id][D_CTWINS]++;
+		if (human && is_user_alive(id))
+		{
+			g_delta[id][D_SURVIVED]++;
+			tokens_hud(id, boosted(id) ? 6 : 3, czm_lang(id) == CZM_EN ? "survived the round" : "выжил раунд", "");
+		}
+	}
+}
+
+// ---------------------------------------------------------------- reports
+
+public task_report()
+{
+	if (g_sending || !g_serverToken[0])
+		return;
+	for (new id = 1; id <= MaxClients; id++)
+		if (g_loaded[id] && 1 <= get_user_team(id) <= 2)
+			g_delta[id][D_TIME] += floatround(REPORT_EVERY);
+	if (!J_OK(g_pending))
+		build_batch();
+	if (!J_OK(g_pending))
+		return;
+	g_sending = true;
+	api("POST", "/survival/server/report", g_pending, "on_report");
+}
+
+build_batch()
+{
+	new EzJSON:entries = ezjson_init_array(), count;
+	for (new id = 1; id <= MaxClients; id++)
+	{
+		if (!g_loaded[id])
+			continue;
+		new EzJSON:e = ezjson_init_object(), name[32], any_ = 0;
+		get_user_name(id, name, charsmax(name));
+		ezjson_object_set_number(e, "player", g_profile[id]);
+		ezjson_object_set_string(e, "nick", name);
+		for (new d = 0; d < D_COUNT; d++)
+		{
+			ezjson_object_set_number(e, D_NAMES[d], g_delta[id][d]);
+			any_ += g_delta[id][d];
+			g_delta[id][d] = 0;
+		}
+		if (any_)
+		{
+			ezjson_array_append_value(entries, e);
+			count++;
+		}
+		ezjson_free(e);
+	}
+	if (g_leavers)
+	{
+		new TrieIter:it = TrieIterCreate(g_leavers), key[16], row[D_COUNT + 1];
+		while (!TrieIterEnded(it))
+		{
+			TrieIterGetKey(it, key, charsmax(key));
+			TrieIterGetArray(it, row, sizeof row);
+			new EzJSON:e = ezjson_init_object();
+			ezjson_object_set_number(e, "player", str_to_num(key));
+			for (new d = 0; d < D_COUNT; d++)
+				ezjson_object_set_number(e, D_NAMES[d], row[d]);
+			ezjson_array_append_value(entries, e);
+			ezjson_free(e);
+			count++;
+			TrieIterNext(it);
+		}
+		TrieIterDestroy(it);
+		TrieClear(g_leavers);
+	}
+
+	new EzJSON:live = live_snapshot();
+	if (!count && !J_OK(live))
+	{
+		ezjson_free(entries);
+		return;
+	}
+	g_batchSeq++;
+	formatex(g_pendingId, charsmax(g_pendingId), "%d-%d-%d", get_cvar_num("hostport"), g_mapStamp, g_batchSeq);
+	new server[32];
+	get_pcvar_string(g_cvarServer, server, charsmax(server));
+	g_pending = ezjson_init_object();
+	ezjson_object_set_string(g_pending, "batch", g_pendingId);
+	ezjson_object_set_string(g_pending, "server", server);
+	ezjson_object_set_value(g_pending, "entries", entries);
+	ezjson_free(entries);
+	if (J_OK(live))
+	{
+		ezjson_object_set_value(g_pending, "live", live);
+		ezjson_free(live);
+	}
+}
+
+EzJSON:live_snapshot()
+{
+	new EzJSON:live = ezjson_init_object(), EzJSON:players = ezjson_init_array(), map[32], name[32];
+	get_mapname(map, charsmax(map));
+	ezjson_object_set_string(live, "map", map);
+	ezjson_object_set_number(live, "timeleft", get_timeleft());
+	ezjson_object_set_number(live, "max", MaxClients);
+	for (new id = 1; id <= MaxClients; id++)
+	{
+		if (!is_user_connected(id) || is_user_hltv(id))
+			continue;
+		new EzJSON:p = ezjson_init_object();
+		get_user_name(id, name, charsmax(name));
+		ezjson_object_set_string(p, "nick", name);
+		ezjson_object_set_number(p, "frags", get_user_frags(id));
+		ezjson_object_set_number(p, "deaths", get_user_deaths(id));
+		ezjson_object_set_number(p, "lvl", g_loaded[id] ? g_lvl[id] : 0);
+		ezjson_object_set_bool(p, "zombie", bool:zp_get_user_zombie(id));
+		ezjson_object_set_bool(p, "alive", bool:is_user_alive(id));
+		ezjson_object_set_bool(p, "bot", bool:is_user_bot(id));
+		ezjson_object_set_number(p, "profile", g_profile[id]);
+		ezjson_array_append_value(players, p);
+		ezjson_free(p);
+	}
+	ezjson_object_set_value(live, "players", players);
+	ezjson_free(players);
+	return live;
+}
+
+public on_report(EzHttpRequest:request)
+{
+	g_sending = false;
+	new code, EzJSON:root = answer(request, code);
+	if (code != 200 || !J_OK(root))
+	{
+		// the same batch goes again next time: the API counts it once
+		if (J_OK(root)) ezjson_free(root);
+		return;
+	}
+	ezjson_free(g_pending);
+	g_pending = J_NONE;
+
+	new EzJSON:states = ezjson_object_get_value(root, "states");
+	new EzJSON:events = ezjson_object_get_value(root, "events");
+	for (new id = 1; id <= MaxClients; id++)
+	{
+		if (!g_loaded[id])
+			continue;
+		new key[16];
+		num_to_str(g_profile[id], key, charsmax(key));
+		if (J_OK(states) && ezjson_object_has_value(states, key))
+		{
+			new EzJSON:st = ezjson_object_get_value(states, key);
+			new before = g_equip_signature(id);
+			apply_state(id, st);
+			ezjson_free(st);
+			if (before != g_equip_signature(id))
+				look(id);
+		}
+		if (J_OK(events) && ezjson_object_has_value(events, key))
+		{
+			new EzJSON:list = ezjson_object_get_value(events, key);
+			for (new n = 0, count = ezjson_array_get_count(list); n < count; n++)
+			{
+				new EzJSON:ev = ezjson_array_get_value(list, n), type[12], reason[16];
+				ezjson_object_get_string(ev, "type", type, charsmax(type));
+				if (equal(type, "level"))
+					level_up(id, ezjson_object_get_number(ev, "lvl"));
+				else
+				{
+					ezjson_object_get_string(ev, "reason", reason, charsmax(reason));
+					// kills and survived rounds were shown at once by this plugin
+					if (equal(reason, "time"))
+						tokens_hud(id, ezjson_object_get_number(ev, "amount"), czm_lang(id) == CZM_EN ? "for 10 minutes in the game" : "за 10 минут в игре", "");
+					else if (equal(reason, "battlepass"))
+						tokens_hud(id, ezjson_object_get_number(ev, "amount"), czm_lang(id) == CZM_EN ? "battle pass task" : "задание пропуска", "");
+				}
+				ezjson_free(ev);
+			}
+			ezjson_free(list);
+		}
+	}
+	if (J_OK(states)) ezjson_free(states);
+	if (J_OK(events)) ezjson_free(events);
+	ezjson_free(root);
+}
+
+g_equip_signature(id)
+{
+	new sum;
+	for (new c = 0; c < g_catCount; c++)
+		sum = sum * 31 + g_equip[id][c] + 1;
+	return sum;
+}
+
+// ---------------------------------------------------------------- the map top
+
+public task_map_end()
+{
+	if (g_mapEndSent || get_cvar_float("mp_timelimit") <= 0.0)
+		return;
+	new left = get_timeleft();
+	if (left <= 0 || left > 12)
+		return;
+	g_mapEndSent = true;
+	new EzJSON:body = ezjson_init_object(), EzJSON:kills = ezjson_init_object(), batch[48];
+	formatex(batch, charsmax(batch), "%d-%d", get_cvar_num("hostport"), g_mapStamp);
+	ezjson_object_set_string(body, "batch", batch);
+	new TrieIter:it = TrieIterCreate(g_mapKills), key[16], value;
+	while (!TrieIterEnded(it))
+	{
+		TrieIterGetKey(it, key, charsmax(key));
+		TrieIterGetCell(it, value);
+		ezjson_object_set_number(kills, key, value);
+		TrieIterNext(it);
+	}
+	TrieIterDestroy(it);
+	ezjson_object_set_value(body, "kills", kills);
+	ezjson_free(kills);
+	api("POST", "/survival/server/map_end", body, "on_map_end");
+	ezjson_free(body);
+}
+
+public on_map_end(EzHttpRequest:request)
+{
+	new code, EzJSON:root = answer(request, code);
+	if (code == 200 && J_OK(root))
+	{
+		new EzJSON:top = ezjson_object_get_value(root, "top");
+		new count = J_OK(top) ? min(ezjson_array_get_count(top), 3) : 0;
+		if (count)
+		{
+			czm_chat(0, "^4[LVL]^1 Лучшие на карте:", "^4[LVL]^1 Best on this map:");
+			czm_play_music(0, g_hRank, true);
+		}
+		for (new n = 0; n < count; n++)
+		{
+			new EzJSON:row = ezjson_array_get_value(top, n), nick[32];
+			ezjson_object_get_string(row, "nick", nick, charsmax(nick));
+			czm_chat(0, "^4%d. ^3%s^1 — %d убийств, ^4+%d^1 токенов", "^4%d. ^3%s^1 — %d kills, ^4+%d^1 tokens",
+				n + 1, nick, ezjson_object_get_number(row, "kills"), ezjson_object_get_number(row, "reward"));
+			ezjson_free(row);
+		}
+		if (J_OK(top)) ezjson_free(top);
+	}
+	if (J_OK(root)) ezjson_free(root);
+}
+
+// ---------------------------------------------------------------- HUD
+
+tokens_hud(id, amount, const reason[], const victim[])
+{
+	if (!is_user_connected(id) || amount <= 0)
+		return;
+	set_hudmessage(255, 200, 40, 0.02, 0.17, 0, 0.0, 3.0, 0.1, 0.4, -1);
+	if (victim[0])
+		ShowSyncHudMsg(id, g_hudTokens, "+%d Tokens %s %s", amount, reason, victim);
+	else
+		ShowSyncHudMsg(id, g_hudTokens, "+%d Tokens %s", amount, reason);
+}
+
+level_up(id, level)
+{
+	new name[32];
+	get_user_name(id, name, charsmax(name));
+	set_hudmessage(80, 220, 255, 0.02, 0.21, 0, 0.0, 4.0, 0.1, 0.5, -1);
+	ShowSyncHudMsg(id, g_hudLevel, czm_lang(id) == CZM_EN ? "%s reached LVL %d" : "%s повысил уровень: LVL %d", name, level);
+	czm_play_sound(id, g_hRank);
+}
+
+// ---------------------------------------------------------------- what the player wears
+
+public fw_spawn_post(id)
+{
+	if (is_user_alive(id) && g_loaded[id])
+	{
+		remove_task(TASK_LOOK + id);
+		set_task(0.5, "task_look", TASK_LOOK + id);
+	}
+}
+
+public zp_user_humanized_post(id, survivor)
+{
+	if (g_loaded[id] && !survivor)
+		look(id);
+}
+
+public task_look(taskid)
+{
+	look(taskid - TASK_LOOK);
+}
+
+look(id)
+{
+	if (!is_user_alive(id) || zp_get_user_zombie(id) || zp_get_user_survivor(id))
+		return;
+	new skin = cat_index("skin"), glow = cat_index("skincolor");
+	if (skin >= 0 && g_equip[id][skin] >= 0 && g_itemModel[skin][g_equip[id][skin]][0])
+		zp_override_user_model(id, g_itemModel[skin][g_equip[id][skin]]);
+	if (glow >= 0 && g_equip[id][glow] >= 0)
+	{
+		new r, g, b;
+		hex_color(g_itemId[glow][g_equip[id][glow]], r, g, b);
+		set_user_rendering(id, kRenderFxGlowShell, r, g, b, kRenderNormal, 16);
+	}
+	else
+		set_user_rendering(id);
+}
+
+hex_color(const hex[], &r, &g, &b)
+{
+	new value = 0;
+	for (new i = hex[0] == '#' ? 1 : 0, n = 0; hex[i] && n < 6; i++, n++)
+	{
+		new c = hex[i], digit = ('0' <= c <= '9') ? c - '0' : (('a' <= c <= 'f') ? c - 'a' + 10 : (('A' <= c <= 'F') ? c - 'A' + 10 : 0));
+		value = value * 16 + digit;
+	}
+	r = (value >> 16) & 0xFF;
+	g = (value >> 8) & 0xFF;
+	b = value & 0xFF;
+}
+
+// ---------------------------------------------------------------- chat
+
+public cmd_say(id)
+{
+	return chat(id, false);
+}
+
+public cmd_say_team(id)
+{
+	return chat(id, true);
+}
+
+chat(id, bool:team)
+{
+	new text[192];
+	read_args(text, charsmax(text));
+	remove_quotes(text);
+	trim(text);
+	if (!text[0] || text[0] == '@')
+		return PLUGIN_CONTINUE;
+	if (text[0] == '/' || text[0] == '!')
+	{
+		new cmd[24], arg[48];
+		parse(text[1], cmd, charsmax(cmd), arg, charsmax(arg));
+		if (equali(cmd, "lvl") || equali(cmd, "лвл"))
+			return menu_lvl(id);
+		if (equali(cmd, "menu") || equali(cmd, "меню"))
+			return menu_server(id);
+		if (equali(cmd, "top"))
+			return show_top(id);
+		if (equali(cmd, "promo"))
+			return use_promo(id, arg);
+		return PLUGIN_CONTINUE;
+	}
+	if (equali(text, "lvl") || equali(text, "лвл"))
+		return menu_lvl(id);
+	if (equali(text, "menu") || equali(text, "меню"))
+		return menu_server(id);
+
+	// the message goes out with the level and the prefix, as on Kontra
+	new name[32], bool:zombie = bool:zp_get_user_zombie(id), bool:dead = !is_user_alive(id);
+	get_user_name(id, name, charsmax(name));
+	new prefix = cat_index("prefix"), color = cat_index("prefcolor");
+	new p = g_loaded[id] && prefix >= 0 ? g_equip[id][prefix] : -1;
+	new code = 3;
+	if (p >= 0 && color >= 0 && g_equip[id][color] >= 0)
+		code = chat_color(g_itemId[color][g_equip[id][color]]);
+	for (new to = 1; to <= MaxClients; to++)
+	{
+		if (!is_user_connected(to) || is_user_bot(to))
+			continue;
+		if (team && (bool:zp_get_user_zombie(to) != zombie || get_user_team(to) != get_user_team(id)))
+			continue;
+		new lang = czm_lang(to), line[256], len;
+		if (dead)
+			len += formatex(line[len], charsmax(line) - len, "^1*%s* ", lang == CZM_EN ? "DEAD" : "МЁРТВ");
+		if (team)
+			len += formatex(line[len], charsmax(line) - len, "^1(%s) ", zombie ? (lang == CZM_EN ? "Zombies" : "Зомби") : (lang == CZM_EN ? "Humans" : "Люди"));
+		if (g_loaded[id])
+			len += formatex(line[len], charsmax(line) - len, "^4[LVL %d] ", g_lvl[id]);
+		if (p >= 0)
+			len += formatex(line[len], charsmax(line) - len, "%c[%s] ", code, g_itemName[prefix][p][lang]);
+		formatex(line[len], charsmax(line) - len, "^3%s^1: %s", name, text);
+		client_print_color(to, id, "%s", line);
+	}
+	// the server log and the panel console still see the chat
+	log_message("^"%s<%d><%s><>^" %s ^"%s^"", name, get_user_userid(id), "", team ? "say_team" : "say", text);
+	return PLUGIN_HANDLED;
+}
+
+// The game's chat has three colours: the team colour, green and the normal yellow.
+chat_color(const hex[])
+{
+	new r, g, b;
+	hex_color(hex, r, g, b);
+	if (g > 160 && r < 120 && b < 170)
+		return 4; // green
+	if (r > 200 && g > 120 && b < 120)
+		return 1; // the normal yellow
+	return 3;     // the team colour
+}
+
+// ---------------------------------------------------------------- actions
+
+act(id, const name[], EzJSON:args)
+{
+	if (!g_loaded[id])
+	{
+		czm_chat(id, "^4[LVL]^1 LVL MOD работает для игроков CZM.", "^4[LVL]^1 LVL MOD works for CZM players.");
+		if (J_OK(args)) ezjson_free(args);
+		return;
+	}
+	new EzJSON:body = ezjson_init_object(), op[48];
+	formatex(op, charsmax(op), "%d-%d-%d-%d", g_profile[id], get_systime(), random_num(100000, 999999), g_session[id]);
+	ezjson_object_set_number(body, "player", g_profile[id]);
+	ezjson_object_set_string(body, "op", op);
+	ezjson_object_set_string(body, "action", name);
+	if (J_OK(args))
+	{
+		ezjson_object_set_value(body, "args", args);
+		ezjson_free(args);
+	}
+	new data[2];
+	data[0] = id; data[1] = g_session[id];
+	api("POST", "/survival/server/action", body, "on_action", data, sizeof data);
+	ezjson_free(body);
+}
+
+EzJSON:args1(const k1[], const v1[])
+{
+	new EzJSON:a = ezjson_init_object();
+	ezjson_object_set_string(a, k1, v1);
+	return a;
+}
+
+EzJSON:args2(const k1[], const v1[], const k2[], const v2[])
+{
+	new EzJSON:a = args1(k1, v1);
+	ezjson_object_set_string(a, k2, v2);
+	return a;
+}
+
+public on_action(EzHttpRequest:request)
+{
+	new data[2];
+	ezhttp_get_user_data(request, data);
+	new id = data[0], code, EzJSON:root = answer(request, code);
+	if (!is_user_connected(id) || g_session[id] != data[1])
+	{
+		if (J_OK(root)) ezjson_free(root);
+		return;
+	}
+	if (code == 200 && J_OK(root))
+	{
+		new action[16];
+		ezjson_object_get_string(root, "action", action, charsmax(action));
+		new EzJSON:st = ezjson_object_get_value(root, "state");
+		apply_state(id, st);
+		ezjson_free(st);
+		look(id);
+		done_message(id, action, root);
+	}
+	else
+	{
+		new error[24];
+		if (J_OK(root))
+			ezjson_object_get_string(root, "error", error, charsmax(error));
+		error_message(id, error);
+	}
+	if (J_OK(root)) ezjson_free(root);
+}
+
+done_message(id, const action[], EzJSON:root)
+{
+	if (equal(action, "buy"))
+	{
+		if (ezjson_object_get_bool(root, "bought"))
+			czm_chat(id, "^4[LVL]^1 Куплено и надето. Осталось токенов: ^4%d", "^4[LVL]^1 Bought and put on. Tokens left: ^4%d", g_tokens[id]);
+		else
+			czm_chat(id, "^4[LVL]^1 Надето.", "^4[LVL]^1 Put on.");
+	}
+	else if (equal(action, "equip"))
+		czm_chat(id, "^4[LVL]^1 Готово.", "^4[LVL]^1 Done.");
+	else if (equal(action, "upgrade"))
+		czm_chat(id, "^4[LVL]^1 Прокачка куплена. LVL ^4%d^1, токенов ^4%d", "^4[LVL]^1 Upgrade bought. LVL ^4%d^1, tokens ^4%d", g_lvl[id], g_tokens[id]);
+	else if (equal(action, "pay"))
+	{
+		new nick[32];
+		ezjson_object_get_string(root, "nick", nick, charsmax(nick));
+		czm_chat(id, "^4[LVL]^1 Передано ^4%d^1 токенов игроку ^3%s", "^4[LVL]^1 Sent ^4%d^1 tokens to ^3%s", ezjson_object_get_number(root, "amount"), nick);
+		new target = ezjson_object_get_number(root, "target");
+		for (new to = 1; to <= MaxClients; to++)
+		{
+			if (g_loaded[to] && g_profile[to] == target)
+			{
+				new name[32];
+				get_user_name(id, name, charsmax(name));
+				czm_chat(to, "^4[LVL]^1 ^4+%d^1 токенов от ^3%s", "^4[LVL]^1 ^4+%d^1 tokens from ^3%s", ezjson_object_get_number(root, "amount"), name);
+				g_tokens[to] += ezjson_object_get_number(root, "amount");
+			}
+		}
+	}
+	else if (equal(action, "bp_buy"))
+		czm_chat(id, "^4[LVL]^1 Боевой пропуск активирован на ^4%d^1 дней!", "^4[LVL]^1 Battle pass active for ^4%d^1 days!", g_bpDays);
+	else if (equal(action, "bp_daily"))
+		czm_chat(id, "^4[LVL]^1 ^4+%d^1 токенов за вход.", "^4[LVL]^1 ^4+%d^1 tokens for coming in.", ezjson_object_get_number(root, "amount"));
+	else if (equal(action, "bp_final"))
+		czm_chat(id, "^4[LVL]^1 Награда пропуска получена!", "^4[LVL]^1 Battle pass reward received!");
+	else if (equal(action, "promo"))
+	{
+		new kind[8];
+		ezjson_object_get_string(root, "kind", kind, charsmax(kind));
+		czm_chat(id, "^4[LVL]^1 Промокод: ^4+%d %s", "^4[LVL]^1 Promo code: ^4+%d %s", ezjson_object_get_number(root, "amount"),
+			equal(kind, "lvl") ? "LVL" : (czm_lang(id) == CZM_EN ? "tokens" : "токенов"));
+	}
+}
+
+error_message(id, const error[])
+{
+	new const codes[][] = { "tokens", "not_owned", "admin_only", "not_for_sale", "pay_lvl", "pay_limit", "bp_active",
+		"bp_inactive", "bp_daily_done", "bp_tasks", "bp_final_done", "promo", "promo_used", "player", "self" };
+	new const ru[][] = { "Не хватает токенов.", "Этого у тебя нет.", "Только для администраторов.", "Это не продаётся.",
+		"Перевод доступен с 10 LVL.", "Дневной лимит переводов исчерпан.", "Пропуск уже активен.", "Сначала купи боевой пропуск.",
+		"Сегодня награда уже получена.", "Сначала выполни все задания.", "Эта награда уже получена.", "Нет такого промокода.",
+		"Этот промокод ты уже использовал.", "Игрок не найден.", "Себе нельзя." };
+	new const en[][] = { "Not enough tokens.", "You do not own it.", "Administrators only.", "Not for sale.",
+		"Transfers open at LVL 10.", "Today's transfer limit is used up.", "The pass is already active.", "Buy the battle pass first.",
+		"Today's reward is already taken.", "Finish every task first.", "This reward is already taken.", "No such promo code.",
+		"You have used this promo code.", "Player not found.", "Not to yourself." };
+	for (new i = 0; i < sizeof codes; i++)
+	{
+		if (equal(error, codes[i]))
+		{
+			czm_chat(id, "^4[LVL]^3 %s", "^4[LVL]^3 %s", ru[i], en[i]);
+			return;
+		}
+	}
+	czm_chat(id, "^4[LVL]^3 Не получилось, попробуй ещё раз.", "^4[LVL]^3 That did not work, try again.");
+}
+
+use_promo(id, const code[])
+{
+	if (!code[0])
+	{
+		czm_chat(id, "^4[LVL]^1 Напиши: ^4/promo КОД", "^4[LVL]^1 Type: ^4/promo CODE");
+		return PLUGIN_HANDLED;
+	}
+	act(id, "promo", args1("code", code));
+	return PLUGIN_HANDLED;
+}
+
+// ---------------------------------------------------------------- menus
+
+T(id, const ru[], const en[], out[], len)
+{
+	return copy(out, len, czm_lang(id) == CZM_EN ? en : ru);
+}
+
+public menu_server(id)
+{
+	new title[96], item[64];
+	formatex(title, charsmax(title), czm_lang(id) == CZM_EN ? "\ySERVER MENU" : "\yМЕНЮ СЕРВЕРА");
+	new menu = menu_create(title, "on_menu_server");
+	T(id, "LVL MOD", "LVL MOD", item, charsmax(item)); menu_additem(menu, item);
+	formatex(item, charsmax(item), czm_lang(id) == CZM_EN ? "Music and sounds: \y%s" : "Музыка и звуки: \y%s",
+		czm_sound_on(id) ? (czm_lang(id) == CZM_EN ? "on" : "вкл") : (czm_lang(id) == CZM_EN ? "off" : "выкл"));
+	menu_additem(menu, item);
+	formatex(item, charsmax(item), czm_lang(id) == CZM_EN ? "Info lines: \y%s" : "Подсказки слева: \y%s",
+		czm_info_on(id) ? (czm_lang(id) == CZM_EN ? "on" : "вкл") : (czm_lang(id) == CZM_EN ? "off" : "выкл"));
+	menu_additem(menu, item);
+	menu_additem(menu, "RU | EN");
+	T(id, "Панель игрока на сайте", "Player panel on the site", item, charsmax(item)); menu_additem(menu, item);
+	menu_display(id, menu);
+	return PLUGIN_HANDLED;
+}
+
+public on_menu_server(id, menu, key)
+{
+	menu_destroy(menu);
+	switch (key)
+	{
+		case 0: menu_lvl(id);
+		case 1: client_cmd(id, czm_sound_on(id) ? "say /sound_off" : "say /sound_on");
+		case 2: client_cmd(id, czm_info_on(id) ? "say /info_off" : "say /info_on");
+		case 3: czm_set_lang(id, czm_lang(id) == CZM_EN ? CZM_RU : CZM_EN);
+		case 4: czm_chat(id, "^4[CZM]^1 Панель: ^4%s^1 — вход по почте или нику CZM", "^4[CZM]^1 Panel: ^4%s^1 — sign in with your CZM email or nick", CZM_SITE);
+	}
+	return PLUGIN_HANDLED;
+}
+
+public menu_lvl(id)
+{
+	if (!g_loaded[id])
+	{
+		czm_chat(id, "^4[LVL]^1 LVL MOD работает для игроков CZM: зайди из игры Counter Zombie Mobile.", "^4[LVL]^1 LVL MOD works for Counter Zombie Mobile players.");
+		return PLUGIN_HANDLED;
+	}
+	new title[128], item[64], ru = czm_lang(id) == CZM_RU;
+	formatex(title, charsmax(title), ru ? "\yLVL MOD^n\wLVL \r%d\w  Токены \r%d" : "\yLVL MOD^n\wLVL \r%d\w  Tokens \r%d", g_lvl[id], g_tokens[id]);
+	new menu = menu_create(title, "on_menu_lvl");
+	menu_additem(menu, ru ? "Профиль" : "Profile");
+	menu_additem(menu, ru ? "Магазин" : "Shop");
+	menu_additem(menu, ru ? "Прокачка" : "Upgrades");
+	formatex(item, charsmax(item), ru ? "Боевой пропуск%s" : "Battle pass%s", g_bpDailyReady[id] ? " \r!" : "");
+	menu_additem(menu, item);
+	menu_additem(menu, ru ? "Перевод токенов" : "Send tokens");
+	menu_additem(menu, ru ? "Топ игроков" : "Top players");
+	menu_additem(menu, ru ? "Промокод" : "Promo code");
+	menu_display(id, menu);
+	return PLUGIN_HANDLED;
+}
+
+public on_menu_lvl(id, menu, key)
+{
+	menu_destroy(menu);
+	switch (key)
+	{
+		case 0: show_profile(id);
+		case 1: menu_shop(id);
+		case 2: menu_upgrades(id);
+		case 3: menu_bp(id);
+		case 4: menu_pay(id);
+		case 5: show_top(id);
+		case 6: use_promo(id, "");
+	}
+	return PLUGIN_HANDLED;
+}
+
+show_profile(id)
+{
+	api_me(id);
+}
+
+api_me(id)
+{
+	// the profile in chat: one request for fresh numbers
+	new EzJSON:body = ezjson_init_object(), EzJSON:args = ezjson_init_object(), name[32];
+	get_user_name(id, name, charsmax(name));
+	ezjson_object_set_number(body, "player", g_profile[id]);
+	ezjson_object_set_string(body, "op", "profile-0000");
+	ezjson_object_set_string(body, "action", "join");
+	ezjson_object_set_string(args, "nick", name);
+	ezjson_object_set_value(body, "args", args);
+	ezjson_free(args);
+	new data[2];
+	data[0] = id; data[1] = g_session[id];
+	api("POST", "/survival/server/join", body, "on_profile", data, sizeof data);
+	ezjson_free(body);
+}
+
+public on_profile(EzHttpRequest:request)
+{
+	new data[2];
+	ezhttp_get_user_data(request, data);
+	new id = data[0], code, EzJSON:root = answer(request, code);
+	if (is_user_connected(id) && g_session[id] == data[1] && code == 200 && J_OK(root))
+	{
+		new EzJSON:st = ezjson_object_get_value(root, "state");
+		apply_state(id, st);
+		new kills = ezjson_object_get_number(st, "kills"), deaths = ezjson_object_get_number(st, "deaths");
+		new seconds = ezjson_object_get_number(st, "time"), matches = ezjson_object_get_number(st, "matches");
+		new wins = ezjson_object_get_number(st, "wins"), wr = ezjson_object_get_number(st, "wr");
+		new nk = ezjson_object_get_number(st, "next_lvl_kills"), nt = ezjson_object_get_number(st, "next_lvl_time");
+		ezjson_free(st);
+		czm_chat(id, "^4[LVL]^1 LVL ^4%d^1 · токены ^4%d^1 · убийств ^4%d^1 · смертей ^4%d", "^4[LVL]^1 LVL ^4%d^1 · tokens ^4%d^1 · kills ^4%d^1 · deaths ^4%d", g_lvl[id], g_tokens[id], kills, deaths);
+		czm_chat(id, "^4[LVL]^1 В игре ^4%d ч %d мин^1 · раундов ^4%d^1 · побед ^4%d^1 (%d%%)", "^4[LVL]^1 Played ^4%d h %d min^1 · rounds ^4%d^1 · wins ^4%d^1 (%d%%)", seconds / 3600, seconds / 60 % 60, matches, wins, wr);
+		czm_chat(id, "^4[LVL]^1 До следующего LVL: ^4%d^1 убийств или ^4%d^1 мин", "^4[LVL]^1 Next LVL: ^4%d^1 kills or ^4%d^1 min", nk, (nt + 59) / 60);
+	}
+	if (J_OK(root)) ezjson_free(root);
+}
+
+menu_shop(id)
+{
+	if (!g_catalogReady)
+		return;
+	new ru = czm_lang(id) == CZM_RU, title[96], item[80], info[4];
+	formatex(title, charsmax(title), ru ? "\yМАГАЗИН^n\wТокены \r%d" : "\ySHOP^n\wTokens \r%d", g_tokens[id]);
+	new menu = menu_create(title, "on_menu_shop");
+	for (new c = 0; c < g_catCount; c++)
+	{
+		new have, total;
+		for (new i = 0; i < g_itemCount[c]; i++)
+		{
+			if (g_itemShop[c][i] || g_owned[id][c][i]) total++;
+			if (g_owned[id][c][i]) have++;
+		}
+		formatex(item, charsmax(item), "%s \d%d/%d", g_catName[c][ru ? CZM_RU : CZM_EN], have, total);
+		num_to_str(c, info, charsmax(info));
+		menu_additem(menu, item, info);
+	}
+	menu_display(id, menu);
+}
+
+public on_menu_shop(id, menu, key)
+{
+	if (key == MENU_EXIT)
+	{
+		menu_destroy(menu);
+		return PLUGIN_HANDLED;
+	}
+	new info[4], dummy;
+	menu_item_getinfo(menu, key, dummy, info, charsmax(info), _, _, dummy);
+	menu_destroy(menu);
+	menu_cat_items(id, str_to_num(info));
+	return PLUGIN_HANDLED;
+}
+
+menu_cat_items(id, c)
+{
+	new ru = czm_lang(id) == CZM_RU, title[96], item[96], info[8];
+	formatex(title, charsmax(title), "\y%s^n\wТокены \r%d", g_catName[c][ru ? CZM_RU : CZM_EN], g_tokens[id]);
+	if (!ru)
+		formatex(title, charsmax(title), "\y%s^n\wTokens \r%d", g_catName[c][CZM_EN], g_tokens[id]);
+	new menu = menu_create(title, "on_menu_items");
+	for (new i = 0; i < g_itemCount[c]; i++)
+	{
+		if (!g_itemShop[c][i] && !g_owned[id][c][i] && !g_itemAdmin[c][i])
+			continue;
+		new state_[32];
+		if (g_equip[id][c] == i)
+			copy(state_, charsmax(state_), ru ? "\y[надето]" : "\y[on]");
+		else if (g_owned[id][c][i])
+			copy(state_, charsmax(state_), ru ? "\g[есть]" : "\g[owned]");
+		else
+			formatex(state_, charsmax(state_), "\r%d", g_itemPrice[c][i]);
+		formatex(item, charsmax(item), "%s %s", g_itemName[c][i][ru ? CZM_RU : CZM_EN], state_);
+		formatex(info, charsmax(info), "%d %d", c, i);
+		menu_additem(menu, item, info);
+	}
+	menu_display(id, menu);
+}
+
+public on_menu_items(id, menu, key)
+{
+	if (key == MENU_EXIT)
+	{
+		menu_destroy(menu);
+		menu_shop(id);
+		return PLUGIN_HANDLED;
+	}
+	new info[8], dummy, cs[4], is[4];
+	menu_item_getinfo(menu, key, dummy, info, charsmax(info), _, _, dummy);
+	menu_destroy(menu);
+	parse(info, cs, charsmax(cs), is, charsmax(is));
+	new c = str_to_num(cs), i = str_to_num(is);
+	if (g_equip[id][c] == i)
+		act(id, "equip", args2("cat", g_catKey[c], "item", ""));       // take off
+	else
+		act(id, "buy", args2("cat", g_catKey[c], "item", g_itemId[c][i])); // buys once, then only puts on
+	return PLUGIN_HANDLED;
+}
+
+menu_upgrades(id)
+{
+	new ru = czm_lang(id) == CZM_RU, title[96], item[80];
+	formatex(title, charsmax(title), ru ? "\yПРОКАЧКА^n\wТокены \r%d" : "\yUPGRADES^n\wTokens \r%d", g_tokens[id]);
+	new menu = menu_create(title, "on_menu_upgrades");
+	for (new u = 0; u < g_upCount; u++)
+	{
+		formatex(item, charsmax(item), "%s \r%d", g_upName[u][ru ? CZM_RU : CZM_EN], g_upPrice[u]);
+		menu_additem(menu, item);
+	}
+	menu_display(id, menu);
+}
+
+public on_menu_upgrades(id, menu, key)
+{
+	menu_destroy(menu);
+	if (0 <= key < g_upCount)
+		act(id, "upgrade", args1("item", g_upId[key]));
+	return PLUGIN_HANDLED;
+}
+
+menu_bp(id)
+{
+	new ru = czm_lang(id) == CZM_RU, title[160], item[80];
+	if (!g_bpActive[id])
+	{
+		formatex(title, charsmax(title), ru ? "\yБОЕВОЙ ПРОПУСК^n\w%d дней: %d токенов каждый день и награды за задания^nТокены \r%d"
+			: "\yBATTLE PASS^n\w%d days: %d tokens every day and task rewards^nTokens \r%d", g_bpDays, g_bpDaily, g_tokens[id]);
+		new menu = menu_create(title, "on_menu_bp_buy");
+		formatex(item, charsmax(item), ru ? "Купить за \r%d" : "Buy for \r%d", g_bpPrice);
+		menu_additem(menu, item);
+		menu_display(id, menu);
+		return;
+	}
+	formatex(title, charsmax(title), ru ? "\yБОЕВОЙ ПРОПУСК^n\wОсталось \r%d\w дн., заданий выполнено \r%d\w из 24"
+		: "\yBATTLE PASS^n\w\r%d\w days left, \r%d\w of 24 tasks done", g_bpLeftDays[id], g_bpClaimed[id]);
+	new menu = menu_create(title, "on_menu_bp");
+	formatex(item, charsmax(item), ru ? "Награда за вход \r+%d%s" : "Daily reward \r+%d%s", g_bpDaily, g_bpDailyReady[id] ? "" : (ru ? " \d(получено)" : " \d(taken)"));
+	menu_additem(menu, item);
+	formatex(item, charsmax(item), ru ? "Задания: убито %d, сыграно %d ч, побед %d" : "Tasks: %d kills, %d h played, %d wins",
+		g_bpProgress[id][0], g_bpProgress[id][1] / 3600, g_bpProgress[id][2]);
+	menu_additem(menu, item);
+	menu_additem(menu, ru ? "Финал: +200 LVL" : "Final: +200 LVL");
+	menu_additem(menu, ru ? "Финал: +50000 токенов" : "Final: +50000 tokens");
+	menu_additem(menu, ru ? "Финал: префикс BATTLE PASS" : "Final: the BATTLE PASS prefix");
+	menu_display(id, menu);
+}
+
+public on_menu_bp_buy(id, menu, key)
+{
+	menu_destroy(menu);
+	if (key == 0)
+		act(id, "bp_buy", J_NONE);
+	return PLUGIN_HANDLED;
+}
+
+public on_menu_bp(id, menu, key)
+{
+	menu_destroy(menu);
+	switch (key)
+	{
+		case 0: act(id, "bp_daily", J_NONE);
+		case 1: czm_chat(id, "^4[LVL]^1 Все задания и прогресс — в панели на ^4%s", "^4[LVL]^1 Every task and its progress is in the panel at ^4%s", CZM_SITE);
+		case 2: act(id, "bp_final", args1("item", "lvl"));
+		case 3: act(id, "bp_final", args1("item", "tokens"));
+		case 4: act(id, "bp_final", args1("item", "prefix"));
+	}
+	return PLUGIN_HANDLED;
+}
+
+menu_pay(id)
+{
+	new ru = czm_lang(id) == CZM_RU, title[128], name[32], info[4];
+	formatex(title, charsmax(title), ru ? "\yПЕРЕВОД ТОКЕНОВ^n\wс %d LVL, до %d в день, сегодня \r%d" : "\ySEND TOKENS^n\wfrom LVL %d, up to %d a day, today \r%d",
+		g_payMinLvl, g_payDaily, g_payToday[id]);
+	new menu = menu_create(title, "on_menu_pay");
+	for (new to = 1; to <= MaxClients; to++)
+	{
+		if (to == id || !g_loaded[to])
+			continue;
+		get_user_name(to, name, charsmax(name));
+		num_to_str(to, info, charsmax(info));
+		menu_additem(menu, name, info);
+	}
+	if (!menu_items(menu))
+	{
+		menu_destroy(menu);
+		czm_chat(id, "^4[LVL]^1 Сейчас некому переводить. Друзьям вне игры — через панель на ^4%s", "^4[LVL]^1 Nobody to send to right now. Use the panel at ^4%s^1 for friends outside the game", CZM_SITE);
+		return;
+	}
+	menu_display(id, menu);
+}
+
+public on_menu_pay(id, menu, key)
+{
+	if (key == MENU_EXIT)
+	{
+		menu_destroy(menu);
+		return PLUGIN_HANDLED;
+	}
+	new info[4], dummy;
+	menu_item_getinfo(menu, key, dummy, info, charsmax(info), _, _, dummy);
+	menu_destroy(menu);
+	g_payTarget[id] = str_to_num(info);
+	new ru = czm_lang(id) == CZM_RU, title[64];
+	formatex(title, charsmax(title), ru ? "\yСколько передать?" : "\yHow many?");
+	new amounts = menu_create(title, "on_menu_pay_amount");
+	menu_additem(amounts, "10");
+	menu_additem(amounts, "50");
+	menu_additem(amounts, "100");
+	menu_display(id, amounts);
+	return PLUGIN_HANDLED;
+}
+
+public on_menu_pay_amount(id, menu, key)
+{
+	menu_destroy(menu);
+	new to = g_payTarget[id];
+	if (!(0 <= key <= 2) || !(1 <= to <= MaxClients) || !g_loaded[to])
+		return PLUGIN_HANDLED;
+	new const amounts[] = { 10, 50, 100 };
+	new EzJSON:a = ezjson_init_object();
+	ezjson_object_set_number(a, "target", g_profile[to]);
+	ezjson_object_set_number(a, "amount", amounts[key]);
+	act(id, "pay", a);
+	return PLUGIN_HANDLED;
+}
+
+show_top(id)
+{
+	new data[2];
+	data[0] = id; data[1] = g_session[id];
+	api("GET", "/survival/top?kind=lvl&limit=10", J_NONE, "on_top", data, sizeof data);
+	return PLUGIN_HANDLED;
+}
+
+public on_top(EzHttpRequest:request)
+{
+	new data[2];
+	ezhttp_get_user_data(request, data);
+	new id = data[0], code, EzJSON:root = answer(request, code);
+	if (is_user_connected(id) && g_session[id] == data[1] && code == 200 && J_OK(root))
+	{
+		new EzJSON:top = ezjson_object_get_value(root, "top");
+		czm_chat(id, "^4[LVL]^1 Топ игроков по уровню:", "^4[LVL]^1 Top players by level:");
+		for (new n = 0, count = J_OK(top) ? min(ezjson_array_get_count(top), 10) : 0; n < count; n++)
+		{
+			new EzJSON:row = ezjson_array_get_value(top, n), nick[32];
+			ezjson_object_get_string(row, "nick", nick, charsmax(nick));
+			czm_chat(id, "^4%d. ^3%s^1 — LVL ^4%d^1, убийств %d", "^4%d. ^3%s^1 — LVL ^4%d^1, %d kills", n + 1, nick,
+				ezjson_object_get_number(row, "lvl"), ezjson_object_get_number(row, "kills"));
+			ezjson_free(row);
+		}
+		if (J_OK(top)) ezjson_free(top);
+	}
+	if (J_OK(root)) ezjson_free(root);
+}

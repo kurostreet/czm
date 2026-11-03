@@ -24,6 +24,24 @@ STAMP=$(date +%Y%m%d-%H%M%S)
 BUILD=$(mktemp -d)
 trap 'rm -rf "$BUILD"' EXIT
 
+echo "== modules"
+# AmxxEasyHttp 1.4.0 (Next21Team): HTTPS and JSON for czm_lvl.amxx. Pinned by hash.
+EH=$SRC/easyhttp
+EH_ZIP_SHA=5d265398590f033900602c7e6e722d5232170f2ed2e48315f6af052e9de9082b
+EH_INC_SHA=5196ae17ea58eeaebd293639f96e0c8bbfe06b40e28daab2c80395538b62f1d9
+mkdir -p "$EH"
+for f in easy_http.inc release_linux_v1.4.0.zip; do
+	[ -s "$EH/$f" ] || curl -sSfL -m 120 -o "$EH/$f" "https://github.com/Next21Team/AmxxEasyHttp/releases/download/1.4.0/$f"
+done
+echo "$EH_ZIP_SHA  $EH/release_linux_v1.4.0.zip" | sha256sum -c --quiet
+echo "$EH_INC_SHA  $EH/easy_http.inc" | sha256sum -c --quiet
+python3 -I -c "import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$EH/release_linux_v1.4.0.zip" "$BUILD/eh"
+EHD=$BUILD/eh/release_linux_v1.4.0/addons/amxmodx
+install -o "${OWNER%:*}" -g "${OWNER#*:}" -m 0644 "$EHD/modules/easy_http_amxx_i386.so" "$A/modules/"
+install -d -o "${OWNER%:*}" -g "${OWNER#*:}" "$A/data"
+install -o "${OWNER%:*}" -g "${OWNER#*:}" -m 0644 "$EHD/data/amxx_easy_http_cacert.pem" "$A/data/"
+install -o "${OWNER%:*}" -g "${OWNER#*:}" -m 0644 "$EH/easy_http.inc" "$A/scripting/include/"
+
 echo "== compile"
 for f in "$R"/scripting/*.sma; do
 	n=$(basename "$f" .sma)

@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, FileResponse, HTML
 from PIL import Image
 from pydantic import BaseModel, Field
 
-from . import service, mappics, accounts, settings, tab, social, website, distribution, lobbies, game_probe, voice_lobby, notifications, rules, moderation, play_feed, playtime, server_moderation, community, admin, official, game_ticket
+from . import service, mappics, accounts, settings, tab, social, website, distribution, lobbies, game_probe, voice_lobby, notifications, rules, moderation, play_feed, playtime, server_moderation, community, admin, official, game_ticket, survival
 from .config import get_settings
 from .db import db
 
@@ -436,6 +436,111 @@ async def community_server_change(body: OwnerServerIn, request: Request, x_czm_k
         except game_probe.ProbeError:
             pass  # an offline server remains editable; its endpoint is the fallback label
     return await social_result(request, lambda c: community.owner_change(c, key, address, body.remove, name))
+
+
+# ---------------------------------------------------------------- Survival LVL MOD
+
+class SurvivalActionIn(BaseModel):
+    op: str = Field(min_length=8, max_length=80)
+    action: str = Field(min_length=2, max_length=24)
+    args: dict = Field(default_factory=dict)
+    player: int = 0  # game servers only
+
+
+class SurvivalReportIn(BaseModel):
+    batch: str = Field(min_length=8, max_length=80)
+    entries: list[dict] = Field(default_factory=list, max_length=64)
+    live: dict | None = None
+    server: str = Field(default="survival", max_length=32)
+
+
+class SurvivalMapEndIn(BaseModel):
+    batch: str = Field(min_length=8, max_length=80)
+    kills: dict[str, int] = Field(default_factory=dict)
+
+
+@router.get("/survival/catalog")
+async def survival_catalog():
+    return JSONResponse(survival.catalog(), headers={"Cache-Control": "public, max-age=60"})
+
+
+@router.get("/survival/top")
+async def survival_top(request: Request, kind: str = "lvl", limit: int = 10):
+    return await social_result(request, lambda c: {"top": survival.top(c, kind, limit)})
+
+
+@router.get("/survival/live")
+async def survival_live(request: Request):
+    return await social_result(request, lambda c: {"servers": survival.live(c)})
+
+
+@router.get("/survival/market")
+async def survival_market(request: Request, x_czm_key: str | None = Header(default=None)):
+    def run(c):
+        player = service.player_by_key(c, x_czm_key or "") if x_czm_key else None
+        return survival.market(c, player["id"] if player else 0)
+    return await social_result(request, run)
+
+
+def _survival_player(c, key):
+    player = service.player_by_key(c, key or "")
+    if player is None:
+        raise accounts.AuthError("hello", 401)
+    return player
+
+
+@router.get("/survival/me")
+async def survival_me(request: Request, x_czm_key: str | None = Header(default=None)):
+    def run(c):
+        player = _survival_player(c, x_czm_key)
+        survival.ensure(c, player["id"], player["nick"])
+        return {"state": survival.state(c, player["id"]), "history": survival.history(c, player["id"])}
+    return await social_result(request, run)
+
+
+@router.post("/survival/action")
+async def survival_action(body: SurvivalActionIn, request: Request, x_czm_key: str | None = Header(default=None)):
+    def run(c):
+        player = _survival_player(c, x_czm_key)
+        survival.ensure(c, player["id"], player["nick"])
+        return survival.action(c, player["id"], "web:" + body.op, body.action, body.args)
+    return await social_result(request, run)
+
+
+@router.post("/survival/server/join")
+async def survival_server_join(body: SurvivalActionIn, request: Request, x_czm_server: str | None = Header(default=None)):
+    def run(c):
+        survival.check_server(x_czm_server)
+        survival.ensure(c, body.player, str(body.args.get("nick") or ""))
+        return {"state": survival.state(c, body.player)}
+    return await social_result(request, run)
+
+
+@router.post("/survival/server/report")
+async def survival_server_report(body: SurvivalReportIn, request: Request, x_czm_server: str | None = Header(default=None)):
+    def run(c):
+        survival.check_server(x_czm_server)
+        if body.live is not None:
+            survival.set_live(c, body.server, body.live)
+        return survival.report(c, "game:" + body.batch, body.entries)
+    return await social_result(request, run)
+
+
+@router.post("/survival/server/action")
+async def survival_server_action(body: SurvivalActionIn, request: Request, x_czm_server: str | None = Header(default=None)):
+    def run(c):
+        survival.check_server(x_czm_server)
+        return survival.action(c, body.player, "game:" + body.op, body.action, body.args)
+    return await social_result(request, run)
+
+
+@router.post("/survival/server/map_end")
+async def survival_server_map_end(body: SurvivalMapEndIn, request: Request, x_czm_server: str | None = Header(default=None)):
+    def run(c):
+        survival.check_server(x_czm_server)
+        kills = {int(k): v for k, v in body.kills.items() if k.isdigit()}
+        return {"top": survival.map_end(c, "map:" + body.batch, kills)}
+    return await social_result(request, run)
 
 
 class GameTicketIn(BaseModel):
