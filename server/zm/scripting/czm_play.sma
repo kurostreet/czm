@@ -106,7 +106,7 @@ play_state(id)
 {
     if (!g_playUi[id]) return;
     // Presentation capability only; this does not grant official-server or panel access.
-    message_begin(MSG_ONE, g_msgPlay, _, id);
+    engfunc(EngFunc_MessageBegin, MSG_ONE, g_msgPlay, Float:{0.0, 0.0, 0.0}, id);
     write_byte(1); // CZM Survival team actions
     message_end();
     g_playSent[id] = true;
@@ -183,6 +183,10 @@ join_choice(id, const choice[])
     {
         // The mod protects the last human/zombie and special rounds itself.
         zp_call("menu_game", id, 5);
+        // The game DLL can throttle ClientKill immediately after spawn. Complete
+        // an accepted spectator move without leaving a living spectator behind.
+        if (cs_get_user_team(id) == CS_TEAM_SPECTATOR && is_user_alive(id))
+            ExecuteHamB(Ham_Killed, id, id, 0);
         return PLUGIN_HANDLED;
     }
     new wanted = equal(choice, "human") ? ZP_TEAM_HUMAN : (equal(choice, "zombie") ? ZP_TEAM_ZOMBIE : 0);
@@ -223,6 +227,14 @@ public finish_join(task)
     new id = task - 7200;
     if (!is_user_connected(id) || get_user_userid(id) != g_joinUserid[id]) return;
     g_joinUserid[id] = 0;
+    // CS may reject a second team switch in the same round after a trip to
+    // spectators. Team membership is safe to restore; spawning still belongs
+    // to the round checks below and CZM Revive's countdown.
+    if (cs_get_user_team(id) == CS_TEAM_SPECTATOR || cs_get_user_team(id) == CS_TEAM_UNASSIGNED)
+    {
+        cs_set_user_team(id, CS_TEAM_CT);
+        engclient_cmd(id, "joinclass", "5");
+    }
     if (cs_get_user_team(id) != CS_TEAM_T && cs_get_user_team(id) != CS_TEAM_CT)
     {
         czm_chat(id, "^4[CZM]^1 Сейчас войти не удалось. Выбери команду ещё раз.", "^4[CZM]^1 Could not join. Please choose a team again.");

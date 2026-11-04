@@ -199,18 +199,21 @@ int main(){CHudMenu menu;unsigned char b=1;
 #define CS_TEAM_SPECTATOR 3
 #define ZP_TEAM_HUMAN 2
 #define ZP_TEAM_ZOMBIE 1
+#define Ham_Killed 1
 #define charsmax(s) (sizeof(s)-1)
-static bool connected=true,alive=false,started=false,special=false,zombie=false,last=false,failTeam=false;
-static int team=0,userid=10,teamCommands=0,classCommands=0,respawns=0,infections=0,opened=0,scheduled=0,clockNow=10;
+static bool connected=true,alive=false,started=false,special=false,zombie=false,last=false,failTeam=false,failSet=false,refuseSpectator=false,leaveAlive=false;
+static int team=0,userid=10,teamCommands=0,classCommands=0,respawns=0,infections=0,opened=0,scheduled=0,clockNow=10,fallbacks=0,kills=0;
 static float g_nextJoin[33];static int g_teamChoice[33],g_joinUserid[33],g_joinTeam[33];
 static bool equal(const char*a,const char*b){return !strcmp(a,b);}
 static bool is_user_connected(int){return connected;}static float get_gametime(){return clockNow;}
 static int cs_get_user_team(int){return team;}static int get_user_userid(int){return userid;}
+static void cs_set_user_team(int,int choice){fallbacks++;if(!failSet)team=choice;}
 static bool is_user_alive(int){return alive;}static bool zp_has_round_started(){return started;}
 static bool special_round(){return special;}static bool zp_get_user_zombie(int){return zombie;}
 static bool zp_get_user_last_human(int){return last;}static void zp_infect_user(int){infections++;zombie=true;}
 static void zp_respawn_user(int,int){respawns++;alive=true;}
-static void zp_call(const char*s,int,int){assert(!strcmp(s,"menu_game"));team=CS_TEAM_SPECTATOR;alive=false;}
+static void zp_call(const char*s,int,int){assert(!strcmp(s,"menu_game"));if(!refuseSpectator){team=CS_TEAM_SPECTATOR;if(!leaveAlive)alive=false;}}
+static void ExecuteHamB(int,int,int,int){alive=false;kills++;}
 static void engclient_cmd(int,const char*s,const char*v){assert(!strcmp(v,"5"));if(!strcmp(s,"jointeam")){teamCommands++;if(!failTeam)team=CS_TEAM_CT;}else{classCommands++;assert(!strcmp(s,"joinclass"));}}
 static void remove_task(int){}static void set_task(float,const char*s,int task){assert(!strcmp(s,"finish_join"));scheduled=task;}
 static void czm_chat(int,const char*,const char*){}static void client_cmd(int,const char*){opened++;}
@@ -225,8 +228,11 @@ int main(){
  zombie=false;special=true;clockNow++;join_choice(1,"zombie");assert(!zombie&&infections==1);
  special=false;last=true;clockNow++;join_choice(1,"zombie");assert(!zombie&&infections==1);
  last=false;team=CS_TEAM_UNASSIGNED;alive=false;clockNow++;join_choice(1,"auto");userid++;finish_join(scheduled);assert(!alive&&respawns==1&&!opened);
- failTeam=true;team=CS_TEAM_UNASSIGNED;clockNow++;join_choice(1,"auto");finish_join(scheduled);assert(opened==1&&!alive);
- connected=false;clockNow++;join_choice(1,"auto");assert(teamCommands==4&&classCommands==4);
+ failTeam=true;team=CS_TEAM_SPECTATOR;clockNow++;join_choice(1,"auto");finish_join(scheduled);assert(!opened&&!alive&&team==CS_TEAM_CT&&fallbacks==1&&respawns==1);
+ failSet=true;team=CS_TEAM_UNASSIGNED;clockNow++;join_choice(1,"auto");finish_join(scheduled);assert(opened==1&&!alive);
+ connected=false;clockNow++;join_choice(1,"auto");assert(teamCommands==5&&classCommands==7);
+ connected=true;alive=true;team=CS_TEAM_CT;refuseSpectator=true;clockNow++;join_choice(1,"spectator");assert(alive&&team==CS_TEAM_CT&&!kills);
+ refuseSpectator=false;leaveAlive=true;clockNow++;join_choice(1,"spectator");assert(!alive&&team==CS_TEAM_SPECTATOR&&kills==1);
 }
 ''')
  def test_team_card_updates_when_capability_arrives_after_opening(self):
