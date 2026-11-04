@@ -130,6 +130,15 @@ int main(){
 }
 '''
   cpp(code)
+ def test_new_protocol_is_not_sent_to_an_older_client(self):
+  s=(ROOT/'server/zm/scripting/czm_play.sma').read_text()
+  body=function(s,'public czm_capable(').replace('public czm_capable(id, unused)','int capable(int id,int unused)')
+  cpp(BASE+r'''
+bool connected=true,rich=true,g_aimUi[33];
+bool is_user_connected(int){return connected;}bool czm_menu_rich(int){return rich;}
+'''+body+r'''
+int main(){assert(!capable(1,0));g_aimUi[1]=true;assert(capable(1,0));rich=false;assert(!capable(1,0));rich=true;connected=false;assert(!capable(1,0));}
+''')
  def test_unfamiliar_zombie_source_is_rejected(self):
   spec=importlib.util.spec_from_file_location('czm_zp',ROOT/'server/zm/tools/patch_zombie_menus.py');m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
   with self.assertRaises(ValueError):m.patch('public plugin_init() {}')

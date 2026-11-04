@@ -64,7 +64,7 @@ public aim_capability(id, const name[], const value[])
 
 public czm_capable(id, unused)
 {
-    return is_user_connected(id) && czm_menu_rich(id);
+    return is_user_connected(id) && g_aimUi[id] && czm_menu_rich(id);
 }
 
 public czm_weapon_open(id, unused)
