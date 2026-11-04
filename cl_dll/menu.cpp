@@ -48,6 +48,15 @@ in the czm_menu cvar: "serial validslots", a new line, then the menu text.
 static bool s_bCardsShown;
 static int s_iCardsSerial;
 
+// The connected plugin announces its team actions independently of the official list.
+static int MsgFunc_CzmPlay( const char *name, int size, void *buffer )
+{
+	if( size != 1 ) return 1;
+	BufferReader reader( name, buffer, size );
+	gEngfuncs.Cvar_Set( "czm_play_mode", reader.ReadByte() == 1 ? "1" : "0" );
+	return 1;
+}
+
 bool CHudMenu::CardsEnabled( void )
 {
 	return g_pMenu && gEngfuncs.pfnGetCvarFloat( "czm_menu_cards" ) != 0.0f;
@@ -121,6 +130,7 @@ int CHudMenu :: Init( void )
 	HOOK_MESSAGE( gHUD.m_Menu, VGUIMenu );
 	HOOK_MESSAGE( gHUD.m_Menu, BuyClose );
 	HOOK_MESSAGE( gHUD.m_Menu, AllowSpec );
+	gEngfuncs.pfnHookUserMsg( "CzmPlay", MsgFunc_CzmPlay );
 	HOOK_COMMAND( gHUD.m_Menu, "client_buy_open", OldStyleMenuOpen );
 	HOOK_COMMAND( gHUD.m_Menu, "client_buy_close", OldStyleMenuClose );
 	HOOK_COMMAND( gHUD.m_Menu, "showvguimenu", ShowVGUIMenu );
@@ -136,6 +146,9 @@ int CHudMenu :: Init( void )
 
 void CHudMenu :: InitHUDData( void )
 {
+	// A new server/map must announce its own capability; it cannot inherit the last one.
+	gEngfuncs.Cvar_Set( "czm_play_mode", "0" );
+	gEngfuncs.Cvar_Set( "czm_motd_off", "0" );
 	m_fMenuDisplayed = 0;
 	m_bitsValidSlots = 0;
 	Reset();

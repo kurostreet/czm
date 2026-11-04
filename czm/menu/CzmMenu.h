@@ -141,6 +141,7 @@ bool CZM_OfficialEnabled( void );
 CzmServer *CZM_OfficialServer( int slot );   // NULL when off or while the slot has no address
 bool CZM_IsOfficial( const char *address );
 int CZM_OfficialSlotNow( void );             // our server the game is on (CZM_OFFICIAL_*), -1 another
+bool CZM_PlayServer( void );                // connected plugin supports CZM team actions; no trust/privileges
 void CZM_ConnectOfficial( int slot );
 // before every connect: our server gets the player's CZM ticket (setinfo _czm), any other gets none
 void CZM_PrepareConnect( const char *address );

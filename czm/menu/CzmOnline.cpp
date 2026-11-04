@@ -601,6 +601,11 @@ static bool CZM_OnOfficialServer( void )
 	return CZM_OfficialSlotNow() >= 0;
 }
 
+bool CZM_PlayServer( void )
+{
+	return CL_IsActive() && EngFuncs::GetCvarFloat( "czm_play_mode" ) == 1.0f;
+}
+
 static void CZM_PanelOpen_f( void )
 {
 	double now = EngFuncs::DoubleTime();

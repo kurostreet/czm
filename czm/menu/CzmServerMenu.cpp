@@ -1028,7 +1028,7 @@ class CCzmTeamCard : public CMenuBaseClientWindow
 {
 public:
 	typedef CMenuBaseClientWindow BaseClass;
-	CCzmTeamCard() : BaseClass( "CzmTeamCard" ), m_bSpectate( false ), m_bCancel( false ), m_iSlot( -1 ),
+	CCzmTeamCard() : BaseClass( "CzmTeamCard" ), m_bSpectate( false ), m_bCancel( false ), m_bPlay( false ), m_iSlot( -1 ),
 		m_iPressed( 0 ), m_iOpenTime( 0 ), m_bClosing( false ), W( 0 ), H( 0 ) { m_szMap[0] = m_szText[0] = 0; }
 
 	void Open( int param1 );
@@ -1047,7 +1047,7 @@ private:
 
 	char m_szMap[64];
 	char m_szText[512];
-	bool m_bSpectate, m_bCancel;
+	bool m_bSpectate, m_bCancel, m_bPlay;
 	int m_iSlot;               // our server (CZM_OFFICIAL_*), -1 another
 	int m_iCounts[2];
 	int m_iPressed;
@@ -1118,6 +1118,7 @@ void CCzmTeamCard::Open( int param1 )
 	m_bSpectate = ( param1 & 1 ) != 0;
 	m_bCancel = ( param1 & 4 ) != 0;
 	m_iSlot = CZM_OfficialSlotNow();
+	m_bPlay = m_iSlot >= 0 || CZM_PlayServer();
 	m_iCounts[0] = m_iCounts[1] = 0;
 	if( counts )
 		sscanf( counts, "%d %d", &m_iCounts[0], &m_iCounts[1] );
@@ -1125,7 +1126,7 @@ void CCzmTeamCard::Open( int param1 )
 	m_iOpenTime = uiStatic.realTime;
 	m_bClosing = false;
 	// our welcome is on the card: the MOTD box goes
-	if( m_iSlot >= 0 )
+	if( m_bPlay )
 		EngFuncs::CvarSetString( "czm_motd_off", "1" );
 	CZM_KeepClientMenu( this );
 	Show();
@@ -1148,6 +1149,15 @@ void CCzmTeamCard::Hide()
 
 void CCzmTeamCard::Layout( void )
 {
+	// The capability or the official cache may arrive after the initial team window.
+	m_iSlot = CZM_OfficialSlotNow();
+	bool play = m_iSlot >= 0 || CZM_PlayServer();
+	if( play != m_bPlay )
+	{
+		m_bPlay = play;
+		m_iPressed = 0;
+		if( play ) EngFuncs::CvarSetString( "czm_motd_off", "1" );
+	}
 	W = ScreenWidth;
 	H = ScreenHeight;
 
@@ -1155,9 +1165,9 @@ void CCzmTeamCard::Layout( void )
 	int pad = H * 0.034f, mapH = cw * 0.27f, btnH = H * 0.088f, gap = H * 0.016f;
 	HFont nameFont = CZM_Font( CZMF_MENU_TITLE ), textFont = CZM_Font( CZMF_PANEL_TEXT ), hintFont = CZM_Font( CZMF_UI_META );
 	int starts[4], lines = m_szText[0] ? CZM_WrapText( textFont, m_szText, cw - pad * 2, starts, 3 ) : 0;
-	int rows = m_iSlot >= 0 ? 2 : ( m_bSpectate ? 2 : 1 );
+	int rows = m_bPlay ? 2 : ( m_bSpectate ? 2 : 1 );
 	int ch = H * 0.014f + mapH + CZM_FontHeight( nameFont ) * 0.6f + lines * ( CZM_FontHeight( textFont ) + H * 0.004f ) + gap * 1.6f
-		+ rows * btnH + ( rows - 1 ) * gap + ( m_iSlot >= 0 ? CZM_FontHeight( hintFont ) + gap * 2 : 0 ) + pad;
+		+ rows * btnH + ( rows - 1 ) * gap + ( m_bPlay ? CZM_FontHeight( hintFont ) + gap * 2 : 0 ) + pad;
 
 	m_card = CZM_Rect(( W - cw ) / 2, ( H - ch ) / 2, cw, ch );
 	m_map = CZM_Rect( m_card.x + H * 0.014f, m_card.y + H * 0.014f, cw - H * 0.028f, mapH );
@@ -1169,7 +1179,7 @@ void CCzmTeamCard::Layout( void )
 	for( int i = 0; i < BTN_COUNT; i++ )
 		m_btn[i] = CZM_Rect( 0, 0, 0, 0 );
 
-	if( m_iSlot >= 0 )
+	if( m_bPlay )
 	{
 		int half = ( w - gap ) / 2;
 		m_btn[BTN_PLAY] = CZM_Rect( x, y, half, btnH );
@@ -1211,7 +1221,7 @@ void CCzmTeamCard::Press( int button )
 	if( button <= 0 || button >= BTN_COUNT )
 		return;
 	CZM_PlayClick();
-	if( m_iSlot >= 0 && button != BTN_CLOSE )
+	if( ( m_iSlot >= 0 || CZM_PlayServer() ) && button != BTN_CLOSE )
 	{
 		const char *choice = button == BTN_SPECTATE ? "spectator" : button == BTN_T ? "zombie" : button == BTN_CT ? "human" : "auto";
 		EngFuncs::ClientCmdF( false, "czm_join %s\n", choice );
@@ -1236,10 +1246,10 @@ bool CCzmTeamCard::KeyDown( int key )
 		return true;
 	}
 	// the keys of the stock menu
-	if( key == '1' && m_iSlot < 0 ) Press( BTN_T );
-	else if( key == '2' && m_iSlot < 0 ) Press( BTN_CT );
-	else if( key == '5' ) Press( m_iSlot >= 0 ? BTN_PLAY : BTN_AUTO );
-	else if( key == '6' && m_bSpectate ) Press( BTN_SPECTATE );
+	if( key == '1' ) Press( BTN_T );
+	else if( key == '2' ) Press( BTN_CT );
+	else if( key == '5' ) Press( m_bPlay ? BTN_PLAY : BTN_AUTO );
+	else if( key == '6' && ( m_bPlay || m_bSpectate )) Press( BTN_SPECTATE );
 	return true;
 }
 
@@ -1290,7 +1300,7 @@ void CCzmTeamCard::Draw()
 		char mode[48], online[48];
 		int chH = H * 0.048f, cx = m_map.x + H * 0.02f, cy = m_map.y + H * 0.018f;
 
-		if( m_iSlot >= 0 )
+		if( m_bPlay )
 			Q_strncpy( mode, m_iSlot == CZM_OFFICIAL_ESCAPE ? "ZE · Escape" : "ZM · Survival", sizeof( mode ));
 		else if( !strncmp( m_szMap, "zm_", 3 ))
 			Q_strncpy( mode, ru ? "Зомби" : "Zombie", sizeof( mode ));
@@ -1382,7 +1392,7 @@ void CCzmTeamCard::Draw()
 		case BTN_CT:
 		{
 			bool t = i == BTN_T;
-			if( m_iSlot >= 0 )
+			if( m_bPlay )
 				snprintf( label, sizeof( label ), "%s", t ? ( ru ? "Зайти за Зомби" : "Join zombies" ) : ( ru ? "Зайти за людей" : "Join humans" ) );
 			else snprintf( label, sizeof( label ), "%s · %d", t ? ( ru ? "Т" : "T" ) : ( ru ? "КТ" : "CT" ), m_iCounts[t ? 0 : 1] );
 			CZM_DrawSliced( UI_DIR "card.png", b.x, b.y, b.w, b.h, 30, corner, CZM_White( a ));
@@ -1405,7 +1415,7 @@ void CCzmTeamCard::Draw()
 	}
 
 	// our servers: the welcome in one line
-	if( m_iSlot >= 0 )
+	if( m_bPlay )
 	{
 		const char *hint = ru ? "Честная игра · Чистый сервер · Приятное общение"
 			: "Fair play · Clean server · Friendly chat";
@@ -1428,7 +1438,7 @@ void UI_CzmTeam_Menu( void )
 bool CZM_TeamShow( int menuType, int param1 )
 {
 	// our servers choose the model: no class menu after the team
-	if(( menuType == CZM_MENU_CLASS_T || menuType == CZM_MENU_CLASS_CT ) && CZM_OfficialSlotNow() >= 0 )
+	if(( menuType == CZM_MENU_CLASS_T || menuType == CZM_MENU_CLASS_CT ) && ( CZM_PlayServer() || CZM_OfficialSlotNow() >= 0 ))
 	{
 		EngFuncs::ClientCmd( false, "joinclass 5\n" );
 		return true;

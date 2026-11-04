@@ -70,11 +70,11 @@ int main(){
  def test_official_team_buttons_use_distinct_commands(self):
   s=(ROOT/'czm/menu/CzmServerMenu.cpp').read_text()
   code=BASE+r'''
-static std::string sent;static void CZM_PlayClick(){}
+static std::string sent;static void CZM_PlayClick(){}static bool play=false;static bool CZM_PlayServer(){return play;}
 namespace EngFuncs{static void ClientCmdF(bool,const char*f,...){char b[128];va_list a;va_start(a,f);vsnprintf(b,sizeof(b),f,a);va_end(a);sent=b;}}
 class CCzmTeamCard{public:enum{BTN_NONE,BTN_PLAY,BTN_SPECTATE,BTN_T,BTN_AUTO,BTN_CT,BTN_CLOSE,BTN_COUNT};int m_iSlot=0;void Press(int);void Hide(){}};
 '''+function(s,'void CCzmTeamCard::Press(')+r'''
-int main(){CCzmTeamCard c;c.Press(c.BTN_PLAY);assert(sent=="czm_join auto\n");c.Press(c.BTN_SPECTATE);assert(sent=="czm_join spectator\n");c.Press(c.BTN_CT);assert(sent=="czm_join human\n");c.Press(c.BTN_T);assert(sent=="czm_join zombie\n");c.m_iSlot=-1;c.Press(c.BTN_CT);assert(sent=="jointeam 2\n");}
+int main(){CCzmTeamCard c;c.Press(c.BTN_PLAY);assert(sent=="czm_join auto\n");c.Press(c.BTN_SPECTATE);assert(sent=="czm_join spectator\n");c.Press(c.BTN_CT);assert(sent=="czm_join human\n");c.Press(c.BTN_T);assert(sent=="czm_join zombie\n");c.m_iSlot=-1;c.Press(c.BTN_CT);assert(sent=="jointeam 2\n");play=true;c.Press(c.BTN_CT);assert(sent=="czm_join human\n");c.Press(c.BTN_T);assert(sent=="czm_join zombie\n");c.Press(c.BTN_PLAY);assert(sent=="czm_join auto\n");c.Press(c.BTN_SPECTATE);assert(sent=="czm_join spectator\n");}
 '''
   cpp(code)
  def test_actual_hp_ratio_colors_and_stale_target_expiry(self):
@@ -138,6 +138,118 @@ bool connected=true,rich=true,g_aimUi[33];
 bool is_user_connected(int){return connected;}bool czm_menu_rich(int){return rich;}
 '''+body+r'''
 int main(){assert(!capable(1,0));g_aimUi[1]=true;assert(capable(1,0));rich=false;assert(!capable(1,0));rich=true;connected=false;assert(!capable(1,0));}
+''')
+ def test_team_bridge_routes_selections_without_reopening_the_card(self):
+  s=(ROOT/'server/zm/scripting/czm_play.sma').read_text()
+  body=function(s,'public czm_team_open(').replace('public czm_team_open(id, unused)','int team_open(int id,int unused)').replace('new ','char ')
+  cpp(BASE+r'''
+#define PLUGIN_HANDLED 1
+#define charsmax(s) (sizeof(s)-1)
+static const char *command="chooseteam",*argument="";static bool capable=true;
+static int opened=0,announced=0;static std::string picked;
+static bool czm_capable(int,int){return capable;}
+static void read_argv(int n,char *out,size_t max){snprintf(out,max+1,"%s",n?argument:command);}
+static bool equal(const char*a,const char*b){return !strcmp(a,b);}
+static int read_argc(){return argument[0]?2:1;}
+static int join_choice(int,const char *choice){picked=choice;return 1;}
+static void play_state(int){announced++;}
+static void client_cmd(int,const char*s){assert(!strcmp(s,"showvguimenu 2"));opened++;}
+'''+body+r'''
+int main(){
+ assert(team_open(1,0)==1&&opened==1);command="jointeam";
+ const char *numbers[]={"1","2","5","6"},*choices[]={"zombie","human","auto","spectator"};
+ for(int i=0;i<4;i++){argument=numbers[i];picked.clear();assert(team_open(1,0)==1);assert(picked==choices[i]&&opened==1);}
+ argument="99";picked.clear();assert(team_open(1,0)==1&&picked.empty()&&opened==1);
+ capable=false;argument="5";assert(team_open(1,0)==0&&picked.empty()&&opened==1);
+ capable=true;argument="";assert(team_open(1,0)==1&&opened==2);
+}
+''')
+ def test_play_capability_resets_between_servers_and_does_not_grant_official_access(self):
+  source=(ROOT/'cl_dll/menu.cpp').read_text()
+  online=(ROOT/'czm/menu/CzmOnline.cpp').read_text()
+  code=BASE+r'''
+static float play=0;static bool active=true;static int resets=0;
+static bool CL_IsActive(){return active;}
+namespace EngFuncs {static float GetCvarFloat(const char *s){assert(!strcmp(s,"czm_play_mode"));return play;}}
+struct {void Cvar_Set(const char *s,const char *v){if(!strcmp(s,"czm_play_mode"))play=atof(v);}} gEngfuncs;
+struct BufferReader{unsigned char*p;BufferReader(const char*,void*b,int):p((unsigned char*)b){}int ReadByte(){return *p;}};
+struct CHudMenu{int m_fMenuDisplayed=1,m_bitsValidSlots=1023;void Reset(){resets++;}void InitHUDData();};
+'''
+  code+=function(source,'static int MsgFunc_CzmPlay(')+function(source,'void CHudMenu :: InitHUDData(')+function(online,'bool CZM_PlayServer(')+r'''
+int main(){CHudMenu menu;unsigned char b=1;
+ MsgFunc_CzmPlay("CzmPlay",1,&b);assert(CZM_PlayServer());active=false;assert(!CZM_PlayServer());active=true;
+ menu.InitHUDData();assert(!CZM_PlayServer()&&!menu.m_fMenuDisplayed&&!menu.m_bitsValidSlots&&resets==1);
+ MsgFunc_CzmPlay("CzmPlay",0,&b);assert(!CZM_PlayServer());b=99;MsgFunc_CzmPlay("CzmPlay",1,&b);assert(!CZM_PlayServer());
+ b=1;MsgFunc_CzmPlay("CzmPlay",1,&b);assert(CZM_PlayServer());b=0;MsgFunc_CzmPlay("CzmPlay",1,&b);assert(!CZM_PlayServer());
+}
+'''
+  cpp(code)
+  panel=function(online,'static bool CZM_OnOfficialServer(')
+  self.assertIn('CZM_OfficialSlotNow()',panel)
+  self.assertNotIn('CZM_PlayServer',panel)
+ def test_real_join_handler_finishes_entry_and_preserves_round_and_slot_guards(self):
+  source=(ROOT/'server/zm/scripting/czm_play.sma').read_text()
+  bodies=function(source,'join_choice(id, const choice[])').replace('join_choice(id, const choice[])','int join_choice(int id,const char *choice)').replace('new ','int ')
+  bodies+=function(source,'public finish_join(').replace('public finish_join(task)','void finish_join(int task)').replace('new ','int ')
+  cpp(BASE+r'''
+#define PLUGIN_HANDLED 1
+#define CS_TEAM_UNASSIGNED 0
+#define CS_TEAM_T 1
+#define CS_TEAM_CT 2
+#define CS_TEAM_SPECTATOR 3
+#define ZP_TEAM_HUMAN 2
+#define ZP_TEAM_ZOMBIE 1
+#define charsmax(s) (sizeof(s)-1)
+static bool connected=true,alive=false,started=false,special=false,zombie=false,last=false,failTeam=false;
+static int team=0,userid=10,teamCommands=0,classCommands=0,respawns=0,infections=0,opened=0,scheduled=0,clockNow=10;
+static float g_nextJoin[33];static int g_teamChoice[33],g_joinUserid[33],g_joinTeam[33];
+static bool equal(const char*a,const char*b){return !strcmp(a,b);}
+static bool is_user_connected(int){return connected;}static float get_gametime(){return clockNow;}
+static int cs_get_user_team(int){return team;}static int get_user_userid(int){return userid;}
+static bool is_user_alive(int){return alive;}static bool zp_has_round_started(){return started;}
+static bool special_round(){return special;}static bool zp_get_user_zombie(int){return zombie;}
+static bool zp_get_user_last_human(int){return last;}static void zp_infect_user(int){infections++;zombie=true;}
+static void zp_respawn_user(int,int){respawns++;alive=true;}
+static void zp_call(const char*s,int,int){assert(!strcmp(s,"menu_game"));team=CS_TEAM_SPECTATOR;alive=false;}
+static void engclient_cmd(int,const char*s,const char*v){assert(!strcmp(v,"5"));if(!strcmp(s,"jointeam")){teamCommands++;if(!failTeam)team=CS_TEAM_CT;}else{classCommands++;assert(!strcmp(s,"joinclass"));}}
+static void remove_task(int){}static void set_task(float,const char*s,int task){assert(!strcmp(s,"finish_join"));scheduled=task;}
+static void czm_chat(int,const char*,const char*){}static void client_cmd(int,const char*){opened++;}
+'''+bodies+r'''
+int main(){
+ join_choice(1,"auto");assert(team==CS_TEAM_CT&&teamCommands==1&&classCommands==1&&scheduled==7201&&!opened);
+ finish_join(scheduled);assert(alive&&respawns==1&&!opened);
+ clockNow++;join_choice(1,"spectator");assert(team==CS_TEAM_SPECTATOR&&!alive);
+ clockNow++;started=true;join_choice(1,"human");finish_join(scheduled);assert(team==CS_TEAM_CT&&!alive&&respawns==1&&!opened);
+ clockNow++;join_choice(1,"zombie");assert(!alive&&teamCommands==2&&infections==0);
+ alive=true;clockNow++;join_choice(1,"zombie");assert(zombie&&infections==1);
+ zombie=false;special=true;clockNow++;join_choice(1,"zombie");assert(!zombie&&infections==1);
+ special=false;last=true;clockNow++;join_choice(1,"zombie");assert(!zombie&&infections==1);
+ last=false;team=CS_TEAM_UNASSIGNED;alive=false;clockNow++;join_choice(1,"auto");userid++;finish_join(scheduled);assert(!alive&&respawns==1&&!opened);
+ failTeam=true;team=CS_TEAM_UNASSIGNED;clockNow++;join_choice(1,"auto");finish_join(scheduled);assert(opened==1&&!alive);
+ connected=false;clockNow++;join_choice(1,"auto");assert(teamCommands==4&&classCommands==4);
+}
+''')
+ def test_team_card_updates_when_capability_arrives_after_opening(self):
+  source=(ROOT/'czm/menu/CzmServerMenu.cpp').read_text()
+  cpp(BASE+r'''
+typedef int HFont;enum{CZMF_MENU_TITLE,CZMF_PANEL_TEXT,CZMF_UI_META};
+static int CZM_Font(int n){return n;}static int CZM_FontHeight(int){return ScreenHeight*.04f;}
+static int CZM_WrapText(int,const char*,int,int*,int){return 2;}
+static int slot=-1,motd=0;static bool play=false;
+static int CZM_OfficialSlotNow(){return slot;}static bool CZM_PlayServer(){return play;}
+namespace EngFuncs{static void CvarSetString(const char*k,const char*v){assert(!strcmp(k,"czm_motd_off")&&!strcmp(v,"1"));motd++;}}
+class CCzmTeamCard{public:enum{BTN_NONE,BTN_PLAY,BTN_SPECTATE,BTN_T,BTN_AUTO,BTN_CT,BTN_CLOSE,BTN_COUNT};
+ int m_iSlot=-1,m_iPressed=3,W,H,m_iTextY;bool m_bPlay=false,m_bSpectate=true,m_bCancel=false;char m_szText[10]="test";
+ CzmRect m_card,m_map,m_btn[BTN_COUNT];void Layout();};
+'''+function(source,'void CCzmTeamCard::Layout(')+r'''
+int main(){for(auto screen:{std::pair<int,int>(640,360),{1536,716},{2340,1080},{1024,768},{2000,1200}}){
+ ScreenWidth=screen.first;ScreenHeight=screen.second;CCzmTeamCard c;play=false;slot=-1;c.Layout();assert(!c.m_bPlay&&c.m_btn[c.BTN_AUTO].w>0&&!c.m_btn[c.BTN_PLAY].w);
+ play=true;c.Layout();assert(c.m_bPlay&&!c.m_iPressed&&!c.m_btn[c.BTN_AUTO].w);
+ int buttons[]={c.BTN_PLAY,c.BTN_SPECTATE,c.BTN_CT,c.BTN_T};
+ for(int i:buttons){auto a=c.m_btn[i];assert(a.w>0&&a.h>0&&a.x>=0&&a.y>=0&&a.x+a.w<=ScreenWidth&&a.y+a.h<=ScreenHeight);}
+ assert(c.m_btn[c.BTN_PLAY].y==c.m_btn[c.BTN_SPECTATE].y&&c.m_btn[c.BTN_T].y>c.m_btn[c.BTN_PLAY].y);
+ play=false;c.Layout();assert(!c.m_bPlay);slot=0;c.Layout();assert(c.m_bPlay);
+}assert(motd==10);}
 ''')
  def test_unfamiliar_zombie_source_is_rejected(self):
   spec=importlib.util.spec_from_file_location('czm_zp',ROOT/'server/zm/tools/patch_zombie_menus.py');m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)

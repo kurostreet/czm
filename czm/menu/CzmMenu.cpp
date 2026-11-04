@@ -487,6 +487,7 @@ void CZM_Init( void )
 	EngFuncs::CvarRegister( "czm_menu_ui", "1", 0 );
 	EngFuncs::CvarRegister( "czm_progress_ui", "1", 0 );
 	EngFuncs::CvarRegister( "czm_aim_ui", "1", 0 );
+	EngFuncs::CvarRegister( "czm_play_ui", "1", 0 );
 	EngFuncs::CvarRegister( "czm_setup", "0", FCVAR_ARCHIVE );
 	EngFuncs::CvarRegister( "czm_defaults", "0", FCVAR_ARCHIVE );
 	EngFuncs::CvarRegister( "czm_zoom_sens", "1.2", FCVAR_ARCHIVE );

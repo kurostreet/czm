@@ -341,6 +341,7 @@ void CHud :: Init( void )
 	CVAR_CREATE( "czm_player_model", "", 0 ); // actual server-assigned skin for the weapon wheel
 	CVAR_CREATE( "czm_menu", "", 0 );      // serial validslots, then the server menu text
 	CVAR_CREATE( "czm_team_counts", "", 0 ); // terrorists and counter-terrorists, for the team card
+	CVAR_CREATE( "czm_play_mode", "0", 0 ); // server-announced CZM team actions, cleared by InitHUD
 	CVAR_CREATE( "czm_motd_off", "0", 0 );   // the team card of our server has the welcome, the MOTD box goes
 	cl_minmodels = CVAR_CREATE( "cl_minmodels", "0", FCVAR_ARCHIVE );
 	cl_min_t     = CVAR_CREATE( "cl_min_t", "1", FCVAR_ARCHIVE );

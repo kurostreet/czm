@@ -8,13 +8,13 @@
 #include <czm_survival>
 #include <czm_menu>
 
-new g_msgAim, g_zp = -1;
+new g_msgAim, g_msgPlay, g_zp = -1;
 new Trie:g_purchased;
 new g_maxHp[MAX_PLAYERS + 1], g_teamChoice[MAX_PLAYERS + 1];
 new g_joinUserid[MAX_PLAYERS + 1], g_joinTeam[MAX_PLAYERS + 1];
 new g_aimSent[MAX_PLAYERS + 1][3];
 new Float:g_aimHeartbeat[MAX_PLAYERS + 1], Float:g_nextJoin[MAX_PLAYERS + 1];
-new bool:g_aimUi[MAX_PLAYERS + 1];
+new bool:g_aimUi[MAX_PLAYERS + 1], bool:g_playUi[MAX_PLAYERS + 1], bool:g_playSent[MAX_PLAYERS + 1];
 
 public plugin_natives()
 {
@@ -33,6 +33,7 @@ public plugin_init()
     register_clcmd("rebuy", "cmd_weapons");
     register_clcmd("czm_zombie_menu", "cmd_zombie_menu");
     g_msgAim = engfunc(EngFunc_RegUserMsg, "CzmAim", 9);
+    g_msgPlay = engfunc(EngFunc_RegUserMsg, "CzmPlay", 1);
     RegisterHam(Ham_Spawn, "player", "spawn_post", 1);
     register_event("HLTV", "new_round", "a", "1=0", "2=0");
     set_task(0.15, "task_aim", _, _, _, "b");
@@ -43,10 +44,13 @@ public client_putinserver(id)
     g_maxHp[id] = 0;
     g_teamChoice[id] = g_joinUserid[id] = g_joinTeam[id] = 0;
     g_nextJoin[id] = g_aimHeartbeat[id] = 0.0;
-    g_aimUi[id] = false;
+    g_aimUi[id] = g_playUi[id] = g_playSent[id] = false;
     for (new k = 0; k < 3; k++) g_aimSent[id][k] = -1;
     if (!is_user_bot(id) && !is_user_hltv(id))
+    {
         query_client_cvar(id, "czm_aim_ui", "aim_capability");
+        query_client_cvar(id, "czm_play_ui", "play_capability");
+    }
 }
 
 public client_disconnected(id)
@@ -62,6 +66,11 @@ public aim_capability(id, const name[], const value[])
     if (is_user_connected(id)) g_aimUi[id] = str_to_num(value) >= 1;
 }
 
+public play_capability(id, const name[], const value[])
+{
+    if (is_user_connected(id)) g_playUi[id] = str_to_num(value) >= 1;
+}
+
 public czm_capable(id, unused)
 {
     return is_user_connected(id) && g_aimUi[id] && czm_menu_rich(id);
@@ -75,8 +84,32 @@ public czm_weapon_open(id, unused)
 public czm_team_open(id, unused)
 {
     if (!czm_capable(id, 0)) return 0;
+    new command[16], selection[8];
+    read_argv(0, command, charsmax(command));
+    if (equal(command, "jointeam") && read_argc() > 1)
+    {
+        // Existing CZM clients can still display the stock card while the official
+        // address cache is unavailable. A selection is an action, never an open request.
+        read_argv(1, selection, charsmax(selection));
+        if (equal(selection, "1")) return join_choice(id, "zombie");
+        if (equal(selection, "2")) return join_choice(id, "human");
+        if (equal(selection, "5")) return join_choice(id, "auto");
+        if (equal(selection, "6")) return join_choice(id, "spectator");
+        return PLUGIN_HANDLED;
+    }
+    play_state(id);
     client_cmd(id, "showvguimenu 2");
     return 1;
+}
+
+play_state(id)
+{
+    if (!g_playUi[id]) return;
+    // Presentation capability only; this does not grant official-server or panel access.
+    message_begin(MSG_ONE, g_msgPlay, _, id);
+    write_byte(1); // CZM Survival team actions
+    message_end();
+    g_playSent[id] = true;
 }
 
 // The purchase limit survives reconnects during this map, keyed by the CZM profile.
@@ -137,10 +170,15 @@ bool:special_round()
 
 public cmd_join(id)
 {
-    if (!is_user_connected(id) || get_gametime() < g_nextJoin[id]) return PLUGIN_HANDLED;
-    g_nextJoin[id] = get_gametime() + 0.8;
     new choice[16];
     read_argv(1, choice, charsmax(choice));
+    return join_choice(id, choice);
+}
+
+join_choice(id, const choice[])
+{
+    if (!is_user_connected(id) || get_gametime() < g_nextJoin[id]) return PLUGIN_HANDLED;
+    g_nextJoin[id] = get_gametime() + 0.8;
     if (equal(choice, "spectator"))
     {
         // The mod protects the last human/zombie and special rounds itself.
@@ -235,6 +273,7 @@ public task_aim()
     for (new viewer = 1; viewer <= MaxClients; viewer++)
     {
         if (!g_aimUi[viewer] || !is_user_connected(viewer)) continue;
+        if (g_playUi[viewer] && !g_playSent[viewer] && czm_capable(viewer, 0)) play_state(viewer);
         new target, hit, hp, limit;
         if (is_user_alive(viewer)) get_user_aiming(viewer, target, hit, 4096);
         if (1 <= target <= MaxClients && is_user_alive(target) && target != viewer)
