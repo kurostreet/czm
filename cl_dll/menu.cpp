@@ -100,7 +100,23 @@ static void CZM_PlainMenuText( void )
 		const char *stop = end ? end : line + strlen( line );
 		const char *tab = (const char *)memchr( line, '\t', stop - line );
 
-		if( *line != '#' )
+		if( !strncmp( line, "#body\t", 6 ))
+		{
+			const char *p = line + 6;
+			while( p < stop && n < sizeof( plain ) - 2 ) plain[n++] = *p++;
+			if( n < sizeof( plain ) - 1 ) plain[n++] = '\n';
+		}
+		else if( !strncmp( line, "#page\t", 6 ))
+		{
+			const char *p = (const char *)memchr( line + 6, '\t', stop - line - 6 );
+			if( p )
+			{
+				p++;
+				while( p < stop && *p != '\t' && n < sizeof( plain ) - 2 ) plain[n++] = *p++;
+				if( n < sizeof( plain ) - 1 ) plain[n++] = '\n';
+			}
+		}
+		else if( *line != '#' )
 		{
 			const char *cut = tab ? tab : stop;
 			while( line < cut && n < sizeof( plain ) - 2 )

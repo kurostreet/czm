@@ -50,3 +50,17 @@ forward czm_menu_build(id, const section[]);
 
 // Whether the player's game draws the window (the CZM game); the others get the text menu.
 native bool:czm_menu_rich(id);
+
+// An in-game article, result or form. Commands are fixed server handlers; @friends
+// and @account open the corresponding CZM views. Text may contain newlines.
+// Returns a stamp; async replies must still match czm_menu_stamp(id).
+native czm_menu_page(id, const title[], const text[], const parent[] = "main", const command[] = "", const hint[] = "", const prefill[] = "");
+native czm_menu_stamp(id);
+
+stock czm_menu_feedback(id, const parent[], const ru_title[], const en_title[], const ru[], const en[], any:...)
+{
+	new title[96], text[1024];
+	czm_text(id, title, charsmax(title), ru_title, en_title);
+	vformat(text, charsmax(text), czm_lang(id) == CZM_EN ? en : ru, 7);
+	return czm_menu_page(id, title, text, parent);
+}

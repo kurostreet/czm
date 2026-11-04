@@ -23,7 +23,10 @@ GNU General Public License for more details.
 #include "Utils.h"
 #include "keydefs.h"
 #include "CzmMenu.h"
+#include "CzmJson.h"
+#include "CzmDesign.h"
 #include "../../common/czm_weapon_menu.h"
+#include "../../common/czm_server_view.h"
 
 #define UI_DIR "gfx/czm/ui/"
 #define MAX_CARDS 10
@@ -296,6 +299,8 @@ struct CzmRichMenu
 	int numTabs;
 	CzmMenuCard cards[SM_MAX_CARDS];
 	int numCards;
+	CzmServerView::Kind kind;
+	char pageTitle[96], body[2048], command[24], hint[160], prefill[724];
 };
 
 static bool IsRichMenu( const char *value )
@@ -417,6 +422,23 @@ static void ParseRich( const char *value, CzmRichMenu &m )
 				Q_strncpy( t.badge, part[3] ? part[3] : "", sizeof( t.badge ));
 			}
 		}
+		else if( !strncmp( line, "#page\t", 6 ))
+		{
+			const char *p = line + 6; char kind[16];
+			NextField( p, end, kind, sizeof( kind ));
+			NextField( p, end, m.pageTitle, sizeof( m.pageTitle ));
+			NextField( p, end, m.command, sizeof( m.command ));
+			NextField( p, end, m.hint, sizeof( m.hint ));
+			NextField( p, end, m.prefill, sizeof( m.prefill ));
+			m.kind = CzmServerView::ParseKind( kind, m.command );
+			Q_strncpy( m.parent, m.tab, sizeof( m.parent ));
+		}
+		else if( !strncmp( line, "#body\t", 6 ))
+		{
+			char part[2048]; TrimCopy( part, sizeof( part ), line + 6, end );
+			size_t used = strlen( m.body );
+			snprintf( m.body + used, sizeof( m.body ) - used, "%s\n", part );
+		}
 		else if( *line != '#' )
 		{
 			char visible[512], right[48], color;
@@ -457,6 +479,9 @@ static void PlainAsRich( const char *value, const CzmRichMenu *previous, CzmRich
 	Q_strncpy( m.parent, previous && previous->tab[0] ? previous->tab : previous && previous->parent[0] ? previous->parent : "", sizeof( m.parent ));
 	Q_strncpy( m.root, previous && previous->root[0] ? previous->root : previous && previous->tab[0] ? previous->tab : "", sizeof( m.root ));
 	m.tab[0] = 0;
+	m.kind = CzmServerView::Cards;
+	m.pageTitle[0] = m.body[0] = m.command[0] = m.hint[0] = 0;
+	m.prefill[0] = 0;
 	const bool zombie = strstr( s_menu.title, "Zombie Plague" ) != NULL;
 	Q_strncpy( m.head, zombie ? ( CZM_IsRussian() ? "МЕНЮ ЗОМБИ" : "ZOMBIE MENU" ) : s_menu.title, sizeof( m.head ));
 	Q_strncpy( m.sub, zombie ? "Zombie Plague" : "", sizeof( m.sub ));
@@ -506,6 +531,8 @@ public:
 	void Draw() override;
 	bool KeyDown( int key ) override;
 	bool KeyUp( int key ) override;
+	bool MouseMove( int x, int y ) override;
+	void Char( int key ) override;
 
 private:
 	enum
@@ -515,6 +542,11 @@ private:
 		HIT_BACK,
 		HIT_TABS_UP,
 		HIT_TABS_DOWN,
+		HIT_FIELD,
+		HIT_SUBMIT,
+		HIT_PREV,
+		HIT_NEXT,
+		HIT_REFRESH,
 		HIT_TAB = 10,    // + tab
 		HIT_CARD = 100,  // + card, separate from all 32 possible tabs
 	};
@@ -527,6 +559,13 @@ private:
 	void DrawTabs( int a );
 	void DrawCards( int a );
 	void DrawFooter( int a );
+	void DrawPage( int a );
+	void EndInput();
+	void Submit();
+	void FriendsFrame();
+	void FetchFriends( int offset );
+	void InviteFriend( int index );
+	void ResetPage();
 
 	CzmRichMenu m_menu;
 	char m_szTab[16];        // the tab asked for, lit before the server answers
@@ -535,9 +574,17 @@ private:
 	int m_iOpenTime, m_iChangeTime, m_iPickTime;
 	int m_iTabFirst, m_iTabRows;
 	bool m_bClosing;
+	bool m_typing, m_drag, m_moved, m_friendsLoaded, m_formPending;
+	int m_formTime;
+	int m_scroll, m_downY, m_downScroll, m_scrollMax;
+	char m_input[768], m_notice[192], m_requestNonce[80];
+	int m_request, m_requestKind, m_requestIdentity, m_friendOffset, m_nextOffset, m_friendPage, m_friendCount, m_sentFriend, m_successFriend;
+	struct Friend { int id; bool online; char nick[100]; } m_friends[40];
+	CUtlVector<int> m_abandoned;
 
 	int W, H;
 	CzmRect m_win, m_head, m_side, m_body, m_foot, m_close, m_back, m_tabsUp, m_tabsDown;
+	CzmRect m_content, m_field, m_submit, m_prev, m_next, m_refresh, m_friendRows[6];
 };
 
 static int s_iClosedSerial = -1;
@@ -552,12 +599,21 @@ CCzmServerWindow::CCzmServerWindow() : BaseClass( "CzmServerWindow" )
 	m_iTabFirst = 0;
 	m_iTabRows = 10;
 	m_bClosing = false;
+	m_typing = m_drag = m_moved = false;
+	m_friendsLoaded = m_formPending = false; m_formTime = 0;
+	m_scroll = m_downY = m_downScroll = m_scrollMax = 0;
+	m_request = m_requestKind = m_friendOffset = m_friendPage = m_friendCount = m_sentFriend = 0;
+	m_requestIdentity = -1; m_nextOffset = -1;
+	m_successFriend = 0;
+	m_input[0] = m_notice[0] = m_requestNonce[0] = 0;
 	W = H = 0;
 }
 
 void CCzmServerWindow::Open( const CzmRichMenu &menu )
 {
+	ResetPage();
 	m_menu = menu;
+	if( menu.kind == CzmServerView::Form ) for( const unsigned char *p = (const unsigned char *)menu.prefill; *p; ++p ) CzmServerView::Append( m_input, sizeof( m_input ), *p );
 	Q_strncpy( m_szTab, menu.root[0] ? menu.root : menu.tab, sizeof( m_szTab ));
 	m_iTabFirst = 0;
 	m_iPressed = HIT_NONE;
@@ -571,8 +627,10 @@ void CCzmServerWindow::Open( const CzmRichMenu &menu )
 void CCzmServerWindow::Update( const CzmRichMenu &menu )
 {
 	bool sameTab = !strcmp( menu.tab, m_menu.tab );
+	ResetPage();
 
 	m_menu = menu;
+	if( menu.kind == CzmServerView::Form ) for( const unsigned char *p = (const unsigned char *)menu.prefill; *p; ++p ) CzmServerView::Append( m_input, sizeof( m_input ), *p );
 	Q_strncpy( m_szTab, menu.root[0] ? menu.root : menu.tab, sizeof( m_szTab ));
 	for( int i = 0; i < menu.numTabs; i++ )
 		if( !strcmp( menu.tabs[i].key, m_szTab ) && ( i < m_iTabFirst || i >= m_iTabFirst + m_iTabRows ))
@@ -591,7 +649,7 @@ void CCzmServerWindow::Close( bool exitMenu )
 	if( exitMenu )
 	{
 		s_iClosedSerial = m_menu.serial;
-		EngFuncs::ClientCmd( false, "slot10\n" );
+		EngFuncs::ClientCmd( false, "slot10\nczm_menu_close\n" );
 	}
 	Hide();
 }
@@ -609,93 +667,111 @@ void CCzmServerWindow::Hide()
 	if( m_bClosing )
 		return;
 	m_bClosing = true;
+	EndInput();
+	if( m_request ) { m_abandoned.AddToTail( m_request ); m_request = 0; }
 	CZM_CloseClientMenuSoon( this );
 }
 
 void CCzmServerWindow::Layout( int shift )
 {
-	W = ScreenWidth;
-	H = ScreenHeight;
-
-	int winW = Q_min( (int)( W * 0.60f ), (int)( H * 1.30f ));
-	int winH = H * 0.86f;
-	int headH = H * 0.12f, footH = H * 0.056f;
-	int sideW = m_menu.numTabs ? winW * 0.20f : 0;
-
-	m_win = CZM_Rect( W * 0.02f + shift, ( H - winH ) / 2, winW, winH );
-	m_head = CZM_Rect( m_win.x, m_win.y, m_win.w, headH );
-	m_foot = CZM_Rect( m_win.x, m_win.y + m_win.h - footH, m_win.w, footH );
-	m_side = CZM_Rect( m_win.x, m_win.y + headH, sideW, m_win.h - headH - footH );
-	m_body = CZM_Rect( m_win.x + sideW, m_win.y + headH, m_win.w - sideW, m_win.h - headH - footH );
-
-	int closeS = headH * 0.48f;
-	m_close = CZM_Rect( m_head.x + m_head.w - closeS - H * 0.025f, m_head.y + ( headH - closeS ) / 2, closeS, closeS );
-
-	int pad = H * 0.016f, tabH = H * 0.064f, tabGap = H * 0.008f;
-	int tabTop = m_side.y + pad;
-	m_tabsUp = m_tabsDown = CZM_Rect( 0, 0, 0, 0 );
-	if( m_menu.numTabs > 10 )
-	{
-		int scrollH = H * 0.036f;
-		m_iTabRows = Q_max( 1, ( m_side.h - pad * 2 - scrollH * 2 - tabGap * 2 ) / ( tabH + tabGap ));
-		m_iTabFirst = bound( 0, m_iTabFirst, Q_max( 0, m_menu.numTabs - m_iTabRows ));
-		m_tabsUp = CZM_Rect( m_side.x + pad, tabTop, m_side.w - pad * 2, scrollH );
-		m_tabsDown = CZM_Rect( m_side.x + pad, m_side.y + m_side.h - pad - scrollH, m_side.w - pad * 2, scrollH );
-		tabTop += scrollH + tabGap;
-	}
-	else
-	{
-		m_iTabFirst = 0;
-		m_iTabRows = m_menu.numTabs;
-		if( m_menu.numTabs )
-			tabH = Q_min( tabH, ( m_side.h - pad * 2 - tabGap * ( m_menu.numTabs - 1 )) / m_menu.numTabs );
-	}
-	for( int i = 0; i < m_menu.numTabs; i++ )
-		m_menu.tabs[i].rect = i >= m_iTabFirst && i < m_iTabFirst + m_iTabRows
-			? CZM_Rect( m_side.x + pad, tabTop + ( i - m_iTabFirst ) * ( tabH + tabGap ), m_side.w - pad * 2, tabH )
-			: CZM_Rect( 0, 0, 0, 0 );
-
-	// two columns, the first filled first, five rows at most like the server sends nine cards
-	int cpad = H * 0.02f, gap = H * 0.015f;
-	int cardW = ( m_body.w - cpad * 2 - gap ) / 2;
-	int navigation = m_menu.parent[0] ? H * 0.066f : 0;
-	m_back = navigation ? CZM_Rect( m_body.x + cpad, m_body.y + cpad, H * 0.24f, H * 0.05f ) : CZM_Rect( 0, 0, 0, 0 );
-	int cardH = Q_min( (int)( H * 0.10f ), ( m_body.h - navigation - cpad * 2 - gap * 4 ) / 5 );
-	int perColumn = Q_max( 1, ( m_menu.numCards + 1 ) / 2 );
-	for( int i = 0; i < m_menu.numCards; i++ )
-	{
-		int col = i / perColumn, row = i % perColumn;
-		m_menu.cards[i].rect = CZM_Rect( m_body.x + cpad + col * ( cardW + gap ), m_body.y + cpad + navigation + row * ( cardH + gap ), cardW, cardH );
-	}
+ W=ScreenWidth;H=ScreenHeight;
+ const int winW=Q_min((int)(W*.90f),(int)(H*1.80f)),winH=H*.88f;
+ const int headH=H*.135f,footH=H*.075f,sideW=m_menu.numTabs?winW*.225f:0;
+ m_win=CZM_Rect((W-winW)/2+shift,(H-winH)/2,winW,winH);
+ m_head=CZM_Rect(m_win.x,m_win.y,winW,headH);
+ m_foot=CZM_Rect(m_win.x,m_win.y+winH-footH,winW,footH);
+ m_side=CZM_Rect(m_win.x,m_win.y+headH,sideW,winH-headH-footH);
+ m_body=CZM_Rect(m_side.x+sideW,m_side.y,winW-sideW,m_side.h);
+ int closeS=H*.055f;
+ m_close=CZM_Rect(m_head.x+winW-closeS-H*.025f,m_head.y+(headH-closeS)/2,closeS,closeS);
+ const int pad=H*.018f,tabGap=Q_max(2,(int)(H*.009f));
+ int tabH=H*.070f,tabTop=m_side.y+pad;
+ m_tabsUp=m_tabsDown=CZM_Rect(0,0,0,0);
+ const int capacity=Q_max(1,(m_side.h-pad*2)/(tabH+tabGap));
+ if(m_menu.numTabs>capacity){
+  int scrollH=H*.036f;
+  m_iTabRows=Q_max(1,(m_side.h-pad*2-scrollH*2-tabGap*2)/(tabH+tabGap));
+  m_iTabFirst=bound(0,m_iTabFirst,Q_max(0,m_menu.numTabs-m_iTabRows));
+  m_tabsUp=CZM_Rect(m_side.x+pad,tabTop,m_side.w-pad*2,scrollH);
+  m_tabsDown=CZM_Rect(m_side.x+pad,m_side.y+m_side.h-pad-scrollH,m_side.w-pad*2,scrollH);
+  tabTop+=scrollH+tabGap;
+ }else{m_iTabFirst=0;m_iTabRows=m_menu.numTabs;}
+ for(int i=0;i<m_menu.numTabs;i++)m_menu.tabs[i].rect=i>=m_iTabFirst&&i<m_iTabFirst+m_iTabRows?
+  CZM_Rect(m_side.x+pad,tabTop+(i-m_iTabFirst)*(tabH+tabGap),sideW-pad*2,tabH):CZM_Rect(0,0,0,0);
+ const int cpad=H*.025f,gap=H*.014f,navigation=m_menu.parent[0]?H*.065f:0;
+ m_back=navigation?CZM_Rect(m_body.x+cpad,m_body.y+cpad,H*.21f,H*.045f):CZM_Rect(0,0,0,0);
+ int columns=m_body.w>=H*.88f?2:1,rows=Q_max(1,(m_menu.numCards+columns-1)/columns);
+ int cardW=(m_body.w-cpad*2-gap*(columns-1))/columns;
+ int cardH=Q_min((int)(H*.125f),(m_body.h-navigation-cpad*2-gap*(rows-1))/rows);
+ for(int i=0;i<m_menu.numCards;i++)m_menu.cards[i].rect=CZM_Rect(m_body.x+cpad+(i%columns)*(cardW+gap),m_body.y+cpad+navigation+(i/columns)*(cardH+gap),cardW,cardH);
+ m_content=CZM_Rect(m_body.x+cpad,m_body.y+cpad+navigation,m_body.w-cpad*2,m_body.h-cpad*2-navigation);
+ m_field=m_submit=m_prev=m_next=m_refresh=CZM_Rect(0,0,0,0);
+ for(int i=0;i<6;i++)m_friendRows[i]=CZM_Rect(0,0,0,0);
+ if(m_menu.kind!=CzmServerView::Cards){
+  const int titleH=H*.067f,bottom=H*.067f;
+  m_content.y+=titleH;m_content.h-=titleH;
+  if(m_menu.kind==CzmServerView::Form){
+   int fieldH=H*.125f;
+   m_submit=CZM_Rect(m_content.x+m_content.w-H*.26f,m_body.y+m_body.h-cpad-bottom,H*.26f,bottom);
+   m_field=CZM_Rect(m_content.x,m_submit.y-fieldH-gap,m_content.w,fieldH);
+   m_content.h=Q_max(H/18,m_field.y-gap-m_content.y);
+  }else if(m_menu.kind==CzmServerView::Account||m_menu.kind==CzmServerView::Friends){
+   int by=m_body.y+m_body.h-cpad-bottom;
+   m_submit=CZM_Rect(m_content.x,by,Q_min((int)(H*.40f),m_content.w),bottom);
+   if(m_menu.kind==CzmServerView::Friends){
+    int bW=H*.14f;
+    m_prev=CZM_Rect(m_content.x+m_content.w-bW*2-gap,by,bW,bottom);
+    m_next=CZM_Rect(m_content.x+m_content.w-bW,by,bW,bottom);
+    m_refresh=CZM_Rect(m_content.x,by,H*.27f,bottom);
+    int rowH=Q_min((int)(H*.075f),(by-gap-m_content.y-gap*5)/6);
+    for(int i=0;i<6;i++)m_friendRows[i]=CZM_Rect(m_content.x,m_content.y+i*(rowH+gap),m_content.w,rowH);
+   }
+   m_content.h=Q_max(1,by-gap-m_content.y);
+  }
+ }
 }
 
 int CCzmServerWindow::HitTest( void ) const
 {
-	int x = uiStatic.cursorX, y = uiStatic.cursorY;
-
-	if( m_close.Grown( H * 0.02f ).Contains( x, y ))
-		return HIT_CLOSE;
-	if( m_back.w && m_back.Contains( x, y ))
-		return HIT_BACK;
-	if( m_tabsUp.w && m_tabsUp.Contains( x, y ))
-		return HIT_TABS_UP;
-	if( m_tabsDown.w && m_tabsDown.Contains( x, y ))
-		return HIT_TABS_DOWN;
-	for( int i = 0; i < m_menu.numTabs; i++ )
-	{
-		if( m_menu.tabs[i].rect.w > 0 && m_menu.tabs[i].rect.Contains( x, y ))
-			return HIT_TAB + i;
-	}
-	for( int i = 0; i < m_menu.numCards; i++ )
-	{
-		if( m_menu.cards[i].rect.Contains( x, y ))
-			return HIT_CARD + i;
-	}
-	return HIT_NONE;
+ int x=uiStatic.cursorX,y=uiStatic.cursorY;
+ if(m_close.Grown(H*.012f).Contains(x,y))return HIT_CLOSE;
+ if(m_back.w&&m_back.Contains(x,y))return HIT_BACK;
+ if(m_tabsUp.w&&m_tabsUp.Contains(x,y))return HIT_TABS_UP;
+ if(m_tabsDown.w&&m_tabsDown.Contains(x,y))return HIT_TABS_DOWN;
+ for(int i=0;i<m_menu.numTabs;i++)if(m_menu.tabs[i].rect.w&&m_menu.tabs[i].rect.Contains(x,y))return HIT_TAB+i;
+ if(m_menu.kind==CzmServerView::Form){if(m_field.Contains(x,y))return HIT_FIELD;if(m_submit.Contains(x,y))return HIT_SUBMIT;}
+ else if(m_menu.kind==CzmServerView::Account){if(m_submit.Contains(x,y))return HIT_SUBMIT;}
+ else if(m_menu.kind==CzmServerView::Friends){
+  if(!CZM_OnlineAccount())return m_submit.Contains(x,y)?HIT_SUBMIT:HIT_NONE;
+  if(m_prev.Contains(x,y))return HIT_PREV;if(m_next.Contains(x,y))return HIT_NEXT;if(m_refresh.Contains(x,y))return HIT_REFRESH;
+  for(int i=0;m_friendPage>=0&&i<6&&m_friendPage*6+i<m_friendCount;i++)if(m_friendRows[i].Contains(x,y))return 200+i;
+ }else if(m_menu.kind==CzmServerView::Cards)for(int i=0;i<m_menu.numCards;i++)if(m_menu.cards[i].rect.Contains(x,y))return HIT_CARD+i;
+ return HIT_NONE;
 }
 
 void CCzmServerWindow::Activate( int hit )
 {
+	if( hit == HIT_FIELD && m_menu.kind == CzmServerView::Form )
+	{
+		m_typing = true;
+		EngFuncs::SetTextInputRect( m_field.x, m_field.y, m_field.w, m_field.h );
+		UI_EnableTextInput( true );
+		return;
+	}
+	if( hit == HIT_SUBMIT ) { Submit(); return; }
+	if( hit == HIT_REFRESH ) { FetchFriends( m_friendOffset ); return; }
+	if( hit == HIT_PREV || hit == HIT_NEXT )
+	{
+		if( m_request ) return;
+		if( hit == HIT_PREV )
+		{
+			if( m_friendPage > 0 ) m_friendPage--;
+			else if( m_friendOffset > 0 ) FetchFriends( Q_max( 0, m_friendOffset - 40 ));
+		}
+		else if( ( m_friendPage + 1 ) * 6 < m_friendCount ) m_friendPage++;
+		else if( m_nextOffset >= 0 ) FetchFriends( m_nextOffset );
+		return;
+	}
 	if( hit == HIT_CLOSE )
 	{
 		CZM_PlayClick();
@@ -731,16 +807,27 @@ void CCzmServerWindow::Activate( int hit )
 		const CzmMenuCard &c = m_menu.cards[hit - HIT_CARD];
 
 		if( !c.enabled )
+		{
+			Q_strncpy( m_notice, c.sub, sizeof( m_notice ));
 			return;
+		}
 		CZM_PlayClick();
 		m_iPicked = hit - HIT_CARD;
 		m_iPickTime = uiStatic.realTime;
 		EngFuncs::ClientCmdF( false, "slot%d\n", c.key );
 	}
+	else if( hit >= 200 && hit < 206 && m_menu.kind == CzmServerView::Friends )
+		InviteFriend( m_friendPage * 6 + hit - 200 );
 }
 
 bool CCzmServerWindow::KeyDown( int key )
 {
+	if( m_typing )
+	{
+		if( UI::Key::IsEscape( key ) || UI::Key::IsEnter( key )) { EndInput(); return true; }
+		if( UI::Key::IsBackspace( key )) { CzmServerView::Backspace( m_input ); return true; }
+		if( !UI::Key::IsLeftMouse( key )) return true;
+	}
 	if( UI::Key::IsEscape( key ))
 	{
 		if( m_menu.parent[0] ) Activate( HIT_BACK );
@@ -749,7 +836,9 @@ bool CCzmServerWindow::KeyDown( int key )
 	}
 	if( key == K_MWHEELUP || key == K_MWHEELDOWN )
 	{
-		Activate( key == K_MWHEELUP ? HIT_TABS_UP : HIT_TABS_DOWN );
+		if( m_menu.kind == CzmServerView::Text || m_menu.kind == CzmServerView::Form || m_menu.kind == CzmServerView::Account )
+			m_scroll = bound( 0, m_scroll + ( key == K_MWHEELUP ? -1 : 1 ) * Q_max( 1, H / 14 ), m_scrollMax );
+		else Activate( key == K_MWHEELUP ? HIT_TABS_UP : HIT_TABS_DOWN );
 		return true;
 	}
 
@@ -757,11 +846,14 @@ bool CCzmServerWindow::KeyDown( int key )
 	{
 		Layout( 0 );
 		m_iPressed = HitTest();
+		m_drag = m_menu.kind != CzmServerView::Cards && m_content.Contains( uiStatic.cursorX, uiStatic.cursorY );
+		m_moved = false; m_downY = uiStatic.cursorY; m_downScroll = m_scroll;
+		if( m_typing && m_iPressed != HIT_FIELD && m_iPressed != HIT_SUBMIT ) EndInput();
 		return true;
 	}
 
 	// the keys of a keyboard still pick, like the text menu
-	if( key >= '1' && key <= '9' )
+	if( key >= '1' && key <= '9' && m_menu.kind == CzmServerView::Cards )
 	{
 		for( int i = 0; i < m_menu.numCards; i++ )
 		{
@@ -784,230 +876,309 @@ bool CCzmServerWindow::KeyUp( int key )
 		Layout( 0 );
 		hit = HitTest();
 		m_iPressed = HIT_NONE;
-		if( hit == pressed && hit != HIT_NONE )
+		m_drag = false;
+		if( !m_moved && hit == pressed && hit != HIT_NONE )
 			Activate( hit );
 	}
 	return true;
 }
 
+bool CCzmServerWindow::MouseMove( int x, int y )
+{
+	BaseClass::MouseMove( x, y );
+	if( m_drag )
+	{
+		int delta = uiStatic.cursorY - m_downY;
+		if( abs( delta ) > H / 60 ) m_moved = true;
+		if( m_moved ) m_scroll = bound( 0, m_downScroll - delta, m_scrollMax );
+	}
+	return true;
+}
+
+void CCzmServerWindow::Char( int key )
+{
+	if( m_typing ) CzmServerView::Append( m_input, sizeof( m_input ), key );
+}
+
+void CCzmServerWindow::EndInput()
+{
+	if( m_typing ) UI_EnableTextInput( false );
+	m_typing = false;
+}
+
+void CCzmServerWindow::ResetPage()
+{
+	EndInput();
+	if( m_request ) m_abandoned.AddToTail( m_request );
+	m_request = m_requestKind = m_friendCount = m_friendOffset = m_friendPage = m_successFriend = 0;
+	m_nextOffset = -1; m_scroll = m_scrollMax = 0;
+	m_friendsLoaded = m_formPending = false;
+	m_input[0] = m_notice[0] = m_requestNonce[0] = 0;
+	m_requestIdentity = CZM_OnlineIdentity();
+}
+
+void CCzmServerWindow::Submit()
+{
+	if( m_menu.kind == CzmServerView::Account || ( m_menu.kind == CzmServerView::Friends && !CZM_OnlineAccount() ))
+	{
+		EndInput(); CZM_AccountShow( CZM_OnlineKey(), EngFuncs::GetCvarString( "name" )); return;
+	}
+	if( m_menu.kind != CzmServerView::Form || !CzmServerView::FormCommand( m_menu.command )) return;
+	if( m_formPending ) return;
+	char *begin = m_input;
+	while( *begin == ' ' ) ++begin;
+	if( begin != m_input ) memmove( m_input, begin, strlen( begin ) + 1 );
+	size_t length = strlen( m_input );
+	while( length && m_input[length - 1] == ' ' ) m_input[--length] = 0;
+	if( CzmServerView::Characters( m_input ) < 3 )
+	{
+		Q_strncpy( m_notice, CZM_IsRussian() ? "Введите хотя бы 3 символа" : "Enter at least 3 characters", sizeof( m_notice )); return;
+	}
+	EndInput();
+	m_formPending = true; m_formTime = uiStatic.realTime;
+	EngFuncs::ClientCmdF( false, "%s \"%s\"\n", m_menu.command, m_input );
+	Q_strncpy( m_notice, CZM_IsRussian() ? "Отправляем…" : "Sending…", sizeof( m_notice ));
+	// A server reply replaces this form. A failed send keeps the text available for retry.
+}
+
+void CCzmServerWindow::FetchFriends( int offset )
+{
+	if( m_request || !CZM_OnlineReady() || !CZM_OnlineAccount() ) return;
+	m_friendPage = offset < m_friendOffset ? -1 : 0;
+	m_friendOffset = Q_max( 0, offset ); m_friendCount = 0; m_nextOffset = -1;
+	m_friendsLoaded = false;
+	char path[128]; snprintf( path, sizeof( path ), "/api/v1/social/people/friends?offset=%d", m_friendOffset );
+	m_requestIdentity = CZM_OnlineIdentity(); m_requestKind = 1;
+	m_request = CZM_NetRequest( "GET", CZM_OnlineUrl( path ), CZM_OnlineKey(), "" );
+	Q_strncpy( m_notice, CZM_IsRussian() ? "Загружаем друзей…" : "Loading friends…", sizeof( m_notice ));
+	if( !m_request ) Q_strncpy( m_notice, CZM_IsRussian() ? "Нет связи. Нажмите обновить" : "Connection failed. Refresh the list", sizeof( m_notice ));
+}
+
+void CCzmServerWindow::FriendsFrame()
+{
+	int status; CUtlString body;
+	for( int i = m_abandoned.Count() - 1; i >= 0; --i )
+		if( CZM_NetPoll( m_abandoned[i], &status, body )) m_abandoned.Remove( i );
+	if( m_menu.kind != CzmServerView::Friends ) return;
+	if( m_requestIdentity != CZM_OnlineIdentity() )
+	{
+		ResetPage();
+		Q_strncpy( m_notice, CZM_IsRussian() ? "Профиль изменился. Обновите список" : "Profile changed. Refresh the list", sizeof( m_notice ));
+		return;
+	}
+	if( m_request && CZM_NetPoll( m_request, &status, body ))
+	{
+		m_request = 0; CzmJson j; bool parsed = j.Parse( body.Get() );
+		if( status == 200 && parsed )
+		{
+			if( m_requestKind == 1 )
+			{
+				m_friendsLoaded = true;
+				int list = j.Get( 0, "people" ); m_friendCount = Q_min( 40, j.Count( list ));
+				for( int i = 0; i < m_friendCount; i++ )
+				{
+					int item = j.At( list, i ); auto &f = m_friends[i];
+					f.id = j.Int( j.Get( item, "id" )); f.online = j.Bool( j.Get( item, "online" ));
+					Q_strncpy( f.nick, j.String( j.Get( item, "nick" )), sizeof( f.nick ));
+				}
+				if( m_friendPage < 0 ) m_friendPage = Q_max( 0, ( m_friendCount - 1 ) / 6 );
+				m_nextOffset = j.Int( j.Get( 0, "next" ), -1 ); m_notice[0] = 0;
+			}
+			else
+			{
+				m_successFriend = m_sentFriend;
+				Q_strncpy( m_notice, CZM_IsRussian() ? "Приглашение отправлено другу" : "Invitation sent to your friend", sizeof( m_notice ));
+			}
+		}
+		else Q_strncpy( m_notice, status == 403 ? ( CZM_IsRussian() ? "Приглашение недоступно. Проверьте дружбу и ограничения профиля" : "Invite unavailable. Check friendship and profile restrictions" ) : ( CZM_IsRussian() ? "Нет связи. Нажмите обновить или повторите отправку" : "Connection failed. Refresh or retry" ), sizeof( m_notice ));
+	}
+	if( !m_request && !m_friendsLoaded && !m_notice[0] ) FetchFriends( m_friendOffset );
+}
+
+void CCzmServerWindow::InviteFriend( int index )
+{
+	if( m_request || index < 0 || index >= m_friendCount || m_friends[index].id <= 0 || m_friends[index].id == m_successFriend ) return;
+	const char *address = EngFuncs::GetCvarString( "czm_connect_adr" );
+	if( !CL_IsActive() || !address || !address[0] || CZM_ServerBlocked( address ))
+	{
+		Q_strncpy( m_notice, CZM_IsRussian() ? "Приглашение на этот сервер недоступно" : "Cannot invite to this server", sizeof( m_notice )); return;
+	}
+	if( m_sentFriend != m_friends[index].id || !m_requestNonce[0] ) CZM_NetNewKey( m_requestNonce, sizeof( m_requestNonce ));
+	m_sentFriend = m_friends[index].id;
+	CUtlString body; body.Append( "{\"server\":" ); CZM_JsonQuote( body, address );
+	body.Append( ",\"proto\":\"gs\",\"name\":" ); CZM_JsonQuote( body, EngFuncs::GetCvarString( "czm_connect_name" ));
+	body.Append( ",\"nonce\":" ); CZM_JsonQuote( body, m_requestNonce ); body.Append( "}" );
+	char path[100]; snprintf( path, sizeof( path ), "/api/v1/social/invite/%d", m_sentFriend );
+	m_requestKind = 2; m_requestIdentity = CZM_OnlineIdentity();
+	m_request = CZM_NetRequest( "POST", CZM_OnlineUrl( path ), CZM_OnlineKey(), body.Get() );
+	Q_strncpy( m_notice, CZM_IsRussian() ? "Отправляем приглашение…" : "Sending invitation…", sizeof( m_notice ));
+	if( !m_request ) Q_strncpy( m_notice, CZM_IsRussian() ? "Нет связи. Повторите отправку" : "Connection failed. Retry sending", sizeof( m_notice ));
+}
+
 void CCzmServerWindow::DrawHeader( int a )
 {
-	const CzmRect &h = m_head;
-	HFont titleFont = CZM_Font( CZMF_MENU_TITLE ), subFont = CZM_Font( CZMF_UI_META ), chipFont = CZM_Font( CZMF_SMALL );
-	int tile = h.h * 0.64f, tx = h.x + H * 0.025f, ty = h.y + ( h.h - tile ) / 2;
-	const char *icon = UI_DIR "icon_star.png";
-
-	for( int i = 0; i < m_menu.numTabs; i++ )
-	{
-		if( !strcmp( m_menu.tabs[i].key, m_szTab ))
-			icon = MenuIcon( m_menu.tabs[i].icon );
-	}
-
-	// a red light in the corner, the lit tile with the icon of the open tab
-	CZM_DrawImage( UI_DIR "glow.png", h.x - h.h * 0.6f, h.y - h.h * 0.9f, h.h * 3.2f, h.h * 2.4f, PackRGBA( 229, 63, 77, a * 60 / 255 ));
-	CZM_DrawImage( UI_DIR "glow.png", tx - tile * 0.4f, ty - tile * 0.4f, tile * 1.8f, tile * 1.8f, PackRGBA( 229, 63, 77, a * 90 / 255 ));
-	CZM_DrawSliced( UI_DIR "smenu_tile.png", tx, ty, tile, tile, 30, tile * 0.24f, PackRGBA( 240, 80, 92, a ));
-	CZM_DrawSliced( UI_DIR "smenu_tile.png", tx, ty, tile, tile, 30, tile * 0.24f, PackRGBA( 229, 63, 77, a ));
-	CZM_DrawSliced( UI_DIR "smenu_ring.png", tx, ty, tile, tile, 30, tile * 0.24f, PackRGBA( 255, 140, 150, a * 160 / 255 ));
-	CZM_DrawImage( icon, tx + tile * 0.24f, ty + tile * 0.24f, tile * 0.52f, tile * 0.52f, CZM_White( a ));
-
-	// the title in two colours: the last word red ("МЕНЮ СЕРВЕРА")
-	int textX = tx + tile + H * 0.022f;
-	int chipW = 0, chipH = h.h * 0.42f;
-	if( m_menu.chip[0] )
-		chipW = CZM_TextWidth( chipFont, m_menu.chip ) + chipH * 1.4f;
-	int textW = m_close.x - textX - chipW - H * 0.05f;
-	int titleY = h.y + h.h * 0.17f;
-	const char *space = strrchr( m_menu.head, ' ' );
-	if( space && space > m_menu.head )
-	{
-		char first[64];
-		TrimCopy( first, sizeof( first ), m_menu.head, space + 1 );
-		int fw = CZM_TextWidth( titleFont, first ) + CZM_TextWidth( titleFont, " " );
-		CZM_DrawText( titleFont, textX, titleY, textW, first, CZM_White( a ));
-		CZM_DrawText( titleFont, textX + fw, titleY, textW - fw, space + 1, PackRGBA( 229, 63, 77, a ));
-	}
-	else
-		CZM_DrawText( titleFont, textX, titleY, textW, m_menu.head, CZM_White( a ));
-	CZM_DrawText( subFont, textX, titleY + CZM_FontHeight( titleFont ) + h.h * 0.04f, textW, m_menu.sub, PackRGBA( 155, 166, 184, a ));
-
-	// map, time, players; the cross
-	if( chipW )
-	{
-		CzmRect c = CZM_Rect( m_close.x - H * 0.02f - chipW, h.y + ( h.h - chipH ) / 2, chipW, chipH );
-		int dot = chipH * 0.2f;
-
-		CZM_DrawPill( UI_DIR "button_secondary.png", c.x, c.y, c.w, c.h, CZM_White( a * 220 / 255 ));
-		CZM_DrawImage( UI_DIR "glow.png", c.x + chipH * 0.42f - dot * 2, c.y + c.h / 2 - dot * 2, dot * 4, dot * 4, PackRGBA( 107, 218, 167, a * 160 / 255 ));
-		CZM_DrawImage( UI_DIR "dot.png", c.x + chipH * 0.42f - dot / 2, c.y + ( c.h - dot ) / 2, dot, dot, PackRGBA( 107, 218, 167, a ));
-		CZM_DrawText( chipFont, c.x + chipH * 0.72f, c.y + ( c.h - CZM_FontHeight( chipFont )) / 2, c.w - chipH, m_menu.chip, PackRGBA( 207, 214, 224, a ));
-	}
-	CZM_DrawImage( UI_DIR "chip_round.png", m_close.x, m_close.y, m_close.w, m_close.h,
-		IsPressed( HIT_CLOSE ) ? PackRGBA( 229, 63, 77, a ) : CZM_White( a ));
-	int ci = m_close.w * 0.42f;
-	CZM_DrawImage( UI_DIR "icon_close.png", m_close.x + ( m_close.w - ci ) / 2, m_close.y + ( m_close.h - ci ) / 2, ci, ci, PackRGBA( 255, 180, 187, a ));
-
-	UI_FillRect( h.x, h.y + h.h - 1, h.w, Q_max( 1, H / 700 ), PackRGBA( 255, 255, 255, a * 18 / 255 ));
+ const CzmRect &h=m_head;int pad=H*.025f,tile=H*.070f,x=h.x+pad;
+ unsigned accent=PackRGBA(255,168,66,a);
+ CzmStyle::Surface(CZM_Rect(x,h.y+(h.h-tile)/2,tile,tile),PackRGBA(38,32,25,a),PackRGBA(118,81,38,a),tile/5);
+ const char *icon=UI_DIR "icon_star.png";
+ for(int i=0;i<m_menu.numTabs;i++)if(!strcmp(m_menu.tabs[i].key,m_szTab))icon=MenuIcon(m_menu.tabs[i].icon);
+ CZM_DrawImage(icon,x+tile/4,h.y+(h.h-tile)/2+tile/4,tile/2,tile/2,accent);
+ x+=tile+pad;
+ const HFont title=CZM_Font(CZMF_UI_TITLE),small=CZM_Font(CZMF_UI_META);
+ int chipW=Q_min((int)(h.w*.36f),(int)(H*.65f)),right=m_close.x-pad;
+ int textW=right-x-chipW-pad;
+ if(textW<H*.32f){chipW=0;textW=right-x;}
+ CZM_DrawText(small,x,h.y+H*.020f,textW,CZM_IsRussian()?"COUNTER ZOMBIE · СЕРВЕР":"COUNTER ZOMBIE · SERVER",accent);
+ CZM_DrawText(title,x,h.y+H*.047f,textW,m_menu.head,CZM_White(a));
+ if(chipW){
+  int cy=h.y+H*.034f;
+  CZM_DrawText(small,right-chipW,cy,chipW,m_menu.chip,PackRGBA(183,194,205,a),QM_RIGHT);
+  CZM_DrawText(small,right-chipW,cy+CZM_FontHeight(small)+H*.008f,chipW,m_menu.sub,PackRGBA(133,146,164,a),QM_RIGHT);
+ }
+ CzmStyle::Surface(m_close,PackRGBA(27,32,40,a),IsPressed(HIT_CLOSE)?accent:PackRGBA(66,74,86,a),m_close.h/5);
+ int ci=m_close.w*.38f;CZM_DrawImage(UI_DIR "icon_close.png",m_close.x+(m_close.w-ci)/2,m_close.y+(m_close.h-ci)/2,ci,ci,CZM_White(a));
+ UI_FillRect(h.x,h.y+h.h-1,h.w,1,PackRGBA(62,69,80,a));
 }
 
 void CCzmServerWindow::DrawTabs( int a )
 {
-	if( !m_menu.numTabs )
-		return;
-
-	HFont font = CZM_Font( CZMF_NAV ), badgeFont = CZM_Font( CZMF_UI_META );
-
-	UI_FillRect( m_side.x, m_side.y, m_side.w, m_side.h, PackRGBA( 0, 0, 0, a * 46 / 255 ));
-	UI_FillRect( m_side.x + m_side.w - 1, m_side.y, Q_max( 1, H / 700 ), m_side.h, PackRGBA( 255, 255, 255, a * 18 / 255 ));
-
-	for( int i = 0; i < m_menu.numTabs; i++ )
-	{
-		const CzmMenuTab &t = m_menu.tabs[i];
-		const CzmRect &r = t.rect;
-		if( r.w <= 0 )
-			continue;
-		bool on = !strcmp( t.key, m_szTab ), pressed = IsPressed( HIT_TAB + i );
-		int icon = r.h * 0.42f, ix = r.x + r.h * 0.30f;
-
-		if( on )
-		{
-			CZM_DrawImage( UI_DIR "glow.png", r.x - r.h * 0.4f, r.y - r.h * 0.5f, r.w + r.h * 0.8f, r.h * 2.0f, PackRGBA( 229, 63, 77, a * 70 / 255 ));
-			CZM_DrawSliced( UI_DIR "tab_on.png", r.x, r.y, r.w, r.h, 30, r.h * 0.24f, CZM_White( a ));
-		}
-		else if( pressed )
-			CZM_DrawSliced( UI_DIR "card.png", r.x, r.y, r.w, r.h, 30, r.h * 0.24f, CZM_White( a ));
-
-		CZM_DrawImage( MenuIcon( t.icon ), ix, r.y + ( r.h - icon ) / 2, icon, icon, on ? CZM_White( a ) : PackRGBA( 142, 153, 170, a ));
-		int lx = ix + icon + r.h * 0.26f, lw = r.x + r.w - lx - r.h * 0.2f;
-		if( t.badge[0] )
-		{
-			int bh = r.h * 0.40f, bw = Q_max( bh, CZM_TextWidth( badgeFont, t.badge ) + bh / 2 );
-			int bx = r.x + r.w - bw - r.h * 0.18f;
-
-			CZM_DrawPill( UI_DIR "pill_lang_on.png", bx, r.y + ( r.h - bh ) / 2, bw, bh, on ? PackRGBA( 255, 255, 255, a ) : CZM_White( a ));
-			CZM_DrawText( badgeFont, bx, r.y + ( r.h - CZM_FontHeight( badgeFont )) / 2, bw, t.badge, on ? PackRGBA( 185, 28, 40, a ) : CZM_White( a ), QM_CENTER );
-			lw -= bw + r.h * 0.1f;
-		}
-		CZM_DrawText( font, lx, r.y + ( r.h - CZM_FontHeight( font )) / 2, lw, t.name, on ? CZM_White( a ) : PackRGBA( 201, 209, 220, a ));
-	}
-	if( m_tabsUp.w )
-	{
-		CZM_DrawButton( UI_DIR "button_secondary.png", m_tabsUp, CZM_IsRussian() ? "Выше" : "Up",
-			CZM_White( m_iTabFirst > 0 ? a : a / 3 ), IsPressed( HIT_TABS_UP ), CZMF_UI_META );
-		CZM_DrawButton( UI_DIR "button_secondary.png", m_tabsDown, CZM_IsRussian() ? "Ниже" : "Down",
-			CZM_White( m_iTabFirst + m_iTabRows < m_menu.numTabs ? a : a / 3 ), IsPressed( HIT_TABS_DOWN ), CZMF_UI_META );
-	}
+ if(!m_menu.numTabs)return;
+ UI_FillRect(m_side.x,m_side.y,m_side.w,m_side.h,PackRGBA(12,16,22,a));
+ UI_FillRect(m_side.x+m_side.w-1,m_side.y,1,m_side.h,PackRGBA(48,56,68,a));
+ HFont font=CZM_Font(CZMF_UI_LABEL),small=CZM_Font(CZMF_UI_META);
+ for(int i=0;i<m_menu.numTabs;i++){
+  const CzmMenuTab&t=m_menu.tabs[i];const CzmRect&r=t.rect;if(r.w<=0)continue;
+  bool on=!strcmp(t.key,m_szTab),pressed=IsPressed(HIT_TAB+i);unsigned accent=PackRGBA(255,168,66,a);
+  if(on||pressed){CzmStyle::Surface(r,PackRGBA(on?42:29,on?34:37,on?25:48,a),PackRGBA(on?105:49,on?77:60,on?43:75,a),r.h/8);if(on)UI_FillRect(r.x,r.y+r.h/5,Q_max(2,H/300),r.h*3/5,accent);}
+  int icon=r.h*.37f,ix=r.x+r.h*.18f,lx=ix+icon+r.h*.18f,lw=r.x+r.w-lx-r.h*.14f;
+  CZM_DrawImage(MenuIcon(t.icon),ix,r.y+(r.h-icon)/2,icon,icon,on?accent:PackRGBA(149,163,179,a));
+  if(t.badge[0]){
+   int bw=Q_min((int)(r.w*.18f),Q_max(r.h/3,CZM_TextWidth(small,t.badge)+r.h/5));
+   CZM_DrawText(small,r.x+r.w-bw-r.h*.1f,r.y+(r.h-CZM_FontHeight(small))/2,bw,t.badge,accent,QM_CENTER);lw-=bw+r.h*.1f;
+  }
+  CZM_DrawText(font,lx,r.y+(r.h-CZM_FontHeight(font))/2,lw,t.name,on?CZM_White(a):PackRGBA(184,195,208,a));
+ }
+ if(m_tabsUp.w){
+  CzmStyle::Button(m_tabsUp,CZM_IsRussian()?"Выше":"Up",m_iTabFirst>0,false,IsPressed(HIT_TABS_UP));
+  CzmStyle::Button(m_tabsDown,CZM_IsRussian()?"Ниже":"Down",m_iTabFirst+m_iTabRows<m_menu.numTabs,false,IsPressed(HIT_TABS_DOWN));
+ }
 }
 
 void CCzmServerWindow::DrawCards( int a )
 {
-	HFont numFont = CZM_Font( CZMF_SHOP_PRICE ), nameFont = CZM_Font( CZMF_SHOP_NAME ), subFont = CZM_Font( CZMF_UI_META );
-	float t = Q_min( 1.0f, ( uiStatic.realTime - m_iChangeTime ) / 160.0f );
-	int ca = a * t;
-	int slide = ( 1.0f - t ) * H * 0.02f;
-	if( m_back.w )
-		CZM_DrawButton( UI_DIR "button_secondary.png", m_back, CZM_IsRussian() ? "‹ Назад" : "‹ Back",
-			CZM_White( a ), IsPressed( HIT_BACK ), CZMF_UI_META );
-
-	for( int i = 0; i < m_menu.numCards; i++ )
-	{
-		const CzmMenuCard &c = m_menu.cards[i];
-		CzmRect r = c.rect;
-		bool pressed = IsPressed( HIT_CARD + i ), picked = m_iPicked == i;
-		int alpha = c.enabled ? ca : ca * 110 / 255;
-
-		r.y += slide;
-		if( pressed || picked )
-		{
-			// the card sinks and lights up in its colour
-			int dx = r.w * 0.012f, dy = r.h * 0.03f;
-			int m = r.h * 0.22f;
-
-			r = CZM_Rect( r.x + dx, r.y + dy, r.w - dx * 2, r.h - dy * 2 );
-			CZM_DrawSliced( UI_DIR "smenu_lit.png", r.x - m, r.y - m, r.w + m * 2, r.h + m * 2, 58, m + r.h * 0.2f, Tint( c.color, alpha * 200 / 255 ));
-		}
-
-		int corner = r.h * 0.2f;
-		CZM_DrawSliced( UI_DIR "card.png", r.x, r.y, r.w, r.h, 30, corner, CZM_White( alpha * 245 / 255 ));
-		UI_FillRect( r.x + Q_max( 1, H / 500 ), r.y + r.h * 0.2f, Q_max( 2, H / 300 ), r.h * 0.6f, Tint( c.color, alpha ));
-
-		// the lit tile with the icon
-		int tile = r.h * 0.70f, tx = r.x + r.h * 0.16f, ty = r.y + ( r.h - tile ) / 2;
-		CZM_DrawImage( UI_DIR "glow.png", tx - tile * 0.25f, ty - tile * 0.25f, tile * 1.5f, tile * 1.5f, Tint( c.color, alpha * 55 / 255 ));
-		CZM_DrawSliced( UI_DIR "smenu_tile.png", tx, ty, tile, tile, 30, tile * 0.24f, Tint( c.color, alpha * 150 / 255 ));
-		CZM_DrawSliced( UI_DIR "smenu_ring.png", tx, ty, tile, tile, 30, tile * 0.24f, Tint( c.color, alpha * 150 / 255 ));
-		CZM_DrawImage( MenuIcon( c.icon ), tx + tile * 0.22f, ty + tile * 0.22f, tile * 0.56f, tile * 0.56f, Tint( c.color, alpha ));
-
-		// the number, the name and the subtitle
-		char key[4];
-		snprintf( key, sizeof( key ), "%d", c.key );
-		int nx = tx + tile + r.h * 0.16f, nw = CZM_TextWidth( numFont, "8" );
-		CZM_DrawText( numFont, nx, r.y + ( r.h - CZM_FontHeight( numFont )) / 2, nw * 2, key, Tint( c.color, alpha ));
-
-		int chev = r.h * 0.26f, textX = nx + nw + r.h * 0.18f;
-		int textW = r.x + r.w - textX - chev - r.h * 0.28f;
-		int badgeW = 0;
-		if( c.badge[0] )
-		{
-			bool red = c.badge[0] == '!';
-			const char *text = red ? c.badge + 1 : c.badge;
-			int bh = r.h * 0.30f;
-
-			badgeW = Q_max( bh, CZM_TextWidth( subFont, text ) + bh * 0.8f );
-			int bx = r.x + r.w - chev - r.h * 0.34f - badgeW, by = r.y + r.h * 0.14f;
-			CZM_DrawPill( red ? UI_DIR "pill_lang_on.png" : UI_DIR "button_secondary.png", bx, by, badgeW, bh, CZM_White( alpha ));
-			CZM_DrawText( subFont, bx, by + ( bh - CZM_FontHeight( subFont )) / 2, badgeW, text, red ? CZM_White( alpha ) : PackRGBA( 205, 213, 223, alpha ), QM_CENTER );
-		}
-
-		int nameH = CZM_FontHeight( nameFont ), subH = c.sub[0] ? CZM_FontHeight( subFont ) : 0;
-		int top = r.y + ( r.h - nameH - subH - ( subH ? r.h * 0.05f : 0 )) / 2;
-		CZM_DrawText( nameFont, textX, top, textW - ( badgeW ? badgeW + r.h * 0.1f : 0 ), c.name, c.enabled ? CZM_White( alpha ) : PackRGBA( 150, 158, 170, alpha ));
-		if( subH )
-			CZM_DrawText( subFont, textX, top + nameH + r.h * 0.05f, textW, c.sub, PackRGBA( 155, 166, 184, alpha ));
-
-		CZM_DrawImage( UI_DIR "icon_chevron.png", r.x + r.w - chev - r.h * 0.22f, r.y + ( r.h - chev ) / 2, chev, chev, PackRGBA( 107, 118, 134, alpha ));
-	}
+ if(m_back.w)CzmStyle::Button(m_back,CZM_IsRussian()?"‹ Назад":"‹ Back",true,false,IsPressed(HIT_BACK),PackRGBA(255,168,66,a),CZMF_UI_META);
+ HFont name=CZM_Font(CZMF_UI_LABEL),sub=CZM_Font(CZMF_UI_META);
+ float t=Q_min(1.0f,(uiStatic.realTime-m_iChangeTime)/130.0f);int alpha=a*t;
+ for(int i=0;i<m_menu.numCards;i++){
+  const CzmMenuCard&c=m_menu.cards[i];CzmRect r=c.rect;bool selected=IsPressed(HIT_CARD+i)||m_iPicked==i;
+  r.y+=(1-t)*H*.012f;unsigned accent=PackRGBA(255,168,66,alpha);
+  CzmStyle::Surface(r,selected?PackRGBA(43,36,28,alpha):PackRGBA(25,31,40,alpha),selected?accent:PackRGBA(57,66,80,alpha),Q_max(4,H/90));
+  int tile=r.h*.56f,ix=r.x+r.h*.20f,iy=r.y+(r.h-tile)/2;
+  CzmStyle::Round(CZM_Rect(ix,iy,tile,tile),PackRGBA(39,43,50,alpha),tile/5);
+  CZM_DrawImage(MenuIcon(c.icon),ix+tile/5,iy+tile/5,tile*3/5,tile*3/5,c.enabled?accent:PackRGBA(119,130,145,alpha));
+  int tx=ix+tile+r.h*.20f,chev=r.h*.18f,tw=r.x+r.w-tx-chev-r.h*.32f;
+  int nh=CZM_FontHeight(name),sh=c.sub[0]?CZM_FontHeight(sub):0,top=r.y+(r.h-nh-sh-(sh?r.h*.06f:0))/2;
+  if(c.badge[0]){const char*b=c.badge[0]=='!'?c.badge+1:c.badge;int bw=Q_min(tw/3,CZM_TextWidth(sub,b)+(int)(H*.02f));CZM_DrawText(sub,r.x+r.w-bw-r.h*.3f,r.y+r.h*.10f,bw,b,accent,QM_RIGHT);}
+  CZM_DrawText(name,tx,top,tw,c.name,c.enabled?CZM_White(alpha):PackRGBA(144,154,169,alpha));
+  if(sh)CZM_DrawText(sub,tx,top+nh+r.h*.06f,tw,c.sub,PackRGBA(154,168,186,alpha));
+  CZM_DrawImage(c.enabled?UI_DIR "icon_chevron.png":UI_DIR "icon_block.png",r.x+r.w-chev-r.h*.16f,r.y+(r.h-chev)/2,chev,chev,PackRGBA(126,140,157,alpha));
+ }
 }
 
 void CCzmServerWindow::DrawFooter( int a )
 {
-	HFont font = CZM_Font( CZMF_UI_META );
-	const CzmRect &f = m_foot;
-	int icon = f.h * 0.40f, y = f.y + ( f.h - CZM_FontHeight( font )) / 2;
-	int x = f.x + H * 0.025f;
+ const CzmRect&f=m_foot;HFont font=CZM_Font(CZMF_UI_META);int pad=H*.025f,lineH=CZM_FontHeight(font),x=f.x+pad;
+ UI_FillRect(f.x,f.y,f.w,1,PackRGBA(48,56,68,a));
+ const char*right=m_notice[0]?m_notice:m_menu.foot;
+ const char*brand="COUNTER ZOMBIE MOBILE";int brandW=CZM_TextWidth(font,brand),rightW=CZM_TextWidth(font,right);
+ unsigned color=m_notice[0]?PackRGBA(255,184,94,a):PackRGBA(130,145,164,a);
+ if(brandW+rightW+pad*3<=f.w){
+  int y=f.y+(f.h-lineH)/2;CZM_DrawText(font,x,y,brandW+2,brand,PackRGBA(130,145,164,a));
+  CZM_DrawText(font,x+brandW+pad,y,f.w-brandW-pad*3,right,color,QM_RIGHT);
+ }else{
+  HFont small=CZM_Font(CZMF_TINY);int sh=CZM_FontHeight(small),top=f.y+(f.h-lineH-sh-H*.003f)/2;
+  CZM_DrawText(small,x,top,f.w-pad*2,brand,PackRGBA(115,129,148,a));
+  CZM_DrawText(font,x,top+sh+H*.003f,f.w-pad*2,right,color);
+ }
+}
 
-	UI_FillRect( f.x, f.y, f.w, Q_max( 1, H / 700 ), PackRGBA( 255, 255, 255, a * 18 / 255 ));
-	CZM_DrawImage( UI_DIR "icon_shield.png", x, f.y + ( f.h - icon ) / 2, icon, icon, PackRGBA( 125, 136, 153, a ));
-	CZM_DrawText( font, x + icon + H * 0.012f, y, f.w * 0.4f, "COUNTER ZOMBIE MOBILE", PackRGBA( 125, 136, 153, a ));
-	if( m_menu.foot[0] )
-		CZM_DrawText( font, f.x + f.w * 0.4f, y, f.w * 0.6f - H * 0.025f, m_menu.foot, PackRGBA( 125, 136, 153, a ), QM_RIGHT );
+void CCzmServerWindow::DrawPage( int a )
+{
+	const bool ru = CZM_IsRussian();
+	const unsigned accent = PackRGBA( 255, 168, 66, a );
+	if( m_back.w ) CzmStyle::Button( m_back, ru ? "‹ Назад" : "‹ Back", true, false, IsPressed( HIT_BACK ), accent, CZMF_UI_META );
+	const int titleY = m_content.y - (int)( H * .067f );
+	CZM_DrawText( CZM_Font( CZMF_UI_ACTION ), m_content.x, titleY, m_content.w, m_menu.pageTitle, CZM_White( a ));
+	if( m_menu.kind == CzmServerView::Friends && CZM_OnlineAccount() )
+	{
+		for( int i = 0; m_friendPage >= 0 && i < 6 && m_friendPage * 6 + i < m_friendCount; ++i )
+		{
+			const Friend &f = m_friends[m_friendPage * 6 + i]; const CzmRect &r = m_friendRows[i];
+			CzmStyle::Surface( r, PackRGBA( 26, 33, 43, a ), IsPressed( 200 + i ) ? accent : PackRGBA( 57, 67, 81, a ), H / 100 );
+			const int dot = Q_max( 3, H / 100 ), x = r.x + (int)( H * .020f );
+			CZM_DrawImage( UI_DIR "dot.png", x, r.y + ( r.h - dot ) / 2, dot, dot, f.online ? PackRGBA( 107, 218, 167, a ) : PackRGBA( 113, 125, 142, a ));
+			const char *action = f.id == m_successFriend ? ( ru ? "Приглашён" : "Invited" ) : ( ru ? "Пригласить" : "Invite" );
+			int right = Q_min( (int)( r.w * .35f ), (int)( H * .24f ));
+			CZM_DrawText( CZM_Font( CZMF_UI_LABEL ), x + dot + H * .014f, r.y + ( r.h - CZM_FontHeight( CZM_Font( CZMF_UI_LABEL ))) / 2, r.w - right - dot - H * .07f, f.nick, CZM_White( a ));
+			CZM_DrawText( CZM_Font( CZMF_UI_META ), r.x + r.w - right - H * .018f, r.y + ( r.h - CZM_FontHeight( CZM_Font( CZMF_UI_META ))) / 2, right, action, accent, QM_RIGHT );
+		}
+		if( !m_friendCount )
+			CzmStyle::TextLines( m_content, m_friendsLoaded ? ( ru ? "В списке пока нет друзей. Добавьте друга через его профиль в игре, затем обновите список." : "No friends yet. Add a friend through their in-game profile, then refresh this list." ) : ( m_notice[0] ? m_notice : ( ru ? "Загружаем список…" : "Loading list…" )), CZMF_PANEL_TEXT );
+		CzmStyle::Button( m_refresh, ru ? "Обновить" : "Refresh", !m_request, false, IsPressed( HIT_REFRESH ), accent, CZMF_UI_META );
+		CzmStyle::Button( m_prev, "‹", m_friendPage > 0 || m_friendOffset > 0, false, IsPressed( HIT_PREV ), accent );
+		CzmStyle::Button( m_next, "›", ( m_friendPage + 1 ) * 6 < m_friendCount || m_nextOffset >= 0, false, IsPressed( HIT_NEXT ), accent );
+		return;
+	}
+	const char *text = m_menu.kind == CzmServerView::Friends && !CZM_OnlineAccount()
+		? ( ru ? "Войдите в аккаунт CZM, чтобы увидеть друзей и отправить приглашение на этот сервер." : "Sign in to CZM to see your friends and invite them to this server." ) : m_menu.body;
+	const HFont font = CZM_Font( CZMF_PANEL_TEXT ); int starts[129];
+	int lineH = CZM_FontHeight( font ) + Q_max( 2, H / 160 ), lines = CZM_WrapText( font, text, m_content.w - H * .018f, starts, 128 );
+	m_scrollMax = Q_max( 0, lines * lineH - m_content.h ); m_scroll = bound( 0, m_scroll, m_scrollMax );
+	UI::Scissor::PushScissor( m_content.x, m_content.y, m_content.w, m_content.h );
+	for( int i = 0; i < lines; ++i )
+	{
+		int y = m_content.y + i * lineH - m_scroll;
+		if( y + lineH <= m_content.y || y >= m_content.y + m_content.h ) continue;
+		char line[1024]; CZM_WrapLine( text, starts, i, line, sizeof( line ));
+		CZM_DrawText( font, m_content.x, y, m_content.w - H * .018f, line, PackRGBA( 190, 202, 218, a ));
+	}
+	UI::Scissor::PopScissor();
+	if( m_scrollMax )
+	{
+		int track = m_content.h, thumb = Q_max( H / 25, track * track / ( track + m_scrollMax ));
+		UI_FillRect( m_content.x + m_content.w - Q_max( 2, H / 300 ), m_content.y + m_scroll * ( track - thumb ) / m_scrollMax, Q_max( 2, H / 300 ), thumb, accent );
+	}
+	if( m_menu.kind == CzmServerView::Account || m_menu.kind == CzmServerView::Friends )
+		CzmStyle::Button( m_submit, ru ? "Войти в профиль" : "Sign in", true, false, IsPressed( HIT_SUBMIT ), accent );
+	if( m_menu.kind == CzmServerView::Form )
+	{
+		if( m_formPending && uiStatic.realTime - m_formTime > 20000 )
+		{
+			m_formPending = false;
+			Q_strncpy( m_notice, ru ? "Ответ не получен. Текст сохранён, можно повторить отправку" : "No response. Your text is kept for retry", sizeof( m_notice ));
+		}
+		CzmStyle::Surface( m_field, PackRGBA( 11, 16, 23, a ), m_typing ? accent : PackRGBA( 71, 84, 102, a ), H / 100 );
+		CzmRect r = CZM_Rect( m_field.x + H * .018f, m_field.y + H * .012f, m_field.w - H * .036f, m_field.h - H * .024f );
+		CzmStyle::TextLines( r, m_input[0] ? m_input : ( m_menu.hint[0] ? m_menu.hint : ( ru ? "Нажмите и введите текст…" : "Tap to enter text…" )), CZMF_PANEL_TEXT, m_input[0] ? CZM_White( a ) : PackRGBA( 116, 133, 154, a ));
+		char counter[48]; snprintf( counter, sizeof( counter ), "%d / 180", CzmServerView::Characters( m_input ));
+		CZM_DrawText( CZM_Font( CZMF_UI_META ), m_content.x, m_submit.y + ( m_submit.h - CZM_FontHeight( CZM_Font( CZMF_UI_META ))) / 2, m_submit.x - m_content.x - H * .018f, counter, PackRGBA( 137, 154, 175, a ));
+		CzmStyle::Button( m_submit, m_formPending ? ( ru ? "Отправляем…" : "Sending…" ) : ( ru ? "Отправить" : "Send" ), !m_formPending, false, IsPressed( HIT_SUBMIT ), accent );
+	}
 }
 
 void CCzmServerWindow::Draw()
 {
-	if( m_bClosing )
-		return;
-	if( !CL_IsActive( ))
-	{
-		Close( false );
-		return;
-	}
-
-	// it opens from the left in a sixth of a second
-	float t = Q_min( 1.0f, ( uiStatic.realTime - m_iOpenTime ) / 170.0f );
-	float ease = 1.0f - ( 1.0f - t ) * ( 1.0f - t );
-	int a = 255 * ease;
-
-	Layout( -( 1.0f - ease ) * ScreenHeight * 0.05f );
-	UI_FillRect( 0, 0, W, H, PackRGBA( 4, 6, 10, a * 110 / 255 ));
-	CZM_DrawImage( UI_DIR "glow.png", m_win.x - H * 0.04f, m_win.y - H * 0.04f, m_win.w + H * 0.08f, m_win.h + H * 0.08f, PackRGBA( 229, 63, 77, a * 40 / 255 ));
-	CZM_DrawSliced( UI_DIR "smenu_frame.png", m_win.x, m_win.y, m_win.w, m_win.h, 48, H * 0.028f, CZM_White( a ));
-	UI_FillRect( m_win.x + m_win.w * 0.08f, m_win.y + Q_max( 1, H / 700 ), m_win.w * 0.84f, Q_max( 2, H / 320 ), PackRGBA( 229, 63, 77, a * 200 / 255 ));
-
-	DrawHeader( a );
-	DrawTabs( a );
-	DrawCards( a );
-	DrawFooter( a );
+ if(m_bClosing)return;
+ if(!CL_IsActive()){Close(false);return;}
+ FriendsFrame();
+ float t=Q_min(1.0f,(uiStatic.realTime-m_iOpenTime)/170.0f),ease=1-(1-t)*(1-t);int a=255*ease;
+ Layout((1-ease)*H*.025f);
+ UI_FillRect(0,0,ScreenWidth,ScreenHeight,PackRGBA(3,5,9,a*165/255));
+ CzmStyle::Surface(m_win,PackRGBA(17,22,30,a),PackRGBA(69,77,90,a),Q_max(6,H/70));
+ UI_FillRect(m_win.x+H*.025f,m_win.y,Q_max(1,(int)(m_win.w*.24f)),Q_max(2,H/400),PackRGBA(255,168,66,a));
+ DrawHeader(a);DrawTabs(a);
+ if(m_menu.kind==CzmServerView::Cards)DrawCards(a);else DrawPage(a);
+ DrawFooter(a);
 }
 
 ADD_MENU3( menu_czmserver, CCzmServerWindow, UI_CzmServer_Menu );

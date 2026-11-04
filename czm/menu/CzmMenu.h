@@ -139,6 +139,7 @@ enum { CZM_OFFICIAL_SURVIVAL = 0, CZM_OFFICIAL_ESCAPE, CZM_OFFICIAL_COUNT };
 void CZM_OfficialSet( bool enabled, const char *survival, const char *escape );
 bool CZM_OfficialEnabled( void );
 CzmServer *CZM_OfficialServer( int slot );   // NULL when off or while the slot has no address
+CzmServer *CZM_ConfiguredServer( int slot ); // trusted configured endpoint, independent of home-card visibility
 bool CZM_IsOfficial( const char *address );
 int CZM_OfficialSlotNow( void );             // our server the game is on (CZM_OFFICIAL_*), -1 another
 bool CZM_PlayServer( void );                // connected plugin supports CZM team actions; no trust/privileges

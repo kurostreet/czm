@@ -10,6 +10,37 @@ MENU = ROOT / "czm/menu"
 
 
 class GameTicketClientTests(unittest.TestCase):
+    def test_configured_endpoint_remains_trusted_when_home_cards_are_hidden(self):
+        from test_loading_errors import function
+        from test_server_menu_transport import run_cpp, CPP_MENU
+        menu = (MENU / 'CzmMenu.cpp').read_text()
+        online = (MENU / 'CzmOnline.cpp').read_text()
+        code = CPP_MENU + r'''
+#define CZM_OFFICIAL_COUNT 2
+struct CzmServer { char address[64]; };
+static CzmServer s_official[2];static bool s_officialOn=false;
+static void CZM_OfficialLoad(){}
+static const char *connected="203.0.113.10:27016";
+namespace EngFuncs {static const char *GetCvarString(const char*){return connected;}}
+'''
+        for src, sig in [(menu, 'CzmServer *CZM_ConfiguredServer('),
+                         (menu, 'CzmServer *CZM_OfficialServer('),
+                         (online, 'int CZM_OfficialSlotNow(')]:
+            code += function(src, sig) + '\n'
+        code += r'''
+int main(){
+ strcpy(s_official[0].address,"203.0.113.10:27016");
+ assert(CZM_ConfiguredServer(0)&&!CZM_OfficialServer(0)&&CZM_OfficialSlotNow()==0);
+ assert(!CZM_ConfiguredServer(-1)&&!CZM_ConfiguredServer(2)&&!CZM_ConfiguredServer(1));
+ connected="198.51.100.4:27015";assert(CZM_OfficialSlotNow()==-1);
+ connected="";assert(CZM_OfficialSlotNow()==-1);
+ s_officialOn=true;assert(CZM_OfficialServer(0)==CZM_ConfiguredServer(0));
+}
+'''
+        run_cpp(code)
+        frame = online[online.index('static void TicketFrame('):online.index('void CZM_PrepareConnect(')]
+        self.assertIn('CZM_ConfiguredServer( i )', frame)
+
     def test_every_connect_is_prepared(self):
         sites = 0
         for path in sorted(MENU.glob("*.cpp")):

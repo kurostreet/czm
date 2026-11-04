@@ -26,6 +26,8 @@
 #include <czm_admin>
 #include <czm_menu>
 
+#pragma dynamic 8192
+
 #define PLUGIN "CZM Admin"
 #define VERSION "1.0"
 #define AUTHOR "kurostreet"
@@ -67,8 +69,9 @@ new g_mapNext[32], g_mapLeft;
 new g_catKey[MAX_CATS][12], g_catName[MAX_CATS][2][40], g_catCount;
 new g_itemId[MAX_CATS][MAX_ITEMS][24], g_itemName[MAX_CATS][MAX_ITEMS][2][40], g_itemCount[MAX_CATS];
 new g_grantCat[MAX_PLAYERS + 1];
-new g_pollText[128], g_pollYes, g_pollNo, g_pollLeft, bool:g_pollRunning;
+new g_pollText[724], g_pollYes, g_pollNo, g_pollLeft, bool:g_pollRunning;
 new g_hud;
+new g_inboxCount[MAX_PLAYERS + 1], g_inboxText[MAX_PLAYERS + 1][8][721], g_inboxName[MAX_PLAYERS + 1][8][40];
 
 new const REASONS[][2][] =
 {
@@ -521,9 +524,9 @@ bool:staff(id, need = CZM_STAFF_MODERATOR)
 	if (g_staff[id] >= need)
 		return true;
 	if (g_staff[id] == CZM_STAFF_NONE)
-		czm_chat(id, "^4[CZM]^1 Это меню — для администрации сервера.", "^4[CZM]^1 This menu is for the server staff.");
+		czm_menu_feedback(id,"main","Доступ к управлению","Management access","Этот раздел доступен администрации сервера.","This section is available to the server staff.");
 	else
-		czm_chat(id, "^4[CZM]^1 Это может только главный админ.", "^4[CZM]^1 Only a head administrator can do this.");
+		czm_menu_feedback(id,"main","Доступ к управлению","Management access","Это действие доступно только главному администратору.","Only the head administrator can perform this action.");
 	return false;
 }
 
@@ -601,34 +604,32 @@ menu_register()
 
 privilege_of(id)
 {
-    if (!(1 <= id <= MaxClients) || (g_privUntil[id] > 0 && g_privUntil[id] <= get_systime()))
-        return 0;
-    return g_priv[id];
+	if (!(1 <= id <= MaxClients) || (g_privUntil[id] > 0 && g_privUntil[id] <= get_systime()))
+		return 0;
+	return g_priv[id];
 }
 
 public on_czm_menu_priv(id, const key[])
 {
-    new role = privilege_of(id);
-    if (role < 1 || role > 3)
-        return;
-    new expected[24];
-    formatex(expected, charsmax(expected), "%s_panel", PRIV_KEYS[role]);
-    if (equal(key, expected))
-    {
-        client_cmd(id, "czm_panel");
-        czm_chat(id, "^4[CZM]^1 Панель сервера: ^4%s/panel", "^4[CZM]^1 Server panel: ^4%s/panel", CZM_SITE);
-        return;
-    }
-    formatex(expected, charsmax(expected), "%s_status", PRIV_KEYS[role]);
-    if (equal(key, expected))
-    {
-        new left[32];
-        czm_api_left(g_privUntil[id] > 0 ? max(0, g_privUntil[id] - get_systime()) : -1, left, charsmax(left), czm_lang(id));
-        czm_chat(id, "^4[CZM]^1 %s: ^4%s", "^4[CZM]^1 %s: ^4%s", PRIV_NAMES[role], left);
-        new child[16];
-        formatex(child, charsmax(child), "%s_info", PRIV_KEYS[role]);
-        czm_menu_open(id, child);
-    }
+	new role = privilege_of(id);
+	if (role < 1 || role > 3)
+		return;
+	new expected[24];
+	formatex(expected, charsmax(expected), "%s_panel", PRIV_KEYS[role]);
+	if (equal(key, expected))
+	{
+		client_cmd(id, "czm_panel");
+		czm_menu_open(id, PRIV_KEYS[role]);
+		return;
+	}
+	formatex(expected, charsmax(expected), "%s_status", PRIV_KEYS[role]);
+	if (equal(key, expected))
+	{
+		new left[32];
+		czm_api_left(g_privUntil[id] > 0 ? max(0, g_privUntil[id] - get_systime()) : -1, left, charsmax(left), czm_lang(id));
+		new child[16];formatex(child,charsmax(child),"%s_info",PRIV_KEYS[role]);
+		czm_menu_feedback(id,child,"Моя привилегия","My privilege","%s^nСрок действия: %s","%s^nTime remaining: %s",PRIV_NAMES[role],left);
+	}
 }
 
 public czm_menu_build(id, const section[])
@@ -679,17 +680,15 @@ admin_action(id, const info[])
 		mode_menu(id);
 	else if (equal(info, "say"))
 	{
-		czm_chat(id, "^4[CZM]^1 Напиши сообщение для всех и отправь.", "^4[CZM]^1 Type the message for everyone and send it.");
-		client_cmd(id, "messagemode czm_say_all");
+		czm_menu_page(id,czm_lang(id)==CZM_EN?"Message to everyone":"Сообщение всем",czm_lang(id)==CZM_EN?"The announcement will appear on every player's screen.":"Объявление появится на экране у всех игроков.",g_staff[id]>=CZM_STAFF_ADMIN?"admin_server":"mod_server","czm_say_all",czm_lang(id)==CZM_EN?"Announcement text":"Текст объявления");
 	}
 	else if (equal(info, "poll"))
 	{
 		if (g_pollRunning)
-			czm_chat(id, "^4[CZM]^1 Опрос уже идёт.", "^4[CZM]^1 A poll is already on.");
+			czm_menu_feedback(id,g_staff[id]>=CZM_STAFF_ADMIN?"admin_server":"mod_server","Опрос","Poll","На сервере уже идёт опрос.","A poll is already running.");
 		else
 		{
-			czm_chat(id, "^4[CZM]^1 Напиши вопрос опроса (ответ ДА или НЕТ) и отправь.", "^4[CZM]^1 Type the poll question (yes or no) and send it.");
-			client_cmd(id, "messagemode czm_poll");
+			czm_menu_page(id,czm_lang(id)==CZM_EN?"Yes / no poll":"Опрос ДА / НЕТ",czm_lang(id)==CZM_EN?"Enter a question. Players will receive a yes/no ballot.":"Введи вопрос. Игрокам откроется голосование с ответами ДА и НЕТ.",g_staff[id]>=CZM_STAFF_ADMIN?"admin_server":"mod_server","czm_poll",czm_lang(id)==CZM_EN?"Poll question":"Вопрос опроса");
 		}
 	}
 	else if (equal(info, "map"))
@@ -698,18 +697,20 @@ admin_action(id, const info[])
 	{
 		server_cmd("czm_airdrop");
 		staff_log(id, "airdrop");
-		czm_chat(id, "^4[CZM]^1 Аирдроп сброшен.", "^4[CZM]^1 The airdrop is down.");
+		admin_result(id, "^4[CZM]^1 Аирдроп сброшен.", "^4[CZM]^1 The airdrop is down.");
 	}
 	else if (equal(info, "board"))
 	{
-		new data[2];
+		new data[3];
 		data[0] = id; data[1] = get_user_userid(id);
+		data[2] = czm_menu_feedback(id, g_staff[id] >= CZM_STAFF_ADMIN ? "admin_players" : "mod_players", "Нарушители", "Violators", "Загружаем список…", "Loading the list…");
 		czm_api("GET", "/survival/board?limit=40", CZM_JSON_NONE, "on_board", data, sizeof data);
 	}
 	else if (equal(info, "inbox"))
 	{
-		new data[2];
+		new data[3];
 		data[0] = id; data[1] = get_user_userid(id);
+		data[2]=czm_menu_feedback(id,g_staff[id]>=CZM_STAFF_ADMIN?"admin_messages":"mod_messages","Обращения игроков","Players' messages","Загружаем обращения…","Loading messages…");
 		czm_api("GET", "/survival/server/messages?limit=8", CZM_JSON_NONE, "on_inbox", data, sizeof data);
 	}
 	else if (equal(info, "priv") && staff(id, CZM_STAFF_ADMIN))
@@ -719,8 +720,7 @@ admin_action(id, const info[])
 	}
 	else if (equal(info, "news") && staff(id, CZM_STAFF_ADMIN))
 	{
-		czm_chat(id, "^4[CZM]^1 Напиши новость (русский | english) и отправь.", "^4[CZM]^1 Type the news (русский | english) and send it.");
-		client_cmd(id, "messagemode czm_news");
+		czm_menu_page(id,czm_lang(id)==CZM_EN?"Publish server news":"Новость сервера",czm_lang(id)==CZM_EN?"The post will appear in server news. Add an English version after | if needed.":"Запись появится в новостях сервера. При необходимости добавь английский вариант после символа |.","admin_server","czm_news",czm_lang(id)==CZM_EN?"News text":"Текст новости");
 	}
 	return PLUGIN_HANDLED;
 }
@@ -751,7 +751,7 @@ pick_player(id, bool:withSelf)
 	if (!menu_items(menu))
 	{
 		menu_destroy(menu);
-		czm_chat(id, "^4[CZM]^1 На сервере нет других игроков.", "^4[CZM]^1 Nobody else is on the server.");
+		admin_result(id, "^4[CZM]^1 На сервере нет других игроков.", "^4[CZM]^1 Nobody else is on the server.");
 		return;
 	}
 	texts(menu, id);
@@ -772,7 +772,7 @@ public on_pick_player(id, menu, item)
 	new target = find_player_ex(FindPlayer_MatchUserId, g_target[id]);
 	if (!target)
 	{
-		czm_chat(id, "^4[CZM]^1 Игрок уже вышел.", "^4[CZM]^1 The player has left.");
+		admin_result(id, "^4[CZM]^1 Игрок уже вышел.", "^4[CZM]^1 The player has left.");
 		return PLUGIN_HANDLED;
 	}
 	if (equal(g_doing[id], "punish"))
@@ -825,7 +825,7 @@ public on_punish_menu(id, menu, item)
 		return PLUGIN_HANDLED;
 	if ((g_staff[target] != CZM_STAFF_NONE && g_staff[id] != CZM_STAFF_ADMIN) || g_staff[target] == CZM_STAFF_ADMIN)
 	{
-		czm_chat(id, "^4[CZM]^1 Этого игрока может наказать только главный админ.", "^4[CZM]^1 Only a head administrator may punish this player.");
+		admin_result(id, "^4[CZM]^1 Этого игрока может наказать только главный админ.", "^4[CZM]^1 Only a head administrator may punish this player.");
 		return PLUGIN_HANDLED;
 	}
 	new name[32], admin[32];
@@ -1011,8 +1011,7 @@ public on_give_menu(id, menu, item)
 	new detail[48];
 	formatex(detail, charsmax(detail), "%s %s x%d", info, SCOPES[g_scope[id]], done);
 	staff_log(id, "give", g_scope[id] == SCOPE_PLAYER ? find_player_ex(FindPlayer_MatchUserId, g_target[id]) : 0, detail);
-	czm_chat(id, "^4[CZM]^1 Выдано: ^4%d^1.", "^4[CZM]^1 Given: ^4%d^1.", done);
-	give_menu(id);
+	admin_result(id, "^4[CZM]^1 Выдано: ^4%d^1.", "^4[CZM]^1 Given: ^4%d^1.", done);
 	return PLUGIN_HANDLED;
 }
 
@@ -1097,7 +1096,7 @@ grant_cat_menu(id)
 	new target = grant_target(id), title[96], name[32], info[4], bool:en = czm_lang(id) == CZM_EN;
 	if (!target || !czm_profile(target))
 	{
-		czm_chat(id, "^4[CZM]^1 Предметы LVL MOD — только игрокам с профилем CZM.", "^4[CZM]^1 LVL MOD items go to players with a CZM profile only.");
+		admin_result(id, "^4[CZM]^1 Предметы LVL MOD — только игрокам с профилем CZM.", "^4[CZM]^1 LVL MOD items go to players with a CZM profile only.");
 		return;
 	}
 	get_user_name(target, name, charsmax(name));
@@ -1149,7 +1148,7 @@ public on_grant_item(id, menu, item)
 	new target = grant_target(id), c = g_grantCat[id], i = str_to_num(info);
 	if (!staff(id, CZM_STAFF_ADMIN) || !target || !czm_profile(target) || i >= g_itemCount[c])
 		return PLUGIN_HANDLED;
-	new EzJSON:body = ezjson_init_object(), EzJSON:args = ezjson_init_object(), op[40], data[4];
+	new EzJSON:body = ezjson_init_object(), EzJSON:args = ezjson_init_object(), op[40], data[5];
 	formatex(op, charsmax(op), "grant-%d-%d-%d", get_systime(), czm_profile(target), random(1000000));
 	ezjson_object_set_number(body, "player", czm_profile(target));
 	ezjson_object_set_string(body, "op", op);
@@ -1160,6 +1159,7 @@ public on_grant_item(id, menu, item)
 	ezjson_object_set_value(body, "args", args);
 	ezjson_free(args);
 	data[0] = id; data[1] = get_user_userid(id); data[2] = c; data[3] = i;
+	data[4] = czm_menu_feedback(id, "admin_players", "Выдача предмета", "Grant item", "Сохраняем выдачу…", "Saving the grant…");
 	czm_api("POST", "/survival/server/action", body, "on_grant", data, sizeof data);
 	new detail[40];
 	formatex(detail, charsmax(detail), "%s:%s", g_catKey[c], g_itemId[c][i]);
@@ -1170,20 +1170,20 @@ public on_grant_item(id, menu, item)
 
 public on_grant(EzHttpRequest:request)
 {
-	new data[4];
+	new data[5];
 	ezhttp_get_user_data(request, data);
 	new id = data[0], c = data[2], i = data[3], code, EzJSON:root = czm_api_answer(request, code);
-	if (is_user_connected(id) && get_user_userid(id) == data[1])
+	if (is_user_connected(id) && get_user_userid(id) == data[1] && czm_menu_stamp(id) == data[4])
 	{
 		new error[24];
 		if (CZM_JSON_OK(root) && code != 200)
 			ezjson_object_get_string(root, "error", error, charsmax(error));
 		if (code == 200)
-			czm_chat(id, "^4[CZM]^1 Подарено: ^4%s^1. Наденется в начале следующей жизни.", "^4[CZM]^1 Given: ^4%s^1. It goes on with the next life.", g_itemName[c][i][czm_lang(id) == CZM_EN ? 1 : 0]);
+			admin_result(id, "^4[CZM]^1 Подарено: ^4%s^1. Наденется в начале следующей жизни.", "^4[CZM]^1 Given: ^4%s^1. It goes on with the next life.", g_itemName[c][i][czm_lang(id) == CZM_EN ? 1 : 0]);
 		else if (equal(error, "owned"))
-			czm_chat(id, "^4[CZM]^1 Это у игрока уже есть.", "^4[CZM]^1 The player has it already.");
+			admin_result(id, "^4[CZM]^1 Это у игрока уже есть.", "^4[CZM]^1 The player has it already.");
 		else
-			czm_chat(id, "^4[CZM]^1 Не получилось (%s).", "^4[CZM]^1 It did not work (%s).", error[0] ? error : "API");
+			admin_result(id, "^4[CZM]^1 Не получилось (%s).", "^4[CZM]^1 It did not work (%s).", error[0] ? error : "API");
 	}
 	if (CZM_JSON_OK(root))
 		ezjson_free(root);
@@ -1196,7 +1196,7 @@ priv_menu(id, target)
 	new title[96], name[32], info[4], bool:en = czm_lang(id) == CZM_EN;
 	if (!czm_profile(target))
 	{
-		czm_chat(id, "^4[CZM]^1 Привилегии — только игрокам с профилем CZM.", "^4[CZM]^1 Privileges go to players with a CZM profile only.");
+		admin_result(id, "^4[CZM]^1 Привилегии — только игрокам с профилем CZM.", "^4[CZM]^1 Privileges go to players with a CZM profile only.");
 		return;
 	}
 	get_user_name(target, name, charsmax(name));
@@ -1261,7 +1261,7 @@ set_privilege(id, kind, seconds)
 	new target = find_player_ex(FindPlayer_MatchUserId, g_target[id]);
 	if (!staff(id, CZM_STAFF_ADMIN) || !target || !czm_profile(target))
 		return;
-	new EzJSON:body = ezjson_init_object(), name[32], data[5];
+	new EzJSON:body = ezjson_init_object(), name[32], data[6];
 	get_user_name(id, name, charsmax(name));
 	ezjson_object_set_number(body, "player", czm_profile(target));
 	ezjson_object_set_string(body, "kind", PRIV_KEYS[kind]);
@@ -1269,6 +1269,7 @@ set_privilege(id, kind, seconds)
 	ezjson_object_set_number(body, "by_player", czm_profile(id));
 	ezjson_object_set_string(body, "by_name", name);
 	data[0] = id; data[1] = get_user_userid(id); data[2] = target; data[3] = get_user_userid(target); data[4] = kind;
+	data[5] = czm_menu_feedback(id, "admin_players", "Привилегия игроку", "Player privilege", "Сохраняем привилегию…", "Saving the privilege…");
 	czm_api("POST", "/survival/server/privilege", body, "on_privilege", data, sizeof data);
 	ezjson_free(body);
 	staff_log(id, kind ? "privilege" : "privilege_off", target, PRIV_NAMES[kind]);
@@ -1276,7 +1277,7 @@ set_privilege(id, kind, seconds)
 
 public on_privilege(EzHttpRequest:request)
 {
-	new data[5];
+	new data[6];
 	ezhttp_get_user_data(request, data);
 	new id = data[0], target = data[2], kind = data[4], code, EzJSON:root = czm_api_answer(request, code);
 	new bool:here = is_user_connected(target) && get_user_userid(target) == data[3];
@@ -1300,9 +1301,11 @@ public on_privilege(EzHttpRequest:request)
 			else
 				czm_chat(0, "^4[CZM]^1 У ^3%s^1 больше нет привилегии.", "^4[CZM]^3 %s^1 no longer has a privilege.", name);
 		}
+		if (is_user_connected(id) && get_user_userid(id) == data[1] && czm_menu_stamp(id) == data[5])
+			admin_result(id, "Привилегия сохранена.", "Privilege saved.");
 	}
-	else if (is_user_connected(id) && get_user_userid(id) == data[1])
-		czm_chat(id, "^4[CZM]^1 Привилегия не сохранилась.", "^4[CZM]^1 The privilege was not saved.");
+	else if (is_user_connected(id) && get_user_userid(id) == data[1] && czm_menu_stamp(id) == data[5])
+		admin_result(id, "^4[CZM]^1 Привилегия не сохранилась.", "^4[CZM]^1 The privilege was not saved.");
 	if (CZM_JSON_OK(root))
 		ezjson_free(root);
 }
@@ -1361,7 +1364,7 @@ public on_mode_menu(id, menu, item)
 		return PLUGIN_HANDLED;
 	if (zp_has_round_started())
 	{
-		czm_chat(id, "^4[CZM]^1 Раунд уже начался: режим включается до заражения.", "^4[CZM]^1 The round has started: modes start before the infection.");
+		admin_result(id, "^4[CZM]^1 Раунд уже начался: режим включается до заражения.", "^4[CZM]^1 The round has started: modes start before the infection.");
 		return PLUGIN_HANDLED;
 	}
 	if (equal(info, "nemesis") || equal(info, "survivor"))
@@ -1390,7 +1393,7 @@ start_mode(id, const mode[], target)
 	if (ok)
 		staff_log(id, "mode", target, mode);
 	if (!ok)
-		czm_chat(id, "^4[CZM]^1 Этот режим сейчас не запустить.", "^4[CZM]^1 This mode cannot start now.");
+		admin_result(id, "^4[CZM]^1 Этот режим сейчас не запустить.", "^4[CZM]^1 This mode cannot start now.");
 }
 
 // ---------------------------------------------------------------- speaking to everyone
@@ -1399,7 +1402,7 @@ public cmd_say_all(id)
 {
 	if (!staff(id))
 		return PLUGIN_HANDLED;
-	new text[160], name[32];
+	new text[724], name[32];
 	read_args(text, charsmax(text));
 	remove_quotes(text);
 	trim(text);
@@ -1411,6 +1414,7 @@ public cmd_say_all(id)
 	ShowSyncHudMsg(0, g_hud, "%s:^n%s", name, text);
 	czm_chat(0, "^4[Админ]^3 %s^1: %s", "^4[Admin]^3 %s^1: %s", name, text);
 	staff_log(id, "say", 0, text);
+	czm_menu_feedback(id,g_staff[id]>=CZM_STAFF_ADMIN?"admin_server":"mod_server","Объявление отправлено","Announcement sent","Объявление показано игрокам.","The announcement was shown to players.");
 	return PLUGIN_HANDLED;
 }
 
@@ -1418,18 +1422,19 @@ public cmd_news(id)
 {
 	if (!staff(id, CZM_STAFF_ADMIN))
 		return PLUGIN_HANDLED;
-	new text[300], ru[200], en[200];
+	new text[724], ru[724], en[724];
 	read_args(text, charsmax(text));
 	remove_quotes(text);
 	trim(text);
 	strtok2(text, ru, charsmax(ru), en, charsmax(en), '|', TRIM_FULL);
 	if (strlen(ru) < 3)
 		return PLUGIN_HANDLED;
-	new EzJSON:body = ezjson_init_object(), data[2];
+	new EzJSON:body = ezjson_init_object(), data[3];
 	ezjson_object_set_number(body, "by_player", czm_profile(id));
 	ezjson_object_set_string(body, "ru", ru);
 	ezjson_object_set_string(body, "en", en);
 	data[0] = id; data[1] = get_user_userid(id);
+	data[2]=czm_menu_feedback(id,"admin_server","Публикация новости","Publishing news","Сохраняем новость…","Saving the post…");
 	czm_api("POST", "/survival/server/news", body, "on_news", data, sizeof data);
 	staff_log(id, "news", 0, ru);
 	ezjson_free(body);
@@ -1438,15 +1443,16 @@ public cmd_news(id)
 
 public on_news(EzHttpRequest:request)
 {
-	new data[2];
+	new data[3];
 	ezhttp_get_user_data(request, data);
 	new id = data[0], code, EzJSON:root = czm_api_answer(request, code);
-	if (is_user_connected(id) && get_user_userid(id) == data[1])
+	if (code == 200) server_cmd("czm_news_reload");
+	if (is_user_connected(id) && get_user_userid(id) == data[1] && czm_menu_stamp(id) == data[2])
 	{
 		if (code == 200)
-			czm_chat(id, "^4[CZM]^1 Новость опубликована: menu → Новости.", "^4[CZM]^1 The news is out: menu → News.");
+			czm_menu_feedback(id,"admin_server","Новости сервера","Server news", "^4[CZM]^1 Новость опубликована: menu → Новости.", "^4[CZM]^1 The news is out: menu → News.");
 		else
-			czm_chat(id, "^4[CZM]^1 Новость не сохранилась.", "^4[CZM]^1 The news was not saved.");
+			czm_menu_feedback(id,"admin_server","Новости сервера","Server news", "^4[CZM]^1 Новость не сохранилась.", "^4[CZM]^1 The news was not saved.");
 	}
 	if (CZM_JSON_OK(root))
 		ezjson_free(root);
@@ -1584,11 +1590,18 @@ public task_map()
 
 public on_board(EzHttpRequest:request)
 {
-	new data[2];
+	new data[3];
 	ezhttp_get_user_data(request, data);
 	new id = data[0], code, EzJSON:root = czm_api_answer(request, code);
-	if (!is_user_connected(id) || get_user_userid(id) != data[1] || code != 200 || !CZM_JSON_OK(root))
+	if (!is_user_connected(id) || get_user_userid(id) != data[1] || czm_menu_stamp(id) != data[2])
 	{
+		if (CZM_JSON_OK(root)) ezjson_free(root);
+		return;
+	}
+	if (!staff(id)) { if (CZM_JSON_OK(root)) ezjson_free(root); return; }
+	if (code != 200 || !CZM_JSON_OK(root))
+	{
+		admin_result(id, "Не удалось загрузить нарушителей. Попробуй ещё раз.", "Could not load the list. Try again.");
 		if (CZM_JSON_OK(root)) ezjson_free(root);
 		return;
 	}
@@ -1613,7 +1626,7 @@ public on_board(EzHttpRequest:request)
 	if (!count)
 	{
 		menu_destroy(menu);
-		czm_chat(id, "^4[CZM]^1 Нарушителей нет.", "^4[CZM]^1 Nobody is banned or muted.");
+		admin_result(id, "^4[CZM]^1 Нарушителей нет.", "^4[CZM]^1 Nobody is banned or muted.");
 		return;
 	}
 	texts(menu, id);
@@ -1637,26 +1650,34 @@ public on_board_menu(id, menu, item)
 
 public on_inbox(EzHttpRequest:request)
 {
-	new data[2];
-	ezhttp_get_user_data(request, data);
-	new id = data[0], code, EzJSON:root = czm_api_answer(request, code);
-	if (!is_user_connected(id) || get_user_userid(id) != data[1] || code != 200 || !CZM_JSON_OK(root))
-	{
-		if (CZM_JSON_OK(root)) ezjson_free(root);
-		return;
-	}
-	new EzJSON:list = ezjson_object_get_value(root, "messages"), count = ezjson_array_get_count(list);
-	if (!count)
-		czm_chat(id, "^4[CZM]^1 Сообщений от игроков нет.", "^4[CZM]^1 No messages from players.");
-	// oldest first, so the newest ends up at the bottom of the chat
-	for (new k = count - 1; k >= 0; k--)
-	{
-		new EzJSON:it = ezjson_array_get_value(list, k), name[32], text[192];
-		ezjson_object_get_string(it, "name", name, charsmax(name));
-		ezjson_object_get_string(it, "text", text, charsmax(text));
-		client_print_color(id, print_team_default, "^4>>^3 %s^1: %s", name, text);
-		ezjson_free(it);
-	}
-	ezjson_free(list);
-	ezjson_free(root);
+ new data[3];ezhttp_get_user_data(request,data);new id=data[0],code,EzJSON:root=czm_api_answer(request,code);
+ if(!is_user_connected(id)||get_user_userid(id)!=data[1]||czm_menu_stamp(id)!=data[2]){if(CZM_JSON_OK(root))ezjson_free(root);return;}
+ if(!staff(id)){if(CZM_JSON_OK(root))ezjson_free(root);return;}
+ new parent[16];copy(parent,charsmax(parent),g_staff[id]>=CZM_STAFF_ADMIN?"admin_messages":"mod_messages");
+ if(code!=200||!CZM_JSON_OK(root)){czm_menu_feedback(id,parent,"Обращения игроков","Players' messages","Не удалось загрузить обращения. Попробуй ещё раз.","Could not load the inbox. Try again.");if(CZM_JSON_OK(root))ezjson_free(root);return;}
+ new EzJSON:list=ezjson_object_get_value(root,"messages"),count=min(8,ezjson_array_get_count(list));g_inboxCount[id]=count;
+ if(!count)czm_menu_feedback(id,parent,"Обращения игроков","Players' messages","Новых обращений пока нет.","No messages yet.");
+ else{
+  new title[96],info[8];formatex(title,charsmax(title),"\y%s",czm_lang(id)==CZM_EN?"PLAYERS' MESSAGES":"ОБРАЩЕНИЯ ИГРОКОВ");new menu=menu_create(title,"on_inbox_pick");
+  for(new k=0;k<count;k++){
+   new EzJSON:it=ezjson_array_get_value(list,k);ezjson_object_get_string(it,"name",g_inboxName[id][k],charsmax(g_inboxName[][]));ezjson_object_get_string(it,"text",g_inboxText[id][k],charsmax(g_inboxText[][]));
+   num_to_str(k,info,charsmax(info));menu_additem(menu,g_inboxName[id][k],info);ezjson_free(it);
+  }
+  texts(menu,id);menu_display(id,menu);
+ }
+ ezjson_free(list);ezjson_free(root);
+}
+
+public on_inbox_pick(id,menu,selected)
+{
+ if(selected<0){menu_destroy(menu);czm_menu_open(id,g_staff[id]>=CZM_STAFF_ADMIN?"admin_messages":"mod_messages");return PLUGIN_HANDLED;}
+ new info[8],access,callback;menu_item_getinfo(menu,selected,access,info,charsmax(info),_,_,callback);menu_destroy(menu);
+ new k=str_to_num(info);if(!staff(id)||k<0||k>=g_inboxCount[id])return PLUGIN_HANDLED;
+ czm_menu_page(id,g_inboxName[id][k],g_inboxText[id][k],g_staff[id]>=CZM_STAFF_ADMIN?"admin_messages":"mod_messages");return PLUGIN_HANDLED;
+}
+
+admin_result(id,const ru[],const en[],any:...)
+{
+ new text[1024];vformat(text,charsmax(text),czm_lang(id)==CZM_EN?en:ru,4);
+ czm_menu_page(id,czm_lang(id)==CZM_EN?"Server management":"Управление сервером",text,g_staff[id]>=CZM_STAFF_ADMIN?"admin":g_staff[id]>=CZM_STAFF_MODERATOR?"moderator":"main");
 }

@@ -21,6 +21,8 @@
 #include <czm_admin>
 #include <czm_menu>
 
+#pragma dynamic 8192
+
 #define PLUGIN "CZM LVL"
 #define VERSION "1.0"
 #define AUTHOR "kurostreet"
@@ -152,6 +154,7 @@ public plugin_init()
 	g_cvarServer = create_cvar("czm_server_name", "survival");
 
 	register_clcmd("say", "cmd_say");
+	register_clcmd("czm_promo", "cmd_promo");
 	register_clcmd("say_team", "cmd_say_team");
 	register_clcmd("lvl", "menu_lvl");
 	menu_register();
@@ -1194,7 +1197,7 @@ act(id, const name[], EzJSON:args, const callback[] = "on_action")
 {
 	if (!g_loaded[id])
 	{
-		czm_chat(id, "^4[LVL]^1 LVL MOD работает для игроков CZM.", "^4[LVL]^1 LVL MOD works for CZM players.");
+		menu_lvl(id);
 		if (J_OK(args)) ezjson_free(args);
 		return;
 	}
@@ -1208,8 +1211,9 @@ act(id, const name[], EzJSON:args, const callback[] = "on_action")
 		ezjson_object_set_value(body, "args", args);
 		ezjson_free(args);
 	}
-	new data[2];
+	new data[3];
 	data[0] = id; data[1] = g_session[id];
+	if(!equal(name,"reward")&&!equal(name,"crate_use"))data[2]=czm_menu_feedback(id,"lvl","LVL MOD","LVL MOD","Выполняем действие…","Processing your action…");
 	api("POST", "/survival/server/action", body, callback, data, sizeof data);
 	ezjson_free(body);
 }
@@ -1217,7 +1221,7 @@ act(id, const name[], EzJSON:args, const callback[] = "on_action")
 // answers nobody needs to read about (a used charge): only the state is taken
 public on_quiet(EzHttpRequest:request)
 {
-	new data[2];
+	new data[3];
 	ezhttp_get_user_data(request, data);
 	new id = data[0], code, EzJSON:root = answer(request, code);
 	if (is_user_connected(id) && g_session[id] == data[1] && code == 200 && J_OK(root))
@@ -1245,7 +1249,7 @@ EzJSON:args2(const k1[], const v1[], const k2[], const v2[])
 
 public on_action(EzHttpRequest:request)
 {
-	new data[2];
+	new data[3];
 	ezhttp_get_user_data(request, data);
 	new id = data[0], code, EzJSON:root = answer(request, code);
 	if (!is_user_connected(id) || g_session[id] != data[1])
@@ -1261,36 +1265,36 @@ public on_action(EzHttpRequest:request)
 		apply_state(id, st);
 		ezjson_free(st);
 		look(id);
-		done_message(id, action, root);
+		done_message(id, action, root, data[2]>0 && czm_menu_stamp(id)==data[2]);
 	}
 	else
 	{
 		new error[24];
 		if (J_OK(root))
 			ezjson_object_get_string(root, "error", error, charsmax(error));
-		error_message(id, error);
+		error_message(id, error, data[2]>0 && czm_menu_stamp(id)==data[2]);
 	}
 	if (J_OK(root)) ezjson_free(root);
 }
 
-done_message(id, const action[], EzJSON:root)
+done_message(id, const action[], EzJSON:root, bool:menu)
 {
 	if (equal(action, "buy"))
 	{
 		if (ezjson_object_get_bool(root, "bought"))
-			czm_chat(id, "^4[LVL]^1 Куплено и надето. Осталось токенов: ^4%d", "^4[LVL]^1 Bought and put on. Tokens left: ^4%d", g_tokens[id]);
+			lvl_result(id, menu, "^4[LVL]^1 Куплено и надето. Осталось токенов: ^4%d", "^4[LVL]^1 Bought and put on. Tokens left: ^4%d", g_tokens[id]);
 		else
-			czm_chat(id, "^4[LVL]^1 Надето.", "^4[LVL]^1 Put on.");
+			lvl_result(id, menu, "^4[LVL]^1 Надето.", "^4[LVL]^1 Put on.");
 	}
 	else if (equal(action, "equip"))
-		czm_chat(id, "^4[LVL]^1 Готово.", "^4[LVL]^1 Done.");
+		lvl_result(id, menu, "^4[LVL]^1 Готово.", "^4[LVL]^1 Done.");
 	else if (equal(action, "upgrade"))
-		czm_chat(id, "^4[LVL]^1 Прокачка куплена. LVL ^4%d^1, токенов ^4%d", "^4[LVL]^1 Upgrade bought. LVL ^4%d^1, tokens ^4%d", g_lvl[id], g_tokens[id]);
+		lvl_result(id, menu, "^4[LVL]^1 Прокачка куплена. LVL ^4%d^1, токенов ^4%d", "^4[LVL]^1 Upgrade bought. LVL ^4%d^1, tokens ^4%d", g_lvl[id], g_tokens[id]);
 	else if (equal(action, "pay"))
 	{
 		new nick[32];
 		ezjson_object_get_string(root, "nick", nick, charsmax(nick));
-		czm_chat(id, "^4[LVL]^1 Передано ^4%d^1 токенов игроку ^3%s", "^4[LVL]^1 Sent ^4%d^1 tokens to ^3%s", ezjson_object_get_number(root, "amount"), nick);
+		lvl_result(id, menu, "^4[LVL]^1 Передано ^4%d^1 токенов игроку ^3%s", "^4[LVL]^1 Sent ^4%d^1 tokens to ^3%s", ezjson_object_get_number(root, "amount"), nick);
 		new target = ezjson_object_get_number(root, "target");
 		for (new to = 1; to <= MaxClients; to++)
 		{
@@ -1304,25 +1308,25 @@ done_message(id, const action[], EzJSON:root)
 		}
 	}
 	else if (equal(action, "reward"))
-		czm_chat(id, "^4[LVL]^1 Аирдроп: ^4+%d^1 токенов!", "^4[LVL]^1 Airdrop: ^4+%d^1 tokens!", ezjson_object_get_number(root, "amount"));
+		lvl_result(id, menu, "^4[LVL]^1 Аирдроп: ^4+%d^1 токенов!", "^4[LVL]^1 Airdrop: ^4+%d^1 tokens!", ezjson_object_get_number(root, "amount"));
 	else if (equal(action, "crate"))
-		czm_chat(id, "^4[LVL]^1 Ящик открыт на 30 минут: всё выдаётся при каждом спавне человеком.", "^4[LVL]^1 The crate is yours for 30 minutes: it is given at every spawn as a human.");
+		lvl_result(id, menu, "^4[LVL]^1 Ящик открыт на 30 минут: всё выдаётся при каждом спавне человеком.", "^4[LVL]^1 The crate is yours for 30 minutes: it is given at every spawn as a human.");
 	else if (equal(action, "bp_buy"))
-		czm_chat(id, "^4[LVL]^1 Боевой пропуск активирован на ^4%d^1 дней!", "^4[LVL]^1 Battle pass active for ^4%d^1 days!", g_bpDays);
+		lvl_result(id, menu, "^4[LVL]^1 Боевой пропуск активирован на ^4%d^1 дней!", "^4[LVL]^1 Battle pass active for ^4%d^1 days!", g_bpDays);
 	else if (equal(action, "bp_daily"))
-		czm_chat(id, "^4[LVL]^1 ^4+%d^1 токенов за вход.", "^4[LVL]^1 ^4+%d^1 tokens for coming in.", ezjson_object_get_number(root, "amount"));
+		lvl_result(id, menu, "^4[LVL]^1 ^4+%d^1 токенов за вход.", "^4[LVL]^1 ^4+%d^1 tokens for coming in.", ezjson_object_get_number(root, "amount"));
 	else if (equal(action, "bp_final"))
-		czm_chat(id, "^4[LVL]^1 Награда пропуска получена!", "^4[LVL]^1 Battle pass reward received!");
+		lvl_result(id, menu, "^4[LVL]^1 Награда пропуска получена!", "^4[LVL]^1 Battle pass reward received!");
 	else if (equal(action, "promo"))
 	{
 		new kind[8];
 		ezjson_object_get_string(root, "kind", kind, charsmax(kind));
-		czm_chat(id, "^4[LVL]^1 Промокод: ^4+%d %s", "^4[LVL]^1 Promo code: ^4+%d %s", ezjson_object_get_number(root, "amount"),
+		lvl_result(id, menu, "^4[LVL]^1 Промокод: ^4+%d %s", "^4[LVL]^1 Promo code: ^4+%d %s", ezjson_object_get_number(root, "amount"),
 			equal(kind, "lvl") ? "LVL" : (czm_lang(id) == CZM_EN ? "tokens" : "токенов"));
 	}
 }
 
-error_message(id, const error[])
+error_message(id, const error[], bool:menu = false)
 {
 	new const codes[][] = { "tokens", "not_owned", "admin_only", "not_for_sale", "pay_lvl", "pay_limit", "bp_active",
 		"bp_inactive", "bp_daily_done", "bp_tasks", "bp_final_done", "promo", "promo_used", "player", "self" };
@@ -1338,18 +1342,21 @@ error_message(id, const error[])
 	{
 		if (equal(error, codes[i]))
 		{
-			czm_chat(id, "^4[LVL]^3 %s", "^4[LVL]^3 %s", ru[i], en[i]);
+			new message[192];
+			if (czm_lang(id) == CZM_EN) copy(message, charsmax(message), en[i]);
+			else copy(message, charsmax(message), ru[i]);
+			lvl_result(id, menu, "^4[LVL]^3 %s", "^4[LVL]^3 %s", message);
 			return;
 		}
 	}
-	czm_chat(id, "^4[LVL]^3 Не получилось, попробуй ещё раз.", "^4[LVL]^3 That did not work, try again.");
+	lvl_result(id, menu, "^4[LVL]^3 Не получилось, попробуй ещё раз.", "^4[LVL]^3 That did not work, try again.");
 }
 
 use_promo(id, const code[])
 {
 	if (!code[0])
 	{
-		czm_chat(id, "^4[LVL]^1 Напиши: ^4/promo КОД", "^4[LVL]^1 Type: ^4/promo CODE");
+		czm_menu_page(id,czm_lang(id)==CZM_EN?"Promo code":"Промокод",czm_lang(id)==CZM_EN?"Enter the code. The server will verify it and apply an available reward.":"Введи код. Сервер проверит его и начислит доступную награду.","lvl","czm_promo",czm_lang(id)==CZM_EN?"Promo code":"Код");
 		return PLUGIN_HANDLED;
 	}
 	act(id, "promo", args1("code", code));
@@ -1363,6 +1370,7 @@ menu_register()
 {
 	czm_menu_section("lvl", "LVL MOD", "LVL MOD", "crown", 10);
 	czm_menu_item("main", "go_lvl", "LVL MOD", "LVL MOD", "Уровень, токены, магазин", "Level, tokens, shop", "crown", "E7BB60", "#lvl", 10);
+	czm_menu_item("lvl", "lvl_help", "Подключить профиль", "Connect profile", "Доступ к LVL и токенам", "Access to levels and tokens", "user", "F9A84A", "on_czm_menu_lvl", 0);
 	czm_menu_item("lvl", "lvl_profile", "Профиль", "Profile", "Уровень, время, победы", "Level, time, wins", "user", "63A1EF", "on_czm_menu_lvl", 10);
 	czm_menu_item("lvl", "lvl_shop", "Магазин", "Shop", "Скины, ножи, префиксы", "Skins, knives, prefixes", "cart", "E7BB60", "on_czm_menu_lvl", 20);
 	czm_menu_item("lvl", "lvl_upgrades", "Прокачка", "Upgrades", "LVL и токены ×2", "LVL and tokens ×2", "bolt", "F59E0B", "on_czm_menu_lvl", 30);
@@ -1379,12 +1387,13 @@ public czm_menu_build(id, const section[])
 	if (!g_loaded[id])
 	{
 		// guests: LVL MOD needs the CZM profile
-		czm_menu_state(id, "go_lvl", _, ru ? "Для игроков CZM" : "For CZM players", _, false, true);
+		czm_menu_state(id, "go_lvl", _, ru ? "Подключить профиль CZM" : "Connect your CZM profile");
 		static const keys[][] = {"lvl_profile", "lvl_shop", "lvl_upgrades", "lvl_crate", "lvl_bp", "lvl_pay", "lvl_top", "lvl_promo"};
 		for (new k = 0; k < sizeof keys; k++)
-			czm_menu_state(id, keys[k], _, _, _, false, true);
+			czm_menu_state(id, keys[k], _, _, _, true);
 		return;
 	}
+	czm_menu_state(id, "lvl_help", _, _, _, true);
 	formatex(line, charsmax(line), ru ? "LVL %d · токенов %d" : "LVL %d · %d tokens", g_lvl[id], g_tokens[id]);
 	czm_menu_state(id, "go_lvl", _, line);
 	czm_menu_state(id, "lvl_profile", _, line);
@@ -1422,7 +1431,7 @@ public menu_lvl(id)
 {
 	if (!g_loaded[id])
 	{
-		czm_chat(id, "^4[LVL]^1 LVL MOD работает для игроков CZM: зайди из игры Counter Zombie Mobile.", "^4[LVL]^1 LVL MOD works for Counter Zombie Mobile players.");
+		czm_menu_page(id,czm_lang(id)==CZM_EN?"Connect your profile":"Подключить профиль",czm_lang(id)==CZM_EN?"Your CZM profile is not connected to this match yet. Sign in, then reconnect to the server. If you have just joined, wait a moment and reopen LVL MOD.":"Профиль CZM ещё не подключён к этому матчу. Войди в профиль и переподключись к серверу. Если ты только зашёл, немного подожди и открой LVL MOD ещё раз.","lvl","@account");
 		return PLUGIN_HANDLED;
 	}
 	czm_menu_open(id, "lvl");
@@ -1436,7 +1445,7 @@ show_profile(id)
 
 api_me(id)
 {
-	// the profile in chat: one request for fresh numbers
+	// A fresh profile opens as a page; late replies cannot replace another section.
 	new EzJSON:body = ezjson_init_object(), EzJSON:args = ezjson_init_object(), name[32];
 	get_user_name(id, name, charsmax(name));
 	ezjson_object_set_number(body, "player", g_profile[id]);
@@ -1445,15 +1454,16 @@ api_me(id)
 	ezjson_object_set_string(args, "nick", name);
 	ezjson_object_set_value(body, "args", args);
 	ezjson_free(args);
-	new data[2];
+	new data[3];
 	data[0] = id; data[1] = g_session[id];
+	data[2]=czm_menu_feedback(id,"lvl","Мой профиль","My profile","Загружаем актуальные данные…","Loading current stats…");
 	api("POST", "/survival/server/join", body, "on_profile", data, sizeof data);
 	ezjson_free(body);
 }
 
 public on_profile(EzHttpRequest:request)
 {
-	new data[2];
+	new data[3];
 	ezhttp_get_user_data(request, data);
 	new id = data[0], code, EzJSON:root = answer(request, code);
 	if (is_user_connected(id) && g_session[id] == data[1] && code == 200 && J_OK(root))
@@ -1465,17 +1475,23 @@ public on_profile(EzHttpRequest:request)
 		new wins = ezjson_object_get_number(st, "wins"), wr = ezjson_object_get_number(st, "wr");
 		new nk = ezjson_object_get_number(st, "next_lvl_kills"), nt = ezjson_object_get_number(st, "next_lvl_time");
 		ezjson_free(st);
-		czm_chat(id, "^4[LVL]^1 LVL ^4%d^1 · токены ^4%d^1 · убийств ^4%d^1 · смертей ^4%d", "^4[LVL]^1 LVL ^4%d^1 · tokens ^4%d^1 · kills ^4%d^1 · deaths ^4%d", g_lvl[id], g_tokens[id], kills, deaths);
-		czm_chat(id, "^4[LVL]^1 В игре ^4%d ч %d мин^1 · раундов ^4%d^1 · побед ^4%d^1 (%d%%)", "^4[LVL]^1 Played ^4%d h %d min^1 · rounds ^4%d^1 · wins ^4%d^1 (%d%%)", seconds / 3600, seconds / 60 % 60, matches, wins, wr);
-		czm_chat(id, "^4[LVL]^1 До следующего LVL: ^4%d^1 убийств или ^4%d^1 мин", "^4[LVL]^1 Next LVL: ^4%d^1 kills or ^4%d^1 min", nk, (nt + 59) / 60);
+		if(czm_menu_stamp(id)==data[2]){
+		 new text[1024];formatex(text,charsmax(text),czm_lang(id)==CZM_EN?"LVL %d  ·  Tokens: %d^n^nKills: %d  ·  Deaths: %d^nPlayed: %d h %d min^nRounds: %d  ·  Wins: %d (%d%%)^n^nNext level: %d kills or %d min":"LVL %d  ·  Токены: %d^n^nУбийства: %d  ·  Смерти: %d^nВ игре: %d ч %d мин^nРаунды: %d  ·  Победы: %d (%d%%)^n^nДо следующего уровня: %d убийств или %d мин",g_lvl[id],g_tokens[id],kills,deaths,seconds/3600,seconds/60%60,matches,wins,wr,nk,(nt+59)/60);
+		 czm_menu_page(id,czm_lang(id)==CZM_EN?"My profile":"Мой профиль",text,"lvl");
+		}
 	}
+	if(is_user_connected(id)&&g_session[id]==data[1]&&czm_menu_stamp(id)==data[2]&&(code!=200||!J_OK(root)))
+	 czm_menu_feedback(id,"lvl","Мой профиль","My profile","Не удалось загрузить профиль. Попробуй ещё раз.","Could not load your profile. Try again.");
 	if (J_OK(root)) ezjson_free(root);
 }
 
 menu_shop(id)
 {
 	if (!g_catalogReady)
+	{
+		czm_menu_feedback(id,"lvl","Каталог LVL MOD","LVL MOD catalog","Каталог ещё загружается. Попробуй открыть его ещё раз через несколько секунд.","The catalog is loading. Reopen it in a few seconds.");
 		return;
+	}
 	new ru = czm_lang(id) == CZM_RU, title[96], item[80], info[4];
 	formatex(title, charsmax(title), ru ? "\yМАГАЗИН^n\wТокены \r%d" : "\ySHOP^n\wTokens \r%d", g_tokens[id]);
 	new menu = menu_create(title, "on_menu_shop");
@@ -1640,7 +1656,7 @@ public on_menu_bp(id, menu, key)
 	switch (key)
 	{
 		case 0: act(id, "bp_daily", J_NONE);
-		case 1: czm_chat(id, "^4[LVL]^1 Все задания и прогресс — в панели на ^4%s", "^4[LVL]^1 Every task and its progress is in the panel at ^4%s", CZM_SITE);
+		case 1: { client_cmd(id,"czm_panel"); czm_menu_open(id,"lvl"); }
 		case 2: act(id, "bp_final", args1("item", "lvl"));
 		case 3: act(id, "bp_final", args1("item", "tokens"));
 		case 4: act(id, "bp_final", args1("item", "prefix"));
@@ -1665,7 +1681,7 @@ menu_pay(id)
 	if (!menu_items(menu))
 	{
 		menu_destroy(menu);
-		czm_chat(id, "^4[LVL]^1 Сейчас некому переводить. Друзьям вне игры — через панель на ^4%s", "^4[LVL]^1 Nobody to send to right now. Use the panel at ^4%s^1 for friends outside the game", CZM_SITE);
+		czm_menu_feedback(id,"lvl","Перевод токенов","Send tokens","На сервере нет других игроков с подключённым профилем CZM. Переводы друзьям вне игры доступны в панели на сайте.","No other connected CZM profiles on this server. Use the website panel to send tokens to friends outside the game.");
 		return;
 	}
 	menu_display(id, menu);
@@ -1708,31 +1724,35 @@ public on_menu_pay_amount(id, menu, key)
 
 show_top(id)
 {
-	new data[2];
+	new data[3];
 	data[0] = id; data[1] = g_session[id];
+	data[2]=czm_menu_feedback(id,"lvl","Топ игроков","Top players","Загружаем рейтинг…","Loading the leaderboard…");
 	api("GET", "/survival/top?kind=lvl&limit=10", J_NONE, "on_top", data, sizeof data);
 	return PLUGIN_HANDLED;
 }
 
 public on_top(EzHttpRequest:request)
 {
-	new data[2];
+	new data[3];
 	ezhttp_get_user_data(request, data);
 	new id = data[0], code, EzJSON:root = answer(request, code);
-	if (is_user_connected(id) && g_session[id] == data[1] && code == 200 && J_OK(root))
+	if (is_user_connected(id) && g_session[id] == data[1] && czm_menu_stamp(id)==data[2] && code == 200 && J_OK(root))
 	{
 		new EzJSON:top = ezjson_object_get_value(root, "top");
-		czm_chat(id, "^4[LVL]^1 Топ игроков по уровню:", "^4[LVL]^1 Top players by level:");
+		new text[2048],len;
 		for (new n = 0, count = J_OK(top) ? min(ezjson_array_get_count(top), 10) : 0; n < count; n++)
 		{
 			new EzJSON:row = ezjson_array_get_value(top, n), nick[32];
 			ezjson_object_get_string(row, "nick", nick, charsmax(nick));
-			czm_chat(id, "^4%d. ^3%s^1 — LVL ^4%d^1, убийств %d", "^4%d. ^3%s^1 — LVL ^4%d^1, %d kills", n + 1, nick,
-				ezjson_object_get_number(row, "lvl"), ezjson_object_get_number(row, "kills"));
+			len+=formatex(text[len],charsmax(text)-len,czm_lang(id)==CZM_EN?"%d. %s — LVL %d, %d kills^n":"%d. %s — LVL %d, убийств %d^n",n+1,nick,ezjson_object_get_number(row,"lvl"),ezjson_object_get_number(row,"kills"));
 			ezjson_free(row);
 		}
+		if(!text[0])copy(text,charsmax(text),czm_lang(id)==CZM_EN?"The leaderboard is empty.":"Рейтинг пока пуст.");
+		czm_menu_page(id,czm_lang(id)==CZM_EN?"Top players":"Топ игроков",text,"lvl");
 		if (J_OK(top)) ezjson_free(top);
 	}
+	if(is_user_connected(id)&&g_session[id]==data[1]&&czm_menu_stamp(id)==data[2]&&(code!=200||!J_OK(root)))
+	 czm_menu_feedback(id,"lvl","Топ игроков","Top players","Не удалось загрузить рейтинг. Попробуй ещё раз.","Could not load the leaderboard. Try again.");
 	if (J_OK(root)) ezjson_free(root);
 }
 
@@ -1800,4 +1820,12 @@ public native_reward(plugin, params)
 	ezjson_object_set_number(a, "amount", amount);
 	act(id, "reward", a);
 	return 1;
+}
+
+public cmd_promo(id){new code[724];read_args(code,charsmax(code));remove_quotes(code);trim(code);if(!g_loaded[id])return menu_lvl(id);return use_promo(id,code);}
+
+lvl_result(id,bool:menu,const ru[],const en[],any:...)
+{
+ new text[1024];vformat(text,charsmax(text),czm_lang(id)==CZM_EN?en:ru,5);
+ if(menu)czm_menu_page(id,"LVL MOD",text,"lvl");else czm_chat(id,"%s","%s",text);
 }

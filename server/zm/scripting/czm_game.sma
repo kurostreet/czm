@@ -27,6 +27,8 @@
 #include <czm_admin>
 #include <czm_menu>
 
+#pragma dynamic 8192
+
 #define PLUGIN "CZM Game"
 #define VERSION "1.0"
 #define AUTHOR "kurostreet"
@@ -75,10 +77,11 @@ new g_tpFrom[MAX_PLAYERS + 1], g_tpMode[MAX_PLAYERS + 1];   // on the target: wh
 new g_tpLeft[MAX_PLAYERS + 1];
 
 // ---------------------------------------------------------------- news
-new g_newsId[MAX_NEWS], g_newsRu[MAX_NEWS][164], g_newsEn[MAX_NEWS][164], g_newsWhen[MAX_NEWS], g_newsCount;
+new g_newsId[MAX_NEWS], g_newsRu[MAX_NEWS][640], g_newsEn[MAX_NEWS][640], g_newsWhen[MAX_NEWS], g_newsCount;
 new g_newsSeen[MAX_PLAYERS + 1];
 
 new g_hud;
+new bool:g_msgPending[MAX_PLAYERS + 1], g_msgText[MAX_PLAYERS + 1][721], g_msgName[MAX_PLAYERS + 1][32];
 
 public plugin_precache()
 {
@@ -99,6 +102,7 @@ public plugin_init()
 	register_clcmd("say_team", "cmd_say");
 	register_clcmd("menu", "game_menu");
 	register_clcmd("czm_admin_msg", "cmd_admin_msg");
+	register_srvcmd("czm_news_reload", "task_news");
 	menu_register();
 	register_message(SVC_INTERMISSION, "msg_intermission");
 	create_cvar("amx_nextmap", "", FCVAR_SERVER | FCVAR_SPONLY, "The next map, chosen by the players' vote");
@@ -244,10 +248,10 @@ public cmd_say(id)
 // the tabs and cards of this plugin in the server menu (czm_menu)
 menu_register()
 {
-	czm_menu_section("main", "Главное", "Main", "star", 0);
+	czm_menu_section("main", "Главная", "Main", "star", 0);
 	czm_menu_section("players", "Игроки", "Players", "users", 30);
 	czm_menu_section("votes", "Голосования", "Voting", "flag", 40);
-	czm_menu_section("server", "Сервер", "Server", "globe", 50);
+	czm_menu_section("server", "Сообщество", "Community", "globe", 50);
 
 	czm_menu_item("main", "panel", "Панель на сайте", "Player panel", "Скины, магазин, топ", "Skins, shop, top", "globe", "6BDAA7", "on_czm_menu", 20);
 	czm_menu_item("main", "go_votes", "Голосования", "Voting", "Карта, бан, мут", "Map, ban, mute", "flag", "A855F7", "#votes", 40);
@@ -256,8 +260,9 @@ menu_register()
 	czm_menu_item("main", "news", "Новости сервера", "Server news", "Что нового на сервере", "What is new here", "bell", "63A1EF", "on_czm_menu", 70);
 	czm_menu_item("main", "msg", "Сообщение админу", "Message to the staff", "Прочитает владелец", "The owner reads it", "chat", "F97316", "on_czm_menu", 80);
 
+	czm_menu_item("players", "pl_list", "Игроки на сервере", "Players on server", "Список и состояние игроков", "Player list and status", "users", "F9A84A", "on_czm_menu", 5);
 	czm_menu_item("players", "pl_tp", "Телепорт", "Teleport", "Позвать к себе или пойти к другу", "Call a human or go to one", "target", "22D3EE", "on_czm_menu", 10);
-	czm_menu_item("players", "pl_invite", "Приглашения", "Invitations", "Сайт, панель и Telegram в чат", "The site, panel and Telegram", "person_add", "E53F4D", "on_czm_menu", 20);
+	czm_menu_item("players", "pl_invite", "Приглашения", "Invitations", "Друзья и приглашение в игру", "Friends and game invitations", "person_add", "E53F4D", "on_czm_menu", 20);
 	czm_menu_item("players", "pl_board", "Нарушители", "Violators", "Баны и муты сейчас", "Bans and mutes now", "block", "9BA6B8", "on_czm_menu", 30);
 
 	czm_menu_item("votes", "v_map", "За смену карты", "Change the map", "Голоса всех игроков", "Everyone's votes", "flag", "A855F7", "on_czm_menu", 10);
@@ -303,7 +308,9 @@ public czm_menu_build(id, const section[])
 
 public on_czm_menu(id, const key[])
 {
-	if (equal(key, "panel") || equal(key, "sv_panel"))
+	if (equal(key, "pl_list"))
+		players_menu(id);
+	else if (equal(key, "panel") || equal(key, "sv_panel"))
 		open_panel(id);
 	else if (equal(key, "tp") || equal(key, "pl_tp"))
 		tp_menu(id);
@@ -315,14 +322,13 @@ public on_czm_menu(id, const key[])
 		show_board(id);
 	else if (equal(key, "msg") || equal(key, "sv_msg"))
 	{
-		czm_chat(id, "^4[CZM]^1 Напиши сообщение администрации и отправь — его прочитает владелец сервера.",
-			"^4[CZM]^1 Type your message to the staff and send it: the server owner reads it.");
-		client_cmd(id, "messagemode czm_admin_msg");
+		czm_menu_page(id, en(id) ? "Message to the staff" : "Сообщение админу",
+			en(id) ? "Describe the issue. The message goes privately to the server staff, without appearing in general chat." : "Опиши проблему. Сообщение получит администрация сервера, в общий чат оно не попадёт.",
+			"server", "czm_admin_msg", en(id) ? "Your message, up to 180 characters" : "Сообщение, до 180 символов");
 	}
 	else if (equal(key, "v_map"))
 	{
 		vote_map(id);
-		czm_menu_open(id, "votes");
 	}
 	else if (equal(key, "v_ban") || equal(key, "v_mute"))
 	{
@@ -331,8 +337,7 @@ public on_czm_menu(id, const key[])
 	}
 	else if (equal(key, "sv_next"))
 	{
-		czm_chat(id, "^4[CZM]^1 Следующая карта: ^4%s", "^4[CZM]^1 Next map: ^4%s", g_nextMap[0] ? g_nextMap : (en(id) ? "after the vote" : "после голосования"));
-		czm_menu_open(id, "server");
+		czm_menu_feedback(id, "server", "Следующая карта", "Next map", "Следующая карта: %s", "Next map: %s", g_nextMap[0] ? g_nextMap : (en(id) ? "not chosen yet. Open Voting to choose a map." : "ещё не выбрана. Выбор доступен в разделе «Голосования»."));
 	}
 }
 
@@ -340,17 +345,14 @@ public on_czm_menu(id, const key[])
 // one-time link); other games get the address in chat.
 open_panel(id)
 {
-	client_cmd(id, "czm_panel");
-	czm_chat(id, "^4[CZM]^1 Панель игрока открывается в браузере. Если нет: ^4%s/panel", "^4[CZM]^1 The player panel opens in your browser. If not: ^4%s/panel", CZM_SITE);
+ client_cmd(id, "czm_panel");
+ czm_menu_open(id, "server");
 }
 
 invite(id)
 {
-	czm_chat(id, "^4[CZM]^1 Сайт игры: ^4%s", "^4[CZM]^1 The game's site: ^4%s", CZM_SITE);
-	czm_chat(id, "^4[CZM]^1 Панель игрока: ^4%s/panel", "^4[CZM]^1 Player panel: ^4%s/panel", CZM_SITE);
-	czm_chat(id, "^4[CZM]^1 Telegram: ^4t.me/counter_zombie_mobile", "^4[CZM]^1 Telegram: ^4t.me/counter_zombie_mobile");
-	set_hudmessage(0, 255, 255, -1.0, 0.32, 0, 0.0, 3.0, 0.2, 0.4, -1);
-	ShowSyncHudMsg(id, g_hud, en(id) ? "LINKS ARE IN THE CHAT!" : "ССЫЛКИ В ЧАТЕ!");
+ czm_menu_page(id, en(id) ? "Invite a friend" : "Пригласить друга",
+  en(id) ? "Choose a friend. They will receive a game invitation with a button to join this server." : "Выбери друга. Ему придёт приглашение с кнопкой подключения к этому серверу.", "players", "@friends");
 }
 
 // ---------------------------------------------------------------- votes
@@ -359,19 +361,19 @@ vote_map(id)
 {
 	if (g_mapVoteRunning || g_mapVoteDone)
 	{
-		czm_chat(id, "^4[CZM]^1 Карта уже выбирается или выбрана.", "^4[CZM]^1 The next map is being chosen or already chosen.");
+		czm_menu_feedback(id, "votes", "Голосование", "Voting", "^4[CZM]^1 Карта уже выбирается или выбрана.", "^4[CZM]^1 The next map is being chosen or already chosen.");
 		return;
 	}
 	if (get_gametime() < g_mapCooldown)
 	{
-		czm_chat(id, "^4[CZM]^1 Недавно уже голосовали — подожди.", "^4[CZM]^1 There was a vote recently: wait a little.");
+		czm_menu_feedback(id, "votes", "Голосование", "Voting", "^4[CZM]^1 Недавно уже голосовали — подожди.", "^4[CZM]^1 There was a vote recently: wait a little.");
 		return;
 	}
 	new key[40];
 	key_of(id, key, charsmax(key));
 	if (TrieKeyExists(g_mapVoters, key))
 	{
-		czm_chat(id, "^4[CZM]^1 Ты уже голосовал.", "^4[CZM]^1 You have voted already.");
+		czm_menu_feedback(id, "votes", "Голосование", "Voting", "^4[CZM]^1 Ты уже голосовал.", "^4[CZM]^1 You have voted already.");
 		return;
 	}
 	TrieSetCell(g_mapVoters, key, 1);
@@ -386,6 +388,7 @@ vote_map(id)
 		g_changeNow = true;
 		start_map_vote();
 	}
+	else czm_menu_feedback(id, "votes", "Голос учтён", "Vote recorded", "За смену карты: %d/%d. Когда голосов станет достаточно, откроется выбор следующей карты.", "Map change votes: %d/%d. The map ballot opens when enough players vote.", have, needed);
 }
 
 pick_player(id)
@@ -428,7 +431,7 @@ pick_player(id)
 	if (!menu_items(menu))
 	{
 		menu_destroy(menu);
-		czm_chat(id, "^4[CZM]^1 Подходящих игроков нет.", "^4[CZM]^1 There is nobody to choose.");
+		czm_menu_feedback(id, "players", "Игроки", "Players", "^4[CZM]^1 Подходящих игроков нет.", "^4[CZM]^1 There is nobody to choose.");
 		return;
 	}
 	texts(menu, id);
@@ -448,7 +451,7 @@ public on_pick_player(id, menu, item_)
 	new target = find_player_ex(FindPlayer_MatchUserId, str_to_num(info));
 	if (!target)
 	{
-		czm_chat(id, "^4[CZM]^1 Игрок уже вышел.", "^4[CZM]^1 The player has left.");
+		czm_menu_feedback(id, "players", "Игроки", "Players", "^4[CZM]^1 Игрок уже вышел.", "^4[CZM]^1 The player has left.");
 		return PLUGIN_HANDLED;
 	}
 	switch (g_pickKind[id])
@@ -463,7 +466,7 @@ vote_against(id, target, bool:ban)
 {
 	if (czm_staff(target) != CZM_STAFF_NONE || czm_privilege(target))
 	{
-		czm_chat(id, "^4[CZM]^1 Против администрации и игроков с привилегией голосовать нельзя.", "^4[CZM]^1 Staff and privileged players are immune.");
+		czm_menu_feedback(id, "players", "Игроки", "Players", "^4[CZM]^1 Против администрации и игроков с привилегией голосовать нельзя.", "^4[CZM]^1 Staff and privileged players are immune.");
 		return;
 	}
 	new targetKey[40], voterKey[40], pair[84], gate[48], Float:until;
@@ -472,19 +475,19 @@ vote_against(id, target, bool:ban)
 	formatex(gate, charsmax(gate), "%s|%s", ban ? "ban" : "mute", targetKey);
 	if (TrieGetCell(g_cooldown, gate, until) && get_gametime() < until)
 	{
-		czm_chat(id, "^4[CZM]^1 Это голосование на перерыве.", "^4[CZM]^1 This vote is on a break.");
+		czm_menu_feedback(id, "players", "Игроки", "Players", "^4[CZM]^1 Это голосование на перерыве.", "^4[CZM]^1 This vote is on a break.");
 		return;
 	}
 	if (!ban && czm_muted(target))
 	{
-		czm_chat(id, "^4[CZM]^1 У игрока уже мут.", "^4[CZM]^1 The player is muted already.");
+		czm_menu_feedback(id, "players", "Игроки", "Players", "^4[CZM]^1 У игрока уже мут.", "^4[CZM]^1 The player is muted already.");
 		return;
 	}
 	formatex(pair, charsmax(pair), "%s|%s", targetKey, voterKey);
 	new Trie:voters = ban ? g_banVoters : g_muteVoters, Trie:counts = ban ? g_banCount : g_muteCount;
 	if (TrieKeyExists(voters, pair))
 	{
-		czm_chat(id, "^4[CZM]^1 Ты уже голосовал.", "^4[CZM]^1 You have voted already.");
+		czm_menu_feedback(id, "players", "Игроки", "Players", "^4[CZM]^1 Ты уже голосовал.", "^4[CZM]^1 You have voted already.");
 		return;
 	}
 	TrieSetCell(voters, pair, 1);
@@ -500,13 +503,17 @@ vote_against(id, target, bool:ban)
 		czm_chat(0, "^4[CZM]^3 %s^1 голосует за мут ^3%s^1: ^4%d/%d", "^4[CZM]^3 %s^1 votes to mute ^3%s^1: ^4%d/%d", who, name, voices, needed);
 	czm_play_sound(id, g_hVoteStart);
 	if (voices < needed)
+	{
+		czm_menu_feedback(id, "votes", "Голос учтён", "Vote recorded", "%s: %d/%d", "%s: %d/%d", name, voices, needed);
 		return;
+	}
 	TrieDeleteKey(counts, targetKey);
 	clear_votes_for(voters, targetKey);
 	TrieSetCell(g_cooldown, gate, get_gametime() + VOTE_COOLDOWN);
 	czm_play_sound(0, g_hVoteStop);
 	// no reason: by 0 already tells everyone it was the players' vote
 	czm_sanction(target, ban ? "ban" : "mute", ban ? VOTE_BAN_SECONDS : VOTE_MUTE_SECONDS, "", 0);
+	czm_menu_feedback(id, "votes", "Голосование завершено", "Vote completed", "Голосов достаточно. Решение передано серверу.", "Enough votes. The decision was sent to the server.");
 }
 
 // Forgets the voices about one player once the vote passed, so a later vote starts from zero.
@@ -533,43 +540,26 @@ clear_votes_for(Trie:voters, const targetKey[])
 
 show_board(id)
 {
-	new data[2];
-	data[0] = id; data[1] = get_user_userid(id);
-	czm_api("GET", "/survival/board?limit=10", CZM_JSON_NONE, "on_board", data, sizeof data);
+ new data[3]; data[0]=id; data[1]=get_user_userid(id);
+ data[2]=czm_menu_feedback(id,"players","Нарушители","Violators","Загружаем действующие наказания…","Loading active sanctions…");
+ czm_api("GET", "/survival/board?limit=10", CZM_JSON_NONE, "on_board", data, sizeof data);
 }
 
 public on_board(EzHttpRequest:request)
 {
-	new data[2];
-	ezhttp_get_user_data(request, data);
-	new id = data[0], code, EzJSON:root = czm_api_answer(request, code);
-	if (!is_user_connected(id) || get_user_userid(id) != data[1] || code != 200 || !CZM_JSON_OK(root))
-	{
-		if (CZM_JSON_OK(root)) ezjson_free(root);
-		return;
-	}
-	new EzJSON:board = ezjson_object_get_value(root, "board"), count = ezjson_array_get_count(board);
-	if (!count)
-		czm_chat(id, "^4[CZM]^1 Доска нарушителей пуста.", "^4[CZM]^1 The violators board is empty.");
-	else
-		czm_chat(id, "^4[CZM]^1 Доска нарушителей:", "^4[CZM]^1 Violators board:");
-	for (new k = 0; k < count; k++)
-	{
-		new EzJSON:it = ezjson_array_get_value(board, k), kind[8], name[32], reason[64], left[24];
-		ezjson_object_get_string(it, "kind", kind, charsmax(kind));
-		ezjson_object_get_string(it, "name", name, charsmax(name));
-		ezjson_object_get_string(it, "reason", reason, charsmax(reason));
-		if (!reason[0] && ezjson_object_get_bool(it, "vote"))
-			copy(reason, charsmax(reason), en(id) ? "players' vote" : "голосование игроков");
-		czm_api_left(ezjson_object_get_number(it, "left"), left, charsmax(left), czm_lang(id));
-		if (equal(kind, "ban"))
-			czm_chat(id, "^3%s^1 — ^4бан^1 %s%s%s", "^3%s^1 — ^4ban^1 %s%s%s", name, left, reason[0] ? ", " : "", reason);
-		else
-			czm_chat(id, "^3%s^1 — ^4мут^1 %s%s%s", "^3%s^1 — ^4mute^1 %s%s%s", name, left, reason[0] ? ", " : "", reason);
-		ezjson_free(it);
-	}
-	ezjson_free(board);
-	ezjson_free(root);
+ new data[3]; ezhttp_get_user_data(request,data);
+ new id=data[0],code,EzJSON:root=czm_api_answer(request,code);
+ if(!is_user_connected(id)||get_user_userid(id)!=data[1]||czm_menu_stamp(id)!=data[2]) {if(CZM_JSON_OK(root))ezjson_free(root);return;}
+ if(code!=200||!CZM_JSON_OK(root)){czm_menu_feedback(id,"players","Нарушители","Violators","Не удалось загрузить список. Попробуй ещё раз.","Could not load the list. Try again.");if(CZM_JSON_OK(root))ezjson_free(root);return;}
+ new body[2048],len,EzJSON:list=ezjson_object_get_value(root,"board"),count=ezjson_array_get_count(list);
+ if(!count)copy(body,charsmax(body),en(id)?"No active sanctions.":"Действующих наказаний нет.");
+ for(new k=0;k<count&&len<charsmax(body)-200;k++){
+  new EzJSON:it=ezjson_array_get_value(list,k),kind[8],name[32],reason[96],left[32];
+  ezjson_object_get_string(it,"kind",kind,charsmax(kind));ezjson_object_get_string(it,"name",name,charsmax(name));ezjson_object_get_string(it,"reason",reason,charsmax(reason));
+  czm_api_left(ezjson_object_get_number(it,"left"),left,charsmax(left),czm_lang(id));
+  len+=formatex(body[len],charsmax(body)-len,"%s — %s, %s^n%s^n^n",name,equal(kind,"ban")?(en(id)?"ban":"бан"):(en(id)?"mute":"мут"),left,reason);ezjson_free(it);
+ }
+ czm_menu_page(id,en(id)?"Violators":"Нарушители",body,"players");ezjson_free(list);ezjson_free(root);
 }
 
 // ---------------------------------------------------------------- the map vote
@@ -750,13 +740,13 @@ public tp_menu(id)
 {
 	if (!is_user_alive(id) || zp_get_user_zombie(id))
 	{
-		czm_chat(id, "^4[CZM]^1 Телепорт — для живых людей.", "^4[CZM]^1 Teleport is for living humans.");
+		czm_menu_feedback(id, "players", "Телепорт", "Teleport", "^4[CZM]^1 Телепорт — для живых людей.", "^4[CZM]^1 Teleport is for living humans.");
 		return PLUGIN_HANDLED;
 	}
 	new Float:wait = g_tpReady[id] - get_gametime();
 	if (wait > 0.0)
 	{
-		czm_chat(id, "^4[CZM]^1 Телепорт будет доступен через ^4%d^1 с.", "^4[CZM]^1 Teleport is ready in ^4%d^1 s.", floatround(wait, floatround_ceil));
+		czm_menu_feedback(id, "players", "Телепорт", "Teleport", "^4[CZM]^1 Телепорт будет доступен через ^4%d^1 с.", "^4[CZM]^1 Teleport is ready in ^4%d^1 s.", floatround(wait, floatround_ceil));
 		return PLUGIN_HANDLED;
 	}
 	new title[64];
@@ -788,12 +778,12 @@ tp_request(id, target, mode)
 {
 	if (!is_user_alive(id) || zp_get_user_zombie(id) || !is_user_alive(target) || zp_get_user_zombie(target))
 	{
-		czm_chat(id, "^4[CZM]^1 Телепорт — между живыми людьми.", "^4[CZM]^1 Teleport works between living humans.");
+		czm_menu_feedback(id, "players", "Телепорт", "Teleport", "^4[CZM]^1 Телепорт — между живыми людьми.", "^4[CZM]^1 Teleport works between living humans.");
 		return;
 	}
 	if (g_tpFrom[target])
 	{
-		czm_chat(id, "^4[CZM]^1 Этому игроку уже пришёл запрос, попробуй позже.", "^4[CZM]^1 That player already has a request: try later.");
+		czm_menu_feedback(id, "players", "Телепорт", "Teleport", "^4[CZM]^1 Этому игроку уже пришёл запрос, попробуй позже.", "^4[CZM]^1 That player already has a request: try later.");
 		return;
 	}
 	g_tpReady[id] = get_gametime() + TP_COOLDOWN;
@@ -813,7 +803,7 @@ tp_request(id, target, mode)
 	menu_display(target, menu, 0, TP_ANSWER);
 	czm_play_sound(target, g_hInvite);
 	get_user_name(target, name, charsmax(name));
-	czm_chat(id, "^4[CZM]^1 Запрос отправлен игроку ^3%s^1.", "^4[CZM]^1 The request went to ^3%s^1.", name);
+	czm_menu_feedback(id, "players", "Телепорт", "Teleport", "^4[CZM]^1 Запрос отправлен игроку ^3%s^1.", "^4[CZM]^1 The request went to ^3%s^1.", name);
 }
 
 public on_tp_answer(id, menu, item_)
@@ -887,54 +877,35 @@ bool:teleport_near(who, to)
 
 public cmd_admin_msg(id)
 {
-	new text[200], name[32], ip[40];
-	read_args(text, charsmax(text));
-	remove_quotes(text);
-	trim(text);
-	if (strlen(text) < 3)
-		return PLUGIN_HANDLED;
-	get_user_name(id, name, charsmax(name));
-	get_user_ip(id, ip, charsmax(ip), 1);
-	new EzJSON:body = ezjson_init_object(), data[2], server[32];
-	get_cvar_string("czm_server_name", server, charsmax(server));
-	ezjson_object_set_number(body, "player", czm_profile(id));
-	ezjson_object_set_string(body, "ip", ip);
-	ezjson_object_set_string(body, "name", name);
-	ezjson_object_set_string(body, "text", text);
-	ezjson_object_set_string(body, "server", server[0] ? server : "survival");
-	data[0] = id; data[1] = get_user_userid(id);
-	czm_api("POST", "/survival/server/message", body, "on_admin_msg", data, sizeof data);
-	ezjson_free(body);
-	// staff who play now read it at once
-	replace_all(text, charsmax(text), "%", "");
-	for (new p = 1; p <= MaxClients; p++)
-		if (p != id && is_user_connected(p) && czm_staff(p) != CZM_STAFF_NONE)
-		{
-			client_print_color(p, print_team_default, "^4[%s]^3 %s^1: %s", en(p) ? "To the staff" : "Админу", name, text);
-			czm_play_sound(p, g_hMessage);
-		}
-	return PLUGIN_HANDLED;
+ if(g_msgPending[id])return PLUGIN_HANDLED;
+ new text[724],name[32],ip[40];read_args(text,charsmax(text));remove_quotes(text);trim(text);
+ if(strlen(text)<3){czm_menu_feedback(id,"server","Сообщение админу","Message to the staff","Введи хотя бы 3 символа.","Enter at least 3 characters.");return PLUGIN_HANDLED;}
+ get_user_name(id,name,charsmax(name));get_user_ip(id,ip,charsmax(ip),1);
+ copy(g_msgText[id],charsmax(g_msgText[]),text);copy(g_msgName[id],charsmax(g_msgName[]),name);g_msgPending[id]=true;
+ new EzJSON:body=ezjson_init_object(),data[3],server[32];get_cvar_string("czm_server_name",server,charsmax(server));
+ ezjson_object_set_number(body,"player",czm_profile(id));ezjson_object_set_string(body,"ip",ip);ezjson_object_set_string(body,"name",name);ezjson_object_set_string(body,"text",text);ezjson_object_set_string(body,"server",server[0]?server:"survival");
+ data[0]=id;data[1]=get_user_userid(id);data[2]=czm_menu_feedback(id,"server","Сообщение админу","Message to the staff","Отправляем сообщение…","Sending your message…");
+ czm_api("POST","/survival/server/message",body,"on_admin_msg",data,sizeof data);ezjson_free(body);return PLUGIN_HANDLED;
 }
 
 public on_admin_msg(EzHttpRequest:request)
 {
-	new data[2];
-	ezhttp_get_user_data(request, data);
-	new id = data[0], code, EzJSON:root = czm_api_answer(request, code);
-	if (is_user_connected(id) && get_user_userid(id) == data[1])
-	{
-		new error[24];
-		if (CZM_JSON_OK(root) && code != 200)
-			ezjson_object_get_string(root, "error", error, charsmax(error));
-		if (code == 200)
-			czm_chat(id, "^4[CZM]^1 Сообщение отправлено администрации. Спасибо!", "^4[CZM]^1 Your message went to the staff. Thank you!");
-		else if (equal(error, "message_limit"))
-			czm_chat(id, "^4[CZM]^1 Не чаще трёх сообщений за 10 минут.", "^4[CZM]^1 At most three messages in 10 minutes.");
-		else
-			czm_chat(id, "^4[CZM]^1 Сообщение не ушло, попробуй позже.", "^4[CZM]^1 The message did not go: try later.");
-	}
-	if (CZM_JSON_OK(root))
-		ezjson_free(root);
+ new data[3];ezhttp_get_user_data(request,data);new id=data[0],code,EzJSON:root=czm_api_answer(request,code);
+ if(is_user_connected(id)&&get_user_userid(id)==data[1]){
+  g_msgPending[id]=false;
+  if(code==200){
+   for(new p=1;p<=MaxClients;p++)if(p!=id&&is_user_connected(p)&&czm_staff(p)!=CZM_STAFF_NONE){
+	client_print_color(p,print_team_default,"^4[%s]^3 %s^1: %s",en(p)?"To the staff":"Админу",g_msgName[id],g_msgText[id]);czm_play_sound(p,g_hMessage);
+   }
+  }
+  if(czm_menu_stamp(id)==data[2]){
+   new error[24];if(CZM_JSON_OK(root)&&code!=200)ezjson_object_get_string(root,"error",error,charsmax(error));
+   if(code==200)czm_menu_feedback(id,"server","Сообщение отправлено","Message sent","Администрация получила твоё обращение.","The staff received your message.");
+   else if(equal(error,"message_limit"))czm_menu_feedback(id,"server","Сообщение админу","Message to the staff","Можно отправить до трёх обращений за 10 минут.","At most three messages per 10 minutes.");
+   else czm_menu_page(id,en(id)?"Send failed":"Не удалось отправить",en(id)?"Try sending again when the connection is restored.":"Попробуй отправить ещё раз после восстановления связи.","server","czm_admin_msg",en(id)?"Your message":"Сообщение",g_msgText[id]);
+  }
+ }
+ if(CZM_JSON_OK(root))ezjson_free(root);
 }
 
 // ---------------------------------------------------------------- news
@@ -974,27 +945,18 @@ bool:news_unseen(id)
 
 show_news(id)
 {
-	if (!g_newsCount)
-	{
-		czm_chat(id, "^4[CZM]^1 Новостей пока нет.", "^4[CZM]^1 No news yet.");
-		return;
-	}
-	new date[16];
-	// oldest first: the newest is at the bottom, next to the input line
-	for (new k = g_newsCount - 1; k >= 0; k--)
-	{
-		format_time(date, charsmax(date), "%d.%m", g_newsWhen[k]);
-		client_print_color(id, print_team_default, "^4[%s]^1 %s%s", date, (g_newsId[k] > g_newsSeen[id]) ? "^3" : "", en(id) ? g_newsEn[k] : g_newsRu[k]);
-	}
-	g_newsSeen[id] = g_newsId[0];
-	new key[48], value[12];
-	czm_player_key(id, key, charsmax(key));
-	if (key[0] && g_vault != INVALID_HANDLE)
-	{
-		format(key, charsmax(key), "news:%s", key);
-		num_to_str(g_newsSeen[id], value, charsmax(value));
-		nvault_set(g_vault, key, value);
-	}
+ new body[2048],len,date[24];
+ if(!g_newsCount)copy(body,charsmax(body),en(id)?"No server news yet. New posts will appear here.":"Новостей сервера пока нет. Новые записи появятся здесь.");
+ for(new k=0;k<g_newsCount&&len<charsmax(body)-200;k++){
+  format_time(date,charsmax(date),"%d.%m.%Y",g_newsWhen[k]);
+  len+=formatex(body[len],charsmax(body)-len,"%s%s^n",date,g_newsId[k]>g_newsSeen[id]?(en(id)?" · NEW":" · НОВОЕ"):"");
+  if(en(id))len+=formatex(body[len],charsmax(body)-len,"%s^n^n",g_newsEn[k]);
+  else len+=formatex(body[len],charsmax(body)-len,"%s^n^n",g_newsRu[k]);
+ }
+ czm_menu_page(id,en(id)?"Server news":"Новости сервера",body,"server");
+ if(g_newsCount)g_newsSeen[id]=g_newsId[0];
+ new key[48],value[12];czm_player_key(id,key,charsmax(key));
+ if(key[0]&&g_vault!=INVALID_HANDLE){format(key,charsmax(key),"news:%s",key);num_to_str(g_newsSeen[id],value,charsmax(value));nvault_set(g_vault,key,value);}
 }
 
 // ---------------------------------------------------------------- players come and go
@@ -1057,6 +1019,7 @@ save_packs(id)
 
 public client_disconnected(id)
 {
+	g_msgPending[id] = false;
 	save_packs(id);
 	remove_task(TASK_PACKS + id);
 	remove_task(TASK_PACKS + MAX_PLAYERS + id);
@@ -1066,4 +1029,32 @@ public client_disconnected(id)
 	for (new p = 1; p <= MaxClients; p++)
 		if (g_tpFrom[p] == id)
 			g_tpFrom[p] = 0;
+}
+
+players_menu(id)
+{
+ new title[96], names[64], info[12], players[MAX_PLAYERS], count;
+ formatex(title, charsmax(title), "\y%s", en(id) ? "PLAYERS ON SERVER" : "ИГРОКИ НА СЕРВЕРЕ");
+ new menu = menu_create(title, "on_player_info");
+ get_players(players, count, "h");
+ for (new k = 0; k < count; k++)
+ {
+  new target = players[k]; get_user_name(target, names, charsmax(names));
+  num_to_str(get_user_userid(target), info, charsmax(info));
+  menu_additem(menu, names, info);
+ }
+ texts(menu, id); menu_display(id, menu);
+}
+public on_player_info(id, menu, selected)
+{
+ if (selected < 0) { menu_destroy(menu); czm_menu_open(id, "players"); return PLUGIN_HANDLED; }
+ new info[12]; menu_info(menu, selected, info, charsmax(info)); menu_destroy(menu);
+ new target = find_player_ex(FindPlayer_MatchUserId, str_to_num(info));
+ if (!target) { czm_menu_feedback(id, "players", "Игрок вышел", "Player left", "Обнови список игроков.", "Refresh the player list."); return PLUGIN_HANDLED; }
+ new name[32], text[512], playerState[64]; get_user_name(target, name, charsmax(name));
+ if (get_user_team(target) == 3 || get_user_team(target) == 0) copy(playerState, charsmax(playerState), en(id) ? "Spectator" : "Наблюдатель");
+ else if (!is_user_alive(target)) copy(playerState, charsmax(playerState), en(id) ? "Waiting to respawn" : "Ожидает возрождения");
+ else copy(playerState, charsmax(playerState), zp_get_user_zombie(target) ? (en(id) ? "Zombie" : "Зомби") : (en(id) ? "Human" : "Человек"));
+ formatex(text, charsmax(text), en(id) ? "Status: %s^nHealth: %d^nCZM profile: %d^n^nVoting and teleport are available in their sections. Staff actions are in the management tab." : "Состояние: %s^nЗдоровье: %d^nПрофиль CZM: %d^n^nГолосования и телепорт доступны в своих разделах. Действия администрации — во вкладке управления.", playerState, is_user_alive(target) ? get_user_health(target) : 0, czm_profile(target));
+ czm_menu_page(id, name, text, "players"); return PLUGIN_HANDLED;
 }

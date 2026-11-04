@@ -97,6 +97,9 @@ int main() {
     vgui=1;automatic=0;
     Receive(menu,"#czmw1\tprimary\t0\t3\t0\t28\t0\t1\nPrimary Weapon\n1. AK-47");
     assert(published.empty()&&commands=="menuselect 10\n");
+    Receive(menu,"#czm1\tmenu\tserver\tMENU\t\t\t\n#page\tform\tСообщение админу\tczm_admin_msg\tТекст\n#body\tПервая строка\n#body\tВторая строка\n1. Открыть\n0. Назад",513);
+    assert(strstr(g_szMenuString,"Сообщение админу")&&strstr(g_szMenuString,"Первая строка")&&strstr(g_szMenuString,"Вторая строка"));
+    assert(!strstr(g_szMenuString,"#page")&&!strstr(g_szMenuString,"#body")&&published.find("#page")!=std::string::npos);
 }
 '''
 
@@ -117,6 +120,7 @@ class ServerMenuTransportTests(unittest.TestCase):
 
 
 CPP_MENU = r"""
+#include "czm_server_view.h"
 #include <cassert>
 #include <cstdio>
 #include <cstring>
@@ -221,6 +225,13 @@ int main(){
  assert(!strcmp(next.parent,"admin_players"));
  PlainAsRich("5 1\nVote\n1. Yes",NULL,next);assert(next.numTabs==0&&!next.parent[0]&&!next.root[0]);
  PlainAsRich("6 1\nZombie Plague 4.4\n1. Choose weapon",NULL,next);assert(!strcmp(next.head,"МЕНЮ ЗОМБИ")&&!next.parent[0]);
+ ParseRich("7 512\n#czm1\tmenu\tserver\tSERVER MENU\tSurvival\t2/32\tFair\t\tserver\n#tabs\tmain:Главная:star:\tserver:Сообщество:globe:\n#page\tform\tСообщение админу\tczm_admin_msg\tВведите сообщение\tСохранённый текст\n#body\tПервая строка\n#body\tВторая строка\n",next);
+ assert(next.kind==CzmServerView::Form&&!strcmp(next.parent,"server")&&!strcmp(next.command,"czm_admin_msg"));
+ assert(!strcmp(next.prefill,"Сохранённый текст")&&!strcmp(next.body,"Первая строка\nВторая строка\n"));
+ assert(!strcmp(next.tabs[0].name,"Главная")&&!strcmp(next.tabs[1].name,"Сообщество"));
+ ParseRich("8 512\n#czm1\tmenu\tplayers\tMENU\tSurvival\t2/32\tFair\n#page\tfriends\tПригласить\t@friends\t\n#body\tВыбери друга\n",next);
+ assert(next.kind==CzmServerView::Friends&&next.numCards==0&&!strcmp(next.parent,"players"));
+ ParseRich("9 512\n#czm1\tmenu\tmain\tMENU\t\t\t\n#page\tform\tUnsafe\tquit;exec evil\t\n",next);assert(next.kind==CzmServerView::Text);
 }
 """
         run_cpp(code)
@@ -234,6 +245,7 @@ static int ScreenWidth,ScreenHeight;
 struct CCzmServerWindow{
  CzmRichMenu m_menu={};int m_iTabFirst=0,m_iTabRows=0,W,H;
  CzmRect m_win,m_head,m_side,m_body,m_foot,m_close,m_back,m_tabsUp,m_tabsDown;
+ CzmRect m_content,m_field,m_submit,m_prev,m_next,m_refresh,m_friendRows[6];
  void Layout(int);
 };
 """

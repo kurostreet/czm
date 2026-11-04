@@ -524,7 +524,7 @@ static void TicketFrame( double now )
 	for( int i = 0; i < CZM_OFFICIAL_COUNT; i++ )
 	{
 		auto &t = s_tickets[i];
-		CzmServer *server = CZM_OfficialServer( i );
+		CzmServer *server = CZM_ConfiguredServer( i );
 		const char *address = server ? server->address : "";
 
 		if( strcmp( t.address, address ) || t.identity != s_online.identity )
@@ -589,7 +589,7 @@ int CZM_OfficialSlotNow( void )
 	const char *address = EngFuncs::GetCvarString( "czm_connect_adr" );
 	for( int i = 0; address && address[0] && i < CZM_OFFICIAL_COUNT; i++ )
 	{
-		CzmServer *server = CZM_OfficialServer( i );
+		CzmServer *server = CZM_ConfiguredServer( i );
 		if( server && server->address[0] && !strcmp( server->address, address ))
 			return i;
 	}

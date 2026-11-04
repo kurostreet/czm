@@ -484,7 +484,7 @@ void CZM_Init( void )
 	EngFuncs::CvarRegister( "czm_lang", "", FCVAR_ARCHIVE );
 	EngFuncs::CvarRegister( "czm_lang_ui", "", 0 );
 	// the server menu window this game draws (CzmServerMenu.cpp), servers ask it (czm_menu.amxx)
-	EngFuncs::CvarRegister( "czm_menu_ui", "1", 0 );
+	EngFuncs::CvarRegister( "czm_menu_ui", "2", 0 );
 	EngFuncs::CvarRegister( "czm_progress_ui", "1", 0 );
 	EngFuncs::CvarRegister( "czm_aim_ui", "1", 0 );
 	EngFuncs::CvarRegister( "czm_play_ui", "1", 0 );
@@ -1396,7 +1396,13 @@ bool CZM_OfficialEnabled( void )
 CzmServer *CZM_OfficialServer( int slot )
 {
 	CZM_OfficialLoad();
-	if( !s_officialOn || slot < 0 || slot >= CZM_OFFICIAL_COUNT || !s_official[slot].address[0] )
+	return s_officialOn ? CZM_ConfiguredServer( slot ) : NULL;
+}
+
+CzmServer *CZM_ConfiguredServer( int slot )
+{
+	CZM_OfficialLoad();
+	if( slot < 0 || slot >= CZM_OFFICIAL_COUNT || !s_official[slot].address[0] )
 		return NULL;
 	return &s_official[slot];
 }

@@ -70,6 +70,9 @@ new g_items[MAX_ITEMS][Item], g_numItems;
 
 // what the player has on the screen
 new bool:g_rich[MAX_PLAYERS + 1];
+new g_version[MAX_PLAYERS + 1], g_stamp[MAX_PLAYERS + 1];
+new g_viewParent[MAX_PLAYERS + 1][16], g_viewCommand[MAX_PLAYERS + 1][24];
+#define MENU_PAGE -2
 new g_shown[MAX_PLAYERS + 1];          // section, -1 none
 new g_page[MAX_PLAYERS + 1];
 new g_slot[MAX_PLAYERS + 1][10];       // item at the slot, or SLOT_*
@@ -94,6 +97,8 @@ public plugin_natives()
 	register_native("czm_menu_open", "native_open");
 	register_native("czm_menu_state", "native_state");
 	register_native("czm_menu_rich", "native_rich");
+	register_native("czm_menu_page", "native_page");
+	register_native("czm_menu_stamp", "native_stamp");
 	set_native_filter("native_filter");
 }
 
@@ -112,6 +117,7 @@ public plugin_init()
 	g_menuId = register_menuid(MENU_ID);
 	register_menucmd(g_menuId, 1023, "on_key");
 	register_clcmd("czm_menu_tab", "cmd_tab");
+	register_clcmd("czm_menu_close", "cmd_close");
 	// the words under the cards, "ru | en"
 	g_cvarMotto = create_cvar("czm_menu_motto", "Честная игра • Чистый сервер • Приятное общение | Fair play • Clean server • Friendly chat");
 }
@@ -119,6 +125,8 @@ public plugin_init()
 public client_connect(id)
 {
 	g_rich[id] = false;
+	g_version[id] = 0;
+	g_stamp[id]++;
 	g_shown[id] = -1;
 }
 
@@ -131,7 +139,72 @@ public client_putinserver(id)
 public on_menu_ui(id, const cvar[], const value[])
 {
 	if (is_user_connected(id))
+	{
+		g_version[id] = clamp(str_to_num(value), 0, 2);
 		g_rich[id] = str_to_num(value) >= 1;
+	}
+}
+
+public native_stamp(plugin, params)
+{
+	new id = get_param(1);
+	return 1 <= id <= MaxClients ? g_stamp[id] : 0;
+}
+
+public native_page(plugin, params)
+{
+	new id = get_param(1);
+	if (!(1 <= id <= MaxClients) || !is_user_connected(id)) return 0;
+	new title[96], body[2048], parent[16], command[24], hint[160], prefill[724], kind[16], text[4096];
+	get_string(2, title, charsmax(title));
+	get_string(3, body, charsmax(body));
+	get_string(4, parent, charsmax(parent));
+	get_string(5, command, charsmax(command));
+	get_string(6, hint, charsmax(hint));
+	if (params >= 7) get_string(7, prefill, charsmax(prefill));
+	new s = find_section(parent);
+	if (s < 0 || !section_allowed(id, s)) s = find_section("main");
+	if (s < 0) return 0;
+	clean(title); clean(hint);
+	replace_all(body, charsmax(body), "^t", " ");
+	for (new k = 0; body[k]; k++)
+		if (body[k] < 32 && body[k] != '^n') body[k] = ' ';
+	copy(g_viewParent[id], charsmax(g_viewParent[]), g_sections[s][SecKey]);
+	copy(g_viewCommand[id], charsmax(g_viewCommand[]), command);
+	g_shown[id] = MENU_PAGE;
+	g_stamp[id]++;
+	new bool:en = czm_lang(id) == CZM_EN, len, keys = (1 << 9);
+	if (g_version[id] >= 2)
+	{
+		if (command[0] == '@') copy(kind, charsmax(kind), command[1]);
+		else copy(kind, charsmax(kind), command[0] ? "form" : "text");
+		len = rich_head(id, s, en, text, charsmax(text));
+		replace_all(prefill, charsmax(prefill), "^t", " ");
+		replace_all(prefill, charsmax(prefill), "^n", " ");
+		len += formatex(text[len], charsmax(text) - len, "#page^t%s^t%s^t%s^t%s^t%s^n", kind, title, command, hint, prefill);
+		new at;
+		while (body[at] && len < charsmax(text) - 180)
+		{
+			new line[1024], n;
+			while (body[at] && body[at] != '^n' && n < charsmax(line)) line[n++] = body[at++];
+			if (body[at] == '^n') at++;
+			line[n] = EOS;
+			len += formatex(text[len], charsmax(text) - len, "#body^t%s^n", line);
+		}
+	}
+	else
+	{
+		// Classic clients retain readable content and their existing input method.
+		len = formatex(text, charsmax(text), "\y%s^n^n\w%s^n^n", title, body);
+	}
+	if (command[0])
+	{
+		keys |= 1;
+		len += formatex(text[len], charsmax(text) - len, "\r1.\w %s^n", en ? "Open" : "Открыть");
+	}
+	formatex(text[len], charsmax(text) - len, "^n\r0.\w %s", en ? "Back" : "Назад");
+	show_menu(id, keys, text, -1, MENU_ID);
+	return g_stamp[id];
 }
 
 // ---------------------------------------------------------------- registry
@@ -394,6 +467,7 @@ section_items(id, s, out[MAX_ITEMS])
 
 open(id, const key[], page)
 {
+	g_stamp[id]++;
 	new s = find_section(key);
 	if (s < 0 || !section_visible(id, s))
 		s = find_section("main");
@@ -493,13 +567,19 @@ open(id, const key[], page)
 
 rich_head(id, s, bool:en, text[], max)
 {
-	new mode[24], sub[96], chip[96], motto[160], ru[80], eng[80];
+	new mode[24], sub[96], chip[96], motto[192], ru[192], eng[192], name[40], parentName[40], rootKey[16];
 	new root = section_root(s), parent = find_section(g_sections[s][SecParent]);
 	get_cvar_string("czm_server_name", mode, charsmax(mode));
 	strtoupper(mode);
 	formatex(sub, charsmax(sub), "COUNTER ZOMBIE · %s", mode[0] ? mode : "SURVIVAL");
+	section_name(s, en, name, charsmax(name));
 	if (parent >= 0)
-		formatex(sub, charsmax(sub), "%s / %s", en ? g_sections[parent][SecEn] : g_sections[parent][SecRu], en ? g_sections[s][SecEn] : g_sections[s][SecRu]);
+	{
+		section_name(parent, en, parentName, charsmax(parentName));
+		formatex(sub, charsmax(sub), "%s / %s", parentName, name);
+	}
+	copy(rootKey, charsmax(rootKey), g_sections[s][SecKey]);
+	if (root >= 0) copy(rootKey, charsmax(rootKey), g_sections[root][SecKey]);
 	chip_text(chip, charsmax(chip));
 	get_pcvar_string(g_cvarMotto, motto, charsmax(motto));
 	strtok(motto, ru, charsmax(ru), eng, charsmax(eng), '|');
@@ -507,17 +587,28 @@ rich_head(id, s, bool:en, text[], max)
 	trim(eng);
 	new len = formatex(text, max, "#czm1^tmenu^t%s^t%s^t%s^t%s^t%s^t%s^t%s^n#tabs", g_sections[s][SecKey],
 		en ? "SERVER MENU" : "МЕНЮ СЕРВЕРА", sub, chip, en && eng[0] ? eng : ru,
-		g_sections[s][SecParent], root >= 0 ? g_sections[root][SecKey] : g_sections[s][SecKey]);
+		g_sections[s][SecParent], rootKey);
 	new order[MAX_SECTIONS], n = sorted_sections(order);
 	for (new k = 0; k < n; k++)
 	{
 		new t = order[k];
 		if (!g_sections[t][SecParent][0] && section_visible(id, t))
+		{
+			section_name(t, en, name, charsmax(name));
 			len += formatex(text[len], max - len, "^t%s:%s:%s:%s", g_sections[t][SecKey],
-				en ? g_sections[t][SecEn] : g_sections[t][SecRu], g_sections[t][SecIcon], g_tabBadge[t]);
+				name, g_sections[t][SecIcon], g_tabBadge[t]);
+		}
 	}
 	len += formatex(text[len], max - len, "^n^n");
 	return len;
+}
+
+section_name(s, bool:en, out[], len)
+{
+	// Select the row explicitly: Pawn's conditional array expressions do not keep
+	// the enum-field bounds and can serialize a single letter plus adjacent data.
+	if (en) copy(out, len, g_sections[s][SecEn]);
+	else copy(out, len, g_sections[s][SecRu]);
 }
 
 plain_head(s, bool:en, text[], max)
@@ -526,7 +617,8 @@ plain_head(s, bool:en, text[], max)
 	chip_text(chip, charsmax(chip));
 	if (equali(g_sections[s][SecKey], "main"))
 		return formatex(text, max, "\y%s^n\d%s^n^n", en ? "SERVER MENU" : "МЕНЮ СЕРВЕРА", chip);
-	return formatex(text, max, "\y%s^n\d%s^n^n", en ? g_sections[s][SecEn] : g_sections[s][SecRu], chip);
+	new name[40]; section_name(s, en, name, charsmax(name));
+	return formatex(text, max, "\y%s^n\d%s^n^n", name, chip);
 }
 
 chip_text(out[], len)
@@ -540,6 +632,16 @@ public on_key(id, key)
 {
 	new s = g_shown[id];
 	g_shown[id] = -1;
+	g_stamp[id]++;
+	if (s == MENU_PAGE)
+	{
+		if (key == 9) open(id, g_viewParent[id], 0);
+		else if (key == 0 && g_viewCommand[id][0] && g_viewCommand[id][0] != '@')
+			client_cmd(id, "messagemode %s", g_viewCommand[id]);
+		else if (key == 0 && g_viewCommand[id][0] == '@')
+			client_cmd(id, "menu_czmsocial");
+		return PLUGIN_HANDLED;
+	}
 	if (key < 0 || key >= 9 || s < 0)
 		return PLUGIN_HANDLED;
 	new i = g_slot[id][key];
@@ -578,5 +680,13 @@ public cmd_tab(id)
 	new key[16];
 	read_argv(1, key, charsmax(key));
 	open(id, key, 0);
+	return PLUGIN_HANDLED;
+}
+
+public cmd_close(id)
+{
+	g_shown[id] = -1;
+	g_stamp[id]++;
+	show_menu(id, 0, "", 0, MENU_ID);
 	return PLUGIN_HANDLED;
 }

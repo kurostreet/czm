@@ -81,6 +81,7 @@ jobs:
       - name: Check native home and lobby geometry, actions and role controls
         run: |
           python3 -m unittest discover -s tests -p test_server_menu_transport.py -v
+          python3 -m unittest discover -s tests -p test_server_menu_window.py -v
           python3 -m unittest discover -s tests -p test_spectator_exit.py -v
           python3 -m unittest discover -s tests -p test_weapon_shop.py -v
           python3 -m unittest discover -s tests -p test_level_progress.py -v
