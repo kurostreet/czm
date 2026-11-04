@@ -13,6 +13,7 @@ prefix in its colour, the privilege) and gives a player toasts for "+N tokens" a
 #include "czm_tags.h"
 #include "czm_hud.h"
 #include "../../common/czm_hud_overlay.h"
+#include "../../common/czm_aim.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -21,7 +22,8 @@ static inline int CzmMin( int a, int b ) { return a < b ? a : b; }
 
 static CzmTag s_tags[MAX_PLAYERS + 1];
 static bool s_have[MAX_PLAYERS + 1];
-static bool s_aimShown;
+static bool s_aimShown, s_aimReceived;
+static CzmAim::Target s_aim;
 static CzmHud::ProgressInfo s_progress;
 
 struct CzmToast
@@ -94,8 +96,21 @@ static int MsgFunc_CzmProgress( const char *pszName, int iSize, void *pbuf )
 	return 1;
 }
 
+static int MsgFunc_CzmAim( const char *name, int size, void *buffer )
+{
+	if( size != 9 ) return 1;
+	BufferReader reader( name, buffer, size );
+	s_aim.index = reader.ReadByte();
+	s_aim.health = reader.ReadLong();
+	s_aim.maximum = reader.ReadLong();
+	s_aim.received = gHUD.m_flTime;
+	s_aimReceived = true;
+	return 1;
+}
+
 void CZM_TagsInit( void )
 {
+	gEngfuncs.pfnHookUserMsg( "CzmAim", MsgFunc_CzmAim );
 	gEngfuncs.pfnHookUserMsg( "CzmTag", MsgFunc_CzmTag );
 	gEngfuncs.pfnHookUserMsg( "CzmToast", MsgFunc_CzmToast );
 	gEngfuncs.pfnHookUserMsg( "CzmProgress", MsgFunc_CzmProgress );
@@ -109,7 +124,8 @@ void CZM_TagsReset( void )
 	memset( s_toasts, 0, sizeof( s_toasts ));
 	memset( &s_progress, 0, sizeof( s_progress ));
 	s_progress.level = -1; // unset is separate from a server reporting level zero
-	s_aimShown = false;
+	s_aimShown = s_aimReceived = false;
+	memset( &s_aim, 0, sizeof( s_aim ));
 }
 
 const CzmTag *CZM_TagFor( int index )
@@ -160,14 +176,17 @@ static int Draw( int x, int y, const char *s, int r, int g, int b )
 	return DrawUtils::DrawConsoleString( x, y, s );
 }
 
-// the player in the crosshair: [prefix] nick, LVL and wins, the health of a team mate
+// The visible aimed player: actual HP/max HP, level and win rate.
 static void DrawAimTag( void )
 {
-	int index = gHUD.m_StatusBar.Value( 2 ), type = gHUD.m_StatusBar.Value( 1 );
+	int index = s_aimReceived ? ( s_aim.Live( gHUD.m_flTime ) ? s_aim.index : 0 ) : gHUD.m_StatusBar.Value( 2 );
+	const CzmTag empty = {};
 	const CzmTag *tag = CZM_TagFor( index );
+	bool ranked = tag != NULL;
+	if( !tag ) tag = &empty;
 
 	s_aimShown = false;
-	if( !tag || g_iUser1 )
+	if( index < 1 || index > MAX_PLAYERS || g_iUser1 )
 		return;
 
 	GetPlayerInfo( index, &g_PlayerInfoList[index] );
@@ -180,18 +199,26 @@ static void DrawAimTag( void )
 		snprintf( prefix, sizeof( prefix ), "[%s] ", tag->prefix );
 	if( tag->lvl > 0 )
 		snprintf( lvl, sizeof( lvl ), "  LVL %d", tag->lvl );
-	if( tag->lvl > 0 && tag->wr > 0 )
+	if( ranked )
 		snprintf( wr, sizeof( wr ), "  WR %d%%", tag->wr );
 
 	int fh = 0, tw = 0;
 	gEngfuncs.pfnDrawConsoleStringLen( "Ag", &tw, &fh );
-	int health = type == 1 ? gHUD.m_StatusBar.Value( 3 ) : -1;
+	if( !ranked )
+	{
+		snprintf( lvl, sizeof( lvl ), "  LVL —" );
+		snprintf( wr, sizeof( wr ), "  WR —" );
+	}
+	int health = s_aimReceived ? s_aim.health : ( gHUD.m_StatusBar.Value( 1 ) == 1 ? gHUD.m_StatusBar.Value( 3 ) : -1 );
+	int maximum = s_aimReceived ? s_aim.maximum : 100;
+	char hpText[40] = "";
+	if( health >= 0 ) snprintf( hpText, sizeof( hpText ), "%d / %d HP", health, maximum );
 	int pad = fh / 2;
 	int lineW = Width( prefix ) + Width( name ) + Width( lvl ) + Width( wr );
 	int privW = tag->priv[0] ? Width( tag->priv ) + pad * 2 : 0;
-	int w = lineW + privW + ( privW ? pad : 0 ) + pad * 2;
+	int w = CzmMax( lineW + privW + ( privW ? pad : 0 ), Width( hpText ) ) + pad * 2;
 	int barH = health >= 0 ? CzmMax( 4, fh / 3 ) : 0;
-	int h = fh + pad * 2 + ( barH ? barH + pad : 0 );
+	int h = fh + pad * 2 + ( barH ? barH + pad + fh : 0 );
 	int x = ( ScreenWidth - w ) / 2, y = ScreenHeight / 2 + ScreenHeight / 14;
 
 	FillRGBABlend( x, y, w, h, 10, 14, 22, 190 );
@@ -219,11 +246,12 @@ static void DrawAimTag( void )
 	if( barH )
 	{
 		int bw = w - pad * 2, by = ty + fh + pad / 2 + 1;
-		int hp = CzmMax( 0, CzmMin( 100, health ));
+		float fraction = CzmAim::Fraction( health, maximum );
 		FillRGBABlend( x + pad, by, bw, barH, 255, 255, 255, 40 );
-		// green, yellow at half, red when low
-		int r = hp > 50 ? ( 100 - hp ) * 5 : 255, g = hp > 50 ? 220 : hp * 4;
-		FillRGBA( x + pad, by, bw * hp / 100, barH, CzmMin( 255, r ), CzmMin( 220, g ), 70, 240 );
+		int r, g, b;
+		CzmAim::Color( fraction, r, g, b );
+		FillRGBA( x + pad, by, (int)( bw * fraction ), barH, r, g, b, 240 );
+		Draw( x + ( w - Width( hpText ) ) / 2, by + barH + pad / 2, hpText, 205, 213, 224 );
 	}
 	s_aimShown = true;
 }

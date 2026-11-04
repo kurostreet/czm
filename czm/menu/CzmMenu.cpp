@@ -306,6 +306,11 @@ static const struct { const char *key, *ru, *en; } s_strings[] =
 	{ "s_shop_hint", "Колесо или сетка. Классика — текстовое меню сервера", "Wheel or grid. Classic is the server's text menu" },
 	{ "opt_wheel", "Колесо", "Wheel" },
 	{ "opt_grid", "Сетка", "Grid" },
+	{ "s_shop_anim", "Анимация магазина", "Shop animation" },
+	{ "s_shop_anim_hint", "Без анимации, плавное появление или сдвиг оружия", "Off, fade in or slide the weapons" },
+	{ "opt_shop_off", "Нет", "Off" },
+	{ "opt_shop_fade", "Плавно", "Fade" },
+	{ "opt_shop_slide", "Сдвиг", "Slide" },
 	{ "s_shop_auto", "Автооткрытие магазина", "Open the shop automatically" },
 	{ "s_shop_auto_hint", "В начале каждого раунда", "At the start of every round" },
 	{ "s_menucards", "Сенсорное меню", "Touch menus" },
@@ -481,6 +486,7 @@ void CZM_Init( void )
 	// the server menu window this game draws (CzmServerMenu.cpp), servers ask it (czm_menu.amxx)
 	EngFuncs::CvarRegister( "czm_menu_ui", "1", 0 );
 	EngFuncs::CvarRegister( "czm_progress_ui", "1", 0 );
+	EngFuncs::CvarRegister( "czm_aim_ui", "1", 0 );
 	EngFuncs::CvarRegister( "czm_setup", "0", FCVAR_ARCHIVE );
 	EngFuncs::CvarRegister( "czm_defaults", "0", FCVAR_ARCHIVE );
 	EngFuncs::CvarRegister( "czm_zoom_sens", "1.2", FCVAR_ARCHIVE );
@@ -489,6 +495,7 @@ void CZM_Init( void )
 	EngFuncs::CvarRegister( "czm_touch_scheme", "1", FCVAR_ARCHIVE );
 	EngFuncs::CvarRegister( "czm_touch_version", "0", FCVAR_ARCHIVE );
 	EngFuncs::CvarRegister( "czm_shop", "1", FCVAR_ARCHIVE );       // 1 wheel, 2 grid
+	EngFuncs::CvarRegister( "czm_shop_anim", "1", FCVAR_ARCHIVE );
 	EngFuncs::CvarRegister( "czm_shop_auto", "0", FCVAR_ARCHIVE );  // open the shop when a round starts
 	EngFuncs::CvarRegister( "czm_menu_cards", "1", FCVAR_ARCHIVE ); // server menus as cards
 	EngFuncs::CvarRegister( "czm_hud_style", "0", FCVAR_ARCHIVE );

@@ -18,6 +18,7 @@
 // generic menu handler
 //
 #include "hud.h"
+#include "../common/czm_weapon_menu.h"
 #include "cl_util.h"
 #include "parsemsg.h"
 #include "com_weapons.h"
@@ -80,7 +81,7 @@ static void CZM_PlainMenuText( void )
 	const char *line = g_szMenuString;
 
 	g_szRichMenuString[0] = 0;
-	if( strncmp( g_szMenuString, "#czm1", 5 ))
+	if( strncmp( g_szMenuString, "#czm1", 5 ) && !CzmWeapons::Wire( g_szMenuString ))
 		return;
 
 	strlcpy( g_szRichMenuString, g_szMenuString, sizeof( g_szRichMenuString ));
@@ -287,7 +288,7 @@ int CHudMenu :: MsgFunc_ShowMenu( const char *pszName, int iSize, void *pbuf )
 		// #czm1 is a wire header, not a titles.txt/localization key. The stock localizer
 		// replaces it with "czm1" and stops, and its 1024-byte buffer also cuts the cards.
 		// Preserve tabs, captions and colours exactly for the window parser.
-		if( !strncmp( g_szPrelocalisedMenuString, "#czm1\t", 6 ))
+		if( !strncmp( g_szPrelocalisedMenuString, "#czm1\t", 6 ) || CzmWeapons::Wire( g_szPrelocalisedMenuString ))
 			strlcpy( g_szMenuString, g_szPrelocalisedMenuString, sizeof( g_szMenuString ));
 		else
 		{
@@ -306,9 +307,21 @@ int CHudMenu :: MsgFunc_ShowMenu( const char *pszName, int iSize, void *pbuf )
 
 	m_fWaitingForMore = NeedMore;
 
-	// the whole menu arrived: give it to the cards
-	if( !NeedMore && CardsEnabled( ))
-		PublishCards( true );
+	if( !NeedMore )
+	{
+		if( CzmWeapons::HideAutomatic( g_szPrelocalisedMenuString, gEngfuncs.pfnGetCvarFloat( "czm_shop_auto" )))
+		{
+			ClientCmd( "menuselect 10\n" );
+			UserCmd_OldStyleMenuClose();
+		}
+		else if( CardsEnabled() && !CzmWeapons::Classic( g_szPrelocalisedMenuString, gEngfuncs.pfnGetCvarFloat( "_vgui_menus" ) == 0 ? 0 : gEngfuncs.pfnGetCvarFloat( "czm_shop" )))
+			PublishCards( true );
+		else
+		{
+			PublishCards( false );
+			ShowVGUIMenu( MENU_NUMERICAL_MENU );
+		}
+	}
 
 	return 1;
 }

@@ -23,6 +23,7 @@ GNU General Public License for more details.
 #include "Utils.h"
 #include "keydefs.h"
 #include "CzmMenu.h"
+#include "../../common/czm_weapon_menu.h"
 
 #define UI_DIR "gfx/czm/ui/"
 #define MAX_CARDS 10
@@ -453,11 +454,12 @@ static void PlainAsRich( const char *value, const CzmRichMenu *previous, CzmRich
 		memset( &m, 0, sizeof( m ));
 	m.serial = s_menu.serial;
 	m.validSlots = s_menu.validSlots;
-	Q_strncpy( m.parent, previous && previous->tab[0] ? previous->tab : previous && previous->parent[0] ? previous->parent : "main", sizeof( m.parent ));
-	Q_strncpy( m.root, previous && previous->root[0] ? previous->root : previous && previous->tab[0] ? previous->tab : "main", sizeof( m.root ));
+	Q_strncpy( m.parent, previous && previous->tab[0] ? previous->tab : previous && previous->parent[0] ? previous->parent : "", sizeof( m.parent ));
+	Q_strncpy( m.root, previous && previous->root[0] ? previous->root : previous && previous->tab[0] ? previous->tab : "", sizeof( m.root ));
 	m.tab[0] = 0;
-	Q_strncpy( m.head, CZM_IsRussian() ? "МЕНЮ СЕРВЕРА" : "SERVER MENU", sizeof( m.head ));
-	Q_strncpy( m.sub, s_menu.title, sizeof( m.sub ));
+	const bool zombie = strstr( s_menu.title, "Zombie Plague" ) != NULL;
+	Q_strncpy( m.head, zombie ? ( CZM_IsRussian() ? "МЕНЮ ЗОМБИ" : "ZOMBIE MENU" ) : s_menu.title, sizeof( m.head ));
+	Q_strncpy( m.sub, zombie ? "Zombie Plague" : "", sizeof( m.sub ));
 	if( !previous )
 		Q_strncpy( m.foot, "COUNTER ZOMBIE MOBILE", sizeof( m.foot ));
 	// Plain menus can carry a selected player or a confirmation above the choices.
@@ -1153,7 +1155,7 @@ void CCzmTeamCard::Layout( void )
 	int pad = H * 0.034f, mapH = cw * 0.27f, btnH = H * 0.088f, gap = H * 0.016f;
 	HFont nameFont = CZM_Font( CZMF_MENU_TITLE ), textFont = CZM_Font( CZMF_PANEL_TEXT ), hintFont = CZM_Font( CZMF_UI_META );
 	int starts[4], lines = m_szText[0] ? CZM_WrapText( textFont, m_szText, cw - pad * 2, starts, 3 ) : 0;
-	int rows = m_iSlot >= 0 ? 1 : ( m_bSpectate ? 2 : 1 );
+	int rows = m_iSlot >= 0 ? 2 : ( m_bSpectate ? 2 : 1 );
 	int ch = H * 0.014f + mapH + CZM_FontHeight( nameFont ) * 0.6f + lines * ( CZM_FontHeight( textFont ) + H * 0.004f ) + gap * 1.6f
 		+ rows * btnH + ( rows - 1 ) * gap + ( m_iSlot >= 0 ? CZM_FontHeight( hintFont ) + gap * 2 : 0 ) + pad;
 
@@ -1169,10 +1171,11 @@ void CCzmTeamCard::Layout( void )
 
 	if( m_iSlot >= 0 )
 	{
-		int playW = m_bSpectate ? ( w - gap ) * 0.62f : w;
-		m_btn[BTN_PLAY] = CZM_Rect( x, y, playW, btnH );
-		if( m_bSpectate )
-			m_btn[BTN_SPECTATE] = CZM_Rect( x + playW + gap, y, w - playW - gap, btnH );
+		int half = ( w - gap ) / 2;
+		m_btn[BTN_PLAY] = CZM_Rect( x, y, half, btnH );
+		m_btn[BTN_SPECTATE] = CZM_Rect( x + half + gap, y, w - half - gap, btnH );
+		m_btn[BTN_CT] = CZM_Rect( x, y + btnH + gap, half, btnH );
+		m_btn[BTN_T] = CZM_Rect( x + half + gap, y + btnH + gap, w - half - gap, btnH );
 	}
 	else
 	{
@@ -1208,7 +1211,12 @@ void CCzmTeamCard::Press( int button )
 	if( button <= 0 || button >= BTN_COUNT )
 		return;
 	CZM_PlayClick();
-	if( commands[button] )
+	if( m_iSlot >= 0 && button != BTN_CLOSE )
+	{
+		const char *choice = button == BTN_SPECTATE ? "spectator" : button == BTN_T ? "zombie" : button == BTN_CT ? "human" : "auto";
+		EngFuncs::ClientCmdF( false, "czm_join %s\n", choice );
+	}
+	else if( commands[button] )
 		EngFuncs::ClientCmdF( false, "%s\n", commands[button] );
 	Hide();
 }
@@ -1374,7 +1382,9 @@ void CCzmTeamCard::Draw()
 		case BTN_CT:
 		{
 			bool t = i == BTN_T;
-			snprintf( label, sizeof( label ), "%s · %d", t ? ( ru ? "Т" : "T" ) : ( ru ? "КТ" : "CT" ), m_iCounts[t ? 0 : 1] );
+			if( m_iSlot >= 0 )
+				snprintf( label, sizeof( label ), "%s", t ? ( ru ? "Зайти за Зомби" : "Join zombies" ) : ( ru ? "Зайти за людей" : "Join humans" ) );
+			else snprintf( label, sizeof( label ), "%s · %d", t ? ( ru ? "Т" : "T" ) : ( ru ? "КТ" : "CT" ), m_iCounts[t ? 0 : 1] );
 			CZM_DrawSliced( UI_DIR "card.png", b.x, b.y, b.w, b.h, 30, corner, CZM_White( a ));
 			UI_FillRect( b.x + b.w * 0.2f, b.y + b.h - Q_max( 3, H / 200 ) - b.h * 0.08f, b.w * 0.6f, Q_max( 3, H / 200 ),
 				t ? PackRGBA( 248, 113, 80, a ) : PackRGBA( 96, 165, 250, a ));
@@ -1433,7 +1443,7 @@ bool CZM_TeamShow( int menuType, int param1 )
 static bool ServerWindowFrame( const char *value )
 {
 	bool rich = IsRichMenu( value );
-	bool plain = !rich && value && value[0] && CL_IsActive() && CZM_OfficialSlotNow() >= 0 && !CZM_IsWeaponMenu( value );
+	bool plain = !rich && value && value[0] && CL_IsActive() && CZM_OfficialSlotNow() >= 0 && !CzmWeapons::Wire( value ) && !CZM_IsWeaponMenu( value );
 	bool open = menu_czmserver && CZM_ClientMenuOpen( menu_czmserver );
 	int serial = -1;
 
@@ -1510,7 +1520,7 @@ static void SpectatorExitFrame( const char *menuValue )
 	{
 		if( added )
 			EngFuncs::ClientCmd( true, "touch_removebutton \"_czm_spec_exit\"\n" );
-		EngFuncs::ClientCmdF( true, "touch_addbutton \"_czm_spec_exit\" \"\" \"jointeam 5\" %f %f %f %f 255 255 255 0 4\n",
+		EngFuncs::ClientCmdF( true, "touch_addbutton \"_czm_spec_exit\" \"\" \"czm_join auto\" %f %f %f %f 255 255 255 0 4\n",
 			r.x / (float)W, r.y / (float)H, ( r.x + r.w ) / (float)W, ( r.y + r.h ) / (float)H );
 		oldW = W;
 		oldH = H;

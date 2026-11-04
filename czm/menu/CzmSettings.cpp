@@ -304,10 +304,10 @@ void SetAutoSwitch( float v ) { SetCvar( "_cl_autowepswitch", v ); }
 float GetScheme( void ) { return CZM_TouchScheme() - 1; }
 void SetScheme( float v ) { CZM_SetTouchScheme( (int)v + 1, false ); }
 
-// shop: our wheel or grid, or the server's classic text menu (shown as cards)
+// Save the selected style together with the engine menu preference.
 float GetShop( void )
 {
-	if( GetCvar( "_vgui_menus" ) == 0.0f )
+	if( GetCvar( "czm_shop" ) == 0.0f || GetCvar( "_vgui_menus" ) == 0.0f )
 		return 2;
 	return GetCvar( "czm_shop" ) == 2.0f ? 1 : 0;
 }
@@ -316,9 +316,12 @@ void SetShop( float v )
 	int style = (int)v;
 
 	SetCvar( "_vgui_menus", style == 2 ? 0.0f : 1.0f );
-	if( style < 2 )
-		SetCvar( "czm_shop", style + 1.0f );
+	SetCvar( "czm_shop", style == 2 ? 0.0f : style + 1.0f );
+	EngFuncs::ClientCmd( false, "host_writeconfig\n" );
 }
+
+float GetShopAnim( void ) { return bound( 0, (int)GetCvar( "czm_shop_anim" ), 2 ); }
+void SetShopAnim( float v ) { SetCvar( "czm_shop_anim", bound( 0, (int)v, 2 )); }
 
 float GetShopAuto( void ) { return GetCvar( "czm_shop_auto" ) != 0.0f; }
 void SetShopAuto( float v ) { SetCvar( "czm_shop_auto", v ); }
@@ -451,6 +454,7 @@ const CzmRow s_game[] =
 	{ ROW_SWITCH, "s_autoswitch", "s_autoswitch_hint", GetAutoSwitch, SetAutoSwitch, NULL, 0, 1, 1, 0, {}, 0, 0 },
 	{ ROW_SECTION, "s_sec_menus", NULL, NULL, NULL, NULL, 0, 0, 0, 0, {}, 0, 0 },
 	{ ROW_CHOICE, "s_shop", "s_shop_hint", GetShop, SetShop, NULL, 0, 2, 1, 0, { "opt_wheel", "opt_grid", "opt_classic" }, 3, 1 },
+	{ ROW_CHOICE, "s_shop_anim", "s_shop_anim_hint", GetShopAnim, SetShopAnim, NULL, 0, 2, 1, 0, { "opt_shop_off", "opt_shop_fade", "opt_shop_slide" }, 3, 0 },
 	{ ROW_SWITCH, "s_shop_auto", "s_shop_auto_hint", GetShopAuto, SetShopAuto, NULL, 0, 1, 1, 0, {}, 0, 0 },
 	{ ROW_SWITCH, "s_menucards", "s_menucards_hint", GetMenuCards, SetMenuCards, NULL, 0, 1, 1, 0, {}, 0, 0 },
 	{ ROW_SECTION, "s_advanced", NULL, NULL, NULL, NULL, 0, 0, 0, 0, {}, 0, 0 },

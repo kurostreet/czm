@@ -78,6 +78,7 @@ static const char *const czm_settings_names[]={
     "czm_parallax",
     "czm_scope_mode",
     "czm_shop",
+    "czm_shop_anim",
     "czm_shop_auto",
     "czm_sniper_release",
     "czm_tab_style",

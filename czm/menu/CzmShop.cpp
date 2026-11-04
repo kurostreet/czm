@@ -26,6 +26,7 @@ GNU General Public License for more details.
 #include "keydefs.h"
 #include "CzmMenu.h"
 #include "../../common/czm_player_model.h"
+#include "../../common/czm_weapon_menu.h"
 
 #define UI_DIR "gfx/czm/ui/"
 #define SHOP_DIR "gfx/czm/shop/"
@@ -436,9 +437,22 @@ pictures and numbers; a pick sends the menu's key like the digit would.
 */
 #define CZM_WEAPON_EXTRA 3
 
+static void DrawWeapon( const CzmShopItem &item, int x, int y, int w, int h, unsigned int color )
+{
+	char path[96];
+	snprintf( path, sizeof( path ), SHOP_DIR "weapons/weapon_%d.png", item.weapon );
+	if( item.name && CZM_Image( path ) )
+	{
+		int iw = Q_min( w, h * 2 ), ih = iw / 2;
+		CZM_DrawImage( path, x + ( w - iw ) / 2, y + ( h - ih ) / 2, iw, ih, color );
+	}
+	else DrawSilhouette( item.image, x, y, w, h, color );
+}
+
 struct CzmWeaponMenu
 {
 	int serial;
+	CzmWeapons::Meta meta;
 	char title[64];
 	int keys[CZM_MAX_SECTORS];              // menu key of each weapon slot
 	const CzmShopItem *items[CZM_MAX_SECTORS];
@@ -523,6 +537,7 @@ static bool ParseWeaponMenu( const char *value, CzmWeaponMenu &m )
 	if( !line || !strncmp( line + 1, "#czm1", 5 ))
 		return false;
 	sscanf( value, "%d %d", &m.serial, &validSlots );
+	m.meta = CzmWeapons::Parse( value );
 
 	for( line++; *line; )
 	{
@@ -531,7 +546,7 @@ static bool ParseWeaponMenu( const char *value, CzmWeaponMenu &m )
 
 		PlainLine( line, text, sizeof( text ));
 		line = end ? end + 1 : line + strlen( line );
-		if( !text[0] )
+		if( !text[0] || !strncmp( text, "#czmw1\t", 7 ))
 			continue;
 
 		if( text[0] >= '0' && text[0] <= '9' && ( text[1] == '.' || text[1] == ')' ))
@@ -583,8 +598,9 @@ static bool ParseWeaponMenu( const char *value, CzmWeaponMenu &m )
 		}
 	}
 
-	// two weapons at least, and the rest fits the bottom bar
-	return m.count >= 2 && unknown <= 2;
+	// Explicit metadata also supports a server with a single permitted weapon.
+	if( m.meta.valid ) m.toggleOn = m.meta.remember != 0;
+	return m.count >= ( m.meta.valid ? 1 : 2 ) && unknown <= 2;
 }
 
 bool CZM_IsWeaponMenu( const char *value )
@@ -667,7 +683,7 @@ private:
 	bool m_bClosing;
 	bool m_bServerMenu;      // a weapon menu of the server, not the CS shop
 	CzmWeaponMenu m_wmenu;
-	int m_iPickTime;
+	int m_iPickTime, m_iOpenTime;
 
 	// layout, recalculated every frame
 	int W, H;
@@ -698,7 +714,7 @@ CCzmShop::CCzmShop() : BaseClass( "CzmShop" )
 	m_bClosing = false;
 	m_bServerMenu = false;
 	memset( &m_wmenu, 0, sizeof( m_wmenu ));
-	m_iPickTime = 0;
+	m_iPickTime = m_iOpenTime = 0;
 	W = H = 0;
 	m_iWheelX = m_iWheelY = m_iWheelR = 0;
 	memset( m_slots, 0, sizeof( m_slots ));
@@ -782,6 +798,7 @@ void CCzmShop::OpenServerMenu( const CzmWeaponMenu &menu )
 	m_bServerMenu = true;
 	m_wmenu = menu;
 	m_iPickTime = 0;
+	m_iOpenTime = uiStatic.realTime;
 	ReadState();
 	m_bGrid = EngFuncs::GetCvarFloat( "czm_shop" ) == 2.0f;
 	m_iSlots = menu.count;
@@ -814,6 +831,7 @@ void CCzmShop::Open( int team )
 		m_iTeam = team;
 	m_bServerMenu = false;
 	m_iPickTime = 0;
+	m_iOpenTime = uiStatic.realTime;
 	ReadState();
 	m_bGrid = EngFuncs::GetCvarFloat( "czm_shop" ) == 2.0f;
 	SelectCategory( s_iLastCategory );
@@ -911,7 +929,8 @@ void CCzmShop::Layout( void )
 		int count = QuickCount();
 		int total = W - quickX - W * 0.02f - gap * ( CZM_QUICK - 1 );
 		int each = total / CZM_QUICK;
-
+		if( m_bServerMenu )
+			each = Q_min( (int)( W * .29f ), ( W - quickX * 2 - gap * ( count - 1 ) ) / Q_max( 1, count ) );
 		for( int i = 0; i < CZM_QUICK; i++ )
 			m_quick[i] = i < count ? CZM_Rect( quickX + i * ( each + gap ), quickY, each, quickH ) : CZM_Rect( 0, 0, 0, 0 );
 	}
@@ -929,14 +948,18 @@ void CCzmShop::Layout( void )
 	}
 	else
 	{
-		int columns = m_iSlots > 6 ? 4 : 3;
-		int areaX = quickX, areaW = W - W * 0.02f - areaX;
-		int areaY = tabY, areaH = quickY - gap * 2 - areaY;
+		int columns = m_iSlots > 6 ? 4 : ( m_iSlots > 2 ? 3 : Q_max( 1, m_iSlots ));
+		int areaX = quickX, areaW = W - W * 0.05f - areaX;
+		int areaY = m_bServerMenu ? H * 0.18f : tabY, areaH = quickY - gap * 4 - areaY;
 		int cardW = ( areaW - gap * ( columns - 1 )) / columns;
 		int cardH = ( areaH - gap ) / 2;
 
 		for( int i = 0; i < m_iSlots; i++ )
-			m_cards[i] = CZM_Rect( areaX + ( i % columns ) * ( cardW + gap ), areaY + ( i / columns ) * ( cardH + gap ), cardW, cardH );
+		{
+			int row = i / columns, inRow = Q_min( columns, m_iSlots - row * columns );
+			int center = ( areaW - inRow * cardW - ( inRow - 1 ) * gap ) / 2;
+			m_cards[i] = CZM_Rect( areaX + center + ( i % columns ) * ( cardW + gap ), areaY + row * ( cardH + gap ), cardW, cardH );
+		}
 	}
 }
 
@@ -944,7 +967,7 @@ int CCzmShop::QuickCount( void ) const
 {
 	if( !m_bServerMenu )
 		return CZM_QUICK;
-	return Q_min( CZM_QUICK, ( m_wmenu.toggleKey ? 1 : 0 ) + m_wmenu.extras );
+	return Q_min( CZM_QUICK, ( m_wmenu.toggleKey ? 1 : 0 ) + ( m_wmenu.meta.valid ? ( m_wmenu.meta.pages > 1 ? 2 : 0 ) : m_wmenu.extras ) );
 }
 
 // the menu key of a bottom button of a server menu: the switch first, then the rest
@@ -954,10 +977,15 @@ int CCzmShop::QuickKey( int i, const char **text ) const
 	{
 		if( i == 0 )
 		{
-			*text = m_wmenu.toggleText;
+			*text = CZM_IsRussian() ? "ЗАПОМНИТЬ ВЫБОР" : "REMEMBER CHOICE";
 			return m_wmenu.toggleKey;
 		}
 		i--;
+	}
+	if( m_wmenu.meta.valid )
+	{
+		*text = i == 0 ? ( CZM_IsRussian() ? "‹ НАЗАД" : "‹ PREVIOUS" ) : ( CZM_IsRussian() ? "ДАЛЕЕ ›" : "NEXT ›" );
+		return i == 0 ? -1 : -2;
 	}
 	if( i < m_wmenu.extras )
 	{
@@ -1060,7 +1088,13 @@ void CCzmShop::Activate( int hit )
 		{
 			CZM_PlayClick();
 			m_iPickTime = uiStatic.realTime;
-			EngFuncs::ClientCmdF( false, "slot%d\n", key );
+			if( key < 0 && m_wmenu.meta.valid )
+			{
+				int page = m_wmenu.meta.page + ( key == -1 ? -1 : 1 );
+				page = ( page + m_wmenu.meta.pages ) % m_wmenu.meta.pages;
+				EngFuncs::ClientCmdF( false, "czm_weapon_page %d\n", page );
+			}
+			else EngFuncs::ClientCmdF( false, "slot%d\n", key );
 		}
 		return;
 	}
@@ -1186,10 +1220,18 @@ void CCzmShop::DrawTop( void )
 	x = W * 0.018f;
 	if( m_bServerMenu )
 	{
-		const char *title = m_wmenu.title[0] ? m_wmenu.title : ( ru ? "Оружие" : "Weapons" );
-		CZM_DrawText( titleFont, x, ( m_top.h - CZM_FontHeight( titleFont )) / 2, m_close.x - x - H * 0.03f, title, CZM_White());
-		closeIcon = m_close.h * 0.42f;
-		CZM_DrawImage( UI_DIR "chip_round.png", m_close.x, m_close.y, m_close.w, m_close.h, IsPressed( HIT_CLOSE ) ? CZM_Grey() : CZM_White());
+		const char *title = m_wmenu.meta.valid ? ( m_wmenu.meta.primary ? ( ru ? "ГЛАВНОЕ ОРУЖИЕ" : "PRIMARY WEAPON" ) :
+			( ru ? "ДОП. ОРУЖИЕ" : "SECONDARY WEAPON" ) ) : m_wmenu.title;
+		x = W * .05f;
+		CZM_DrawText( titleFont, x, H * .025f, m_close.x - x - H * .03f, title, CZM_White());
+		CZM_DrawText( teamFont, x, H * .096f, W * .8f, ru ? "ВЫБЕРИ СНАРЯЖЕНИЕ ДЛЯ БОЯ" : "CHOOSE YOUR LOADOUT", PackRGBA( 206, 160, 110, 255 ));
+		if( m_wmenu.meta.valid )
+		{
+			char page[32]; snprintf( page, sizeof( page ), "%d / %d", m_wmenu.meta.page + 1, m_wmenu.meta.pages );
+			CZM_DrawText( teamFont, m_close.x - H * .2f, H * .04f, H * .16f, page, PackRGBA( 255, 175, 85, 255 ), QM_RIGHT );
+		}
+		closeIcon = m_close.h * .42f;
+		CZM_DrawImage( SHOP_DIR "arsenal_button.png", m_close.x, m_close.y, m_close.w, m_close.h );
 		CZM_DrawImage( UI_DIR "icon_close.png", m_close.x + ( m_close.w - closeIcon ) / 2, m_close.y + ( m_close.h - closeIcon ) / 2, closeIcon, closeIcon );
 		return;
 	}
@@ -1249,7 +1291,7 @@ void CCzmShop::DrawQuick( void )
 			bool on = toggle && m_wmenu.toggleOn;
 			int pad = r.h * 0.28f;
 
-			CZM_DrawSliced( on ? UI_DIR "tab_on.png" : UI_DIR "card.png", r.x, r.y, r.w, r.h, 30, corner,
+			CZM_DrawImage( on || !toggle ? SHOP_DIR "arsenal_button_on.png" : SHOP_DIR "arsenal_button.png", r.x, r.y, r.w, r.h,
 				IsPressed( HIT_QUICK + i ) ? CZM_Grey() : CZM_White());
 			if( toggle )
 			{
@@ -1322,7 +1364,7 @@ void CCzmShop::DrawWheel( void )
 		if( n == 1 )
 			top = m_iWheelY - m_iWheelR * 0.72f;
 
-		DrawSilhouette( item.image, cx - boxW / 2, top, boxW, imgH, CZM_White( afford ? 255 : 100 ));
+		DrawWeapon( item, cx - boxW / 2, top, boxW, imgH, CZM_White( afford ? 255 : 100 ));
 		CZM_DrawText( nameFont, cx - textW / 2, top + imgH + H * 0.008f, textW, ItemName( item ), CZM_White( afford ? 255 : 110 ), QM_CENTER );
 		if( !m_bServerMenu )
 		{
@@ -1417,7 +1459,7 @@ void CCzmShop::DrawInfo( const CzmShopItem *item )
 		textFont = CZM_Font( CZMF_UI_META );
 	}
 
-	DrawSilhouette( item->image, x + w * 0.08f, y, w * 0.84f, H * 0.15f, CZM_White());
+	DrawWeapon( *item, x + w * 0.08f, y, w * 0.84f, H * 0.15f, CZM_White());
 	y += H * 0.17f;
 
 	if( item->clip )
@@ -1473,7 +1515,7 @@ void CCzmShop::DrawInfo( const CzmShopItem *item )
 	CZM_DrawSliced( UI_DIR "tab_on.png", m_buy.x, m_buy.y, m_buy.w, m_buy.h, 30, (int)( H * 0.02f ),
 		IsPressed( HIT_ITEM + m_iInfo ) && m_info.HasCursor() ? CZM_Grey() : CZM_White());
 	CZM_DrawText( buyFont, m_buy.x, m_buy.y + ( m_buy.h - CZM_FontHeight( buyFont )) / 2, m_buy.w,
-		m_bServerMenu ? ( ru ? "ВЗЯТЬ" : "TAKE" ) : Owned( *item ) ? ( ru ? "КУПИТЬ ЕЩЁ" : "BUY AGAIN" ) : ( ru ? "КУПИТЬ" : "BUY" ),
+		m_bServerMenu ? ( m_wmenu.meta.queued ? ( ru ? "НА СЛЕДУЮЩИЙ РАУНД" : "FOR NEXT ROUND" ) : ( ru ? "ВЗЯТЬ" : "TAKE" ) ) : Owned( *item ) ? ( ru ? "КУПИТЬ ЕЩЁ" : "BUY AGAIN" ) : ( ru ? "КУПИТЬ" : "BUY" ),
 		CZM_White(), QM_CENTER );
 }
 
@@ -1481,37 +1523,34 @@ void CCzmShop::DrawGrid( void )
 {
 	HFont nameFont = CZM_Font( CZMF_SHOP_CARD );
 	HFont priceFont = CZM_Font( CZMF_SHOP_CARD_PRICE );
-	HFont badgeFont = CZM_Font( CZMF_SHOP_PRICE );
-	int corner = H * 0.03f;
-	char money[32];
-
+	int mode = bound( 0, (int)EngFuncs::GetCvarFloat( "czm_shop_anim" ), 2 );
+	int age = uiStatic.realTime - m_iOpenTime;
 	for( int i = 0; i < m_iSlots; i++ )
 	{
 		const CzmShopItem &item = *m_slots[i];
-		const CzmRect &r = m_cards[i];
+		CzmRect r = m_cards[i];
 		bool afford = m_bServerMenu || item.price <= m_iMoney;
-		bool owned = Owned( item );
-		int pad = r.h * 0.09f;
+		bool selected = m_bServerMenu && m_wmenu.meta.valid ? item.weapon == m_wmenu.meta.selected : Owned( item );
+		bool active = IsPressed( HIT_ITEM + i ) || r.HasCursor();
+		float t = mode ? bound( 0.0f, ( age - i * 14 ) / 180.0f, 1.0f ) : 1;
+		t = 1 - ( 1 - t ) * ( 1 - t );
+		int alpha = mode == 1 ? (int)( 255 * t ) : 255;
+		int slide = mode == 2 ? (int)( H * .035f * ( 1 - t )) : 0;
+		int pad = r.h * .09f;
 		int textY = r.y + r.h - pad - CZM_FontHeight( nameFont );
-
-		CZM_DrawSliced( owned ? UI_DIR "tab_on.png" : UI_DIR "card.png", r.x, r.y, r.w, r.h, 30, corner,
-			IsPressed( HIT_ITEM + i ) ? CZM_Grey() : CZM_White());
-		DrawSilhouette( item.image, r.x + r.w * 0.1f, r.y + pad * 1.4f, r.w * 0.8f, textY - r.y - pad * 2.4f, CZM_White( afford ? 255 : 95 ));
-
-		CZM_DrawText( nameFont, r.x + pad * 1.2f, textY, m_bServerMenu ? r.w - pad * 2.4f : r.w * 0.58f, ItemName( item ), CZM_White( afford ? 255 : 110 ));
+		CZM_DrawImage( selected || active ? SHOP_DIR "arsenal_selected.png" : SHOP_DIR "arsenal_card.png", r.x, r.y, r.w, r.h, CZM_White( alpha ));
+		DrawWeapon( item, r.x + r.w * .055f, r.y + pad * .8f + slide, r.w * .89f, textY - r.y - pad - slide, CZM_White( afford ? alpha : alpha * .4f ));
+		CZM_DrawText( nameFont, r.x + pad * 2.5f, textY, r.w - pad * 3.5f, ItemName( item ), CZM_White( alpha ));
 		if( !m_bServerMenu )
 		{
-			FormatMoney( item.price, money, sizeof( money ));
-			CZM_DrawText( priceFont, r.x, textY + ( CZM_FontHeight( nameFont ) - CZM_FontHeight( priceFont )) / 2, r.w - pad * 1.2f, money,
-				afford ? PackRGBA( 74, 222, 128, 255 ) : PackRGBA( 248, 113, 113, 255 ), QM_RIGHT );
+			char money[32]; FormatMoney( item.price, money, sizeof( money ));
+			CZM_DrawText( priceFont, r.x + pad, r.y + pad, r.w - pad * 2, money,
+				afford ? PackRGBA( 255, 179, 93, alpha ) : PackRGBA( 248, 113, 113, alpha ), QM_RIGHT );
 		}
-
-		if( owned )
+		if( selected )
 		{
-			const char *badge = CZM_IsRussian() ? "ЕСТЬ" : "OWNED";
-			int bw = CZM_TextWidth( badgeFont, badge ) + H * 0.03f, bh = H * 0.04f;
-			CZM_DrawPill( UI_DIR "button_secondary.png", r.x + r.w - pad - bw, r.y + pad, bw, bh, CZM_White());
-			CZM_DrawText( badgeFont, r.x + r.w - pad - bw, r.y + pad + ( bh - CZM_FontHeight( badgeFont )) / 2, bw, badge, CZM_White(), QM_CENTER );
+			int d = H * .034f;
+			CZM_DrawImage( UI_DIR "icon_check.png", r.x + r.w - pad - d, r.y + pad, d, d, PackRGBA( 255, 177, 63, alpha ));
 		}
 	}
 }
@@ -1521,7 +1560,7 @@ void CCzmShop::Draw()
 	ReadState();
 
 	// dead, spectating or out of the game: the shop is not for now
-	if( m_bClosing || !m_bAlive || !CL_IsActive( ))
+	if( m_bClosing || ( !m_bAlive && !m_bServerMenu ) || !CL_IsActive( ))
 	{
 		Hide();
 		return;
@@ -1529,7 +1568,8 @@ void CCzmShop::Draw()
 
 	Layout();
 
-	UI_FillRect( 0, 0, W, H, PackRGBA( 6, 8, 12, 150 ));
+	CZM_DrawCover( CZM_Image( "gfx/czm/loading_3.png" ), 0, 0, W, H );
+	UI_FillRect( 0, 0, W, H, PackRGBA( 6, 8, 12, 180 ));
 	DrawTop();
 	if( !m_bServerMenu )
 		DrawTabs();
@@ -1543,6 +1583,12 @@ void CCzmShop::Draw()
 	}
 
 	DrawQuick();
+	if( m_bServerMenu && m_wmenu.meta.valid )
+	{
+		const char *hint = m_wmenu.meta.queued ? ( CZM_IsRussian() ? "Выбор применится в следующем раунде" : "Your choice will apply next round" ) :
+			( CZM_IsRussian() ? "Одна закупка за матч · Нажми на оружие" : "One purchase per match · Tap a weapon" );
+		CZM_DrawText( CZM_Font( CZMF_UI_META ), W * .05f, H * .824f, W * .9f, hint, PackRGBA( 205, 184, 161, 255 ));
+	}
 
 	if( m_szToast[0] && uiStatic.realTime - m_iToastTime < 1800 )
 	{
@@ -1574,6 +1620,11 @@ bool CZM_ShopWeaponFrame( const char *value )
 	if( value && value[0] )
 		sscanf( value, "%d", &serial );
 
+	if( open && ( EngFuncs::GetCvarFloat( "czm_shop" ) == 0 || EngFuncs::GetCvarFloat( "_vgui_menus" ) == 0 ))
+	{
+		menu_czmshop->CloseServerMenu( false );
+		return false;
+	}
 	if( open )
 	{
 		if( !value || !value[0] )
@@ -1594,7 +1645,7 @@ bool CZM_ShopWeaponFrame( const char *value )
 		return false;
 	}
 
-	if( !value || !value[0] || serial == s_iWeaponClosed || EngFuncs::GetCvarFloat( "czm_shop" ) == 0.0f || !menu_czmshop
+	if( !value || !value[0] || serial == s_iWeaponClosed || EngFuncs::GetCvarFloat( "czm_shop" ) == 0.0f || EngFuncs::GetCvarFloat( "_vgui_menus" ) == 0.0f || !menu_czmshop
 		|| !CL_IsActive() || uiStatic.menu.IsActive() || uiStatic.client.IsActive( ))
 		return false;
 	if( !ParseWeaponMenu( value, menu ))
