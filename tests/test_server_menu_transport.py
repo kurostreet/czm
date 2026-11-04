@@ -14,6 +14,7 @@ PREAMBLE = r'''
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include "czm_weapon_menu.h"
 #define MAX_MENU_STRING 4096
 #define FALSE 0
 #define HUD_DRAW 1
@@ -32,7 +33,12 @@ struct Localizer { char *BufferedLocaliseTextString(const char *s) {
     translations++; return const_cast<char *>(!strncmp(s,"#czm1",5)?"czm1":!strcmp(s,"#stock")?"Translated stock":s);
 } };
 struct { float m_flTime=10; Localizer m_TextMessage; } gHUD;
-struct { void Cvar_Set(const char *,const char *s) { published=s; } } gEngfuncs;
+static float style=2, automatic=1, vgui=1;
+static std::string commands;
+static void ClientCmd(const char *s){commands+=s;}
+struct { void Cvar_Set(const char *,const char *s) { published=s; }
+ float pfnGetCvarFloat(const char *key){return !strcmp(key,"czm_shop")?style:!strcmp(key,"_vgui_menus")?vgui:automatic;}
+} gEngfuncs;
 static int KB_ConvertString(char *,char **) { bindings++; return 0; }
 struct BufferReader {
     const unsigned char *p;
@@ -84,6 +90,13 @@ int main() {
     assert(!g_szRichMenuString[0] && published=="2 1023\nTranslated stock");
     menu.PublishCards(false);
     assert(published.empty());
+    std::string weapon="#czmw1\tprimary\t0\t3\t0\t28\t0\t0\n\\yPrimary Weapon\n1. AK-47\n8. Remember [Off]\n0. Exit";
+    Receive(menu,weapon);assert(published.find("#czmw1")!=std::string::npos&&translations==1);
+    style=0;Receive(menu,weapon);assert(published.empty()&&strstr(g_szMenuString,"AK-47")&&!strstr(g_szMenuString,"#czmw1"));
+    style=2;vgui=0;Receive(menu,weapon);assert(published.empty());
+    vgui=1;automatic=0;
+    Receive(menu,"#czmw1\tprimary\t0\t3\t0\t28\t0\t1\nPrimary Weapon\n1. AK-47");
+    assert(published.empty()&&commands=="menuselect 10\n");
 }
 '''
 
@@ -99,7 +112,7 @@ class ServerMenuTransportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="czm-menu-wire-") as folder:
             path = Path(folder)
             (path / "check.cpp").write_text(code)
-            subprocess.run(["g++", "-std=c++11", "-Wall", str(path / "check.cpp"), "-o", str(path / "check")], check=True)
+            subprocess.run(["g++", "-std=c++11", "-Wall", "-I"+str(ROOT/"common"), str(path / "check.cpp"), "-o", str(path / "check")], check=True)
             subprocess.run([str(path / "check")], check=True)
 
 
@@ -126,7 +139,7 @@ def run_cpp(code):
     with tempfile.TemporaryDirectory(prefix="czm-menu-policy-") as folder:
         path = Path(folder)
         (path / "check.cpp").write_text(code)
-        subprocess.run(["g++", "-std=c++11", "-Wall", str(path / "check.cpp"), "-o", str(path / "check")], check=True)
+        subprocess.run(["g++", "-std=c++11", "-Wall", "-I"+str(ROOT/"common"), str(path / "check.cpp"), "-o", str(path / "check")], check=True)
         subprocess.run([str(path / "check")], check=True)
 
 
@@ -206,7 +219,8 @@ int main(){
  assert(!strcmp(plain.cards[2].sub,"37 LVL"));
  CzmRichMenu next;PlainAsRich("4 1\nDuration\n1. One hour",&plain,next);
  assert(!strcmp(next.parent,"admin_players"));
- PlainAsRich("5 1\nVote\n1. Yes",NULL,next);assert(next.numTabs==0&&!strcmp(next.parent,"main"));
+ PlainAsRich("5 1\nVote\n1. Yes",NULL,next);assert(next.numTabs==0&&!next.parent[0]&&!next.root[0]);
+ PlainAsRich("6 1\nZombie Plague 4.4\n1. Choose weapon",NULL,next);assert(!strcmp(next.head,"МЕНЮ ЗОМБИ")&&!next.parent[0]);
 }
 """
         run_cpp(code)

@@ -5,7 +5,8 @@
 namespace CzmWeapons {
 struct Meta { bool valid,primary,queued,automatic;int page,pages,selected,remember; };
 inline const char *Text(const char *value) {
- if(!value)return "";int serial,slots,n=0;
+ if(!value) return "";
+ int serial,slots,n=0;
  if(std::sscanf(value,"%d %d%n",&serial,&slots,&n)==2&&value[n]=='\n')return value+n+1;
  return value;
 }

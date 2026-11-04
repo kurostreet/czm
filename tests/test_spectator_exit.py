@@ -27,7 +27,7 @@ namespace EngFuncs {
 const char *GetCvarString(const char *){static char s[64];snprintf(s,sizeof(s),"100 %d 0 0 0 0",team);return s;}
 float GetCvarFloat(const char *){return 1;}
 void ClientCmd(bool,const char *s){assert(strstr(s,"touch_removebutton \"_czm_spec_exit\""));removed++;}
-void ClientCmdF(bool,const char *s,...){assert(strstr(s,"\"jointeam 5\""));assert(strstr(s,"255 255 255 0 4"));added++;}
+void ClientCmdF(bool,const char *s,...){assert(strstr(s,"\"czm_join auto\""));assert(strstr(s,"255 255 255 0 4"));added++;}
 }
 typedef int HFont;
 enum { CZMF_TILE_NAME };

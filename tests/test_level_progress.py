@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 HARNESS = r'''
 #include "czm_hud_overlay.h"
+#include "czm_aim.h"
 #include <cassert>
 #include <algorithm>
 #include <cmath>
@@ -52,12 +53,14 @@ class LevelProgressTests(unittest.TestCase):
         source = (ROOT/'cl_dll/hud/czm_tags.cpp').read_text()
         code = r'''
 #include "czm_hud_overlay.h"
+#include "czm_aim.h"
 #include <cassert>
 #include <algorithm>
 #include <cstdint>
 #define MAX_PLAYERS 32
 static CzmHud::ProgressInfo s_progress;
-static int s_tags[33],s_toasts[3];static bool s_have[33],s_aimShown;
+static int s_tags[33],s_toasts[3];static bool s_have[33],s_aimShown,s_aimReceived;
+static CzmAim::Target s_aim;
 struct BufferReader {
  const unsigned char *p;
  BufferReader(const char *,void *buf,int):p((const unsigned char *)buf){}
