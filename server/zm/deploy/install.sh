@@ -56,6 +56,14 @@ for f in "$R"/scripting/*.sma; do
 		exit 1
 	fi
 done
+# Compile a patched copy; the installed upstream source stays untouched.
+python3 -I "$R/tools/patch_zombie_menus.py" "$A/scripting/zombie_plague40.sma" "$BUILD/zombie_plague40.sma"
+if ! (cd "$A/scripting" && ./amxxpc "$BUILD/zombie_plague40.sma" -i"$A/scripting/include" -o"$BUILD/zombie_plague40.amxx") > "$BUILD/zombie_plague40.log" 2>&1; then
+ cat "$BUILD/zombie_plague40.log"; exit 1
+fi
+if grep -qE "(error|fatal error) [0-9]+:" "$BUILD/zombie_plague40.log"; then
+ cat "$BUILD/zombie_plague40.log"; exit 1
+fi
 echo "COMPILE_OK"
 
 echo "== backup"

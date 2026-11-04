@@ -19,6 +19,11 @@
 #define CZM_MENU_PLUGIN
 #include <czm_menu>
 
+// open() owns a 4096-cell wire buffer and calls rich_head() plus plugin forwards.
+// AMXX's default 4096-cell stack cannot even hold that one buffer: the collision
+// overwrites the registry/string data and makes later cvar callbacks invalid.
+#pragma dynamic 16384
+
 #define PLUGIN  "CZM Menu"
 #define VERSION "1.0"
 #define AUTHOR  "Counter Zombie Mobile"
