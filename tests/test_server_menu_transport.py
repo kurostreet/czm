@@ -232,6 +232,10 @@ int main(){
  ParseRich("8 512\n#czm1\tmenu\tplayers\tMENU\tSurvival\t2/32\tFair\n#page\tfriends\tПригласить\t@friends\t\n#body\tВыбери друга\n",next);
  assert(next.kind==CzmServerView::Friends&&next.numCards==0&&!strcmp(next.parent,"players"));
  ParseRich("9 512\n#czm1\tmenu\tmain\tMENU\t\t\t\n#page\tform\tUnsafe\tquit;exec evil\t\n",next);assert(next.kind==CzmServerView::Text);
+ ParseRich("10 897\n#czm1\tmenu\tstandalone\tAdmin menu\t\t\t\n#nav\t1\t1\t2\tshield\n1. Kick\t\tuser\n8. Back\n9. Next\n0. Exit",root);
+ PlainAsRich("11 769\nKick Player Menu 2/3\n1. Bob\n9. Дальше...\n0. Назад",&root,next);
+ assert(next.navigation&&next.canGoBack&&next.nextSlot==9&&next.prevSlot==10&&next.numCards==1);
+ assert(!strcmp(next.cards[0].name,"Bob")&&!next.menuPages);
 }
 """
         run_cpp(code)
@@ -242,9 +246,13 @@ int main(){
         code += source[source.index('struct CzmMenuTab'):source.index('static bool IsRichMenu')]
         code += r"""
 static int ScreenWidth,ScreenHeight;
+enum { CZMF_UI_META };
+static int CZM_Font(int font){return font;}
+static int CZM_FontHeight(int){return 15;}
 struct CCzmServerWindow{
  CzmRichMenu m_menu={};int m_iTabFirst=0,m_iTabRows=0,W,H;
  CzmRect m_win,m_head,m_side,m_body,m_foot,m_close,m_back,m_tabsUp,m_tabsDown;
+ CzmRect m_navPrev,m_navNext,m_cardInfo;
  CzmRect m_content,m_field,m_submit,m_prev,m_next,m_refresh,m_friendRows[6];
  void Layout(int);
 };

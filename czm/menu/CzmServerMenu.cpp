@@ -269,8 +269,9 @@ the left, cards with an icon, a subtitle and a badge. The menu text starts with 
 	#tabs<TAB>key:name:icon:badge<TAB>...
 	\r1.\w name<TAB>sub<TAB>icon<TAB>RRGGBB<TAB>badge
 
-A card sends slotN like a key, a tab asks the server for its section (czm_menu_tab), the cross
-sends slot10. The window is modal: the menu is opened on purpose and closes with a pick.
+A card sends slotN like a key. A tab asks the server for its section (czm_menu_tab).
+Standalone menus add #nav<TAB>hasParent<TAB>page<TAB>pages<TAB>icon and use a footer
+for navigation. Closing dismisses the menu without selecting an item.
 =================
 */
 #define SM_MAX_TABS  32
@@ -299,6 +300,9 @@ struct CzmRichMenu
 	int numTabs;
 	CzmMenuCard cards[SM_MAX_CARDS];
 	int numCards;
+	bool navigation, canGoBack;
+	int menuPage, menuPages, prevSlot, nextSlot;
+	char headerIcon[16];
 	CzmServerView::Kind kind;
 	char pageTitle[96], body[2048], command[24], hint[160], prefill[724];
 };
@@ -393,6 +397,24 @@ static void ParseRich( const char *value, CzmRichMenu &m )
 			NextField( p, end, m.parent, sizeof( m.parent ));
 			NextField( p, end, m.root, sizeof( m.root ));
 		}
+		else if( !strncmp( line, "#nav\t", 5 ))
+		{
+			const char *p = line + 5;
+			char back[4], page[8], pages[8];
+			NextField( p, end, back, sizeof( back ));
+			NextField( p, end, page, sizeof( page ));
+			NextField( p, end, pages, sizeof( pages ));
+			const int current = atoi( page ), total = atoi( pages );
+			if( current >= 1 && current <= total && total <= 32 )
+			{
+				m.navigation = true;
+				m.canGoBack = !strcmp( back, "1" );
+				m.menuPage = current;
+				m.menuPages = total;
+				m.nextSlot = current < total && ( m.validSlots & ( 1 << 8 )) ? 9 : 0;
+				NextField( p, end, m.headerIcon, sizeof( m.headerIcon ));
+			}
+		}
 		else if( !strncmp( line, "#tabs", 5 ))
 		{
 			const char *p = line + 5;
@@ -447,6 +469,11 @@ static void ParseRich( const char *value, CzmRichMenu &m )
 			// "1. name<TAB>sub<TAB>icon<TAB>color<TAB>badge"; 0 is the exit, the cross does it
 			if( visible[0] >= '1' && visible[0] <= '9' && visible[1] == '.' && m.numCards < SM_MAX_CARDS )
 			{
+				if( m.navigation && visible[0] >= '8' )
+				{
+					line = *end ? end + 1 : end;
+					continue;
+				}
 				CzmMenuCard &c = m.cards[m.numCards++];
 				const char *p = visible + 2, *e = visible + strlen( visible );
 				char hex[16];
@@ -459,6 +486,12 @@ static void ParseRich( const char *value, CzmRichMenu &m )
 				NextField( p, e, c.badge, sizeof( c.badge ));
 				c.color = HexColor( hex, PackRGBA( 229, 63, 77, 255 ));
 				c.enabled = ( m.validSlots & ( 1 << ( c.key - 1 ))) && color != 'd';
+			}
+			else if( m.navigation && visible[0] && strncmp( visible, "0.", 2 )
+				&& strcmp( visible, m.head ) && strcmp( visible, m.chip ))
+			{
+				size_t used = strlen( m.body );
+				snprintf( m.body + used, sizeof( m.body ) - used, "%s\n", visible );
 			}
 		}
 		line = *end ? end + 1 : end;
@@ -482,6 +515,11 @@ static void PlainAsRich( const char *value, const CzmRichMenu *previous, CzmRich
 	m.kind = CzmServerView::Cards;
 	m.pageTitle[0] = m.body[0] = m.command[0] = m.hint[0] = 0;
 	m.prefill[0] = 0;
+	if( m.navigation )
+	{
+		m.canGoBack = true;
+		m.menuPage = m.menuPages = m.prevSlot = m.nextSlot = 0;
+	}
 	const bool zombie = strstr( s_menu.title, "Zombie Plague" ) != NULL;
 	Q_strncpy( m.head, zombie ? ( CZM_IsRussian() ? "МЕНЮ ЗОМБИ" : "ZOMBIE MENU" ) : s_menu.title, sizeof( m.head ));
 	Q_strncpy( m.sub, zombie ? "Zombie Plague" : "", sizeof( m.sub ));
@@ -499,6 +537,20 @@ static void PlainAsRich( const char *value, const CzmRichMenu *previous, CzmRich
 	for( int i = 0; i < s_menu.numCards && m.numCards < SM_MAX_CARDS; i++ )
 	{
 		const CzmCard &plain = s_menu.cards[i];
+		if( m.navigation && plain.enabled )
+		{
+			const bool more = plain.key == 9 &&
+				( !strcmp( plain.text, "More..." ) || !strcmp( plain.text, "Next" )
+				|| !strcmp( plain.text, "Дальше..." ) || !strcmp( plain.text, "Далее" ));
+			const bool prev = ( plain.key == 8 || plain.key == 10 ) &&
+				( !strcmp( plain.text, "Back" ) || !strcmp( plain.text, "Назад" ));
+			if( more || prev )
+			{
+				if( more ) m.nextSlot = plain.key;
+				else m.prevSlot = plain.key;
+				continue;
+			}
+		}
 		if( plain.key == 10 )
 			continue;
 		CzmMenuCard &card = m.cards[m.numCards++];
@@ -547,7 +599,9 @@ private:
 		HIT_PREV,
 		HIT_NEXT,
 		HIT_REFRESH,
-		HIT_TAB = 10,    // + tab
+		HIT_MENU_PREV,
+		HIT_MENU_NEXT,
+		HIT_TAB = 16,    // + tab
 		HIT_CARD = 100,  // + card, separate from all 32 possible tabs
 	};
 
@@ -584,6 +638,7 @@ private:
 
 	int W, H;
 	CzmRect m_win, m_head, m_side, m_body, m_foot, m_close, m_back, m_tabsUp, m_tabsDown;
+	CzmRect m_navPrev, m_navNext, m_cardInfo;
 	CzmRect m_content, m_field, m_submit, m_prev, m_next, m_refresh, m_friendRows[6];
 };
 
@@ -649,7 +704,7 @@ void CCzmServerWindow::Close( bool exitMenu )
 	if( exitMenu )
 	{
 		s_iClosedSerial = m_menu.serial;
-		EngFuncs::ClientCmd( false, "slot10\nczm_menu_close\n" );
+		EngFuncs::ClientCmd( false, "client_buy_close\nczm_menu_close\n" );
 	}
 	Hide();
 }
@@ -676,13 +731,13 @@ void CCzmServerWindow::Layout( int shift )
 {
  W=ScreenWidth;H=ScreenHeight;
  const int winW=Q_min((int)(W*.90f),(int)(H*1.80f)),winH=H*.88f;
- const int headH=H*.135f,footH=H*.075f,sideW=m_menu.numTabs?winW*.225f:0;
+ const int headH=H*.135f,footH=H*(m_menu.navigation?.14f:.075f),sideW=m_menu.numTabs?winW*.225f:0;
  m_win=CZM_Rect((W-winW)/2+shift,(H-winH)/2,winW,winH);
  m_head=CZM_Rect(m_win.x,m_win.y,winW,headH);
  m_foot=CZM_Rect(m_win.x,m_win.y+winH-footH,winW,footH);
  m_side=CZM_Rect(m_win.x,m_win.y+headH,sideW,winH-headH-footH);
  m_body=CZM_Rect(m_side.x+sideW,m_side.y,winW-sideW,m_side.h);
- int closeS=H*.055f;
+ int closeS=H*(m_menu.navigation?.078f:.055f);
  m_close=CZM_Rect(m_head.x+winW-closeS-H*.025f,m_head.y+(headH-closeS)/2,closeS,closeS);
  const int pad=H*.018f,tabGap=Q_max(2,(int)(H*.009f));
  int tabH=H*.070f,tabTop=m_side.y+pad;
@@ -698,12 +753,29 @@ void CCzmServerWindow::Layout( int shift )
  }else{m_iTabFirst=0;m_iTabRows=m_menu.numTabs;}
  for(int i=0;i<m_menu.numTabs;i++)m_menu.tabs[i].rect=i>=m_iTabFirst&&i<m_iTabFirst+m_iTabRows?
   CZM_Rect(m_side.x+pad,tabTop+(i-m_iTabFirst)*(tabH+tabGap),sideW-pad*2,tabH):CZM_Rect(0,0,0,0);
- const int cpad=H*.025f,gap=H*.014f,navigation=m_menu.parent[0]?H*.065f:0;
+ const int cpad=H*.025f,gap=H*.014f,navigation=!m_menu.navigation&&m_menu.parent[0]?H*.065f:0;
  m_back=navigation?CZM_Rect(m_body.x+cpad,m_body.y+cpad,H*.21f,H*.045f):CZM_Rect(0,0,0,0);
+ m_navPrev=m_navNext=m_cardInfo=CZM_Rect(0,0,0,0);
+ if( m_menu.navigation )
+ {
+  const int height=H*.091f, y=m_foot.y+(m_foot.h-height)/2, width=m_foot.w*.365f;
+  if( m_menu.canGoBack ) m_back=CZM_Rect(m_foot.x+cpad,y,width,height);
+  if( m_menu.prevSlot || m_menu.menuPage>1 )
+   m_navPrev=CZM_Rect(m_foot.x+m_foot.w*.398f,y,Q_min((int)(H*.087f),(int)(m_foot.w*.062f)),height);
+  if( m_menu.nextSlot ) m_navNext=CZM_Rect(m_foot.x+m_foot.w-cpad-width,y,width,height);
+ }
+ int context=0;
+ if( m_menu.navigation && m_menu.kind==CzmServerView::Cards && m_menu.body[0] )
+ {
+  int lines=0;
+  for( const char *p=m_menu.body; *p; ++p ) if( *p=='\n' ) ++lines;
+  context=Q_min(7,lines)*Q_max((int)(H*.037f),CZM_FontHeight(CZM_Font(CZMF_UI_META))+2);
+  m_cardInfo=CZM_Rect(m_body.x+cpad,m_body.y+cpad,m_body.w-cpad*2,context);
+ }
  int columns=m_body.w>=H*.88f?2:1,rows=Q_max(1,(m_menu.numCards+columns-1)/columns);
  int cardW=(m_body.w-cpad*2-gap*(columns-1))/columns;
- int cardH=Q_min((int)(H*.125f),(m_body.h-navigation-cpad*2-gap*(rows-1))/rows);
- for(int i=0;i<m_menu.numCards;i++)m_menu.cards[i].rect=CZM_Rect(m_body.x+cpad+(i%columns)*(cardW+gap),m_body.y+cpad+navigation+(i/columns)*(cardH+gap),cardW,cardH);
+ int cardH=Q_min((int)(H*(m_menu.navigation?.154f:.125f)),(m_body.h-navigation-context-cpad*2-gap*(rows-1))/rows);
+ for(int i=0;i<m_menu.numCards;i++)m_menu.cards[i].rect=CZM_Rect(m_body.x+cpad+(i%columns)*(cardW+gap),m_body.y+cpad+navigation+context+(i/columns)*(cardH+gap),cardW,cardH);
  m_content=CZM_Rect(m_body.x+cpad,m_body.y+cpad+navigation,m_body.w-cpad*2,m_body.h-cpad*2-navigation);
  m_field=m_submit=m_prev=m_next=m_refresh=CZM_Rect(0,0,0,0);
  for(int i=0;i<6;i++)m_friendRows[i]=CZM_Rect(0,0,0,0);
@@ -736,6 +808,8 @@ int CCzmServerWindow::HitTest( void ) const
  int x=uiStatic.cursorX,y=uiStatic.cursorY;
  if(m_close.Grown(H*.012f).Contains(x,y))return HIT_CLOSE;
  if(m_back.w&&m_back.Contains(x,y))return HIT_BACK;
+ if(m_navPrev.w&&m_navPrev.Contains(x,y))return HIT_MENU_PREV;
+ if(m_navNext.w&&m_navNext.Contains(x,y))return HIT_MENU_NEXT;
  if(m_tabsUp.w&&m_tabsUp.Contains(x,y))return HIT_TABS_UP;
  if(m_tabsDown.w&&m_tabsDown.Contains(x,y))return HIT_TABS_DOWN;
  for(int i=0;i<m_menu.numTabs;i++)if(m_menu.tabs[i].rect.w&&m_menu.tabs[i].rect.Contains(x,y))return HIT_TAB+i;
@@ -778,10 +852,27 @@ void CCzmServerWindow::Activate( int hit )
 		Close( true );
 		return;
 	}
-	if( hit == HIT_BACK && m_menu.parent[0] )
+	if( hit == HIT_BACK && ( m_menu.navigation ? m_menu.canGoBack : m_menu.parent[0] != 0 ))
 	{
 		CZM_PlayClick();
-		EngFuncs::ClientCmdF( false, "czm_menu_tab %s\n", m_menu.parent );
+		if( m_menu.navigation )
+			EngFuncs::ClientCmd( false, "czm_menu_back\n" );
+		else
+			EngFuncs::ClientCmdF( false, "czm_menu_tab %s\n", m_menu.parent );
+		return;
+	}
+	if( hit == HIT_MENU_PREV || hit == HIT_MENU_NEXT )
+	{
+		const int slot = hit == HIT_MENU_PREV ? m_menu.prevSlot : m_menu.nextSlot;
+		if( Waiting() || ( !slot && ( hit != HIT_MENU_PREV || m_menu.menuPage < 2 )))
+			return;
+		CZM_PlayClick();
+		m_iPicked = SM_MAX_CARDS;
+		m_iPickTime = uiStatic.realTime;
+		if( slot )
+			EngFuncs::ClientCmdF( false, "slot%d\n", slot );
+		else
+			EngFuncs::ClientCmd( false, "czm_menu_prev\n" );
 		return;
 	}
 	if( hit == HIT_TABS_UP || hit == HIT_TABS_DOWN )
@@ -830,7 +921,7 @@ bool CCzmServerWindow::KeyDown( int key )
 	}
 	if( UI::Key::IsEscape( key ))
 	{
-		if( m_menu.parent[0] ) Activate( HIT_BACK );
+		if( m_menu.navigation ? m_menu.canGoBack : m_menu.parent[0] != 0 ) Activate( HIT_BACK );
 		else Close( true );
 		return true;
 	}
@@ -853,6 +944,17 @@ bool CCzmServerWindow::KeyDown( int key )
 	}
 
 	// the keys of a keyboard still pick, like the text menu
+	if( m_menu.navigation && key == '9' && m_menu.nextSlot )
+	{
+		Activate( HIT_MENU_NEXT );
+		return true;
+	}
+	if( m_menu.navigation && key == '8' && ( m_menu.menuPages || m_menu.prevSlot == 8 ))
+	{
+		if( m_menu.menuPage > 1 || m_menu.prevSlot == 8 ) Activate( HIT_MENU_PREV );
+		else if( m_menu.canGoBack ) Activate( HIT_BACK );
+		return true;
+	}
 	if( key >= '1' && key <= '9' && m_menu.kind == CzmServerView::Cards )
 	{
 		for( int i = 0; i < m_menu.numCards; i++ )
@@ -1020,7 +1122,7 @@ void CCzmServerWindow::DrawHeader( int a )
  const CzmRect &h=m_head;int pad=H*.025f,tile=H*.070f,x=h.x+pad;
  unsigned accent=PackRGBA(255,168,66,a);
  CzmStyle::Surface(CZM_Rect(x,h.y+(h.h-tile)/2,tile,tile),PackRGBA(38,32,25,a),PackRGBA(118,81,38,a),tile/5);
- const char *icon=UI_DIR "icon_star.png";
+ const char *icon=m_menu.headerIcon[0]?MenuIcon(m_menu.headerIcon):UI_DIR "icon_star.png";
  for(int i=0;i<m_menu.numTabs;i++)if(!strcmp(m_menu.tabs[i].key,m_szTab))icon=MenuIcon(m_menu.tabs[i].icon);
  CZM_DrawImage(icon,x+tile/4,h.y+(h.h-tile)/2+tile/4,tile/2,tile/2,accent);
  x+=tile+pad;
@@ -1066,7 +1168,20 @@ void CCzmServerWindow::DrawTabs( int a )
 
 void CCzmServerWindow::DrawCards( int a )
 {
- if(m_back.w)CzmStyle::Button(m_back,CZM_IsRussian()?"‹ Назад":"‹ Back",true,false,IsPressed(HIT_BACK),PackRGBA(255,168,66,a),CZMF_UI_META);
+ if(m_back.w&&!m_menu.navigation)CzmStyle::Button(m_back,CZM_IsRussian()?"‹ Назад":"‹ Back",true,false,IsPressed(HIT_BACK),PackRGBA(255,168,66,a),CZMF_UI_META);
+ if( m_cardInfo.h )
+ {
+  const HFont font=CZM_Font(CZMF_UI_META);
+  const int lineH=Q_max(1,CZM_FontHeight(font));
+  int starts[8];
+  const int count=CZM_WrapText(font,m_menu.body,m_cardInfo.w,starts,Q_min(7,m_cardInfo.h/lineH));
+  for( int i=0; i<count; ++i )
+  {
+   char line[256];
+   CZM_WrapLine(m_menu.body,starts,i,line,sizeof(line));
+   CZM_DrawText(font,m_cardInfo.x,m_cardInfo.y+i*lineH,m_cardInfo.w,line,PackRGBA(187,199,215,a));
+  }
+ }
  HFont name=CZM_Font(CZMF_UI_LABEL),sub=CZM_Font(CZMF_UI_META);
  float t=Q_min(1.0f,(uiStatic.realTime-m_iChangeTime)/130.0f);int alpha=a*t;
  for(int i=0;i<m_menu.numCards;i++){
@@ -1089,6 +1204,34 @@ void CCzmServerWindow::DrawFooter( int a )
 {
  const CzmRect&f=m_foot;HFont font=CZM_Font(CZMF_UI_META);int pad=H*.025f,lineH=CZM_FontHeight(font),x=f.x+pad;
  UI_FillRect(f.x,f.y,f.w,1,PackRGBA(48,56,68,a));
+ if( m_menu.navigation )
+ {
+  const bool ru=CZM_IsRussian();
+  const unsigned amber=PackRGBA(255,175,66,a);
+  if( m_back.w )
+  {
+   CzmStyle::Surface(m_back,PackRGBA(25,31,40,a),IsPressed(HIT_BACK)?amber:PackRGBA(142,154,170,a));
+   CzmStyle::Text(m_back,ru?"← Назад":"← Back",CZMF_UI_LABEL,CZM_White(a),QM_CENTER);
+  }
+  if( m_navPrev.w )
+  {
+   CzmStyle::Surface(m_navPrev,PackRGBA(25,31,40,a),IsPressed(HIT_MENU_PREV)?amber:PackRGBA(63,73,87,a));
+   CzmStyle::Text(m_navPrev,"‹",CZMF_UI_LABEL,CZM_White(a),QM_CENTER);
+  }
+  if( m_menu.menuPages>1 )
+  {
+   char page[24];
+   snprintf(page,sizeof(page),"%d / %d",m_menu.menuPage,m_menu.menuPages);
+   CzmStyle::Text(CZM_Rect(f.x+f.w*.462f,f.y,f.w*.076f,f.h),page,CZMF_UI_META,PackRGBA(155,166,184,a),QM_CENTER);
+  }
+  if( m_navNext.w )
+  {
+   const unsigned fill=IsPressed(HIT_MENU_NEXT)?PackRGBA(225,145,46,a):amber;
+   CzmStyle::Surface(m_navNext,fill,amber);
+   CzmStyle::Text(m_navNext,ru?"Далее →":"Next →",CZMF_UI_LABEL,PackRGBA(23,25,30,a),QM_CENTER);
+  }
+  return;
+ }
  const char*right=m_notice[0]?m_notice:m_menu.foot;
  const char*brand="COUNTER ZOMBIE MOBILE";int brandW=CZM_TextWidth(font,brand),rightW=CZM_TextWidth(font,right);
  unsigned color=m_notice[0]?PackRGBA(255,184,94,a):PackRGBA(130,145,164,a);

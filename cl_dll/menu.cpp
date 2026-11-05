@@ -394,6 +394,8 @@ void CHudMenu::UserCmd_OldStyleMenuOpen()
 void CHudMenu::UserCmd_OldStyleMenuClose()
 {
 	m_fMenuDisplayed = 0; // no valid slots means that the menu should be turned off
+	m_bitsValidSlots = 0;
+	Reset();
 	m_iFlags &= ~HUD_DRAW;
 
 	Touch_CloseMenu();

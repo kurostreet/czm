@@ -31,7 +31,24 @@ int main(int argc,char**argv){
  w.Update(form);strcpy(w.m_input,"ok");sentCommands.clear();w.Submit();assert(sentCommands.empty()&&!w.m_formPending);
  strcpy(w.m_input,"  ok  ");w.Submit();assert(sentCommands.empty()&&!w.m_formPending&&!strcmp(w.m_input,"ok"));
  strcpy(w.m_menu.command,"quit");strcpy(w.m_input,"hello");w.Submit();assert(sentCommands.empty());
- w.Close(true);assert(sentCommands=="slot10\nczm_menu_close\n");
+ w.Close(true);assert(sentCommands=="client_buy_close\nczm_menu_close\n");
+ // A tap on a footer control uses its own action, and X never selects Back.
+ CzmRichMenu admin,confirm;
+ ParseRich("20 961\n#czm1\tmenu\tstandalone\tАдмин-меню\t\tLVL 1\t\n#nav\t1\t1\t2\tshield\n\\yАдмин-меню\n\\wLVL 1\n1. Выдать кредиты\t\tcoins\n8. Назад\n9. Далее\n0. Выход",admin);
+ assert(admin.navigation&&admin.canGoBack&&admin.menuPage==1&&admin.menuPages==2&&admin.numCards==1);
+ assert(!strcmp(admin.headerIcon,"shield")&&!strcmp(admin.cards[0].icon,"coins")&&!admin.body[0]);
+ w.Open(admin);w.Layout(0);
+ auto tap=[&](CzmRect r){assert(r.w&&r.h);uiStatic.cursorX=r.x+r.w/2;uiStatic.cursorY=r.y+r.h/2;sentCommands.clear();w.KeyDown(1);w.KeyUp(1);};
+ assert(inside(w.m_navNext,w.m_foot)&&inside(w.m_back,w.m_foot)&&inside(w.m_menu.cards[0].rect,w.m_body));
+ tap(w.m_navNext);assert(sentCommands=="slot9\n");
+ admin.menuPage=2;admin.nextSlot=0;w.Update(admin);w.Layout(0);
+ tap(w.m_navPrev);assert(sentCommands=="czm_menu_prev\n");
+ tap(w.m_back);assert(sentCommands=="czm_menu_back\n");
+ ParseRich("22 641\n#czm1\tmenu\tstandalone\tПодтвердите действие\t\t\t\n#nav\t1\t1\t1\tshield\nKuro\nВыдать токены: 500\n1. Подтвердить\n8. Назад\n0. Выход",confirm);
+ assert(confirm.numCards==1&&!strcmp(confirm.body,"Kuro\nВыдать токены: 500\n"));
+ w.Update(confirm);w.Layout(0);
+ assert(inside(w.m_cardInfo,w.m_body)&&w.m_cardInfo.y+w.m_cardInfo.h<=w.m_menu.cards[0].rect.y);
+ tap(w.m_close);assert(sentCommands=="client_buy_close\nczm_menu_close\n"&&w.m_bClosing);
  // A tab switch abandons its request; a delayed result never enters another view/account.
  auto friends=root;friends.kind=CzmServerView::Friends;strcpy(friends.command,"@friends");strcpy(friends.parent,"players");strcpy(friends.pageTitle,"Пригласить друга");
  w.Open(friends);w.FriendsFrame();int pending=w.m_request;assert(pending>0&&requests.back().url=="/api/v1/social/people/friends?offset=0");
