@@ -138,6 +138,29 @@ void CZM_ProgressDraw( const CzmHud::ProgressInfo &info )
 	CzmHud::PaintProgress( canvas, p, info, Russian(), r, g, b );
 }
 
+bool CZM_AimDraw( const CzmHud::AimInfo &info )
+{
+	if( g_iUser1 || !CZM_HudReady()
+		|| CZM_HudValue( CzmHud::AIM, "hidden", CzmHud::defaultHidden[CzmHud::AIM] ) > 0.5f )
+		return false;
+	GameCanvas canvas;
+	CzmHud::Rect p = CzmHud::AimLayout( ScreenWidth, ScreenHeight,
+		CZM_HudValue( CzmHud::AIM, "x", CzmHud::defaults[CzmHud::AIM][0] ),
+		CZM_HudValue( CzmHud::AIM, "y", CzmHud::defaults[CzmHud::AIM][1] ),
+		CZM_HudValue( CzmHud::AIM, "scale", CzmHud::defaultScale[CzmHud::AIM] ),
+		CZM_HudValue( CzmHud::AIM, "opacity", 1 ), canvas.LabelHeight() );
+	CzmHud::AimInfo clean = info;
+	char name[128], prefix[64], privilege[40];
+	Clean( info.name, name, sizeof( name ));
+	Clean( info.prefix, prefix, sizeof( prefix ));
+	Clean( info.privilege, privilege, sizeof( privilege ));
+	clean.name = name; clean.prefix = prefix; clean.privilege = privilege;
+	int r, g, b;
+	CZM_LevelColor( info.level, &r, &g, &b );
+	CzmHud::PaintAim( canvas, p, clean, r, g, b );
+	return true;
+}
+
 // server files downloading in a match: the engine keeps the percent in scr_download and the
 // number of files left in czm_download_files; the place comes from the editor (czm_hud_dl_*)
 void CZM_DownloadsDraw( void )

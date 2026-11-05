@@ -14,6 +14,8 @@ prefix in its colour, the privilege) and gives a player toasts for "+N tokens" a
 #include "czm_hud.h"
 #include "../../common/czm_hud_overlay.h"
 #include "../../common/czm_aim.h"
+#include "../../common/czm_hud_scope.h"
+#include "net_api.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -158,9 +160,41 @@ void CZM_LevelColor( int lvl, int *r, int *g, int *b )
 	*b = color & 255;
 }
 
+// The live network peer is authoritative. czm_connect_adr can still name the previous server
+// after a console connect or a redirect, and a server capability is not proof of ownership.
+static bool OnLvlServer( void )
+{
+	net_api_t *api = gEngfuncs.pNetAPI;
+	if( !api || !api->Status || !api->StringToAdr || !api->CompareAdr ) return false;
+	net_status_t status = {};
+	api->Status( &status );
+	if( !status.connected ) return false;
+	static CzmHud::ServerScope scope = {};
+	static float checked = -1, nextCheck = 0;
+	if( gHUD.m_flTime < checked || gHUD.m_flTime >= nextCheck )
+	{
+		checked = gHUD.m_flTime;
+		nextCheck = checked + 2;
+		int length = 0;
+		byte *data = gEngfuncs.COM_LoadFile( CzmHud::serverScopeFile, 5, &length );
+		char text[192] = "";
+		if( data && length > 0 && length < (int)sizeof( text )) memcpy( text, data, length );
+		if( data ) gEngfuncs.COM_FreeFile( data );
+		scope.Load( text );
+	}
+	for( auto &address : scope.addresses )
+	{
+		netadr_t configured = {};
+		if( address[0] && api->StringToAdr( address, &configured ) && api->CompareAdr( &status.remote_address, &configured ))
+			return true;
+	}
+	return false;
+}
+
 bool CZM_AimTagShown( void )
 {
-	return s_aimShown;
+	return s_aimShown && OnLvlServer()
+		&& CZM_HudValue( CzmHud::AIM, "hidden", CzmHud::defaultHidden[CzmHud::AIM] ) <= 0.5f;
 }
 
 static int Width( const char *s )
@@ -194,66 +228,12 @@ static void DrawAimTag( void )
 	if( !name || !name[0] )
 		return;
 
-	char prefix[40] = "", lvl[24] = "", wr[16] = "";
-	if( tag->prefix[0] )
-		snprintf( prefix, sizeof( prefix ), "[%s] ", tag->prefix );
-	if( tag->lvl > 0 )
-		snprintf( lvl, sizeof( lvl ), "  LVL %d", tag->lvl );
-	if( ranked )
-		snprintf( wr, sizeof( wr ), "  WR %d%%", tag->wr );
-
-	int fh = 0, tw = 0;
-	gEngfuncs.pfnDrawConsoleStringLen( "Ag", &tw, &fh );
-	if( !ranked )
-	{
-		snprintf( lvl, sizeof( lvl ), "  LVL —" );
-		snprintf( wr, sizeof( wr ), "  WR —" );
-	}
 	int health = s_aimReceived ? s_aim.health : ( gHUD.m_StatusBar.Value( 1 ) == 1 ? gHUD.m_StatusBar.Value( 3 ) : -1 );
+	// StatusValue reports a percentage, not actual HP/max HP. Only CzmAim supplies both.
 	int maximum = s_aimReceived ? s_aim.maximum : 100;
-	char hpText[40] = "";
-	if( health >= 0 ) snprintf( hpText, sizeof( hpText ), "%d / %d HP", health, maximum );
-	int pad = fh / 2;
-	int lineW = Width( prefix ) + Width( name ) + Width( lvl ) + Width( wr );
-	int privW = tag->priv[0] ? Width( tag->priv ) + pad * 2 : 0;
-	int w = CzmMax( lineW + privW + ( privW ? pad : 0 ), Width( hpText ) ) + pad * 2;
-	int barH = health >= 0 ? CzmMax( 4, fh / 3 ) : 0;
-	int h = fh + pad * 2 + ( barH ? barH + pad + fh : 0 );
-	int x = ( ScreenWidth - w ) / 2, y = ScreenHeight / 2 + ScreenHeight / 14;
-
-	FillRGBABlend( x, y, w, h, 10, 14, 22, 190 );
-	FillRGBA( x, y, w, CzmMax( 1, fh / 10 ), 224, 37, 50, 230 );
-
-	int cx = x + pad, ty = y + pad;
-	if( privW )
-	{
-		FillRGBABlend( cx, ty, privW, fh, 231, 187, 96, 230 );
-		Draw( cx + pad, ty, tag->priv, 28, 20, 8 );
-		cx += privW + pad;
-	}
-	if( prefix[0] )
-		cx = Draw( cx, ty, prefix, tag->r, tag->g, tag->b );
-	cx = Draw( cx, ty, name, 240, 243, 248 );
-	if( lvl[0] )
-	{
-		int r, g, b;
-		CZM_LevelColor( tag->lvl, &r, &g, &b );
-		cx = Draw( cx, ty, lvl, r, g, b );
-	}
-	if( wr[0] )
-		Draw( cx, ty, wr, 155, 166, 184 );
-
-	if( barH )
-	{
-		int bw = w - pad * 2, by = ty + fh + pad / 2 + 1;
-		float fraction = CzmAim::Fraction( health, maximum );
-		FillRGBABlend( x + pad, by, bw, barH, 255, 255, 255, 40 );
-		int r, g, b;
-		CzmAim::Color( fraction, r, g, b );
-		FillRGBA( x + pad, by, (int)( bw * fraction ), barH, r, g, b, 240 );
-		Draw( x + ( w - Width( hpText ) ) / 2, by + barH + pad / 2, hpText, 205, 213, 224 );
-	}
-	s_aimShown = true;
+	CzmHud::AimInfo info = { name, tag->prefix, tag->priv, ranked ? tag->lvl : -1, tag->wr,
+		health, maximum, tag->r, tag->g, tag->b, !s_aimReceived };
+	s_aimShown = CZM_AimDraw( info );
 }
 
 // "+5 tokens for a kill", "LVL 38 — a new level!", top centre, three seconds each
@@ -301,6 +281,8 @@ static void DrawToasts( float flTime )
 
 void CZM_TagsDraw( float flTime )
 {
+	s_aimShown = false;
+	if( !OnLvlServer() ) return;
 	CZM_ProgressDraw( s_progress );
 	DrawAimTag();
 	DrawToasts( flTime );

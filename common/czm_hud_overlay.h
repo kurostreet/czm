@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cstring>
 #include "czm_hud_layout.h"
+#include "czm_aim.h"
 
 namespace CzmHud {
 // three looks of the spectator overlay (czm_hud_spec_style), chosen in Settings → HUD
@@ -116,6 +117,62 @@ inline void PaintProgress(Canvas &c,const Rect &p,const ProgressInfo &s,bool ru,
     if(filled>0)c.Blend(x+pad,by,filled,barH,r,g,b,a);
     Fit(c,hint,bw,fitted,sizeof(fitted));
     if(fitted[0])c.Label(x+pad,footerY,fitted,161*p.opacity,172*p.opacity,191*p.opacity);
+}
+
+struct AimInfo {
+    const char *name, *prefix, *privilege;
+    int level, winRate, health, maximum;
+    int prefixR, prefixG, prefixB;
+    bool healthPercent; // stock StatusValue carries percent, CzmAim carries actual HP/max HP
+};
+
+// Both the editor and the match use this frame, including truncation of long UTF-8 names.
+inline void PaintAim(Canvas &c,const Rect &p,const AimInfo &s,int r,int g,int b) {
+    const int x=p.x,y=p.y,w=p.w,h=p.h;
+    const int pad=Max(3,h/10),barH=Max(3,h/14),by=y+h-pad-barH;
+    const float a=p.opacity;
+    c.Blend(x,y,w,h,10,14,22,205*a);
+    c.Blend(x,y,w,Max(1,h/30),224,37,50,230*a);
+    int tx=x+pad,ty=y+pad;
+    char text[160];
+    if(s.privilege && *s.privilege) {
+        Fit(c,s.privilege,w*.22f,text,sizeof(text));
+        if(*text) {
+            int pw=c.LabelWidth(text)+pad;
+            c.Blend(tx,ty,pw,c.LabelHeight(),231,187,96,230*a);
+            c.Label(tx+pad/2,ty,text,28*a,20*a,8*a);
+            tx+=pw+pad;
+        }
+    }
+    if(s.prefix && *s.prefix) {
+        char prefix[96];snprintf(prefix,sizeof(prefix),"[%s]",s.prefix);
+        Fit(c,prefix,w*.22f,text,sizeof(text));
+        if(*text) {
+            c.Label(tx,ty,text,s.prefixR*a,s.prefixG*a,s.prefixB*a);
+            tx+=c.LabelWidth(text)+pad;
+        }
+    }
+    Fit(c,s.name,w-pad-(tx-x),text,sizeof(text));
+    if(*text)c.Label(tx,ty,text,240*a,243*a,248*a);
+
+    char stats[48],hp[48];
+    if(s.level>=0)snprintf(stats,sizeof(stats),"LVL %d  WR %d%%",s.level,s.winRate);
+    else snprintf(stats,sizeof(stats),"LVL --  WR --");
+    if(s.healthPercent && s.health>=0)snprintf(hp,sizeof(hp),"%d%% HP",s.health);
+    else if(s.health>=0 && s.maximum>0)snprintf(hp,sizeof(hp),"%d / %d HP",s.health,s.maximum);
+    else snprintf(hp,sizeof(hp),"HP --");
+    float lh=h*.24f,hh=lh;
+    const float available=(w-pad*3)*.5f;
+    if(GlyphWidth(stats,lh)>available)lh=available/(strlen(stats)*.65f);
+    if(GlyphWidth(hp,hh)>available)hh=available/(strlen(hp)*.65f);
+    c.Glyphs(x+pad,by-pad/2-lh,lh,stats,r,g,b,a);
+    c.Glyphs(x+w-pad-GlyphWidth(hp,hh),by-pad/2-hh,hh,hp,205,213,224,a);
+    c.Blend(x+pad,by,w-pad*2,barH,255,255,255,35*a);
+    if(s.health>=0 && s.maximum>0) {
+        const float fraction=CzmAim::Fraction(s.health,s.maximum);
+        int hr,hg,hb;CzmAim::Color(fraction,hr,hg,hb);
+        if(fraction>0)c.Blend(x+pad,by,(w-pad*2)*fraction,barH,hr,hg,hb,240*a);
+    }
 }
 
 // a soft dark band at the top (down = true) or the bottom edge of the screen

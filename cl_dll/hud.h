@@ -779,6 +779,7 @@ public:
 	int Init( void );
 	int VidInit( void );
 	int Draw( float flTime );
+	void InitHUDData( void );
 	CHudMsgFunc(Money);
 	CHudMsgFunc(BlinkAcct);
 

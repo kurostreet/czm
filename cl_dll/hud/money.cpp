@@ -46,9 +46,17 @@ int CHudMoney::Init( )
 	HOOK_MESSAGE( gHUD.m_Money, Money );
 	HOOK_MESSAGE( gHUD.m_Money, BlinkAcct );
 	gHUD.AddHudElem(this);
-	m_fFade = 0;
-	m_iFlags = 0;
+	InitHUDData();
 	return 1;
+}
+
+void CHudMoney::InitHUDData( void )
+{
+	// A new connection must not inherit the last server's balance or failed-purchase blink.
+	m_iFlags &= ~HUD_DRAW;
+	m_iMoneyCount = m_iDelta = m_iBlinkAmt = 0;
+	m_fBlinkTime = m_fFade = 0;
+	if( gHUD.cscl_currentmoney ) gEngfuncs.Cvar_SetValue( gHUD.cscl_currentmoney->name, 0 );
 }
 
 int CHudMoney::VidInit()
@@ -62,7 +70,7 @@ int CHudMoney::VidInit()
 
 int CHudMoney::Draw(float flTime)
 {
-	if( gHUD.m_iHideHUDDisplay & ( HIDEHUD_MONEY | HIDEHUD_ALL ) )
+	if( gHUD.m_iHideHUDDisplay & HIDEHUD_ALL )
 		return 1;
 
 	if (!(gHUD.m_iWeaponBits & (1<<(WEAPON_SUIT))))
@@ -71,14 +79,28 @@ int CHudMoney::Draw(float flTime)
 	if( g_iUser1 == OBS_IN_EYE )
 		return 1;
 
-	if( CZM_HudNumber(CzmHud::MONEY,m_iMoneyCount,m_iBlinkAmt>0) ) return 1;
-	int r, g, b, alphaBalance;
 	m_fFade -= gHUD.m_flTimeDelta;
 	if( m_fFade < 0)
 	{
 		m_fFade = 0.0f;
 		m_iDelta = 0;
 	}
+	bool blinkWarning = false;
+	if( m_iBlinkAmt )
+	{
+		m_fBlinkTime += gHUD.m_flTimeDelta;
+		blinkWarning = m_fBlinkTime > 0.5f;
+		if( m_fBlinkTime > 1.0f )
+		{
+			m_fBlinkTime = 0;
+			--m_iBlinkAmt;
+		}
+	}
+	// CZM's money block follows the player's saved layout. ZP's legacy-money flag must not
+	// remove it before that setting is read. Whole-HUD hiding and spectator rules still apply.
+	if( CZM_HudNumber(CzmHud::MONEY,m_iMoneyCount,blinkWarning) ) return 1;
+	if( gHUD.m_iHideHUDDisplay & HIDEHUD_MONEY ) return 1;
+	int r, g, b, alphaBalance;
 	float interpolate = ( 5 - m_fFade ) / 5;
 
 	int iDollarWidth = m_hDollar.rect.Width();
@@ -88,14 +110,7 @@ int CHudMoney::Draw(float flTime)
 
 	if( m_iBlinkAmt )
 	{
-		m_fBlinkTime += gHUD.m_flTimeDelta;
-		DrawUtils::UnpackRGB( r, g, b, m_fBlinkTime > 0.5f? RGB_REDISH : gHUD.m_iDefaultHUDColor );
-
-		if( m_fBlinkTime > 1.0f )
-		{
-			m_fBlinkTime = 0.0f;
-			--m_iBlinkAmt;
-		}
+		DrawUtils::UnpackRGB( r, g, b, blinkWarning ? RGB_REDISH : gHUD.m_iDefaultHUDColor );
 	}
 	else
 	{
@@ -151,9 +166,11 @@ int CHudMoney::Draw(float flTime)
 
 int CHudMoney::MsgFunc_Money(const char *pszName, int iSize, void *pbuf)
 {
+	if( iSize < 4 ) return 1;
 	BufferReader buf( pszName, pbuf, iSize );
 	int iOldCount = m_iMoneyCount;
 	m_iMoneyCount = buf.ReadLong();
+	if( m_iMoneyCount < 0 ) m_iMoneyCount = 0;
 	gEngfuncs.Cvar_SetValue( gHUD.cscl_currentmoney->name, m_iMoneyCount );
 	m_iDelta = m_iMoneyCount - iOldCount;
 	m_fFade = 5.0f; //fade for 5 seconds
@@ -163,6 +180,7 @@ int CHudMoney::MsgFunc_Money(const char *pszName, int iSize, void *pbuf)
 
 int CHudMoney::MsgFunc_BlinkAcct(const char *pszName, int iSize, void *pbuf)
 {
+	if( iSize < 1 ) return 1;
 	BufferReader buf( pszName, pbuf, iSize );
 
 	m_iBlinkAmt = buf.ReadByte();
