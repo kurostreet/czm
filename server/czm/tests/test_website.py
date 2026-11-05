@@ -157,34 +157,16 @@ class InstallListTests(unittest.TestCase):
         site = {p.relative_to(self.base).as_posix() for p in (self.base / "site").rglob("*") if p.is_file()}
         self.assertEqual(site, self.listed("SITE"))
 
-    def test_beta_group_is_publicly_listed_but_play_links_start_locked(self):
+    def test_public_apk_ctas_are_gone(self):
         html = (self.base / "site" / "index.html").read_text()
-        js = (self.base / "site" / "assets" / "site.js").read_text()
-        self.assertIn('data-group="https://groups.google.com/g/counter-zombie-mobile-beta"', html)
-        self.assertIn('id="sBetaTesters" class="count">—</span> / 50', html)
-        self.assertIn('.beta-progress strong .count{font-size:1.2em;color:var(--gold)}', html)
-        self.assertIn('data-step="2"', html)
-        self.assertIn('data-step="3"', html)
-        self.assertIn('play_beta_open === true', js)
-        self.assertIn("link.removeAttribute('href')", js)
-        self.assertIn("link.setAttribute('aria-disabled', 'true')", js)
-
-    def test_beta_is_first_and_apk_ctas_are_gone(self):
-        html = (self.base / "site" / "index.html").read_text()
-        js = (self.base / "site" / "assets" / "site.js").read_text()
         caddy = (self.base / "deploy" / "czm.caddy").read_text()
-        self.assertIn('href="#beta"', html)
-        self.assertIn('data-i18n="downloadCta">Принять участие в бета-тесте', html)
-        self.assertLess(html.index('id="beta"'), html.index('id="features"'))
         self.assertNotIn('href="/download"', html)
-        self.assertNotIn('id="download"', html)
         self.assertNotIn('Скачать APK', html)
         self.assertNotIn('id="sDownloads"', html)
         self.assertIn("handle /dl/*", caddy)
         downloads = caddy.split("handle /dl/*", 1)[1].split("}", 1)[0]
         self.assertIn("reverse_proxy 127.0.0.1:8200", downloads)
         self.assertNotIn("file_server", downloads)
-        self.assertIn("downloadCta: 'Join the beta test'", js)
 
     def test_gameplay_shots_carousel_is_separate_from_features(self):
         html = (self.base / "site" / "index.html").read_text()
@@ -201,24 +183,11 @@ class InstallListTests(unittest.TestCase):
         self.assertIn('function gallerySrc(i)', js)
         self.assertIn('buildStrip()', js)
         self.assertIn("gallery: ['Игровая сцена: бой'", js)
-        self.assertLess(html.index('id="beta"'), html.index('id="shots"'))
+        self.assertLess(html.index('id="download"'), html.index('id="shots"'))
         self.assertLess(html.index('id="shots"'), html.index('id="features"'))
         for i in range(1, 5):
             self.assertTrue((self.base / 'site' / 'assets' / f'gameplay-{i}.webp').is_file())
         self.assertIn('scroll-snap-type:x mandatory', html)
-
-    def test_beta_video_guide_is_embedded_not_preloaded(self):
-        html = (self.base / "site" / "index.html").read_text()
-        js = (self.base / "site" / "assets" / "site.js").read_text()
-        caddy = (self.base / "deploy" / "czm.caddy").read_text()
-        self.assertIn('data-i18n="betaVideo">Видео инструкция', html)
-        self.assertIn('preload="none"', html)
-        self.assertIn('controls playsinline', html)
-        self.assertIn('src="/media/beta-instruction.mp4"', html)
-        self.assertIn('poster="/media/beta-instruction.jpg"', html)
-        self.assertIn("betaVideo: 'Video instructions'", js)
-        self.assertIn('handle_path /media/*', caddy)
-        self.assertIn('root * /var/lib/czm/tutorial', caddy)
 
     def test_build_uploads_get_the_large_body_limit(self):
         caddy = (self.base / "deploy" / "czm.caddy").read_text()
