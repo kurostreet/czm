@@ -60,16 +60,39 @@ final class ServerAuthData {
     /** A packet copy only. The game's global userinfo/cvars never receive a password. */
     static String packet(String base, Set<String> managed, String parameter, String secret, int limit) {
         Map<String, String> info = new LinkedHashMap<>();
+        boolean activeKey = key(parameter);
         String[] parts = base.split("\\\\", -1);
         for (int i = base.startsWith("\\") ? 1 : 0; i + 1 < parts.length; i += 2)
-            if (!managed.contains(parts[i]) && !parts[i].isEmpty()) info.put(parts[i], parts[i + 1]);
+            if (!managed.contains(parts[i]) && !(activeKey && parts[i].equals(parameter)) && !parts[i].isEmpty())
+                info.put(parts[i], parts[i + 1]);
+        String clean = serialize(info);
+        if (activeKey && password(secret)) {
+            String field = "\\" + parameter + "\\" + secret;
+            if (fits(clean + field, limit)) return clean + field;
+            // A saved password takes priority over version/help/cosmetic hints. Remove only
+            // known optional fields from this destination's packet, never identity, network rates,
+            // account tickets, custom server fields, or the global userinfo/config.
+            Map<String, String> compact = new LinkedHashMap<>(info);
+            for (String optional : new String[] {"cscl_ver", "_ah", "_vgui_menus", "cl_dlmax", "topcolor", "bottomcolor"}) {
+                if (compact.remove(optional) != null) {
+                    String candidate = serialize(compact) + field;
+                    if (fits(candidate, limit)) return candidate;
+                }
+            }
+        }
+        // Impossible even after compaction: retain the original public data and let the
+        // editor report the failure. Never truncate a password, nickname, or account ticket.
+        return clean;
+    }
+
+    private static boolean fits(String packet, int limit) {
+        return packet.getBytes(StandardCharsets.UTF_8).length < limit; // reserve the native NUL byte
+    }
+
+    private static String serialize(Map<String, String> info) {
         StringBuilder wire = new StringBuilder();
         for (Map.Entry<String, String> item : info.entrySet())
             wire.append('\\').append(item.getKey()).append('\\').append(item.getValue());
-        if (key(parameter) && password(secret)) {
-            String field = "\\" + parameter + "\\" + secret;
-            if ((wire.toString() + field).getBytes(StandardCharsets.UTF_8).length < limit) wire.append(field);
-        }
         return wire.toString();
     }
 
