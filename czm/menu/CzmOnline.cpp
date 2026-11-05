@@ -511,6 +511,69 @@ static struct
 } s_tickets[CZM_OFFICIAL_COUNT];
 static double s_ticketClearAt;
 
+bool CZM_OnSurvivalServer()
+{
+	CzmServer *server = CZM_ConfiguredServer( CZM_OFFICIAL_SURVIVAL );
+	auto *api = EngFuncs::textfuncs.pNetAPI;
+	if( !CL_IsActive() || !server || !server->address[0] || !api || !api->Status || !api->StringToAdr || !api->CompareAdr )
+		return false;
+	net_status_t status = {};
+	api->Status( &status );
+	netadr_t address = {};
+	return status.connected && api->StringToAdr( server->address, &address ) && api->CompareAdr( &status.remote_address, &address );
+}
+
+static void SurvivalProfileFrame( double now )
+{
+	static int request, requestIdentity, sentPlayer;
+	static double nextTry;
+	static char requested[33], requestedAddress[64], submitted[33];
+	const bool connected = CZM_OnSurvivalServer();
+	const char *challenge = EngFuncs::GetCvarString( "czm_profile_challenge" );
+	if( !connected )
+	{
+		sentPlayer = 0;
+		submitted[0] = 0;
+		nextTry = 0;
+	}
+	else if( sentPlayer && ( !s_online.account || s_online.player != sentPlayer ))
+	{
+		// The server pins a verified profile to this connection. A new account needs a new session.
+		sentPlayer = 0;
+		EngFuncs::ClientCmd( true, "disconnect\n" );
+		return;
+	}
+	if( request )
+	{
+		int status;
+		CUtlString body;
+		if( !CZM_NetPoll( request, &status, body )) return;
+		request = 0;
+		if( !connected || !challenge || strcmp( challenge, requested ) || requestIdentity != s_online.identity
+			|| strcmp( CZM_ConfiguredServer( CZM_OFFICIAL_SURVIVAL )->address, requestedAddress ))
+			return;
+		CzmJson json;
+		const char *proof = status == 200 && json.Parse( body.Get() ) ? json.String( json.Get( 0, "ticket" )) : "";
+		if( !proof[0] || strlen( proof ) >= 64 || proof[strspn( proof, "0123456789abcdef." )] || atoi( proof ) != s_online.player
+			|| strcmp( json.String( json.Get( 0, "address" )), requestedAddress ))
+			return;
+		Q_strncpy( submitted, challenge, sizeof( submitted ));
+		sentPlayer = s_online.player;
+		EngFuncs::ClientCmdF( true, "czm_profile_ticket %s\n", proof );
+		return;
+	}
+	if( !connected || !s_online.account || s_online.player <= 0 || now < nextTry || !challenge || strlen( challenge ) != 32
+		|| strspn( challenge, "0123456789abcdef" ) != 32 || !strcmp( submitted, challenge ))
+		return;
+	Q_strncpy( requested, challenge, sizeof( requested ));
+	Q_strncpy( requestedAddress, CZM_ConfiguredServer( CZM_OFFICIAL_SURVIVAL )->address, sizeof( requestedAddress ));
+	char payload[144];
+	snprintf( payload, sizeof( payload ), "{\"address\":\"%s\",\"challenge\":\"%s\"}", requestedAddress, requested );
+	requestIdentity = s_online.identity;
+	nextTry = now + 5.0;
+	request = CZM_NetRequest( "POST", CZM_OnlineUrl( "/api/v1/game/ticket" ), s_online.key, payload );
+}
+
 static void TicketFrame( double now )
 {
 	int status;
@@ -727,6 +790,7 @@ void CZM_OnlineFrame( void )
 			}
 		}
 	}
+	SurvivalProfileFrame( now );
 	if( s_online.preserveAvatar && !s_online.profilePhoto && now >= s_online.photoRetry )
 	{
 		char path[128];

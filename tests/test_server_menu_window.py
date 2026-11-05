@@ -49,6 +49,19 @@ int main(int argc,char**argv){
  w.Update(confirm);w.Layout(0);
  assert(inside(w.m_cardInfo,w.m_body)&&w.m_cardInfo.y+w.m_cardInfo.h<=w.m_menu.cards[0].rect.y);
  tap(w.m_close);assert(sentCommands=="client_buy_close\nczm_menu_close\n"&&w.m_bClosing);
+ // Structured views use server values, and a recovery code is only sent to Survival.
+ CzmRichMenu stats,progress,migrate;
+ ParseRich("23 640\n#czm1\tmenu\tstandalone\tМоя статистика\t\t\t\n#nav\t1\t1\t1\tstar\n#facts\tstats\tru\t12\t8\t4\t5\t472\t1\n8. Назад\n0. Выход",stats);
+ assert(stats.facts.kind==CzmRichMenu::Facts::Statistics&&stats.facts.stats.seconds==472&&stats.facts.stats.saved);
+ ParseRich("24 640\n#czm1\tmenu\tstandalone\tПрогресс уровня\t\t\t\n#nav\t1\t1\t1\tstar\n#facts\tprogress\tru\t3\t4\t6\t10\t95\t600\n8. Назад\n0. Выход",progress);
+ assert(progress.facts.kind==CzmRichMenu::Facts::Progress&&progress.facts.progress.next==4&&progress.facts.progress.timeLeft==95);
+ for(int height:{360,480,716}){ScreenHeight=height;ScreenWidth=height*2;w.Open(stats);w.Layout(0);assert(inside(w.m_cardInfo,w.m_body));w.Draw();w.Update(progress);w.Layout(0);assert(inside(w.m_cardInfo,w.m_body));w.Draw();}
+ ParseRich("25 640\n#czm1\tmenu\tstandalone\tПеренос\t\t\t\n#nav\t1\t1\t1\tstar\n#page\tform\tВведи код\tczm_profile_migrate\tКод\n8. Назад\n0. Выход",migrate);
+ w.Update(migrate);assert(migrate.kind==CzmServerView::Form);
+ strcpy(w.m_input,"0123456789abcdef0123456789abcdef");sentCommands.clear();w.Submit();assert(sentCommands.empty());
+ survivalPeer=true;strcpy(w.m_input,"wrong");w.Submit();assert(sentCommands.empty());
+ strcpy(w.m_input,"0123456789abcdef0123456789abcdef");w.Submit();assert(sentCommands=="czm_profile_migrate \"0123456789abcdef0123456789abcdef\"\n");
+ survivalPeer=false;
  // A tab switch abandons its request; a delayed result never enters another view/account.
  auto friends=root;friends.kind=CzmServerView::Friends;strcpy(friends.command,"@friends");strcpy(friends.parent,"players");strcpy(friends.pageTitle,"Пригласить друга");
  w.Open(friends);w.FriendsFrame();int pending=w.m_request;assert(pending>0&&requests.back().url=="/api/v1/social/people/friends?offset=0");
@@ -85,7 +98,7 @@ class ServerMenuWindowTests(unittest.TestCase):
    stub=stub.replace('struct EngFuncs{','struct EngFuncs{static void KEY_SetDest(int){}static void ClientCmd(bool,const char*);static void ClientCmdF(bool,const char*,...);')
    stub=stub.replace('inline bool CL_IsActive(){return false;}','inline bool CL_IsActive(){return true;}')
    stub=stub.replace('unsigned CZM_White();','unsigned CZM_White(int=255);')
-   stub+='\nusing CMenuBaseClientWindow=CMenuFramework;void CZM_KeepClientMenu(CMenuFramework*);void CZM_CloseClientMenuSoon(CMenuFramework*);int CZM_ImageAspect1000(const char*);\n'
+   stub+='\nusing CMenuBaseClientWindow=CMenuFramework;void CZM_KeepClientMenu(CMenuFramework*);void CZM_CloseClientMenuSoon(CMenuFramework*);int CZM_ImageAspect1000(const char*);\nstatic bool survivalPeer=false;inline bool CZM_OnSurvivalServer(){return survivalPeer;}\n'
    (p/'stub.h').write_text(stub)
    for name in ['CzmMenu.h','Scissor.h']:(p/name).write_text('#include "stub.h"\n')
    for name in ['CzmJson.h','CzmDesign.h']:(p/name).write_text((ROOT/'czm/menu'/name).read_text())

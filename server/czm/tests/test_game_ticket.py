@@ -55,6 +55,26 @@ class GameTicketTests(unittest.TestCase):
         answer = self.ask(1, "194.226.112.249:27016")
         self.assertEqual((answer.status_code, answer.json()), (503, {"error": "ticket_unavailable"}))
 
+    def test_survival_profile_proof_requires_account_and_connection_challenge(self):
+        address, escape, challenge = "194.226.112.249:27016", "194.226.112.249:27017", "de" * 16
+        body = {"address": address, "challenge": challenge}
+        guest = self.client.post("/api/v1/game/ticket", headers={"X-CZM-Key": self.guest}, json=body)
+        self.assertEqual(guest.status_code, 401)
+        with db.db() as conn:
+            official.update(conn, False, address, escape, 0)
+        headers = {"X-CZM-Key": self.keys[1]}
+        with patch.object(game_ticket, "now", return_value=1_000_000):
+            answer = self.client.post("/api/v1/game/ticket", headers=headers, json=body)
+        self.assertEqual(answer.status_code, 200, answer.text)
+        profile, expires, signature = answer.json()["ticket"].split(".")
+        self.assertEqual((int(profile), int(expires)), (self.ids[1], 1_000_060))
+        key = "ab" * 32
+        expected = hashlib.sha256(f"{key}|profile-v1|{profile}|{expires}|{address}|{challenge}|{key}".encode()).hexdigest()[:32]
+        self.assertEqual(signature, expected)
+        self.assertNotEqual(signature, game_ticket.sign_profile(key, int(profile), int(expires), address, "ef" * 16))
+        self.assertEqual(self.client.post("/api/v1/game/ticket", headers=headers, json={**body, "address": escape}).status_code, 403)
+        self.assertEqual(self.client.post("/api/v1/game/ticket", headers=headers, json={**body, "challenge": "x" * 32}).status_code, 400)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -4,13 +4,19 @@
 
 namespace CzmServerView {
 enum Kind { Cards, Text, Form, Friends, Account };
+inline bool ProfileCodeCommand(const char *command) {
+    return command && !std::strcmp(command, "czm_profile_migrate");
+}
+inline bool ProfileCode(const char *text) {
+    return std::strlen(text) == 32 && std::strspn(text, "0123456789abcdefABCDEF") == 32;
+}
 inline bool FormCommand(const char *command) {
     static const char *allowed[] = {"czm_admin_msg", "czm_say_all", "czm_poll", "czm_news", "czm_promo"};
     for (const char *value : allowed) if (command && !std::strcmp(command, value)) return true;
     return false;
 }
 inline Kind ParseKind(const char *kind, const char *command) {
-    if (!std::strcmp(kind, "form") && FormCommand(command)) return Form;
+    if (!std::strcmp(kind, "form") && (FormCommand(command) || ProfileCodeCommand(command))) return Form;
     if (!std::strcmp(kind, "friends") && !std::strcmp(command, "@friends")) return Friends;
     if (!std::strcmp(kind, "account") && !std::strcmp(command, "@account")) return Account;
     return Text;

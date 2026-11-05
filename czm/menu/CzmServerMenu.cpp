@@ -305,6 +305,14 @@ struct CzmRichMenu
 	char headerIcon[16];
 	CzmServerView::Kind kind;
 	char pageTitle[96], body[2048], command[24], hint[160], prefill[724];
+	struct Facts
+	{
+		enum { None, Statistics, Progress, Profile } kind;
+		bool russian;
+		struct { int kills, deaths, wins, rounds, seconds, saved; } stats;
+		struct { int level, next, killsLeft, killGoal, timeLeft, timeGoal; } progress;
+		struct { int state, level, tokens; char name[64]; } profile;
+	} facts;
 };
 
 static bool IsRichMenu( const char *value )
@@ -444,6 +452,48 @@ static void ParseRich( const char *value, CzmRichMenu &m )
 				Q_strncpy( t.badge, part[3] ? part[3] : "", sizeof( t.badge ));
 			}
 		}
+		else if( !strncmp( line, "#facts\t", 7 ) )
+		{
+			const char *p = line + 7;
+			char kind[16], language[4];
+			NextField( p, end, kind, sizeof( kind ));
+			NextField( p, end, language, sizeof( language ));
+			auto &facts = m.facts;
+			const bool profile = !strcmp( kind, "profile" );
+			int values[6] = {};
+			bool valid = !strcmp( language, "ru" ) || !strcmp( language, "en" );
+			for( int i = 0; valid && i < ( profile ? 3 : 6 ); ++i )
+			{
+				char field[16];
+				NextField( p, end, field, sizeof( field ));
+				const unsigned long number = strtoul( field, nullptr, 10 );
+				valid = field[0] && !field[strspn( field, "0123456789" )] && number <= 2147483647UL;
+				if( valid ) values[i] = (int)number;
+			}
+			if( valid )
+			{
+				facts.russian = !strcmp( language, "ru" );
+				if( !strcmp( kind, "stats" ) && values[2] <= values[3] && values[5] <= 1 )
+				{
+					facts.kind = CzmRichMenu::Facts::Statistics;
+					facts.stats = { values[0], values[1], values[2], values[3], values[4], values[5] };
+				}
+				else if( !strcmp( kind, "progress" ) && values[0] > 0 && values[1] >= values[0] &&
+					values[3] > 0 && values[2] <= values[3] && values[5] > 0 && values[4] <= values[5] )
+				{
+					facts.kind = CzmRichMenu::Facts::Progress;
+					facts.progress = { values[0], values[1], values[2], values[3], values[4], values[5] };
+				}
+				else if( profile && values[0] <= 3 && values[1] > 0 )
+				{
+					facts.kind = CzmRichMenu::Facts::Profile;
+					facts.profile.state = values[0];
+					facts.profile.level = values[1];
+					facts.profile.tokens = values[2];
+					NextField( p, end, facts.profile.name, sizeof( facts.profile.name ));
+				}
+			}
+		}
 		else if( !strncmp( line, "#page\t", 6 ))
 		{
 			const char *p = line + 6; char kind[16];
@@ -513,6 +563,7 @@ static void PlainAsRich( const char *value, const CzmRichMenu *previous, CzmRich
 	Q_strncpy( m.root, previous && previous->root[0] ? previous->root : previous && previous->tab[0] ? previous->tab : "", sizeof( m.root ));
 	m.tab[0] = 0;
 	m.kind = CzmServerView::Cards;
+	m.facts.kind = CzmRichMenu::Facts::None;
 	m.pageTitle[0] = m.body[0] = m.command[0] = m.hint[0] = 0;
 	m.prefill[0] = 0;
 	if( m.navigation )
@@ -612,6 +663,7 @@ private:
 	void DrawHeader( int a );
 	void DrawTabs( int a );
 	void DrawCards( int a );
+	void DrawFacts( int a );
 	void DrawFooter( int a );
 	void DrawPage( int a );
 	void EndInput();
@@ -765,7 +817,14 @@ void CCzmServerWindow::Layout( int shift )
   if( m_menu.nextSlot ) m_navNext=CZM_Rect(m_foot.x+m_foot.w-cpad-width,y,width,height);
  }
  int context=0;
- if( m_menu.navigation && m_menu.kind==CzmServerView::Cards && m_menu.body[0] )
+ if( m_menu.kind==CzmServerView::Cards && m_menu.facts.kind!=CzmRichMenu::Facts::None )
+ {
+  const int height=m_body.h-cpad*2;
+  const int panel=m_menu.facts.kind==CzmRichMenu::Facts::Profile ? Q_min(height,(int)(H*.32f)) : height;
+  m_cardInfo=CZM_Rect(m_body.x+cpad,m_body.y+cpad,m_body.w-cpad*2,panel);
+  context=panel+(m_menu.numCards?gap:0);
+ }
+ else if( m_menu.navigation && m_menu.kind==CzmServerView::Cards && m_menu.body[0] )
  {
   int lines=0;
   for( const char *p=m_menu.body; *p; ++p ) if( *p=='\n' ) ++lines;
@@ -903,6 +962,12 @@ void CCzmServerWindow::Activate( int hit )
 			return;
 		}
 		CZM_PlayClick();
+		if( m_menu.facts.kind == CzmRichMenu::Facts::Profile && m_menu.facts.profile.state == 0 && c.key == 1 &&
+			CZM_OnSurvivalServer() )
+		{
+			CZM_AccountShow( CZM_OnlineKey(), EngFuncs::GetCvarString( "name" ));
+			return;
+		}
 		m_iPicked = hit - HIT_CARD;
 		m_iPickTime = uiStatic.realTime;
 		EngFuncs::ClientCmdF( false, "slot%d\n", c.key );
@@ -999,6 +1064,9 @@ bool CCzmServerWindow::MouseMove( int x, int y )
 
 void CCzmServerWindow::Char( int key )
 {
+	if( CzmServerView::ProfileCodeCommand( m_menu.command ) &&
+		( key <= 0 || key > 127 || !strchr( "0123456789abcdefABCDEF", key ) || strlen( m_input ) >= 32 ))
+		return;
 	if( m_typing ) CzmServerView::Append( m_input, sizeof( m_input ), key );
 }
 
@@ -1025,13 +1093,18 @@ void CCzmServerWindow::Submit()
 	{
 		EndInput(); CZM_AccountShow( CZM_OnlineKey(), EngFuncs::GetCvarString( "name" )); return;
 	}
-	if( m_menu.kind != CzmServerView::Form || !CzmServerView::FormCommand( m_menu.command )) return;
+	const bool migration = CzmServerView::ProfileCodeCommand( m_menu.command );
+	if( m_menu.kind != CzmServerView::Form || !( migration ? CZM_OnSurvivalServer() : CzmServerView::FormCommand( m_menu.command ))) return;
 	if( m_formPending ) return;
 	char *begin = m_input;
 	while( *begin == ' ' ) ++begin;
 	if( begin != m_input ) memmove( m_input, begin, strlen( begin ) + 1 );
 	size_t length = strlen( m_input );
 	while( length && m_input[length - 1] == ' ' ) m_input[--length] = 0;
+	if( migration && !CzmServerView::ProfileCode( m_input ))
+	{
+		Q_strncpy( m_notice, CZM_IsRussian() ? "Введи код из 32 символов" : "Enter the 32-character code", sizeof( m_notice )); return;
+	}
 	if( CzmServerView::Characters( m_input ) < 3 )
 	{
 		Q_strncpy( m_notice, CZM_IsRussian() ? "Введите хотя бы 3 символа" : "Enter at least 3 characters", sizeof( m_notice )); return;
@@ -1166,10 +1239,118 @@ void CCzmServerWindow::DrawTabs( int a )
  }
 }
 
+static void FactDuration( int seconds, bool ru, char *text, size_t size )
+{
+	if( seconds >= 3600 )
+		snprintf( text, size, ru ? "%d ч %d мин" : "%d h %d min", seconds / 3600, seconds / 60 % 60 );
+	else if( seconds >= 60 )
+		snprintf( text, size, ru ? "%d мин %d сек" : "%d min %d s", seconds / 60, seconds % 60 );
+	else
+		snprintf( text, size, ru ? "%d сек" : "%d s", seconds );
+}
+
+void CCzmServerWindow::DrawFacts( int a )
+{
+	const auto &facts = m_menu.facts;
+	const CzmRect &r = m_cardInfo;
+	const bool ru = facts.russian;
+	const int pad = H * .025f, gap = H * .017f, badgeH = H * .058f;
+	const unsigned gold = PackRGBA( 255, 176, 72, a );
+	const unsigned green = PackRGBA( 110, 218, 172, a );
+	const unsigned ink = CZM_White( a ), muted = PackRGBA( 172, 185, 202, a );
+	const unsigned fill = PackRGBA( 25, 33, 44, a ), edge = PackRGBA( 54, 68, 84, a );
+	auto status = [&]( int x, int y, int width, const char *text, bool saved )
+	{
+		const int w = Q_min( width, CZM_TextWidth( CZM_Font( CZMF_UI_LABEL ), text ) + pad * 2 );
+		CzmRect pill = CZM_Rect( x, y, w, badgeH );
+		CzmStyle::Round( pill, saved ? PackRGBA( 26, 59, 50, a ) : PackRGBA( 59, 46, 29, a ));
+		CzmStyle::Text( pill, text, CZMF_UI_LABEL, saved ? green : gold, QM_CENTER );
+	};
+	auto tile = [&]( const CzmRect &box, const char *icon, const char *title, const char *value, unsigned accent )
+	{
+		CzmStyle::Surface( box, fill, edge );
+		const int iconSize = H * .088f;
+		CzmRect iconTile = CZM_Rect( box.x + pad, box.y + pad, iconSize, iconSize );
+		CzmStyle::Round( iconTile, PackRGBA( 42, 49, 60, a ));
+		CzmStyle::Icon( iconTile, MenuIcon( icon ), accent );
+		const int tx = iconTile.x + iconSize + gap;
+		const int tw = box.x + box.w - pad - tx;
+		CzmStyle::Text( CZM_Rect( tx, box.y + pad, tw, H * .068f ), value, CZMF_UI_TITLE, ink );
+		CzmStyle::TextLines( CZM_Rect( tx, box.y + pad + H * .074f, tw, H * .065f ), title, CZMF_UI_LABEL, muted );
+	};
+	if( facts.kind == CzmRichMenu::Facts::Statistics )
+	{
+		const auto &s = facts.stats;
+		status( r.x, r.y, r.w, s.saved ? ( ru ? "Прогресс сохраняется" : "Progress is saved" )
+			: ( ru ? "Только текущая сессия" : "Current session only" ), s.saved != 0 );
+		const int top = r.y + badgeH + gap, w = ( r.w - gap ) / 2;
+		const int h = ( r.h - badgeH - gap * 2 ) / 2;
+		char value[4][48];
+		snprintf( value[0], sizeof( value[0] ), "%d", s.kills );
+		snprintf( value[1], sizeof( value[1] ), "%d", s.deaths );
+		snprintf( value[2], sizeof( value[2] ), "%d / %d", s.wins, s.rounds );
+		FactDuration( s.seconds, ru, value[3], sizeof( value[3] ));
+		tile( CZM_Rect( r.x, top, w, h ), "target", ru ? "Убийства и заражения" : "Kills and infections", value[0], gold );
+		tile( CZM_Rect( r.x + w + gap, top, w, h ), "shield", ru ? "Смерти и полученные заражения" : "Deaths and times infected", value[1], gold );
+		tile( CZM_Rect( r.x, top + h + gap, w, h ), "trophy", ru ? "Победы / раунды" : "Wins / rounds", value[2], green );
+		tile( CZM_Rect( r.x + w + gap, top + h + gap, w, h ), "clock", ru ? "Активное время" : "Active play time", value[3], green );
+		return;
+	}
+	if( facts.kind == CzmRichMenu::Facts::Progress )
+	{
+		const auto &p = facts.progress;
+		char level[80], time[48], kills[16];
+		if( p.next > p.level ) snprintf( level, sizeof( level ), "LVL %d  →  LVL %d", p.level, p.next );
+		else snprintf( level, sizeof( level ), ru ? "LVL %d  ·  Ближайшие этапы" : "LVL %d  ·  Next milestones", p.level );
+		const int heroH = H * .112f, tipH = H * .082f;
+		CzmRect hero = CZM_Rect( r.x, r.y, r.w, heroH );
+		CzmStyle::Surface( hero, PackRGBA( 42, 35, 27, a ), PackRGBA( 113, 79, 40, a ));
+		CzmStyle::Icon( CZM_Rect( hero.x + pad, hero.y, hero.h, hero.h ), MenuIcon( "crown" ), gold );
+		CzmStyle::Text( CZM_Rect( hero.x + pad + hero.h, hero.y, hero.w - hero.h - pad * 2, hero.h ), level, CZMF_UI_TITLE, ink );
+		const int w = ( r.w - gap ) / 2, h = r.h - heroH - tipH - gap * 2;
+		CzmRect killTile = CZM_Rect( r.x, r.y + heroH + gap, w, h );
+		CzmRect timeTile = CZM_Rect( r.x + w + gap, killTile.y, w, h );
+		snprintf( kills, sizeof( kills ), "%d", p.killsLeft );
+		FactDuration( p.timeLeft, ru, time, sizeof( time ));
+		tile( killTile, "target", ru ? "Осталось убийств и заражений" : "Kills and infections remaining", kills, gold );
+		tile( timeTile, "clock", ru ? "Осталось активного времени" : "Active time remaining", time, green );
+		auto bar = [&]( const CzmRect &box, int left, int total, unsigned color )
+		{
+			CzmRect track = CZM_Rect( box.x + pad, box.y + box.h - pad - H * .014f, box.w - pad * 2, H * .014f );
+			CzmStyle::Round( track, PackRGBA( 55, 68, 83, a ));
+			track.w = (int)( track.w * ( 1.0 - double( left ) / total ));
+			CzmStyle::Round( track, color );
+		};
+		bar( killTile, p.killsLeft, p.killGoal, gold );
+		bar( timeTile, p.timeLeft, p.timeGoal, green );
+		CzmStyle::TextLines( CZM_Rect( r.x + pad, killTile.y + h + gap, r.w - pad * 2, tipH ),
+			ru ? "Время и убийства дают отдельные ступени прогресса." : "Time and kills each count toward your level.", CZMF_UI_LABEL, muted );
+		return;
+	}
+	const auto &p = facts.profile;
+	CzmStyle::Surface( r, fill, edge );
+	const int side = H * .115f;
+	CzmRect avatar = CZM_Rect( r.x + pad, r.y + pad, side, side );
+	CzmStyle::Round( avatar, PackRGBA( 51, 45, 38, a ));
+	CzmStyle::Icon( avatar, MenuIcon( "user" ), gold );
+	const int x = avatar.x + side + gap, width = r.x + r.w - pad - x;
+	const char *states[] = { ru ? "Гостевой профиль" : "Guest profile", "Steam",
+		ru ? "Сохранённый профиль" : "Saved profile", ru ? "Аккаунт CZM подключён" : "CZM account linked" };
+	status( x, r.y + pad, width, states[p.state], p.state != 0 );
+	CzmStyle::Text( CZM_Rect( x, r.y + pad + badgeH, width, H * .063f ), p.name, CZMF_UI_TITLE, ink );
+	char info[100];
+	snprintf( info, sizeof( info ), ru ? "LVL %d    ·    Токены %d" : "LVL %d    ·    Tokens %d", p.level, p.tokens );
+	CzmStyle::Text( CZM_Rect( x, r.y + pad + badgeH + H * .065f, width, H * .052f ), info, CZMF_UI_ACTION, gold );
+	const char *help = p.state ? ( ru ? "Уровень, статистика и токены сохраняются автоматически." : "Your level, stats and tokens are saved automatically." )
+		: ( ru ? "Войди в аккаунт CZM, чтобы сохранить прогресс." : "Sign in to CZM to save your progress." );
+	CzmStyle::TextLines( CZM_Rect( x, r.y + pad + badgeH + H * .127f, width, H * .080f ), help, CZMF_UI_LABEL, muted );
+}
+
 void CCzmServerWindow::DrawCards( int a )
 {
  if(m_back.w&&!m_menu.navigation)CzmStyle::Button(m_back,CZM_IsRussian()?"‹ Назад":"‹ Back",true,false,IsPressed(HIT_BACK),PackRGBA(255,168,66,a),CZMF_UI_META);
- if( m_cardInfo.h )
+ if( m_menu.facts.kind!=CzmRichMenu::Facts::None ) DrawFacts(a);
+ else if( m_cardInfo.h )
  {
   const HFont font=CZM_Font(CZMF_UI_META);
   const int lineH=Q_max(1,CZM_FontHeight(font));
@@ -1248,8 +1429,9 @@ void CCzmServerWindow::DrawFooter( int a )
 void CCzmServerWindow::DrawPage( int a )
 {
 	const bool ru = CZM_IsRussian();
+	const bool migration = CzmServerView::ProfileCodeCommand( m_menu.command );
 	const unsigned accent = PackRGBA( 255, 168, 66, a );
-	if( m_back.w ) CzmStyle::Button( m_back, ru ? "‹ Назад" : "‹ Back", true, false, IsPressed( HIT_BACK ), accent, CZMF_UI_META );
+	if( m_back.w && !m_menu.navigation ) CzmStyle::Button( m_back, ru ? "‹ Назад" : "‹ Back", true, false, IsPressed( HIT_BACK ), accent, CZMF_UI_META );
 	const int titleY = m_content.y - (int)( H * .067f );
 	CZM_DrawText( CZM_Font( CZMF_UI_ACTION ), m_content.x, titleY, m_content.w, m_menu.pageTitle, CZM_White( a ));
 	if( m_menu.kind == CzmServerView::Friends && CZM_OnlineAccount() )
@@ -1302,10 +1484,16 @@ void CCzmServerWindow::DrawPage( int a )
 		}
 		CzmStyle::Surface( m_field, PackRGBA( 11, 16, 23, a ), m_typing ? accent : PackRGBA( 71, 84, 102, a ), H / 100 );
 		CzmRect r = CZM_Rect( m_field.x + H * .018f, m_field.y + H * .012f, m_field.w - H * .036f, m_field.h - H * .024f );
-		CzmStyle::TextLines( r, m_input[0] ? m_input : ( m_menu.hint[0] ? m_menu.hint : ( ru ? "Нажмите и введите текст…" : "Tap to enter text…" )), CZMF_PANEL_TEXT, m_input[0] ? CZM_White( a ) : PackRGBA( 116, 133, 154, a ));
-		char counter[48]; snprintf( counter, sizeof( counter ), "%d / 180", CzmServerView::Characters( m_input ));
-		CZM_DrawText( CZM_Font( CZMF_UI_META ), m_content.x, m_submit.y + ( m_submit.h - CZM_FontHeight( CZM_Font( CZMF_UI_META ))) / 2, m_submit.x - m_content.x - H * .018f, counter, PackRGBA( 137, 154, 175, a ));
-		CzmStyle::Button( m_submit, m_formPending ? ( ru ? "Отправляем…" : "Sending…" ) : ( ru ? "Отправить" : "Send" ), !m_formPending, false, IsPressed( HIT_SUBMIT ), accent );
+		const int chars = CzmServerView::Characters( m_input );
+		char masked[33] = {};
+		if( migration ) memset( masked, '*', Q_min( chars, 32 ));
+		const char *input = migration ? masked : m_input;
+		CzmStyle::TextLines( r, input[0] ? input : ( m_menu.hint[0] ? m_menu.hint : ( ru ? "Нажмите и введите текст…" : "Tap to enter text…" )), CZMF_PANEL_TEXT, input[0] ? CZM_White( a ) : PackRGBA( 116, 133, 154, a ));
+		char counter[48]; snprintf( counter, sizeof( counter ), "%d / %d", chars, migration ? 32 : 180 );
+		const char *feedback = migration && m_notice[0] ? m_notice : counter;
+		CZM_DrawText( CZM_Font( CZMF_UI_LABEL ), m_content.x, m_submit.y + ( m_submit.h - CZM_FontHeight( CZM_Font( CZMF_UI_LABEL ))) / 2, m_submit.x - m_content.x - H * .018f, feedback, PackRGBA( 157, 172, 190, a ));
+		CzmStyle::Button( m_submit, m_formPending ? ( ru ? "Отправляем…" : "Sending…" )
+			: migration ? ( ru ? "Перенести" : "Transfer" ) : ( ru ? "Отправить" : "Send" ), !m_formPending, false, IsPressed( HIT_SUBMIT ), accent );
 	}
 }
 

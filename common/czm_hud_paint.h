@@ -27,7 +27,7 @@ inline void Paint(Painter &d,int kind,int style,const Rect &p,const char *value,
             d.Fill(x,y+h-edge,w,edge,62,70,88,a/2);
         } else d.Fill(x,y,edge,h,red,green,blue,a);
     } else d.Fill(x,y+h-edge,w,edge,warning?255:145,warning?65:160,warning?72:185,a/2);
-    // Independently drawn geometric indicators: cross, shield, clock, wallet, cartridges.
+    // Shared live and editor indicators.
     const int sz=h*.36f,ix=x+h*.18f,iy=y+(h-sz)/2,t=sz/5+1;
     const int ir=warning?255:214,ig=warning?70:224,ib=warning?78:239;
     if(kind==HEALTH) {
@@ -39,7 +39,8 @@ inline void Paint(Painter &d,int kind,int style,const Rect &p,const char *value,
         d.Fill(ix,iy,t,sz,ir,ig,ib,a);d.Fill(ix+sz-t,iy,t,sz,ir,ig,ib,a);
         d.Fill(ix+sz/2,iy+t,t,sz/2,red,green,blue,a);
     } else if(kind==MONEY) {
-        d.Fill(ix,iy,sz,sz,ir,ig,ib,a);d.Fill(ix+sz/2,iy+sz/3,sz/2,sz/3,red,green,blue,a);
+        const float iconHeight=h*.63f;
+        d.Text(ix,y+(h-iconHeight)/2,iconHeight,"$",ir,ig,ib,p.opacity);
     } else {
         for(int j=0;j<3;j++) d.Fill(ix+j*(sz/3),iy+(j%2)*t,t,sz-(j%2)*t,ir,ig,ib,a);
     }
