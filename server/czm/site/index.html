@@ -87,37 +87,34 @@ header{position:sticky;top:0;z-index:30;background:var(--glass);-webkit-backdrop
 .btn-game .h-game{font-size:19px}
 .btn-ghost{display:inline-flex;align-items:center;min-height:52px;padding:0 20px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.24);color:#fff;text-decoration:none;font-weight:600;font-size:15px}
 .btn-ghost:hover{color:#fff;background:rgba(255,255,255,.14)}
-/* The only installation CTA is now beta signup; fit its label on narrow phones. */
-#beta{scroll-margin-top:86px}
-.beta-hero-cta{max-width:100%;min-height:62px}
-.beta-hero-cta .h-game{font-size:clamp(14px,3.8vw,19px);line-height:1.14;white-space:normal}
-@media(max-width:400px){.beta-hero-cta{width:100%;padding-right:14px}.beta-hero-cta .h-game{font-size:15px}}
-/* A shared, fixed beta milestone. The timer never restarts for a new visitor. */
-#beta-countdown{scroll-margin-top:82px;margin-top:24px}
-.launch-card{position:relative;overflow:hidden;padding:25px 28px;border:1px solid rgba(239,40,52,.35);border-radius:20px;background:radial-gradient(ellipse at 100% 0,rgba(239,40,52,.14),transparent 62%),var(--surface);box-shadow:var(--shadow)}
-.launch-card::before{content:"";position:absolute;left:28px;right:28px;top:0;height:2px;background:linear-gradient(90deg,var(--red),var(--gold),transparent)}
-.launch-main{display:grid;grid-template-columns:1fr 1fr;gap:22px 36px;align-items:center}
-.launch-live{display:inline-flex;align-items:center;gap:8px;margin-bottom:12px;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--gold)}
-.launch-live .dot{width:7px;height:7px;background:#22c55e}
-.launch-card h2{margin:0;font-size:clamp(24px,3.2vw,35px);line-height:1.1}
-.launch-card h2 em{font-style:inherit;color:var(--red-ink)}
-.launch-copy p{margin:9px 0 0;max-width:440px;font-size:14px;color:var(--muted)}
-.launch-label{margin:0 0 9px;text-align:center;font-size:12px;color:var(--muted)}
-.countdown{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
-.countdown>div{text-align:center;padding:12px 3px 9px;border-radius:12px;border:1px solid var(--line);background:var(--bg)}
-.countdown b{display:block;color:var(--text);font:900 clamp(28px,4.4vw,43px)/1 "CZM Display",system-ui,sans-serif;font-variant-numeric:tabular-nums}
-.countdown small{display:block;margin-top:7px;color:var(--muted);font-size:11px}
-.countdown>div:first-child{border-color:rgba(245,180,64,.4)}
-.countdown>div:first-child b{color:var(--gold)}
-.launch-progress{height:4px;margin-top:22px;overflow:hidden;border-radius:99px;background:var(--surface2)}
-.launch-progress span{display:block;width:0;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--red),var(--gold))}
-.launch-foot{display:flex;align-items:center;justify-content:space-between;gap:12px 24px;margin-top:13px;color:var(--muted);font-size:12px}
-.launch-foot p{margin:0;max-width:660px}
-.launch-foot time{color:var(--text);white-space:nowrap}
-.launch-join{flex:none;display:inline-flex;align-items:center;gap:8px;color:var(--red-ink);font-weight:600;text-decoration:none;min-height:36px}
-.launch-join svg{width:16px;height:16px}
-.launch-card.finished .launch-live .dot{background:var(--gold)}
-@media(max-width:700px){.launch-card{padding:22px 18px}.launch-main{grid-template-columns:1fr;gap:20px}.launch-card::before{left:18px;right:18px}.launch-live{margin-bottom:9px;font-size:10px}.launch-card h2{font-size:27px}.launch-copy p{font-size:13px}.launch-label{text-align:left}.countdown b{font-size:34px}.countdown>div{padding:11px 3px 9px}.launch-foot{flex-wrap:wrap;gap:8px}.launch-progress{margin-top:18px}}
+/* Store links and publication status. */
+#download{position:relative;scroll-margin-top:82px;margin-top:24px}
+.download-anchor{position:absolute;top:0;scroll-margin-top:82px}
+.download-hero-cta{max-width:100%}
+.store-panel{position:relative;overflow:hidden;padding:28px;border:1px solid rgba(239,40,52,.3);border-radius:20px;background:radial-gradient(ellipse at 100% 0,rgba(239,40,52,.12),transparent 65%),var(--surface);box-shadow:var(--shadow)}
+.store-panel::before{content:"";position:absolute;left:28px;right:28px;top:0;height:2px;background:linear-gradient(90deg,var(--red),var(--gold),transparent)}
+.store-state{display:inline-flex;align-items:center;gap:8px;margin-bottom:12px;color:var(--gold);font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase}
+.store-state svg{width:16px;height:16px;flex:none}
+.store-panel h2{margin:0;font-size:clamp(26px,3.2vw,35px)}
+.store-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:23px 0 21px}
+.store-link{--store-accent:var(--red);display:flex;align-items:center;gap:14px;min-width:0;min-height:88px;padding:17px 20px;border:1px solid var(--line);border-radius:15px;background:var(--surface2);color:var(--text);text-decoration:none;transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease}
+.store-link:hover{color:var(--text);transform:translateY(-2px);border-color:var(--store-accent);box-shadow:0 8px 24px rgba(0,0,0,.16)}
+.store-link:active{transform:translateY(0)}
+.store-icon{display:grid;place-items:center;width:44px;height:48px;flex:none}
+.store-icon svg{display:block;width:34px;height:38px}
+.store-link.rustore{--store-accent:#1684ff}
+.rustore .store-icon{height:44px;border-radius:11px;background:#087bf4;color:#fff}
+.rustore .store-icon svg{width:30px;height:30px}
+.store-copy{display:flex;flex:1;min-width:0;flex-direction:column;gap:2px}
+.store-copy small{font-size:12px;color:var(--muted)}
+.store-copy strong{font-size:25px;line-height:1.2;letter-spacing:-.4px;white-space:nowrap}
+.store-arrow{width:18px;height:18px;flex:none;color:var(--muted);transition:transform .2s ease}
+.store-link:hover .store-arrow{transform:translate(2px,-2px);color:var(--store-accent)}
+.store-review{border-top:1px solid var(--line);padding-top:16px}
+.store-review p{margin:0;max-width:720px;color:var(--text);font-size:14px;line-height:1.55}
+.store-review p+p{margin-top:6px;color:var(--muted);font-size:12px}
+@media(max-width:560px){.store-panel{padding:23px 18px}.store-panel::before{left:18px;right:18px}.store-grid{grid-template-columns:1fr;gap:10px;margin-top:20px}.store-link{min-height:82px;padding:15px 17px}.store-copy strong{font-size:24px}.store-state{font-size:10px;letter-spacing:.7px}.store-review p{font-size:13px}}
+@media(max-width:360px){.store-panel{padding:21px 15px}.store-link{gap:11px;padding:14px}.store-copy strong{font-size:22px}.store-icon{width:38px}.rustore .store-icon{height:38px}.store-arrow{width:16px}}
 /* stats */
 .stats{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;margin-top:-16px;position:relative;z-index:2;padding-bottom:2px}
 .stats::-webkit-scrollbar{display:none}
@@ -230,45 +227,6 @@ footer .h-game{font-size:14px;color:var(--text);margin-right:auto}
 @keyframes flicker{0%{opacity:0}15%{opacity:.75}25%{opacity:0}40%{opacity:.85}55%{opacity:.1}70%{opacity:.6}100%{opacity:0}}
 .dl .btn-ghost{min-height:56px;background:var(--surface2);border-color:var(--line);color:var(--text)}
 .btn-ghost svg{flex:none}
-.beta{padding:16px 16px 10px}
-.beta h2{margin:0}
-.beta-status{margin:12px 0;padding:12px 14px;border:1px solid var(--line);border-left:3px solid var(--red);border-radius:12px;background:var(--surface2);font-size:14px}
-.beta-progress{margin:14px 0;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px}
-.beta-progress strong{font:900 28px/1 "CZM Display";color:var(--red-ink);font-variant-numeric:tabular-nums}
-.beta-progress span{font-size:14px;color:var(--muted)}
-.beta-progress strong .count{font-size:1.2em;color:var(--gold)}
-.beta-progress small{flex-basis:100%;font-size:12px;color:var(--muted)}
-.beta-track{width:100%;height:7px;margin:0 0 16px;background:var(--surface2);border-radius:999px;overflow:hidden}
-.beta-track div{width:0;height:100%;background:var(--red);border-radius:inherit;transition:width .5s}
-.beta .lead{margin:6px 0 12px;color:var(--muted);font-size:15px;max-width:640px}
-.beta-video{margin:16px 0;border:1px solid var(--line);border-radius:14px;background:var(--surface2);overflow:hidden}
-.beta-video summary{list-style:none;cursor:pointer;padding:13px 15px;display:flex;align-items:center;gap:12px;font-weight:600;min-height:50px}
-.beta-video summary::-webkit-details-marker{display:none}
-.beta-video summary:focus-visible{outline:2px solid var(--gold);outline-offset:-2px}
-.beta-video-play{width:32px;height:32px;background:var(--red);border-radius:50%;color:#fff;display:grid;place-items:center;font-size:12px;flex:none}
-.beta-video video{display:block;background:#000;margin:0 auto 14px;max-width:calc(100% - 28px);width:auto;height:auto;max-height:70svh;border-radius:10px}
-.steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
-.step{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--line);transition:opacity .3s ease}
-.step .n{width:34px;height:34px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font:900 16px "CZM Display";background:var(--red);color:#fff}
-.step .b{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
-.step .b b{font-weight:600;font-size:15px}
-.step .b small{color:var(--muted);font-size:13px;line-height:1.4}
-.step .btn-red,.step .btn-red:hover,.step .btn-red:visited{display:inline-flex;align-items:center;text-decoration:none;white-space:nowrap;color:#fff}
-.step.locked{opacity:.45}
-.step.locked .btn-red{pointer-events:none}
-.step.done .n{background:#22c55e}
-@media (max-width:560px){.step{flex-wrap:wrap}.step .b{flex:1 1 calc(100% - 46px)}.step .btn-red{margin-left:46px}}
-.box{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;opacity:0;visibility:hidden;transition:opacity .3s ease,visibility .3s}
-.box.on{opacity:1;visibility:visible}
-.box img{max-width:94vw;max-height:84vh;border-radius:12px;object-fit:contain}
-.box .nav{position:absolute;top:50%;transform:translateY(-50%);width:48px;height:48px;border-radius:50%;border:1px solid rgba(255,255,255,.25);background:rgba(0,0,0,.5);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center}
-.box .prev{left:10px}.box .next{right:10px}
-.box .x{position:absolute;right:12px;top:12px;width:48px;height:48px;border-radius:50%;border:1px solid rgba(255,255,255,.25);background:rgba(0,0,0,.5);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center}
-.box .cap{position:absolute;bottom:18px;left:0;right:0;text-align:center;color:#ddd;font-size:14px}
-.toast{position:fixed;left:50%;width:max-content;bottom:calc(80px + env(safe-area-inset-bottom));z-index:55;transform:translate(-50%,20px);max-width:calc(100% - 32px);padding:11px 18px;border-radius:999px;background:var(--text);color:var(--bg);font:600 14px "CZM Text";box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:opacity .25s ease,transform .25s ease;overflow-wrap:anywhere}
-.toast.on{opacity:1;transform:translate(-50%,0)}
-.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
-@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}html{scroll-behavior:auto}}
 </style>
 </head>
 <body>
@@ -303,9 +261,9 @@ footer .h-game{font-size:14px;color:var(--text);margin-right:auto}
 <h1 style="margin:0"><img class="title" src="/assets/title.png?v=__V__" alt="Counter Zombie Mobile · 32 players" width="1100" height="199"></h1>
 <p class="tagline" data-i18n="tagline">Мобильный зомби-шутер: орды зомби, серверы до 32 игроков, свои кнопки, друзья и живой чат.</p>
 <div class="ctas">
-<a class="btn-game beta-hero-cta" href="#beta">
-<span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3.5 20v-1a5.5 5.5 0 0 1 11 0v1"/><path d="M19 8v6m-3-3h6"/></svg></span>
-<span class="h-game" data-i18n="downloadCta">Принять участие в бета-тесте</span>
+<a class="btn-game download-hero-cta" href="#download">
+<span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M5 17v4h14v-4"/></svg></span>
+<span class="h-game" data-i18n="downloadCta">Скачать игру</span>
 </a>
 <a class="btn-ghost" href="https://t.me/counter_zombie_mobile" rel="noopener">Telegram</a>
 <a class="btn-ghost" href="/create-server" data-i18n="createServerCta">Создать свой сервер</a>
@@ -320,59 +278,28 @@ footer .h-game{font-size:14px;color:var(--text);margin-right:auto}
 </div>
 </div>
 
-<section class="wrap" id="beta-countdown" aria-labelledby="launchTitle"
-  data-start="2026-10-21T20:51:00+03:00" data-end="2026-11-04T20:51:00+03:00">
-<div class="launch-card" id="launchCard">
-<div class="launch-main">
-<div class="launch-copy">
-<span class="launch-live"><span class="dot" aria-hidden="true"></span><span id="launchStatus" data-i18n="launchStatus">Бета-тест уже идёт</span></span>
-<h2 class="h-game" id="launchTitle"><span data-i18n="launchTitle">На пути к</span><br><em data-i18n="launchAccent">глобальному релизу</em></h2>
-<p data-i18n="launchLead">Присоединяйся к бета-тесту и помоги сделать игру лучше перед большим запуском.</p>
+<section class="wrap" id="download" aria-labelledby="storeTitle">
+<span class="download-anchor" id="beta" aria-hidden="true"></span>
+<span class="download-anchor" id="beta-countdown" aria-hidden="true"></span>
+<div class="store-panel">
+<div class="store-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span data-i18n="storeStatus">Ожидаем публикацию</span></div>
+<h2 class="h-game" id="storeTitle" data-i18n="storeTitle">Скачать игру</h2>
+<div class="store-grid">
+<a class="store-link googleplay" href="https://play.google.com/store/apps/details?id=dev.gaming.czm" target="_blank" rel="noopener noreferrer" aria-describedby="storeReviewNote storeAvailabilityNote">
+<span class="store-icon" aria-hidden="true"><svg viewBox="0 0 32 36"><path fill="#32BBFF" d="M3 2.5v31L18.5 18Z"/><path fill="#32D080" d="m3 2.5 19.6 11.1-4.1 4.4Z"/><path fill="#FFCE00" d="m22.6 13.6 6.1 3.4c.9.5.9 1.5 0 2l-6.1 3.4-4.1-4.4Z"/><path fill="#FF5368" d="M3 33.5 18.5 18l4.1 4.4Z"/></svg></span>
+<span class="store-copy"><small data-i18n="storeDownload">Скачать из</small><strong>Google Play</strong></span>
+<svg class="store-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 18 18 6M6 6h12v12"/></svg>
+</a>
+<a class="store-link rustore" href="https://www.rustore.ru/catalog/app/ru.kurostreet.counterzombiemobile" target="_blank" rel="noopener noreferrer" aria-describedby="storeReviewNote storeAvailabilityNote">
+<span class="store-icon" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none"><path d="m17 5 9 2.5c1.2.3 2 1.4 2 2.6v13.8c0 1.2-1.1 2-2.2 1.7L17 23M12 7l9 2.5c1.2.3 2 1.4 2 2.6v13.8c0 1.2-1.1 2-2.2 1.7L12 25" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/><path d="m6.8 9 9 2.5c1.2.3 2 1.4 2 2.6v13c0 1.2-1.1 2-2.2 1.7l-9-2.5c-1.2-.3-2-1.4-2-2.6v-13c0-1.2 1.1-2 2.2-1.7Z" fill="currentColor"/></svg></span>
+<span class="store-copy"><small data-i18n="storeDownload">Скачать из</small><strong>RuStore</strong></span>
+<svg class="store-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 18 18 6M6 6h12v12"/></svg>
+</a>
 </div>
-<div>
-<p class="launch-label" id="countdownLabel" data-i18n="countdownLabel">До завершения 14-дневного этапа</p>
-<div class="countdown" role="timer" aria-live="off" aria-labelledby="countdownLabel">
-<div><b id="betaDays">14</b><small data-i18n="clockDays">дней</small></div>
-<div><b id="betaHours">00</b><small data-i18n="clockHours">часов</small></div>
-<div><b id="betaMinutes">00</b><small data-i18n="clockMinutes">минут</small></div>
-<div><b id="betaSeconds">00</b><small data-i18n="clockSeconds">секунд</small></div>
+<div class="store-review">
+<p id="storeReviewNote" data-i18n="storeReview">Публикация игры ожидает одобрения Google Play и RuStore.</p>
+<p id="storeAvailabilityNote" data-i18n="storeAvailability">Скачивание станет доступно после публикации в соответствующем магазине.</p>
 </div>
-</div>
-</div>
-<div class="launch-progress" aria-hidden="true"><span id="betaTimeBar"></span></div>
-<div class="launch-foot">
-<p><span id="launchNote" data-i18n="launchNote">Ориентир завершения:</span> <time id="betaEndDate" datetime="2026-11-04T20:51:00+03:00">4 ноября, 20:51 МСК</time><br><span data-i18n="launchReview">После теста — заявка на глобальный релиз и проверка Google Play.</span></p>
-<a class="launch-join" href="#beta"><span data-i18n="launchJoin">Участвовать в бете</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6"/></svg></a>
-</div>
-</div>
-</section>
-
-<!-- Official Google Play beta recruitment. Main hero links here; no APK downloads. -->
-<section class="sec wrap" id="beta" hidden
-  data-group="https://groups.google.com/g/counter-zombie-mobile-beta"
-  data-optin="https://play.google.com/apps/testing/dev.gaming.czm"
-  data-store="https://play.google.com/store/apps/details?id=dev.gaming.czm">
-<div class="card beta">
-<h2 class="h-game" data-i18n="betaTitle">Бета-тест в Google Play</h2>
-<p class="beta-status" id="betaStatus" role="status" data-i18n="betaPending">Google Play проверяет игру. Пока можно вступить в группу; шаги 2 и 3 откроются после одобрения.</p>
-<div class="beta-progress"><strong><span id="sBetaTesters" class="count">—</span> / 50</strong><span data-i18n="betaCount">подтвердили участие в Google Play</span><small id="betaCountUpdated" data-i18n="betaCountNote">По данным Google Play Console, обновляется вручную</small></div>
-<div class="beta-track" id="sBetaTrack" role="progressbar" data-i18n-aria="betaProgress" aria-label="Подтверждённые тестировщики" aria-valuemin="0" aria-valuemax="50" aria-valuenow="0"><div id="sBetaBar"></div></div>
-<p class="lead" data-i18n="betaLead">Набираем 50 тестировщиков с запасом! Google требует минимум 12 участников на 14 дней. Присоединяйся и играй.</p>
-<details class="beta-video">
-<summary><span class="beta-video-play" aria-hidden="true">▶</span><span data-i18n="betaVideo">Видео инструкция</span></summary>
-<video controls playsinline preload="none" poster="/media/beta-instruction.jpg" src="/media/beta-instruction.mp4" width="720" height="1544" data-i18n-aria="betaVideo" aria-label="Видео инструкция"></video>
-</details>
-<ol class="steps">
-<li class="step" data-step="1"><span class="n">1</span><span class="b"><b data-i18n="beta1">Вступи в группу тестировщиков</b><small data-i18n="beta1Note">Нужен аккаунт Google — тот же, что в Google Play на телефоне.</small></span><a class="btn-red" data-beta="group" target="_blank" rel="noopener" data-i18n="beta1Btn">Вступить</a></li>
-<li class="step locked" data-step="2"><span class="n">2</span><span class="b"><b data-i18n="beta2">Прими приглашение</b><small data-i18n="beta2Note">Откроется Google Play. Если приглашения нет, проверь шаг 1.</small></span><a class="btn-red" data-beta="optin" aria-disabled="true" tabindex="-1" target="_blank" rel="noopener" data-i18n="beta2Btn">Стать тестером</a></li>
-<li class="step locked" data-step="3"><span class="n">3</span><span class="b"><b data-i18n="beta3">Установи и играй</b><small data-i18n="beta3Note">Заходи в игру хотя бы пару раз в неделю: Google проверяет, что тест живой.</small></span><a class="btn-red" data-beta="store" aria-disabled="true" tabindex="-1" target="_blank" rel="noopener" data-i18n="beta3Btn">Открыть в Google Play</a></li>
-</ol>
-<details class="beta-video">
-<summary><span data-i18n="betaUseful">Полезно знать</span></summary>
-<p style="margin:0 15px 12px" data-i18n="betaAccounts">В группе Google, на странице участия в бета-тесте и в Play Маркете должен быть выбран один и тот же Google-аккаунт.</p>
-<p style="margin:0 15px 12px" data-i18n="betaVpn">Если страницы Google не открываются, может потребоваться VPN. Доступ к тесту иногда появляется с задержкой.</p>
-<p style="margin:0 15px 15px" data-i18n="betaSave">Перед удалением старой игры сохраните аккаунт и настройки. В версии Google Play войдите в тот же игровой аккаунт.</p>
-</details>
 </div>
 </section>
 
@@ -431,7 +358,7 @@ footer .h-game{font-size:14px;color:var(--text);margin-right:auto}
 <a href="https://github.com/kurostreet/czm" rel="noopener">GitHub</a>
 <a href="/create-server" data-i18n="createServerCta">Создать свой сервер</a>
 <a href="/server-panel" data-i18n="serverPanelCta">Панель сервера</a>
-<a href="#beta" data-beta-link hidden data-i18n="betaShort">Бета-тест</a>
+<a href="#download" data-i18n="storeShort">Скачать игру</a>
 <a href="/rules" data-i18n="rules">Правила</a>
 <a href="/privacy" data-i18n="privacy">Конфиденциальность</a>
 </div>

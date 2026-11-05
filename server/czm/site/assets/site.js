@@ -16,14 +16,10 @@
       description: 'Мобильный зомби-шутер: орды зомби, серверы до 32 игроков, свои кнопки, друзья и живой чат. Скачай бесплатно для Android.',
       langLabel: 'Язык', themeLabel: 'День или ночь', account: 'Войти в панель игрока', share: 'Поделиться', copied: 'Ссылка скопирована', close: 'Закрыть', prev: 'Назад', next: 'Дальше',
       tagline: 'Мобильный зомби-шутер: орды зомби, серверы до 32 игроков, свои кнопки, друзья и живой чат.',
-      downloadCta: 'Принять участие в бета-тесте', createServerCta: 'Создать свой сервер', serverPanelCta: 'Панель сервера', statsLabel: 'Статистика', online: 'в игре', offline: 'не в сети', downloads: 'скачиваний', mb: 'МБ',
-      launchStatus: 'Бета-тест уже идёт', launchFinished: '14-дневный этап завершён',
-      launchTitle: 'На пути к', launchAccent: 'глобальному релизу',
-      launchLead: 'Присоединяйся к бета-тесту и помоги сделать игру лучше перед большим запуском.',
-      countdownLabel: 'До завершения 14-дневного этапа', countdownFinished: 'Готовимся к следующему этапу',
-      clockDays: 'дней', clockHours: 'часов', clockMinutes: 'минут', clockSeconds: 'секунд',
-      launchNote: 'Ориентир завершения:', launchEndedNote: 'Этап завершился:',
-      launchReview: 'После теста — заявка на глобальный релиз и проверка Google Play.', launchJoin: 'Участвовать в бете',
+      downloadCta: 'Скачать игру', createServerCta: 'Создать свой сервер', serverPanelCta: 'Панель сервера', statsLabel: 'Статистика', online: 'в игре', offline: 'не в сети', downloads: 'скачиваний', mb: 'МБ',
+      storeTitle: 'Скачать игру', storeShort: 'Скачать игру', storeStatus: 'Ожидаем публикацию', storeDownload: 'Скачать из',
+      storeReview: 'Публикация игры ожидает одобрения Google Play и RuStore.',
+      storeAvailability: 'Скачивание станет доступно после публикации в соответствующем магазине.',
       overviewTitle: 'Видеообзор игры', overviewPlay: 'Смотреть видеообзор игры',
       overviewNote: 'Живой геймплей Counter Zombie Mobile: зомби, командная игра и управление на телефоне.',
       overviewError: 'Не удалось загрузить видео. Попробуй запустить его ещё раз.', overviewFallback: 'Браузер не поддерживает видео.',
@@ -48,29 +44,16 @@
       roomsLabel: 'Комнаты чата', chatEmpty: 'В этой комнате пока тихо', chatLoading: 'Загружаем чат…',
       chatError: 'Чат сейчас не отвечает, попробуем ещё раз через несколько секунд', all: 'Все',
       newsTitle: 'Что нового', version: 'Версия', mail: 'Почта', rules: 'Правила', privacy: 'Конфиденциальность',
-      betaTitle: 'Бета-тест в Google Play', betaShort: 'Бета-тест',
-      betaCount: 'подтвердили участие в Google Play', betaCountNote: 'По данным Google Play Console, обновляется вручную',
-      betaUseful: 'Полезно знать', betaAccounts: 'В группе Google, на странице участия в бета-тесте и в Play Маркете должен быть выбран один и тот же Google-аккаунт.', betaVpn: 'Если страницы Google не открываются, может потребоваться VPN. Доступ к тесту иногда появляется с задержкой.', betaSave: 'Перед удалением старой игры сохраните аккаунт и настройки. В версии Google Play войдите в тот же игровой аккаунт.',
-      betaVideo: 'Видео инструкция', betaProgress: 'Подтверждённые тестировщики', betaPending: 'Google Play проверяет игру. Пока можно вступить в группу; шаги 2 и 3 откроются после одобрения.',
-      betaReady: 'Закрытая бета в Google Play доступна! Вступи в группу, подтверди участие и установи игру.',
-      betaLead: 'Цель — 50 тестировщиков с запасом! Для допуска к рабочей версии Google требует минимум 12 участников на 14 дней.',
-      beta1: 'Вступи в группу тестировщиков', beta1Note: 'Нужен аккаунт Google — тот же, что в Google Play на телефоне.', beta1Btn: 'Вступить',
-      beta2: 'Прими приглашение', beta2Note: 'Откроется Google Play. Если приглашения нет, проверь шаг 1.', beta2Btn: 'Стать тестером',
-      beta3: 'Установи и играй', beta3Note: 'Заходи в игру хотя бы пару раз в неделю: Google проверяет, что тест живой.', beta3Btn: 'Открыть в Google Play'
     },
     en: {
       title: 'Counter Zombie Mobile — a zombie shooter for Android',
       description: 'A mobile zombie shooter: zombie hordes, servers for up to 32 players, your own buttons, friends and a live chat. Free for Android.',
       langLabel: 'Language', themeLabel: 'Day or night', account: 'Sign in to the player panel', share: 'Share', copied: 'Link copied', close: 'Close', prev: 'Previous', next: 'Next',
       tagline: 'A mobile zombie shooter: zombie hordes, servers for up to 32 players, your own buttons, friends and a live chat.',
-      downloadCta: 'Join the beta test', createServerCta: 'Create a server', serverPanelCta: 'Server panel', statsLabel: 'Statistics', online: 'playing', offline: 'offline', downloads: 'downloads', mb: 'MB',
-      launchStatus: 'The beta is live', launchFinished: 'The 14-day stage has ended',
-      launchTitle: 'On the road to', launchAccent: 'global release',
-      launchLead: 'Join the beta and help us make the game better before the big launch.',
-      countdownLabel: 'Until the end of the 14-day stage', countdownFinished: 'Getting ready for the next stage',
-      clockDays: 'days', clockHours: 'hours', clockMinutes: 'minutes', clockSeconds: 'seconds',
-      launchNote: 'Target completion:', launchEndedNote: 'Stage ended:',
-      launchReview: 'After testing: an application for global release and a Google Play review.', launchJoin: 'Join the beta',
+      downloadCta: 'Download the game', createServerCta: 'Create a server', serverPanelCta: 'Server panel', statsLabel: 'Statistics', online: 'playing', offline: 'offline', downloads: 'downloads', mb: 'MB',
+      storeTitle: 'Download the game', storeShort: 'Download the game', storeStatus: 'Awaiting publication', storeDownload: 'Download on',
+      storeReview: 'The game’s publication is awaiting approval from Google Play and RuStore.',
+      storeAvailability: 'Downloads will become available once the game is published in each store.',
       overviewTitle: 'Game video overview', overviewPlay: 'Play the game overview',
       overviewNote: 'Real Counter Zombie Mobile gameplay: zombies, teamwork and touch controls.',
       overviewError: 'The video could not load. Please try playing it again.', overviewFallback: 'Your browser does not support video.',
@@ -95,15 +78,6 @@
       roomsLabel: 'Chat rooms', chatEmpty: 'Quiet in this room so far', chatLoading: 'Loading the chat…',
       chatError: 'The chat is not answering, trying again in a few seconds', all: 'All',
       newsTitle: 'What’s new', version: 'Version', mail: 'Email', rules: 'Rules', privacy: 'Privacy',
-      betaTitle: 'Google Play beta test', betaShort: 'Beta test',
-      betaCount: 'confirmed Google Play testers', betaCountNote: 'From Google Play Console, manually updated',
-      betaUseful: 'Useful information', betaAccounts: 'Use the same Google account in the Google group, on the beta opt-in page and in the Play Store.', betaVpn: 'If Google pages do not open, a VPN may be needed. Access to the test can take some time to appear.', betaSave: 'Save your account and settings before removing the old game. Sign in to the same game account in the Google Play version.',
-      betaVideo: 'Video instructions', betaProgress: 'Confirmed testers', betaPending: 'Google Play is reviewing the game. You can join the group now; steps 2 and 3 will unlock after approval.',
-      betaReady: 'The Google Play closed beta is available! Join the group, opt in and install the game.',
-      betaLead: 'Our goal is 50 testers as a safety margin! Google requires at least 12 opted-in testers for 14 days.',
-      beta1: 'Join the testers group', beta1Note: 'You need a Google account, the same one as in Google Play on your phone.', beta1Btn: 'Join',
-      beta2: 'Accept the invitation', beta2Note: 'Google Play opens. If there is no invitation, check step 1.', beta2Btn: 'Become a tester',
-      beta3: 'Install and play', beta3Note: 'Play at least a couple of times a week: Google checks that the test is alive.', beta3Btn: 'Open in Google Play'
     }
   };
   var FEAT_SHOTS = ['menu', 'servers', 'top', 'chat', 'controls', 'graphics', 'audio', 'game', 'hud', 'profile', 'friends'];
@@ -143,7 +117,6 @@
     buildStrip();
     buildFeatures();
     if (boxAt >= 0) showBox();
-    paintCountdown();
     renderStats(true);
     renderChat(false);
     renderNews();
@@ -518,69 +491,6 @@
     }
   });
 
-  /* ---------- Google Play: store buttons and the beta test ---------- */
-var beta = $('beta');
-  var betaLinks = beta ? { group: beta.getAttribute('data-group') || '', optin: beta.getAttribute('data-optin') || '',
-    store: beta.getAttribute('data-store') || '' } : {};
-  function paintBeta() {
-    if (!beta || beta.hidden) return;
-    var open = Boolean(stats && stats.play_beta_open === true);
-    $('betaStatus').textContent = open ? T.betaReady : T.betaPending;
-    all('#beta .step').forEach(function (li) {
-      var n = parseInt(li.getAttribute('data-step'), 10);
-      var link = li.querySelector('[data-beta]');
-      var kind = link.getAttribute('data-beta');
-      var allowed = kind === 'group' || open;
-      li.classList.toggle('locked', !allowed);
-      li.classList.remove('done'); // clicks cannot verify Google Group membership or opt-in
-      if (allowed) {
-        link.href = betaLinks[kind];
-        link.removeAttribute('aria-disabled');
-        link.removeAttribute('tabindex');
-      } else {
-        link.removeAttribute('href');
-        link.setAttribute('aria-disabled', 'true');
-        link.setAttribute('tabindex', '-1');
-      }
-    });
-  }
-  if (beta && /^https:\/\/groups\.google\.com\//.test(betaLinks.group)) {
-    beta.hidden = false;
-    all('[data-beta-link]').forEach(function (el) { el.hidden = false; });
-    paintBeta();
-  }
-
-  /* ---------- one shared beta milestone, independent of visits and time zones ---------- */
-  var countdown = $('beta-countdown'), serverOffset = 0;
-  var betaStart = countdown ? Date.parse(countdown.getAttribute('data-start')) : NaN;
-  var betaEnd = countdown ? Date.parse(countdown.getAttribute('data-end')) : NaN;
-  function countdownParts(now, start, end) {
-    var seconds = Math.ceil(Math.max(0, end - Math.max(start, now)) / 1000);
-    return {
-      days: Math.floor(seconds / 86400), hours: Math.floor(seconds / 3600) % 24,
-      minutes: Math.floor(seconds / 60) % 60, seconds: seconds % 60,
-      progress: Math.max(0, Math.min(1, (now - start) / (end - start))), finished: now >= end
-    };
-  }
-  function paintCountdown() {
-    if (!countdown) return;
-    if (!isFinite(betaStart) || !isFinite(betaEnd) || betaEnd <= betaStart) { countdown.hidden = true; return; }
-    var p = countdownParts(Date.now() + serverOffset, betaStart, betaEnd);
-    [['betaDays',p.days],['betaHours',p.hours],['betaMinutes',p.minutes],['betaSeconds',p.seconds]].forEach(function (unit) {
-      var value = String(unit[1]).padStart(2, '0');
-      if ($(unit[0]).textContent !== value) $(unit[0]).textContent = value;
-    });
-    $('betaTimeBar').style.width = (p.progress * 100).toFixed(3) + '%';
-    $('launchCard').classList.toggle('finished', p.finished);
-    $('launchStatus').textContent = p.finished ? T.launchFinished : T.launchStatus;
-    $('countdownLabel').textContent = p.finished ? T.countdownFinished : T.countdownLabel;
-    $('launchNote').textContent = p.finished ? T.launchEndedNote : T.launchNote;
-    $('betaEndDate').textContent = new Intl.DateTimeFormat(lang === 'ru' ? 'ru-RU' : 'en-GB', {
-      timeZone:'Europe/Moscow', day:'numeric', month:'long', hour:'2-digit', minute:'2-digit'
-    }).format(new Date(betaEnd)) + (lang === 'ru' ? ' МСК' : ' MSK');
-  }
-  setInterval(function () { if (!doc.hidden) paintCountdown(); }, 1000);
-
   /* ---------- gameplay overview: no autoplay or video preload ---------- */
   var overview = $('gameOverview'), overviewPlay = $('overviewPlay'), overviewStatus = $('overviewStatus');
   if (overview && overviewPlay) {
@@ -636,25 +546,10 @@ var beta = $('beta');
     if (!stats) return;
     countTo('online', $('sOnline'), stats.online, instant);
     countTo('offline', $('sOffline'), stats.offline, instant);
-    if ($('sBetaTesters')) {
-      var testers = stats.play_beta_testers;
-      $('sBetaTesters').textContent = typeof testers === 'number' ? fmt(testers) : '—';
-      $('sBetaBar').style.width = typeof testers === 'number' ? Math.min(100, testers / 50 * 100) + '%' : '0%';
-      $('sBetaTrack').setAttribute('aria-valuenow', String(typeof testers === 'number' ? Math.min(50, testers) : 0));
-      var checked = stats.play_beta_checked_at;
-      $('betaCountUpdated').textContent = T.betaCountNote + (checked ? ' · ' + new Date(checked * 1000).toLocaleString(lang === 'ru' ? 'ru-RU' : 'en-GB') : '');
-    }
-    paintBeta();
   }
   function loadStats() {
     if (doc.hidden) return;
-    var requestedAt = Date.now();
     fetch('/api/v1/site/stats', { cache: 'no-store' }).then(function (r) {
-      var serverDate = Date.parse(r.headers.get('Date'));
-      if (r.ok && isFinite(serverDate)) {
-        serverOffset = serverDate + (Date.now() - requestedAt) / 2 - Date.now();
-        paintCountdown();
-      }
       return r.ok ? r.json() : null;
     }).then(function (d) {
       if (!d || typeof d.online !== 'number') return;
@@ -817,6 +712,6 @@ var beta = $('beta');
   setInterval(loadStats, 30000);
   setInterval(loadChat, 5000);
   doc.addEventListener('visibilitychange', function () {
-    if (!doc.hidden) { paintCountdown(); loadStats(); loadChat(); startEmbers(); }
+    if (!doc.hidden) { loadStats(); loadChat(); startEmbers(); }
   });
 })();
