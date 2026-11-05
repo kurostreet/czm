@@ -700,11 +700,14 @@ async def survival_news(request: Request, limit: int = 10):
 
 class GameTicketIn(BaseModel):
     address: str = Field(min_length=7, max_length=64)
+    challenge: str | None = Field(default=None, max_length=32)
 
 
 @router.post("/game/ticket")
 async def game_ticket_issue(body: GameTicketIn, request: Request, x_czm_key: str | None = Header(default=None)):
     """A ticket for one of our servers: it proves the CZM profile to that server only."""
+    if body.challenge is not None:
+        return await social_result(request, lambda c: game_ticket.issue_profile(c, x_czm_key or "", body.address, body.challenge))
     return await social_result(request, lambda c: game_ticket.issue(c, x_czm_key or "", body.address))
 
 

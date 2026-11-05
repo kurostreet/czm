@@ -820,7 +820,7 @@ void CCzmShop::CloseServerMenu( bool exitMenu )
 	if( exitMenu )
 	{
 		s_iWeaponClosed = m_wmenu.serial;
-		EngFuncs::ClientCmd( false, "slot10\n" );
+		EngFuncs::ClientCmdF( false, "czm_shop_select %d 10\n", m_wmenu.serial );
 	}
 	Hide();
 }
@@ -1094,7 +1094,7 @@ void CCzmShop::Activate( int hit )
 				page = ( page + m_wmenu.meta.pages ) % m_wmenu.meta.pages;
 				EngFuncs::ClientCmdF( false, "czm_weapon_page %d\n", page );
 			}
-			else EngFuncs::ClientCmdF( false, "slot%d\n", key );
+			else EngFuncs::ClientCmdF( false, "czm_shop_select %d %d\n", m_wmenu.serial, key );
 		}
 		return;
 	}

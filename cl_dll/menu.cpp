@@ -48,12 +48,37 @@ in the czm_menu cvar: "serial validslots", a new line, then the menu text.
 static bool s_bCardsShown;
 static int s_iCardsSerial;
 
+// A touch selection belongs to the displayed menu, even if the weapon wheel
+// would otherwise handle the same slot key.
+static void SelectShopCard()
+{
+	if( gEngfuncs.Cmd_Argc() != 3 || !s_bCardsShown || atoi( gEngfuncs.Cmd_Argv( 1 )) != s_iCardsSerial )
+		return;
+	CHudMenu &menu = gHUD.m_Menu;
+	const int slot = atoi( gEngfuncs.Cmd_Argv( 2 ));
+	if( slot < 1 || slot > 10 || !menu.m_fMenuDisplayed || !( menu.m_bitsValidSlots & ( 1 << ( slot - 1 ))))
+		return;
+	char cmd[24];
+	snprintf( cmd, sizeof( cmd ), "menuselect %d", slot );
+	gEngfuncs.pfnServerCmd( cmd );
+	menu.UserCmd_OldStyleMenuClose();
+}
+
 // The connected plugin announces its team actions independently of the official list.
 static int MsgFunc_CzmPlay( const char *name, int size, void *buffer )
 {
 	if( size != 1 ) return 1;
 	BufferReader reader( name, buffer, size );
 	gEngfuncs.Cvar_Set( "czm_play_mode", reader.ReadByte() == 1 ? "1" : "0" );
+	return 1;
+}
+
+static int MsgFunc_CzmProfile( const char *, int size, void *buffer )
+{
+	if( size != 33 && size != 1 ) return 1;
+	const char *challenge = static_cast<const char *>( buffer );
+	if( challenge[size - 1] == 0 && ( size == 1 || strspn( challenge, "0123456789abcdef" ) == 32 ))
+		gEngfuncs.Cvar_Set( "czm_profile_challenge", challenge );
 	return 1;
 }
 
@@ -147,11 +172,15 @@ int CHudMenu :: Init( void )
 	HOOK_MESSAGE( gHUD.m_Menu, BuyClose );
 	HOOK_MESSAGE( gHUD.m_Menu, AllowSpec );
 	gEngfuncs.pfnHookUserMsg( "CzmPlay", MsgFunc_CzmPlay );
+	gEngfuncs.pfnHookUserMsg( "CzmProfile", MsgFunc_CzmProfile );
+	gEngfuncs.pfnAddCommand( "czm_shop_select", SelectShopCard );
 	HOOK_COMMAND( gHUD.m_Menu, "client_buy_open", OldStyleMenuOpen );
 	HOOK_COMMAND( gHUD.m_Menu, "client_buy_close", OldStyleMenuClose );
 	HOOK_COMMAND( gHUD.m_Menu, "showvguimenu", ShowVGUIMenu );
 
 	_extended_menus = CVAR_CREATE("_extended_menus", "1", FCVAR_ARCHIVE);
+	CVAR_CREATE( "czm_profile_ui", "1", 0 );
+	CVAR_CREATE( "czm_profile_challenge", "", 0 );
 
 	InitHUDData();
 
@@ -165,6 +194,7 @@ void CHudMenu :: InitHUDData( void )
 	// A new server/map must announce its own capability; it cannot inherit the last one.
 	gEngfuncs.Cvar_Set( "czm_play_mode", "0" );
 	gEngfuncs.Cvar_Set( "czm_motd_off", "0" );
+	gEngfuncs.Cvar_Set( "czm_profile_challenge", "" );
 	m_fMenuDisplayed = 0;
 	m_bitsValidSlots = 0;
 	Reset();

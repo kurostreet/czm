@@ -435,6 +435,7 @@ const char *CZM_OnlineUrl( const char *path );
 const char *CZM_OnlineKey( void );
 bool CZM_OnlineReady( void );
 bool CZM_OnlineAccount( void );
+bool CZM_OnSurvivalServer( void );     // verified against the connected network peer
 int CZM_OnlineCount( void ); // players in the game right now, -1 unknown
 int CZM_OnlineIdentity( void );
 int CZM_OnlinePlayer( void );

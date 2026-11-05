@@ -28,6 +28,32 @@ static CzmRect CZM_Rect(int x,int y,int w,int h){return {x,y,w,h};}
 int ScreenWidth=1536,ScreenHeight=716;
 '''
 class WeaponShopTests(unittest.TestCase):
+ def test_card_sends_the_current_menu_choice_to_the_server(self):
+  source=(ROOT/'cl_dll/menu.cpp').read_text()
+  cpp(BASE+r'''
+static bool s_bCardsShown=true;
+static int s_iCardsSerial=12,argc=3;
+static const char *argv[]={"czm_shop_select","12","4"};
+static std::string sent;
+struct CHudMenu{
+ int m_fMenuDisplayed=1,m_bitsValidSlots=1<<3;
+ void UserCmd_OldStyleMenuClose(){m_fMenuDisplayed=0;s_bCardsShown=false;}
+};
+static struct {CHudMenu m_Menu;} gHUD;
+static struct {
+ int Cmd_Argc(){return argc;}
+ const char *Cmd_Argv(int i){return argv[i];}
+ void pfnServerCmd(const char *cmd){sent=cmd;}
+} gEngfuncs;
+'''+function(source,'static void SelectShopCard(')+r'''
+int main(){
+ argv[1]="11";SelectShopCard();assert(sent.empty());
+ argv[1]="12";argv[2]="1";SelectShopCard();assert(sent.empty());
+ argv[2]="4";SelectShopCard();assert(sent=="menuselect 4"&&!gHUD.m_Menu.m_fMenuDisplayed);
+ sent.clear();SelectShopCard();assert(sent.empty());
+}
+''')
+
  def test_actual_weapon_parser_and_grid_geometry(self):
   s=(ROOT/'czm/menu/CzmShop.cpp').read_text()
   code=BASE+s[s.index('enum\n{'):s.index('static const struct\n{\n\tconst char *ru, *en; // two lines')]

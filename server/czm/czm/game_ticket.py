@@ -10,6 +10,7 @@ address, so a ticket that reached any other server does not open ours. A ticket 
     signature = sha256(key "|v1|" profile "|" expires "|" address "|" key), first 32 hex digits
 """
 import hashlib
+import re
 import sqlite3
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from . import accounts, community, official, service
 from .db import now
 
 LIFE = 15 * 60
+PROFILE_LIFE = 60
 KEY_FILE = Path("/etc/czm/game-ticket.key")
 
 
@@ -47,3 +49,21 @@ def issue(conn: sqlite3.Connection, player_key: str, address: str, key_path: Pat
     expires = now() + LIFE
     ticket = f"{player['id']}.{expires}.{sign(_key(key_path), player['id'], expires, address)}"
     return {"ticket": ticket, "address": address, "expires": expires}
+
+
+def sign_profile(key: str, profile: int, expires: int, address: str, challenge: str) -> str:
+    message = f"{key}|profile-v1|{profile}|{expires}|{address}|{challenge}|{key}"
+    return hashlib.sha256(message.encode()).hexdigest()[:32]
+
+
+def issue_profile(conn: sqlite3.Connection, session: str, address: str, challenge: str) -> dict:
+    """An account-only proof for the connection that supplied the challenge."""
+    player = accounts.authenticated(conn, session)
+    address = community.public_endpoint(address.strip())
+    if not address or address != official.state(conn)["survival"]:
+        raise accounts.AuthError("not_official", 403)
+    if not re.fullmatch(r"[0-9a-f]{32}", challenge):
+        raise accounts.AuthError("bad_challenge", 400)
+    expires = now() + PROFILE_LIFE
+    signature = sign_profile(_key(), player["id"], expires, address, challenge)
+    return {"ticket": f"{player['id']}.{expires}.{signature}", "address": address, "expires": expires}
