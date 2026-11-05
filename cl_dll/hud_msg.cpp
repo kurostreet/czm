@@ -26,6 +26,7 @@
 #include "studio_util.h"
 #include "StudioModelRenderer.h"
 #include "GameStudioModelRenderer.h"
+#include "hud/czm_tags.h"
 
 void IN_StopAutoRun( void ); // input_xash3d.cpp
 bool CL_IsDead( void );
@@ -116,6 +117,7 @@ int CHud :: MsgFunc_ViewMode( const char *pszName, int iSize, void *pbuf )
 
 int CHud :: MsgFunc_InitHUD( const char *pszName, int iSize, void *pbuf )
 {
+	CZM_TagsReset(); // also reconnecting to another server on the same map
 	// prepare all hud data
 	HUDLIST *pList = m_pHudList;
 

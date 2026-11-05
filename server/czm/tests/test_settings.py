@@ -40,6 +40,14 @@ class SettingsTests(unittest.TestCase):
         response=self.save(self.tokens[0],0,self.data)
         self.assertEqual(response.status_code,200,response.text)
         self.assertEqual(self.get(self.tokens[0]).json()['payload'],self.data)
+    def test_aim_hud_layout_round_trips_without_replacing_personal_progress(self):
+        self.data['cvars'].update({'czm_hud_aim_x':'0.21','czm_hud_aim_y':'0.31',
+            'czm_hud_aim_scale':'1.3','czm_hud_aim_opacity':'0.6','czm_hud_aim_hidden':'1',
+            'czm_hud_progress_x':'0.75','czm_hud_progress_y':'0.85'})
+        response=self.save(self.tokens[0],0,self.data)
+        self.assertEqual(response.status_code,200,response.text)
+        with db.db() as c:second=accounts.login(c,'Player0','Password123','other-device')['token']
+        self.assertEqual(self.get(second).json()['payload'],self.data)
     def test_import_does_not_execute_commands_or_include_credentials(self):
         for key,value in [('password','secret'),('rcon_password','secret'),('czm_hud_style','nan'),('cl_crosshair_color','256 0 0')]:
             bad=copy.deepcopy(self.data);bad['cvars'][key]=value
