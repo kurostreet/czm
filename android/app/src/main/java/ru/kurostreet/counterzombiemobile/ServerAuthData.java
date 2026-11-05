@@ -73,7 +73,8 @@ final class ServerAuthData {
             // known optional fields from this destination's packet, never identity, network rates,
             // account tickets, custom server fields, or the global userinfo/config.
             Map<String, String> compact = new LinkedHashMap<>(info);
-            for (String optional : new String[] {"cscl_ver", "_ah", "_vgui_menus", "cl_dlmax", "topcolor", "bottomcolor"}) {
+            // Keep menu and weapon-switch preferences; spend cosmetic space before download hints.
+            for (String optional : new String[] {"cscl_ver", "topcolor", "bottomcolor", "_ah", "cl_dlmax"}) {
                 if (compact.remove(optional) != null) {
                     String candidate = serialize(compact) + field;
                     if (fits(candidate, limit)) return candidate;

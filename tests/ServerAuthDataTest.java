@@ -52,7 +52,8 @@ public final class ServerAuthDataTest {
         for (int limit : new int[] {256, 512}) for (String nickname : new String[] {"Kuro", "Игрок"}) {
             String publicInfo = "\\name\\" + nickname + "\\model\\gign\\rate\\100000\\cl_updaterate\\100"
                 + "\\cl_lw\\1\\cl_lc\\1\\czm_tag\\public-binding\\lang\\ru"
-                + "\\cscl_ver\\1.35-2dbcbc6\\_ah\\0\\_vgui_menus\\1\\cl_dlmax\\512\\_czm\\";
+                + "\\cscl_ver\\1.35-2dbcbc6\\_ah\\0\\_vgui_menus\\1\\cl_dlmax\\512"
+                + "\\topcolor\\30\\bottomcolor\\6\\_cl_autowepswitch\\1\\_czm\\";
             String ticket = "T".repeat(limit - 1 - publicInfo.getBytes(StandardCharsets.UTF_8).length);
             String dense = publicInfo + ticket;
             expect(dense.getBytes(StandardCharsets.UTF_8).length == limit - 1);
@@ -61,7 +62,8 @@ public final class ServerAuthDataTest {
             expect(packed.endsWith("\\_pw\\" + password));
             expect(packed.getBytes(StandardCharsets.UTF_8).length < limit);
             for (String required : new String[] {"\\name\\" + nickname, "\\model\\gign", "\\rate\\100000",
-                    "\\cl_updaterate\\100", "\\cl_lw\\1", "\\cl_lc\\1", "\\czm_tag\\public-binding", "\\lang\\ru", "\\_czm\\" + ticket})
+                    "\\cl_updaterate\\100", "\\cl_lw\\1", "\\cl_lc\\1", "\\czm_tag\\public-binding", "\\lang\\ru", "\\_czm\\" + ticket,
+                    "\\_vgui_menus\\1", "\\cl_dlmax\\512", "\\_cl_autowepswitch\\1"})
                 expect(packed.contains(required));
             expect(dense.contains("\\cscl_ver\\1.35-2dbcbc6") && !dense.contains("\\_pw\\"));
             expect(!ServerAuthData.packet(dense, managed, "", "", limit).contains(password));
