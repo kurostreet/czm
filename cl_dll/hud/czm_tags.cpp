@@ -222,6 +222,10 @@ static void DrawAimTag( void )
 	s_aimShown = false;
 	if( index < 1 || index > MAX_PLAYERS || g_iUser1 )
 		return;
+	// A server that sends neither the aimed player's health (CzmAim) nor his tag (CzmTag) gives
+	// the card nothing true to show: the stock line stays instead of "LVL --" and a bogus percent.
+	if( !s_aimReceived && !ranked )
+		return;
 
 	GetPlayerInfo( index, &g_PlayerInfoList[index] );
 	const char *name = g_PlayerInfoList[index].name;

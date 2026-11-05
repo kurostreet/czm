@@ -169,6 +169,45 @@ int main(){
 '''
         run_cpp(code.replace('#include <cmath>', '#include <cmath>\n#include <initializer_list>'))
 
+    def test_aim_card_shows_no_placeholders_and_needs_server_data(self):
+        run_cpp(r'''
+#include "czm_hud_overlay.h"
+#include <cassert>
+#include <cstring>
+#include <string>
+struct Text:CzmHud::Canvas {
+ std::string all;
+ void Blend(int,int,int,int,int,int,int,int)override{}
+ void Glyphs(float,float,float,const char *s,int,int,int,float)override{all+=s;all+="|";}
+ int LabelWidth(const char *s)override{return (int)strlen(s)*6;}
+ int LabelHeight()override{return 12;}
+ void Label(int,int,const char *s,int,int,int)override{all+=s;all+="|";}
+ bool Avatar(int,int,int)override{return false;}
+};
+int main(){
+ auto p=CzmHud::AimLayout(1536,716,.5f,.64f,1,1,12);
+ CzmHud::AimInfo unranked={"Kuro","","",-1,0,5400,5400,0,0,0,false};
+ Text a;CzmHud::PaintAim(a,p,unranked,0,255,255);
+ assert(a.all.find("LVL")==std::string::npos&&a.all.find("--")==std::string::npos);
+ assert(a.all.find("5400 / 5400 HP")!=std::string::npos);
+ CzmHud::AimInfo ranked={"Kuro","","VIP+",37,65,3089,8000,0,0,0,false};
+ Text b;CzmHud::PaintAim(b,p,ranked,0,255,255);
+ assert(b.all.find("LVL 37  WR 65%")!=std::string::npos&&b.all.find("VIP+")!=std::string::npos);
+}
+''')
+        # without CzmAim and CzmTag from the server the stock status line stays, no card
+        tags = (ROOT / "cl_dll/hud/czm_tags.cpp").read_text()
+        aim = function(tags, "static void DrawAimTag(")
+        self.assertIn("if( !s_aimReceived && !ranked )\n\t\treturn;", aim)
+        self.assertLess(aim.index("if( !s_aimReceived && !ranked )"), aim.index("CZM_AimDraw( info )"))
+
+    def test_editor_server_text_sample_follows_the_list_setting(self):
+        touch = (ROOT / "czm/menu/CzmTouch.cpp").read_text()
+        sample = function(touch, "static void DrawServerSample(")
+        self.assertIn('EngFuncs::GetCvarFloat( "czm_hud_msg_list" ) > 0.5f', sample)
+        self.assertIn("frame.h * 0.9f", sample)   # Zombie Plague status: x 0.02, y 0.9
+        self.assertIn("frame.y + lineH / 2", sample)   # as a list: top left, as message.cpp
+
     def test_money_obeys_layout_after_zp_hide_flag_and_resets_on_new_connection(self):
         source = (ROOT / "cl_dll/hud/money.cpp").read_text()
         header = (ROOT / "cl_dll/hud.h").read_text()

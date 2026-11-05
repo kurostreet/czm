@@ -156,16 +156,17 @@ inline void PaintAim(Canvas &c,const Rect &p,const AimInfo &s,int r,int g,int b)
     if(*text)c.Label(tx,ty,text,240*a,243*a,248*a);
 
     char stats[48],hp[48];
+    // no level from the server: no placeholder, the line stays empty
     if(s.level>=0)snprintf(stats,sizeof(stats),"LVL %d  WR %d%%",s.level,s.winRate);
-    else snprintf(stats,sizeof(stats),"LVL --  WR --");
+    else stats[0]=0;
     if(s.healthPercent && s.health>=0)snprintf(hp,sizeof(hp),"%d%% HP",s.health);
     else if(s.health>=0 && s.maximum>0)snprintf(hp,sizeof(hp),"%d / %d HP",s.health,s.maximum);
     else snprintf(hp,sizeof(hp),"HP --");
     float lh=h*.24f,hh=lh;
     const float available=(w-pad*3)*.5f;
-    if(GlyphWidth(stats,lh)>available)lh=available/(strlen(stats)*.65f);
+    if(stats[0] && GlyphWidth(stats,lh)>available)lh=available/(strlen(stats)*.65f);
     if(GlyphWidth(hp,hh)>available)hh=available/(strlen(hp)*.65f);
-    c.Glyphs(x+pad,by-pad/2-lh,lh,stats,r,g,b,a);
+    if(stats[0])c.Glyphs(x+pad,by-pad/2-lh,lh,stats,r,g,b,a);
     c.Glyphs(x+w-pad-GlyphWidth(hp,hh),by-pad/2-hh,hh,hp,205,213,224,a);
     c.Blend(x+pad,by,w-pad*2,barH,255,255,255,35*a);
     if(s.health>=0 && s.maximum>0) {

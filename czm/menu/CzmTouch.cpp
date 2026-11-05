@@ -677,16 +677,23 @@ static void DrawChatSample( int style, int x, int bottom, int lineH, float opaci
 	DrawMessageLine( style, font, x + pad, bottom - lineH, lineH, three, 1, 224, 37, 50, opacity, pad );
 }
 
-// two typical server texts where servers put them: the title at the top, the zombie status at the bottom left
+// two typical server texts: a centred announcement and the Zombie Plague status line, which the
+// server puts at the bottom left (x 0.02, y 0.9). "As a list" (czm_hud_msg_list) moves the texts
+// at the side into one column at the top left of the frame, as the match does (cl_dll/message.cpp).
 static void DrawServerSample( int style, const CzmRect &frame, int lineH, float opacity, HFont font )
 {
-	const CzmTextPart title[] = { { "ZS.SERVER  •  zm_dust  •  12/32", 80, 230, 120 } };
-	const CzmTextPart status[] = { { "HP: 1750  ·  Light Zombie  ·  Ammo packs: 35", 200, 230, 60 } };
+	const bool ru = CZM_IsRussian(), list = EngFuncs::GetCvarFloat( "czm_hud_msg_list" ) > 0.5f;
+	const CzmTextPart title[] = { { ru ? "Kuro первый зомби !!!" : "Kuro is the first zombie !!!", 250, 60, 60 } };
+	const CzmTextPart status[] = { { ru ? "HP: 1750 - Тип: Light Zombie - Кредиты: 35" : "HP: 1750 - Class: Light Zombie - Ammo packs: 35",
+		200, 250, 0 } };
 	int pad = lineH / 3;
 	int w = MessageLineWidth( font, title, 1 );
 
-	DrawMessageLine( style, font, frame.x + ( frame.w - w ) / 2, frame.y + frame.h * 0.02f, lineH, title, 1, 80, 230, 120, opacity, pad );
-	DrawMessageLine( style, font, frame.x + frame.w * 0.02f + pad, frame.y + frame.h * 0.88f, lineH, status, 1, 200, 230, 60, opacity, pad );
+	DrawMessageLine( style, font, frame.x + ( frame.w - w ) / 2, frame.y + frame.h * 0.17f, lineH, title, 1, 250, 60, 60, opacity, pad );
+	if( list )
+		DrawMessageLine( style, font, frame.x + lineH / 2 + pad, frame.y + lineH / 2, lineH, status, 1, 200, 250, 0, opacity, pad );
+	else
+		DrawMessageLine( style, font, frame.x + frame.w * 0.02f + pad, frame.y + frame.h * 0.9f, lineH, status, 1, 200, 250, 0, opacity, pad );
 }
 
 // a small picture of the three looks for the settings: a game shot with the chat and a server text
