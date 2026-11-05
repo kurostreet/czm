@@ -47,6 +47,33 @@ public final class ServerAuthDataTest {
         // Renaming/deleting a setting removes every managed field from old global data.
         expect(!ServerAuthData.packet(base + "\\_old\\old-secret", managed, "", "", 256).contains("secret"));
 
+        // A real CZM connect packet is nearly full before Admin/VIP adds its field. The
+        // previous implementation silently omitted the password in exactly this case.
+        for (int limit : new int[] {256, 512}) for (String nickname : new String[] {"Kuro", "Игрок"}) {
+            String publicInfo = "\\name\\" + nickname + "\\model\\gign\\rate\\100000\\cl_updaterate\\100"
+                + "\\cl_lw\\1\\cl_lc\\1\\czm_tag\\public-binding\\lang\\ru"
+                + "\\cscl_ver\\1.35-2dbcbc6\\_ah\\0\\_vgui_menus\\1\\cl_dlmax\\512\\_czm\\";
+            String ticket = "T".repeat(limit - 1 - publicInfo.getBytes(StandardCharsets.UTF_8).length);
+            String dense = publicInfo + ticket;
+            expect(dense.getBytes(StandardCharsets.UTF_8).length == limit - 1);
+            String password = "p".repeat(24);
+            String packed = ServerAuthData.packet(dense, managed, "_pw", password, limit);
+            expect(packed.endsWith("\\_pw\\" + password));
+            expect(packed.getBytes(StandardCharsets.UTF_8).length < limit);
+            for (String required : new String[] {"\\name\\" + nickname, "\\model\\gign", "\\rate\\100000",
+                    "\\cl_updaterate\\100", "\\cl_lw\\1", "\\cl_lc\\1", "\\czm_tag\\public-binding", "\\lang\\ru", "\\_czm\\" + ticket})
+                expect(packed.contains(required));
+            expect(dense.contains("\\cscl_ver\\1.35-2dbcbc6") && !dense.contains("\\_pw\\"));
+            expect(!ServerAuthData.packet(dense, managed, "", "", limit).contains(password));
+        }
+        // The selected field cannot keep a stale value, even before it enters the managed set.
+        String replaced = ServerAuthData.packet(base, new HashSet<>(), "_pw", "new-password", 256);
+        expect(!replaced.contains("stale-password") && replaced.endsWith("\\_pw\\new-password"));
+        // If protected data alone uses the budget, fail without dropping or truncating it.
+        String protectedInfo = "\\name\\Kuro\\model\\gign\\rate\\100000\\_czm\\" + "T".repeat(205);
+        String unchanged = ServerAuthData.packet(protectedInfo, managed, "_pw", "p".repeat(24), 256);
+        expect(unchanged.equals(protectedInfo) && !unchanged.contains("\\_pw\\"));
+
         KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA"); generator.initialize(2048);
         KeyPair pair = generator.generateKeyPair();
         String address = "104.234.65.245:27300";
