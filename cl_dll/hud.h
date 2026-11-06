@@ -552,6 +552,7 @@ public:
 	// Counter Zombie Mobile: server menus drawn as cards by the menu library
 	bool CardsEnabled( void );
 	void PublishCards( bool open );
+	void PresentSurvivalShop( bool newPacket );
 
 	int m_fMenuDisplayed;
 	bool m_bAllowSpec;

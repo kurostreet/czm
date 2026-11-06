@@ -2,6 +2,7 @@
 #pragma once
 #include <cstdio>
 #include <cstring>
+#include "czm_survival_shop.h"
 namespace CzmWeapons {
 struct Meta {
  bool valid,primary,queued,automatic,purchase;
@@ -13,7 +14,10 @@ inline const char *Text(const char *value) {
  if(std::sscanf(value,"%d %d%n",&serial,&slots,&n)==2&&value[n]=='\n')return value+n+1;
  return value;
 }
-inline bool Wire(const char *value) { return std::strncmp(Text(value),"#czmw1\t",7)==0; }
+inline bool Wire(const char *value) {
+ const char *text = Text(value);
+ return std::strncmp(text,"#czmw1\t",7)==0 || CzmSurvivalShop::Wire(text);
+}
 inline Meta Parse(const char *value) {
  Meta m={};char kind[16];int q,a,n=0;
  if(std::sscanf(Text(value),"#czmw1\t%15[^\t]\t%d\t%d\t%d\t%d\t%d\t%d%n",kind,&m.page,&m.pages,&q,&m.selected,&m.remember,&a,&n)!=7)return m;

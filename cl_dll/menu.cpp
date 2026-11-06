@@ -163,6 +163,25 @@ void Touch_CloseMenu()
 	gMobileAPI.pfnTouchSetClientOnly( 0 );
 }
 
+#ifdef __ANDROID__
+static void CZM_SurvivalClassicButtons( int slots )
+{
+	unsigned char color[] = { 255, 255, 255, 200 };
+	for( int i = 0; i < 10; ++i )
+	{
+		if( !( slots & ( 1 << i ))) continue;
+		const float x = .715f + ( i % 2 ) * .128f, y = .12f + ( i / 2 ) * .155f;
+		char name[24], texture[24], command[12];
+		snprintf( name, sizeof( name ), "_menu_slot%d", i + 1 );
+		snprintf( texture, sizeof( texture ), "touch/gfx/key_%d", ( i + 1 ) % 10 );
+		snprintf( command, sizeof( command ), "slot%d", i + 1 );
+		gMobileAPI.pfnTouchAddClientButton( name, texture, command, x, y, x + .107f, y + .130f, color, 0, 0, 0 );
+	}
+	if( gEngfuncs.pfnGetCvarFloat( "numericalmenu_clientonly" ) != 0.0f )
+		gMobileAPI.pfnTouchSetClientOnly( 1 );
+}
+#endif
+
 int CHudMenu :: Init( void )
 {
 	gHUD.AddHudElem( this );
@@ -180,6 +199,7 @@ int CHudMenu :: Init( void )
 
 	_extended_menus = CVAR_CREATE("_extended_menus", "1", FCVAR_ARCHIVE);
 	CVAR_CREATE( "czm_profile_ui", "1", 0 );
+	CVAR_CREATE( "czm_loadout_ui", "1", 0 );
 	CVAR_CREATE( "czm_profile_challenge", "", 0 );
 
 	InitHUDData();
@@ -197,6 +217,8 @@ void CHudMenu :: InitHUDData( void )
 	gEngfuncs.Cvar_Set( "czm_profile_challenge", "" );
 	m_fMenuDisplayed = 0;
 	m_bitsValidSlots = 0;
+	g_szRichMenuString[0] = 0;
+	PublishCards( false );
 	Reset();
 }
 
@@ -209,6 +231,20 @@ void CHudMenu :: Reset( void )
 int CHudMenu :: VidInit( void )
 {
 	return 1;
+}
+
+// Style changes only re-render the last complete server menu. They never
+// send a selection or clear the server's draft or pending purchase.
+void CHudMenu::PresentSurvivalShop( bool newPacket )
+{
+	const bool cards = g_pMenu && gEngfuncs.pfnGetCvarFloat( "_vgui_menus" ) != 0.0f &&
+		gEngfuncs.pfnGetCvarFloat( "czm_shop" ) != 0.0f;
+	if( !newPacket && cards == s_bCardsShown ) return;
+	if( !cards || !s_bCardsShown ) Touch_CloseMenu();
+	PublishCards( cards );
+#ifdef __ANDROID__
+	if( !cards ) CZM_SurvivalClassicButtons( m_bitsValidSlots );
+#endif
 }
 
 int CHudMenu :: Draw( float flTime )
@@ -226,6 +262,10 @@ int CHudMenu :: Draw( float flTime )
 	// don't draw the menu if the scoreboard is being shown
 	//if ( gViewPort && gViewPort->IsScoreBoardVisible() )
 		//return 1;
+
+	const bool survival = m_fMenuDisplayed && !m_fWaitingForMore && CzmSurvivalShop::Wire( g_szRichMenuString );
+	if( survival )
+		PresentSurvivalShop( false );
 
 	// the menu library draws it as cards
 	if( s_bCardsShown )
@@ -245,12 +285,23 @@ int CHudMenu :: Draw( float flTime )
 	// center it
 	int y = (ScreenHeight/2) - ((nlc/2)*12) - 40; // make sure it is above the say text
 	int x = 20;
+	int right = 320, lineHeight = 24;
+	float scale = 1.0f;
+	if( survival )
+	{
+		x = ScreenWidth * .035f;
+		y = ScreenHeight * .10f;
+		right = ScreenWidth * .68f;
+		const int glyphHeight = max( 1, gHUD.GetCharHeight() );
+		lineHeight = max( 1, min( glyphHeight + 4, (int)( ScreenHeight * .79f ) / ( nlc + 1 )));
+		scale = min( 1.0f, (float)lineHeight / glyphHeight );
+	}
 
 	i = 0;
 	while ( i < MAX_MENU_STRING && g_szMenuString[i] != '\0' )
 	{
-		DrawUtils::DrawHudString( x, y, 320, g_szMenuString + i, 255, 255, 255 );
-		y += 24;
+		DrawUtils::DrawHudString( x, y, right, g_szMenuString + i, 255, 255, 255, scale );
+		y += lineHeight;
 
 		while ( i < MAX_MENU_STRING && g_szMenuString[i] != '\0' && g_szMenuString[i] != '\n' )
 			i++;
@@ -305,10 +356,11 @@ int CHudMenu :: MsgFunc_ShowMenu( const char *pszName, int iSize, void *pbuf )
 	}
 
 	menustring = reader.ReadString();
+	const bool survival = CzmSurvivalShop::Wire( m_fWaitingForMore ? g_szPrelocalisedMenuString : menustring );
 
 	// menu will be replaced by scripted touch config
 	// so execute it and exit
-	if( _extended_menus->value != 0.0f )
+	if( !survival && _extended_menus->value != 0.0f )
 	{
 		if( !strncmp(menustring, "#Radio", 6 ) )
 		{
@@ -330,7 +382,7 @@ int CHudMenu :: MsgFunc_ShowMenu( const char *pszName, int iSize, void *pbuf )
 		else if( !CardsEnabled( ))
 			ShowVGUIMenu(MENU_NUMERICAL_MENU);
 	}
-	else if( !CardsEnabled( ))
+	else if( !survival && !CardsEnabled( ))
 		ShowVGUIMenu(MENU_NUMERICAL_MENU);
 
 	if ( !m_fWaitingForMore ) // this is the start of a new menu
@@ -368,7 +420,9 @@ int CHudMenu :: MsgFunc_ShowMenu( const char *pszName, int iSize, void *pbuf )
 
 	if( !NeedMore )
 	{
-		if( CzmWeapons::HideAutomatic( g_szPrelocalisedMenuString, gEngfuncs.pfnGetCvarFloat( "czm_shop_auto" )))
+		if( CzmSurvivalShop::Wire( g_szPrelocalisedMenuString ))
+			PresentSurvivalShop( true );
+		else if( CzmWeapons::HideAutomatic( g_szPrelocalisedMenuString, gEngfuncs.pfnGetCvarFloat( "czm_shop_auto" )))
 		{
 			ClientCmd( "menuselect 10\n" );
 			UserCmd_OldStyleMenuClose();

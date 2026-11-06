@@ -22,6 +22,18 @@ enum { MENU_RADIOA, MENU_RADIOB, MENU_RADIOC, MENU_NUMERICAL_MENU };
 char g_szMenuString[MAX_MENU_STRING], g_szPrelocalisedMenuString[MAX_MENU_STRING];
 static char g_szRichMenuString[MAX_MENU_STRING];
 static bool s_bCardsShown;
+static bool g_pMenu=true;
+static int classicMenus;
+static std::string touchSlots;
+static void Touch_CloseMenu(){touchSlots.clear();}
+struct {
+ void pfnTouchAddClientButton(const char *,const char *,const char *command,float x,float y,float r,float b,
+                              unsigned char *,int,float,int) {
+    assert(x>.68f && y>0 && r>x && b>y && r<1 && b<1);
+    touchSlots+=command;touchSlots+=' ';
+ }
+ void pfnTouchSetClientOnly(int){}
+} gMobileAPI;
 static int s_iCardsSerial, translations, bindings;
 static std::string published;
 #define strlcpy StubCopy
@@ -54,8 +66,9 @@ struct CHudMenu {
     Cvar *_extended_menus=&extended;
     bool CardsEnabled(){return true;}
     void PublishCards(bool);
+    void PresentSurvivalShop(bool);
     void UserCmd_OldStyleMenuClose(){PublishCards(false);}
-    void ShowVGUIMenu(int){}
+    void ShowVGUIMenu(int){classicMenus++;}
     int MsgFunc_ShowMenu(const char *,int,void *);
 };
 '''
@@ -100,6 +113,29 @@ int main() {
     Receive(menu,"#czm1\tmenu\tserver\tMENU\t\t\t\n#page\tform\tСообщение админу\tczm_admin_msg\tТекст\n#body\tПервая строка\n#body\tВторая строка\n1. Открыть\n0. Назад",513);
     assert(strstr(g_szMenuString,"Сообщение админу")&&strstr(g_szMenuString,"Первая строка")&&strstr(g_szMenuString,"Вторая строка"));
     assert(!strstr(g_szMenuString,"#page")&&!strstr(g_szMenuString,"#body")&&published.find("#page")!=std::string::npos);
+    // The same complete packet supports every style. Rendering it again never
+    // issues a slot command or creates a new transaction.
+    const auto before=commands;
+    const std::string loadout="#czms1\t39\t0\t0\t2\t4\t5\t1\t1\t28\t26\t3\t0\t2\n"
+        "#item\t0\t28\t4\t0\nPrimary weapon\n1. AK-47\n8. Sections\n9. Loadout\n0. Exit";
+    Receive(menu,loadout,896);
+    assert(s_bCardsShown && published.find(loadout)!=std::string::npos && menu.m_bitsValidSlots==896);
+    style=1;
+    menu.PresentSurvivalShop(false);
+    assert(published.find(loadout)!=std::string::npos);
+    vgui=0;style=0;
+    const int oldClassic=classicMenus;
+    menu.PresentSurvivalShop(false);
+    assert(!s_bCardsShown && published.empty() && classicMenus==oldClassic);
+    assert(touchSlots=="slot8 slot9 slot10 ");
+    assert(strstr(g_szMenuString,"9. Loadout")&&!strstr(g_szMenuString,"#czms1")&&!strstr(g_szMenuString,"#item"));
+    assert(menu.m_fMenuDisplayed && menu.m_bitsValidSlots==896);
+    vgui=1;style=2;
+    menu.PresentSurvivalShop(false);
+    assert(published.find(loadout)!=std::string::npos && commands==before && touchSlots.empty());
+    style=0;vgui=0;Receive(menu,loadout,513);
+    assert(touchSlots=="slot1 slot10 " && classicMenus==oldClassic);
+
 }
 '''
 
@@ -109,13 +145,14 @@ class ServerMenuTransportTests(unittest.TestCase):
         source = (ROOT / "cl_dll/menu.cpp").read_text()
         code = PREAMBLE
         for signature in ("void CHudMenu::PublishCards(", "static void CZM_PlainMenuText(",
-                          "int CHudMenu :: MsgFunc_ShowMenu("):
+                          "static void CZM_SurvivalClassicButtons(",
+                          "void CHudMenu::PresentSurvivalShop(", "int CHudMenu :: MsgFunc_ShowMenu("):
             code += function(source, signature) + "\n"
         code += SCENARIO
         with tempfile.TemporaryDirectory(prefix="czm-menu-wire-") as folder:
             path = Path(folder)
             (path / "check.cpp").write_text(code)
-            subprocess.run(["g++", "-std=c++11", "-Wall", "-I"+str(ROOT/"common"), str(path / "check.cpp"), "-o", str(path / "check")], check=True)
+            subprocess.run(["g++", "-std=c++11", "-Wall", "-D__ANDROID__", "-I"+str(ROOT/"common"), str(path / "check.cpp"), "-o", str(path / "check")], check=True)
             subprocess.run([str(path / "check")], check=True)
 
 

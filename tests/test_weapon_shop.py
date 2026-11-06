@@ -59,13 +59,13 @@ int main(){
   code=BASE+s[s.index('enum\n{'):s.index('static const struct\n{\n\tconst char *ru, *en; // two lines')]
   code+=re.search(r'^#define CZM_WEAPON_EXTRA .*$',s,re.M).group(0)+'\n'
   code+=s[s.index('struct CzmWeaponMenu'):s.index('// the menu line without colour codes')]
-  for sig in ['static const CzmShopItem *FindWeapon(','static bool Contains(','static void PlainLine(','static bool ParseWeaponMenu(']:code+=function(s,sig)+'\n'
+  for sig in ['static const CzmShopItem *FindWeapon(','static bool Contains(','static void PlainLine(','static const CzmShopItem *ShopWeapon(','static bool ParseWeaponMenu(']:code+=function(s,sig)+'\n'
   code+=r'''
 #define CZM_QUICK 5
 class CCzmShop{public:
  bool m_bServerMenu=true,m_bGrid=true;int m_iSlots=7,W,H;CzmWeaponMenu m_wmenu={};
  CzmRect m_top,m_close,m_tabs[CAT_COUNT],m_quick[5],m_info,m_buy,m_cards[8];int m_iWheelX,m_iWheelY,m_iWheelR;
- void Layout();int QuickCount()const;int QuickKey(int,const char**)const;
+ void Layout();void LayoutSurvival(){} bool Survival()const{return false;}int QuickCount()const;int QuickKey(int,const char**)const;
 };
 '''
   for sig in ['void CCzmShop::Layout(','int CCzmShop::QuickCount(','int CCzmShop::QuickKey(']:code+=function(s,sig)+'\n'
@@ -93,6 +93,92 @@ int main(){
 }
 '''
   cpp(code)
+ def test_survival_shop_wheel_grid_and_equipment_use_the_same_actions(self):
+  source=(ROOT/'czm/menu/CzmShop.cpp').read_text()
+  code=BASE.replace(
+   'struct CzmRect{int x,y,w,h;};',
+   'struct CzmRect{int x,y,w,h;bool Contains(int a,int b)const{return w>0&&h>0&&a>=x&&b>=y&&a<x+w&&b<y+h;} CzmRect Grown(int n)const{return{x-n,y-n,w+2*n,h+2*n};}};')
+  code+=source[source.index('enum\n{'):source.index('static const struct\n{\n\tconst char *ru, *en; // two lines')]
+  code+=re.search(r'^#define CZM_WEAPON_EXTRA .*$',source,re.M).group(0)+'\n'
+  code+=source[source.index('struct CzmWeaponMenu'):source.index('// the menu line without colour codes')]
+  for signature in ('static const CzmShopItem *FindWeapon(', 'static bool Contains(', 'static void PlainLine(',
+                    'static const CzmShopItem *ShopWeapon(', 'static bool ParseWeaponMenu('):
+   code+=function(source,signature)+'\n'
+  code+=r"""
+#define CZM_QUICK 5
+static int style=1;
+static std::string command;
+static struct {int cursorX,cursorY,realTime;} uiStatic;
+static int bound(int lo,int value,int hi){return std::min(hi,std::max(lo,value));}
+static void CZM_PlayClick(){}
+namespace EngFuncs{
+ static float GetCvarFloat(const char*){return style;}
+ static void ClientCmdF(bool,const char *fmt,...){
+  char text[96];va_list a;va_start(a,fmt);vsnprintf(text,sizeof(text),fmt,a);va_end(a);command=text;
+ }
+}
+class CCzmShop{
+public:
+ enum{HIT_NONE=0,HIT_CLOSE,HIT_HUB,HIT_TAB=10,HIT_QUICK=30,HIT_ITEM=100};
+ bool m_bGrid=false;
+ int W,H,m_iSlots=0,m_iPressed=0,m_iHover=-1,m_iPickTime=0,m_iInfo=0,m_iWheelX,m_iWheelY,m_iWheelR;
+ CzmWeaponMenu m_wmenu={};
+ CzmRect m_top,m_close,m_tabs[CAT_COUNT],m_quick[CZM_QUICK],m_info,m_buy,m_cards[8];
+ bool Gear()const{return m_wmenu.shop.tab==CzmSurvivalShop::Equipment;}
+ bool RowEnabled(int row)const{return m_wmenu.shop.rows[m_wmenu.keys[row]].enabled;}
+ bool Waiting()const{return m_iPickTime&&uiStatic.realTime-m_iPickTime<700;}
+ void CloseServerMenu(bool){SendSurvival(CzmSurvivalShop::Close,0);}
+ void LayoutSurvival();
+ void ActivateSurvival(int);
+ void SendSurvival(int,int);
+ int HitTest()const;
+ int WheelSlot(int,int)const;
+};
+static void click(CCzmShop &s,const CzmRect &r){
+ uiStatic.cursorX=r.x+r.w/2;uiStatic.cursorY=r.y+r.h/2;
+ uiStatic.realTime+=1000;s.ActivateSurvival(s.HitTest());
+}
+"""
+  for signature in ('void CCzmShop::LayoutSurvival(', 'int CCzmShop::WheelSlot(', 'int CCzmShop::HitTest(',
+                    'void CCzmShop::SendSurvival(', 'void CCzmShop::ActivateSurvival('):
+   code+=function(source,signature)+'\n'
+  code+=r"""
+int main(){
+ using namespace CzmSurvivalShop;
+ CCzmShop s;
+ assert(ParseWeaponMenu("4 1023\n#czms1\t22\t0\t0\t3\t10\t4\t0\t0\t28\t0\t0\t0\t3\n#item\t0\t28\t4\t1\nPrimary weapon",s.m_wmenu));
+ s.m_iSlots=s.m_wmenu.count;
+ assert(s.m_iSlots==1&&s.m_wmenu.items[0]->weapon==28);
+ for(auto width:{640,780,1536}){
+  s.W=width;s.H=width==640?360:width==780?440:716;
+  style=1;s.LayoutSurvival();
+  assert(!s.m_bGrid&&s.m_iWheelY+s.m_iWheelR<s.H*.75f);
+  command.clear();
+  click(s,CZM_Rect(s.m_iWheelX,s.m_iWheelY-s.m_iWheelR*3/4,1,1));
+  assert(command=="czm_loadout 22 1 0\n");
+  style=2;s.LayoutSurvival();
+  assert(s.m_bGrid&&s.m_cards[0].y>=s.m_top.h&&s.m_cards[0].y+s.m_cards[0].h<s.H*.75f);
+  click(s,s.m_cards[0]);assert(command=="czm_loadout 22 1 0\n");
+  click(s,s.m_tabs[2]);assert(command=="czm_loadout 22 2 2\n");
+  click(s,s.m_quick[4]);assert(command=="czm_loadout 22 5 0\n");
+  assert(s.m_quick[4].x+s.m_quick[4].w<=s.W&&s.m_quick[4].y+s.m_quick[4].h<=s.H);
+ }
+ assert(ParseWeaponMenu("5 1023\n#czms1\t23\t2\t0\t1\t5\t5\t1\t1\t28\t26\t3\t0\t2\n"
+  "#item\t0\t4\t6\t1\n#item\t1\t25\t4\t1\n#item\t2\t9\t4\t0\n#item\t3\t0\t20\t1\nEquipment",s.m_wmenu));
+ s.m_iSlots=s.m_wmenu.count;
+ style=1;s.LayoutSurvival();
+ assert(s.m_iSlots==4&&s.m_bGrid&&s.m_cards[0].x+s.m_cards[0].w<s.m_cards[3].x);
+ click(s,s.m_cards[3]);assert(command=="czm_loadout 23 1 3\n");
+ command.clear();click(s,s.m_cards[2]);assert(command.empty());
+ click(s,s.m_quick[4]);assert(command=="czm_loadout 23 6 0\n");
+ click(s,s.m_close);assert(command=="czm_loadout 23 8 0\n");
+ View bad={};
+ assert(!Parse("#czms1\t2147483648\t0\t0\t1\t5\t4\t0\t0\t28\t0\t0\t0\t3\n",bad));
+ assert(!Parse("#czms1\t24\t2\t0\t1\t5\t0\t2\t0\t28\t26\t3\t0\t2\n#item\t0\t4\t6\t1\n",bad));
+}
+"""
+  cpp(code)
+
  def test_purchase_metadata_does_not_change_other_servers(self):
   cpp(BASE+r'''
 int main(){
@@ -246,7 +332,8 @@ static bool CL_IsActive(){return active;}
 namespace EngFuncs {static float GetCvarFloat(const char *s){assert(!strcmp(s,"czm_play_mode"));return play;}}
 struct {void Cvar_Set(const char *s,const char *v){if(!strcmp(s,"czm_play_mode"))play=atof(v);}} gEngfuncs;
 struct BufferReader{unsigned char*p;BufferReader(const char*,void*b,int):p((unsigned char*)b){}int ReadByte(){return *p;}};
-struct CHudMenu{int m_fMenuDisplayed=1,m_bitsValidSlots=1023;void Reset(){resets++;}void InitHUDData();};
+static char g_szRichMenuString[64]="old menu";
+struct CHudMenu{int m_fMenuDisplayed=1,m_bitsValidSlots=1023;void Reset(){resets++;}void PublishCards(bool){}void InitHUDData();};
 '''
   code+=function(source,'static int MsgFunc_CzmPlay(')+function(source,'void CHudMenu :: InitHUDData(')+function(online,'bool CZM_PlayServer(')+r'''
 int main(){CHudMenu menu;unsigned char b=1;
