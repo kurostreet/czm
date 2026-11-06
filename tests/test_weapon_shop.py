@@ -178,6 +178,15 @@ int main(){
  assert(!Parse("#czms1\t2147483648\t0\t0\t1\t5\t4\t0\t0\t28\t0\t0\t0\t3\n",bad));
  assert(!Parse("#czms1\t24\t2\t0\t1\t5\t0\t2\t0\t28\t26\t3\t0\t2\n#item\t0\t4\t6\t1\n",bad));
  assert(!Parse("#czms2\t25\t0\t0\t1\t10\t0\t0\t0\t0\t0\t0\t0\t6\n#round\t14\t1\t0\t0\t0\t0\t0\t30001\n",bad));
+ assert(!Parse("#czms3\t25\t0\t0\t1\t10\t0\t0\t0\t0\t0\t0\t0\t6\n#round\t14\t1\t0\t0\t0\t0\t0\t0\n#gear\t16\t0\t0\n",bad));
+ assert(ParseWeaponMenu("7 1023\n#czms3\t26\t2\t0\t1\t50000\t26\t0\t1\t0\t0\t0\t0\t7\n"
+  "#round\t0\t1\t0\t0\t0\t0\t0\t30000\n#gear\t9\t0\t0\n"
+  "#item\t0\t4\t6\t1\n#item\t1\t25\t4\t1\n#item\t2\t9\t4\t1\n#item\t3\t0\t20\t1\nEquipment",s.m_wmenu));
+ s.m_iSlots=s.m_wmenu.count;
+ assert(s.m_wmenu.shop.equipmentSelection&&s.m_wmenu.shop.equipment==9&&s.m_wmenu.shop.balance==50000);
+ s.LayoutSurvival();
+ click(s,s.m_cards[0]);assert(command=="czm_loadout 26 1 0\n");
+ click(s,s.m_quick[4]);assert(command=="czm_loadout 26 5 0\n");
  assert(ParseWeaponMenu("6 1023\n#czms2\t24\t0\t0\t2\t12\t5\t1\t1\t28\t26\t0\t0\t7\n"
   "#round\t14\t2\t16\t26\t22\t26\t4\t0\n#item\t0\t14\t4\t1\n#item\t1\t28\t4\t1\nPrimary",s.m_wmenu));
  s.m_iSlots=s.m_wmenu.count;
@@ -255,9 +264,10 @@ int main(){
   code=BASE+r'''
 static std::string sent;static void CZM_PlayClick(){}static bool play=false;static bool CZM_PlayServer(){return play;}
 namespace EngFuncs{static void ClientCmdF(bool,const char*f,...){char b[128];va_list a;va_start(a,f);vsnprintf(b,sizeof(b),f,a);va_end(a);sent=b;}}
-class CCzmTeamCard{public:enum{BTN_NONE,BTN_PLAY,BTN_SPECTATE,BTN_T,BTN_AUTO,BTN_CT,BTN_CLOSE,BTN_COUNT};int m_iSlot=0;void Press(int);void Hide(){}};
+static bool preview;static bool OpenClassPreview(bool ct,bool,int){if(preview)sent=ct?"preview ct":"preview t";return preview;}
+class CCzmTeamCard{public:enum{BTN_NONE,BTN_PLAY,BTN_SPECTATE,BTN_T,BTN_AUTO,BTN_CT,BTN_CLOSE,BTN_COUNT};int m_iSlot=0,m_teamFlags=1;bool m_conditionZero=false;void Press(int);void Hide(){}};
 '''+function(s,'void CCzmTeamCard::Press(')+r'''
-int main(){CCzmTeamCard c;c.Press(c.BTN_PLAY);assert(sent=="czm_join auto\n");c.Press(c.BTN_SPECTATE);assert(sent=="czm_join spectator\n");c.Press(c.BTN_CT);assert(sent=="czm_join human\n");c.Press(c.BTN_T);assert(sent=="czm_join zombie\n");c.m_iSlot=-1;c.Press(c.BTN_CT);assert(sent=="jointeam 2\n");play=true;c.Press(c.BTN_CT);assert(sent=="czm_join human\n");c.Press(c.BTN_T);assert(sent=="czm_join zombie\n");c.Press(c.BTN_PLAY);assert(sent=="czm_join auto\n");c.Press(c.BTN_SPECTATE);assert(sent=="czm_join spectator\n");}
+int main(){CCzmTeamCard c;c.Press(c.BTN_PLAY);assert(sent=="czm_join auto\n");c.Press(c.BTN_SPECTATE);assert(sent=="czm_join spectator\n");c.Press(c.BTN_CT);assert(sent=="czm_join human\n");c.Press(c.BTN_T);assert(sent=="czm_join zombie\n");c.m_iSlot=-1;c.Press(c.BTN_CT);assert(sent=="jointeam 2\n");preview=true;c.Press(c.BTN_CT);assert(sent=="preview ct");c.Press(c.BTN_T);assert(sent=="preview t");c.Press(c.BTN_SPECTATE);assert(sent=="jointeam 6\n");play=true;c.Press(c.BTN_CT);assert(sent=="czm_join human\n");c.Press(c.BTN_T);assert(sent=="czm_join zombie\n");c.Press(c.BTN_PLAY);assert(sent=="czm_join auto\n");c.Press(c.BTN_SPECTATE);assert(sent=="czm_join spectator\n");}
 '''
   cpp(code)
  def test_actual_hp_ratio_colors_and_stale_target_expiry(self):

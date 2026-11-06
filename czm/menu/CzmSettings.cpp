@@ -570,6 +570,27 @@ static void ChoosePhoto( void )
 		CZM_PickAvatarPhoto();
 }
 
+static int SprayCards()
+{
+#ifdef __ANDROID__
+	return CZM_SprayCount() + 1;
+#else
+	return CZM_SprayCount();
+#endif
+}
+
+static void ChooseSprayPhoto()
+{
+	const int photo = CZM_SprayCount();
+	const char *path = CZM_SprayImage( photo );
+	if( path[0] && EngFuncs::FileExists( path, true ) && CZM_CurrentSpray() != photo )
+	{
+		CZM_SetSpray( photo );
+		EngFuncs::ClientCmd( false, "host_writeconfig\n" );
+	}
+	else CZM_PickSprayPhoto();
+}
+
 class CCzmSettings : public CMenuFramework
 {
 public:
@@ -821,7 +842,7 @@ void CCzmSettings::Layout( void )
 		else if( row.type == ROW_SPRAYS || row.type == ROW_AVATARS )
 		{
 			int card, cardGap, columns;
-			int count = row.type == ROW_SPRAYS ? CZM_SprayCount() : AvatarCards();
+			int count = row.type == ROW_SPRAYS ? SprayCards() : AvatarCards();
 			CardGrid( m_panel.w - pad * 2, Q_min( count, 16 ), &card, &cardGap, &columns );
 			int lines = ( Q_min( count, 16 ) + columns - 1 ) / columns;
 
@@ -917,7 +938,7 @@ void CCzmSettings::Layout( void )
 		case ROW_AVATARS:
 		{
 			int card, cardGap, columns;
-			int count = Q_min( row.type == ROW_SPRAYS ? CZM_SprayCount() : AvatarCards(), 16 );
+			int count = Q_min( row.type == ROW_SPRAYS ? SprayCards() : AvatarCards(), 16 );
 			CardGrid( l.rect.w, count, &card, &cardGap, &columns );
 
 			for( int k = 0; k < count; k++ )
@@ -1160,8 +1181,18 @@ void CCzmSettings::Activate( int hit )
 			break;
 		}
 		case ROW_SPRAYS:
-			if( part >= 0 )
+			if( part == CZM_SprayCount() )
+			{
+				char why[300];
+				if( CZM_OnlineLimited( CZM_LIMIT_PHOTO, why, sizeof( why )))
+					CZM_ShowNotice( CZM_IsRussian() ? "Фото недоступно" : "Photo unavailable", why );
+				else if( CZM_RulesAllow( ChooseSprayPhoto )) ChooseSprayPhoto();
+			}
+			else if( part >= 0 )
+			{
 				CZM_SetSpray( part );
+				EngFuncs::ClientCmd( false, "host_writeconfig\n" );
+			}
 			break;
 		case ROW_AVATARS:
 			// the photo card: choose the photo, a second tap (or no photo yet) opens the gallery
@@ -1802,7 +1833,15 @@ void CCzmSettings::DrawRow( int i )
 
 			CZM_DrawSliced( k == current ? UI_DIR "card_on.png" : UI_DIR "card.png", p.x, p.y, p.w, p.h, 30, corner,
 				pressed ? PackRGBA( 200, 200, 200, 255 ) : CZM_White());
-			CZM_DrawImage( CZM_SprayImage( k ), p.x + inset, p.y + inset, p.w - inset * 2, p.h - inset * 2 );
+			const char *path = CZM_SprayImage( k );
+			if( path[0] )
+				CZM_DrawImage( path, p.x + inset, p.y + inset, p.w - inset * 2, p.h - inset * 2 );
+			else
+			{
+				const HFont small = CZM_Font( CZMF_UI_META );
+				CZM_DrawText( small, p.x, p.y + p.h * .17f, p.w, "+", CZM_White(), QM_CENTER );
+				CZM_DrawText( small, p.x, p.y + p.h * .55f, p.w, CZM_T( "s_avatar_photo" ), CZM_White(), QM_CENTER );
+			}
 
 			if( k == current )
 			{

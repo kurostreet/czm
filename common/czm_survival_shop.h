@@ -10,7 +10,7 @@ enum Status { Draft, Pending, Purchased, Guest };
 enum PurchaseMode { Unavailable, BuyNow, BuyNext };
 enum Action { Item = 1, Section, Page, Skip, Confirm, Cancel, Remember, Close, Select = 12 };
 enum Notice { NoNotice, NoCredits, SignIn, Locked, Failed, Changed, Refunded, EquipmentBought, EquipmentOwned,
-	LoadoutDelivered, LoadoutReserved, LoadoutReplaced };
+	LoadoutDelivered, LoadoutReserved, LoadoutReplaced, OrderCanceled };
 enum { MaxRows = 6, CanConfirm = 1, CanRemember = 2, CanBuyGear = 4 };
 
 struct Row
@@ -23,15 +23,16 @@ struct View
 {
 	int token, tab, page, pages, balance, total, status;
 	int remember, primary, pistol, locked, notice, flags;
-	bool roundPurchase;
+	bool roundPurchase, equipmentSelection;
 	int preview, mode, currentPrimary, currentPistol, nextPrimary, nextPistol, reserved, windowMs;
+	int equipment, currentEquipment, nextEquipment;
 	int count;
 	Row rows[MaxRows];
 };
 
 inline bool RoundWire( const char *text )
 {
-	return text && std::strncmp( text, "#czms2\t", 7 ) == 0;
+	return text && ( std::strncmp( text, "#czms2\t", 7 ) == 0 || std::strncmp( text, "#czms3\t", 7 ) == 0 );
 }
 
 inline bool Wire( const char *text )
@@ -70,11 +71,14 @@ inline bool Parse( const char *text, View &out )
 {
 	if( !Wire( text )) return false;
 	const bool round = RoundWire( text );
+	const bool equipment = text[5] == '3';
+	const int maxPrice = equipment ? 6000000 : 2000000;
+	const int maxNotice = equipment ? OrderCanceled : round ? LoadoutReplaced : EquipmentOwned;
 	const char *p = text + 7;
 	int v[13];
 	if( !Fields( p, v, 13 ) || !v[0] || v[1] > Equipment || v[2] >= v[3] || v[3] > 128 ||
-		v[5] > 2000000 || v[6] > Guest || v[7] > 1 || v[8] > 30 || v[9] > 30 ||
-		v[10] > 3 || v[11] > ( round ? LoadoutReplaced : EquipmentOwned ) || v[12] > ( round ? 7 : 3 ))
+		v[5] > maxPrice || v[6] > Guest || v[7] > 1 || v[8] > 30 || v[9] > 30 ||
+		v[10] > 3 || v[11] > maxNotice || v[12] > ( round ? 7 : 3 ))
 		return false;
 
 	View menu = {};
@@ -82,18 +86,29 @@ inline bool Parse( const char *text, View &out )
 	menu.balance = v[4]; menu.total = v[5]; menu.status = v[6]; menu.remember = v[7];
 	menu.primary = v[8]; menu.pistol = v[9]; menu.locked = v[10]; menu.notice = v[11]; menu.flags = v[12];
 	menu.roundPurchase = round;
+	menu.equipmentSelection = equipment;
 	if( round )
 	{
 		if( std::strncmp( p, "#round\t", 7 ) != 0 ) return false;
 		p += 7;
 		int fields[8];
 		if( !Fields( p, fields, 8 ) || fields[0] > 30 || fields[1] > BuyNext || fields[2] > 30 || fields[3] > 30 ||
-			fields[4] > 30 || fields[5] > 30 || fields[6] > 2000000 || fields[7] > 30000 )
+			fields[4] > 30 || fields[5] > 30 || fields[6] > maxPrice || fields[7] > 30000 )
 			return false;
 		menu.preview = fields[0]; menu.mode = fields[1];
 		menu.currentPrimary = fields[2]; menu.currentPistol = fields[3];
 		menu.nextPrimary = fields[4]; menu.nextPistol = fields[5]; menu.reserved = fields[6];
 		menu.windowMs = fields[7];
+	}
+	if( equipment )
+	{
+		if( std::strncmp( p, "#gear\t", 6 ) != 0 ) return false;
+		p += 6;
+		int gear[3];
+		if( !Fields( p, gear, 3 ) || gear[0] > 15 || gear[1] > 15 || gear[2] > 15 ) return false;
+		menu.equipment = gear[0];
+		menu.currentEquipment = gear[1];
+		menu.nextEquipment = gear[2];
 	}
 	while( std::strncmp( p, "#item\t", 6 ) == 0 )
 	{

@@ -25,6 +25,8 @@ GNU General Public License for more details.
 #include "CzmMenu.h"
 #include "CzmJson.h"
 #include "CzmDesign.h"
+#include "PlayerModelView.h"
+#include "../../common/czm_player_model.h"
 #include "../../common/czm_weapon_menu.h"
 #include "../../common/czm_server_view.h"
 
@@ -1529,6 +1531,8 @@ buttons: on our servers "Play" and "Spectate" (the side and the model are the se
 on other servers Terrorists / Auto / Counter-terrorists with the players of each side.
 =================
 */
+static bool OpenClassPreview( bool ct, bool conditionZero, int teamFlags );
+
 class CCzmTeamCard : public CMenuBaseClientWindow
 {
 public:
@@ -1536,7 +1540,7 @@ public:
 	CCzmTeamCard() : BaseClass( "CzmTeamCard" ), m_bSpectate( false ), m_bCancel( false ), m_bPlay( false ), m_iSlot( -1 ),
 		m_iPressed( 0 ), m_iOpenTime( 0 ), m_bClosing( false ), W( 0 ), H( 0 ) { m_szMap[0] = m_szText[0] = 0; }
 
-	void Open( int param1 );
+	void Open( int teamFlags, bool conditionZero );
 	void Show() override;
 	void Hide() override;
 	void Draw() override;
@@ -1554,6 +1558,8 @@ private:
 	char m_szText[512];
 	bool m_bSpectate, m_bCancel, m_bPlay;
 	int m_iSlot;               // our server (CZM_OFFICIAL_*), -1 another
+	int m_teamFlags = 0;
+	bool m_conditionZero = false;
 	int m_iCounts[2];
 	int m_iPressed;
 	int m_iOpenTime;
@@ -1613,15 +1619,17 @@ void CCzmTeamCard::ReadDescription( void )
 	EngFuncs::COM_FreeFile( file );
 }
 
-void CCzmTeamCard::Open( int param1 )
+void CCzmTeamCard::Open( int teamFlags, bool conditionZero )
 {
 	const char *map = g_pClient ? g_pClient->GetLevelName() : NULL;
 	const char *counts = EngFuncs::GetCvarString( "czm_team_counts" );
 
 	Q_strncpy( m_szMap, map && map[0] ? map : "", sizeof( m_szMap ));
 	ReadDescription();
-	m_bSpectate = ( param1 & 1 ) != 0;
-	m_bCancel = ( param1 & 4 ) != 0;
+	m_teamFlags = teamFlags;
+	m_conditionZero = conditionZero;
+	m_bSpectate = ( teamFlags & 1 ) != 0;
+	m_bCancel = ( teamFlags & 4 ) != 0;
 	m_iSlot = CZM_OfficialSlotNow();
 	m_bPlay = m_iSlot >= 0 || CZM_PlayServer();
 	m_iCounts[0] = m_iCounts[1] = 0;
@@ -1730,6 +1738,11 @@ void CCzmTeamCard::Press( int button )
 	{
 		const char *choice = button == BTN_SPECTATE ? "spectator" : button == BTN_T ? "zombie" : button == BTN_CT ? "human" : "auto";
 		EngFuncs::ClientCmdF( false, "czm_join %s\n", choice );
+	}
+	else if( button == BTN_T || button == BTN_CT )
+	{
+		if( !OpenClassPreview( button == BTN_CT, m_conditionZero, m_teamFlags ))
+			EngFuncs::ClientCmdF( false, "%s\n", commands[button] );
 	}
 	else if( commands[button] )
 		EngFuncs::ClientCmdF( false, "%s\n", commands[button] );
@@ -1940,7 +1953,231 @@ void UI_CzmTeam_Menu( void )
 #define CZM_MENU_CLASS_T  26
 #define CZM_MENU_CLASS_CT 27
 
-bool CZM_TeamShow( int menuType, int param1 )
+class CCzmClassCard : public CMenuBaseClientWindow
+{
+public:
+	CCzmClassCard() : CMenuBaseClientWindow( "CzmClassCard" ) {}
+	void Open( bool ct, bool conditionZero, int teamFlags = -1 );
+	bool AcceptServerClass( bool ct, bool conditionZero );
+	void ClearPending() { m_pendingClass = 0; }
+	void Draw() override;
+	bool KeyDown( int key ) override;
+	bool KeyUp( int key ) override;
+	void Hide() override;
+
+private:
+	enum { Back = 7, Join };
+	void Layout();
+	int Hit() const;
+	void Activate( int action );
+	const char *Name( int index ) const;
+	bool DrawModel();
+
+	bool m_ct = false, m_closing = false;
+	int m_count = 5, m_selected = 0, m_pressed = 0;
+	int m_teamFlags = -1, m_pendingClass = 0;
+	double m_pendingUntil = 0;
+	int m_modelChoice = -1, m_modelWidth = 0, m_modelHeight = 0;
+	CzmRect m_panel, m_preview, m_rows[6], m_back, m_join;
+	CMenuPlayerModelView m_model;
+};
+
+void CCzmClassCard::Open( bool ct, bool conditionZero, int teamFlags )
+{
+	m_ct = ct;
+	m_count = conditionZero ? 6 : 5;
+	m_teamFlags = teamFlags;
+	m_selected = m_pressed = 0;
+	m_modelChoice = -1;
+	m_closing = false;
+	CZM_KeepClientMenu( this );
+	EngFuncs::KEY_SetDest( KEY_MENU );
+	EngFuncs::ClientCmd( true, "touch_setclientonly 1" );
+	CMenuBaseClientWindow::Show();
+}
+
+bool CCzmClassCard::AcceptServerClass( bool ct, bool conditionZero )
+{
+	const int selected = m_pendingClass;
+	ClearPending();
+	if( !selected || EngFuncs::DoubleTime() > m_pendingUntil || ct != m_ct || conditionZero != ( m_count == 6 ))
+		return false;
+	EngFuncs::ClientCmdF( false, "joinclass %d\n", selected );
+	return true;
+}
+
+void CCzmClassCard::Hide()
+{
+	if( m_closing ) return;
+	m_closing = true;
+	CZM_CloseClientMenuSoon( this );
+}
+
+void CCzmClassCard::Layout()
+{
+	const int w = ScreenWidth, h = ScreenHeight, pad = h * .036f, gap = h * .013f;
+	const int width = Q_min( (int)( w * .90f ), (int)( h * 1.66f ));
+	m_panel = CZM_Rect( ( w - width ) / 2, h * .064f, width, h * .872f );
+	const int x = m_panel.x + pad, y = m_panel.y + h * .183f, body = h * .50f;
+	const int rowWidth = ( width - 2 * pad - gap ) * .45f;
+	const int rowHeight = ( body - gap * ( m_count - 1 )) / m_count;
+	for( int i = 0; i < m_count; i++ )
+		m_rows[i] = CZM_Rect( x, y + i * ( rowHeight + gap ), rowWidth, rowHeight );
+	m_preview = CZM_Rect( x + rowWidth + gap, y, width - 2 * pad - rowWidth - gap, body );
+
+	const int actionY = m_panel.y + m_panel.h - pad - h * .088f;
+	const int actionWidth = ( width - 2 * pad - gap ) / 2;
+	if( m_teamFlags >= 0 )
+	{
+		m_back = CZM_Rect( x, actionY, actionWidth, h * .088f );
+		m_join = CZM_Rect( x + actionWidth + gap, actionY, actionWidth, m_back.h );
+	}
+	else
+	{
+		m_back = CZM_Rect( 0, 0, 0, 0 );
+		m_join = CZM_Rect( x, actionY, width - 2 * pad, h * .088f );
+	}
+}
+
+const char *CCzmClassCard::Name( int index ) const
+{
+	static const char *names[2][5] = {
+		{ "Phoenix Connexion", "Elite Crew", "Arctic Avengers", "Guerrilla Warfare", "Midwest Militia" },
+		{ "SEAL Team 6", "GSG-9", "SAS", "GIGN", "Spetsnaz" },
+	};
+	if( index == m_count - 1 ) return CZM_IsRussian() ? "Автовыбор" : "Auto-select";
+	return names[m_ct][index];
+}
+
+bool CCzmClassCard::DrawModel()
+{
+	if( m_selected == m_count - 1 ) return false;
+	static const char *models[2][5] = {
+		{ "terror", "leet", "arctic", "guerilla", "militia" },
+		{ "urban", "gsg9", "sas", "gign", "spetsnaz" },
+	};
+	const char *model = models[m_ct][m_selected];
+	if( m_modelChoice != m_selected || m_modelWidth != ScreenWidth || m_modelHeight != ScreenHeight )
+	{
+		const int pad = ScreenHeight * .012f;
+		m_model.iFlags |= QMF_DISABLESCAILING | QMF_INACTIVE;
+		m_model.m_bCanCaptureFocus = false;
+		m_model.SetRect( m_preview.x + pad, m_preview.y + pad, m_preview.w - 2 * pad, m_preview.h - pad - ScreenHeight * .053f );
+		m_model.VidInit();
+		m_model.backgroundColor.SetDefault( 0 );
+		m_model.iStrokeWidth = 0;
+		m_modelChoice = m_selected;
+		m_modelWidth = ScreenWidth;
+		m_modelHeight = ScreenHeight;
+		char path[128];
+		if( m_model.ent && CzmPlayerModel::Path( model, path, sizeof( path )) && EngFuncs::FileExists( path ))
+			EngFuncs::SetModel( m_model.ent, path );
+		snprintf( path, sizeof( path ), "gfx/vgui/%s.tga", model );
+		const bool hasModel = m_model.ent && m_model.ent->model;
+		m_model.hPlayerImage = hasModel ? 0 : EngFuncs::PIC_Load( path );
+		m_model.eOverrideMode = hasModel ? CMenuPlayerModelView::PMV_SHOWMODEL : CMenuPlayerModelView::PMV_SHOWIMAGE;
+	}
+	if( !m_model.hPlayerImage && ( !m_model.ent || !m_model.ent->model )) return false;
+	m_model.Draw();
+	return true;
+}
+
+void CCzmClassCard::Draw()
+{
+	if( m_closing ) return;
+	if( !CL_IsActive() ) { Hide(); return; }
+	Layout();
+	const bool ru = CZM_IsRussian();
+	const int h = ScreenHeight, pad = h * .036f;
+	UI_FillRect( 0, 0, ScreenWidth, h, PackRGBA( 4, 6, 10, 182 ));
+	CZM_DrawSliced( UI_DIR "smenu_frame.png", m_panel.x, m_panel.y, m_panel.w, m_panel.h, 48, pad, CZM_White());
+	CZM_DrawText( CZM_Font( CZMF_MENU_TITLE ), m_panel.x + pad, m_panel.y + pad, m_panel.w - 2 * pad,
+		ru ? "Выбор персонажа" : "Choose a character", CZM_White());
+	const HFont note = CZM_Font( CZMF_UI_LABEL );
+	CZM_DrawText( note, m_panel.x + pad, m_panel.y + h * .124f, m_panel.w - 2 * pad,
+		m_ct ? ( ru ? "Спецназ · КТ" : "Counter-Terrorists · CT" ) : ( ru ? "Террористы · Т" : "Terrorists · T" ),
+		m_ct ? PackRGBA( 147, 196, 255, 255 ) : PackRGBA( 251, 171, 146, 255 ));
+	for( int i = 0; i < m_count; i++ )
+		CZM_DrawButton( i == m_selected ? UI_DIR "tab_on.png" : UI_DIR "button_secondary.png",
+			m_rows[i], Name( i ), CZM_White(), m_pressed == i + 1, CZMF_UI_LABEL );
+	CZM_DrawSliced( UI_DIR "card.png", m_preview.x, m_preview.y, m_preview.w, m_preview.h, 30, pad / 2, CZM_White());
+	if( !DrawModel() )
+	{
+		const int icon = h * .115f;
+		CZM_DrawImage( UI_DIR "icon_users.png", m_preview.x + ( m_preview.w - icon ) / 2,
+			m_preview.y + ( m_preview.h - icon ) / 2, icon, icon, CZM_White( 120 ));
+	}
+	CZM_DrawText( note, m_preview.x + pad, m_preview.y + m_preview.h - h * .043f, m_preview.w - 2 * pad,
+		Name( m_selected ), CZM_White(), QM_CENTER );
+	if( m_teamFlags >= 0 )
+		CZM_DrawButton( UI_DIR "button_secondary.png", m_back, ru ? "Назад" : "Back", CZM_White(), m_pressed == Back, CZMF_TILE_STATUS );
+	CZM_DrawButton( UI_DIR "tab_on.png", m_join, ru ? "В бой" : "Join", CZM_White(), m_pressed == Join, CZMF_TILE_STATUS );
+}
+
+int CCzmClassCard::Hit() const
+{
+	if( m_teamFlags >= 0 && m_back.HasCursor() ) return Back;
+	if( m_join.HasCursor() ) return Join;
+	for( int i = 0; i < m_count; i++ )
+		if( m_rows[i].HasCursor() ) return i + 1;
+	return 0;
+}
+
+void CCzmClassCard::Activate( int action )
+{
+	if( m_closing || !action || ( action == Back && m_teamFlags < 0 )) return;
+	CZM_PlayClick();
+	if( action <= m_count )
+	{
+		m_selected = action - 1;
+		return;
+	}
+	Hide();
+	if( action == Back ) menu_czmteam->Open( m_teamFlags, m_count == 6 );
+	else if( m_teamFlags >= 0 )
+	{
+		// Stock servers lock team changes while waiting for joinclass.
+		// Send the team only after the player confirms the local preview.
+		m_pendingClass = m_selected + 1;
+		m_pendingUntil = EngFuncs::DoubleTime() + 5.0;
+		EngFuncs::ClientCmdF( false, "jointeam %d\n", m_ct ? 2 : 1 );
+	}
+	else EngFuncs::ClientCmdF( false, "joinclass %d\n", m_selected + 1 );
+}
+
+bool CCzmClassCard::KeyDown( int key )
+{
+	if( UI::Key::IsEscape( key )) Activate( Back );
+	else if( UI::Key::IsEnter( key )) Activate( Join );
+	else if( UI::Key::IsLeftMouse( key )) { Layout(); m_pressed = Hit(); }
+	else if( key >= '1' && key < '1' + m_count ) Activate( key - '0' );
+	return true;
+}
+
+bool CCzmClassCard::KeyUp( int key )
+{
+	if( UI::Key::IsLeftMouse( key ))
+	{
+		Layout();
+		const int pressed = m_pressed;
+		m_pressed = 0;
+		if( pressed == Hit() ) Activate( pressed );
+	}
+	return true;
+}
+
+ADD_MENU3( menu_czmclass, CCzmClassCard, UI_CzmClass_Menu );
+void UI_CzmClass_Menu( void ) {}
+
+static bool OpenClassPreview( bool ct, bool conditionZero, int teamFlags )
+{
+	if( !menu_czmclass ) return false;
+	menu_czmclass->ClearPending();
+	menu_czmclass->Open( ct, conditionZero, teamFlags );
+	return true;
+}
+
+bool CZM_TeamShow( int menuType, int param1, int param2 )
 {
 	// our servers choose the model: no class menu after the team
 	if(( menuType == CZM_MENU_CLASS_T || menuType == CZM_MENU_CLASS_CT ) && ( CZM_PlayServer() || CZM_OfficialSlotNow() >= 0 ))
@@ -1948,9 +2185,16 @@ bool CZM_TeamShow( int menuType, int param1 )
 		EngFuncs::ClientCmd( false, "joinclass 5\n" );
 		return true;
 	}
+	if( ( menuType == CZM_MENU_CLASS_T || menuType == CZM_MENU_CLASS_CT ) && menu_czmclass )
+	{
+		if( !menu_czmclass->AcceptServerClass( menuType == CZM_MENU_CLASS_CT, param1 != 0 ))
+			menu_czmclass->Open( menuType == CZM_MENU_CLASS_CT, param1 != 0 );
+		return true;
+	}
 	if( menuType != CZM_MENU_TEAM || !menu_czmteam )
 		return false;
-	menu_czmteam->Open( param1 );
+	if( menu_czmclass ) menu_czmclass->ClearPending();
+	menu_czmteam->Open( param1, param2 != 0 );
 	return true;
 }
 

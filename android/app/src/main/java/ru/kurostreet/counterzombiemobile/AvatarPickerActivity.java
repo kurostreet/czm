@@ -21,19 +21,20 @@ import java.io.IOException;
 import java.io.InputStream;
 
 /**
- * The player's own avatar from the phone gallery.
+ * The player's avatar or spray from the phone gallery.
  *
  * The menu opens czmavatar://pick?file=czm_avatar_N.png (the engine hands such links to
  * Android). Android opens those links with "no history", which would lose the gallery's
  * answer, so the first copy only starts a second one and closes. The second copy asks
- * the gallery for a picture, makes it round like the game avatars and writes it to
- * files/game/cstrike under the name the menu chose. The menu waits for that file.
+ * the gallery for a picture and writes the completed PNG. Avatar photos go
+ * in the game folder and sprays in its logos folder.
  */
 public class AvatarPickerActivity extends Activity {
     private static final String TAG = "CzmAvatar";
     private static final String EXTRA_FILE = "file";
     private static final int PICK = 1;
     private static final int SIZE = 192;
+    private static final int SPRAY_SIZE = 96;
     private String fileName;
 
     @Override protected void onCreate(Bundle state) {
@@ -78,7 +79,7 @@ public class AvatarPickerActivity extends Activity {
     }
 
     private static boolean validName(String file) {
-        return file != null && file.matches("czm_avatar_[0-9]{1,9}\\.png");
+        return file != null && file.matches("czm_(?:avatar|spray)_[0-9]{1,9}\\.png");
     }
 
     @Override protected void onActivityResult(int request, int result, Intent data) {
@@ -109,7 +110,8 @@ public class AvatarPickerActivity extends Activity {
     }
 
     private void save(Uri picture) throws IOException {
-        // read it small: a phone photo is far bigger than an avatar
+        boolean spray = fileName.startsWith("czm_spray_");
+        int size = spray ? SPRAY_SIZE : SIZE;
         BitmapFactory.Options bounds = new BitmapFactory.Options();
         bounds.inJustDecodeBounds = true;
         try (InputStream in = getContentResolver().openInputStream(picture)) {
@@ -119,7 +121,7 @@ public class AvatarPickerActivity extends Activity {
 
         BitmapFactory.Options options = new BitmapFactory.Options();
         options.inSampleSize = 1;
-        while (Math.min(bounds.outWidth, bounds.outHeight) / (options.inSampleSize * 2) >= SIZE * 2) {
+        while (Math.max(bounds.outWidth, bounds.outHeight) / options.inSampleSize > size * 4) {
             options.inSampleSize *= 2;
         }
 
@@ -142,7 +144,22 @@ public class AvatarPickerActivity extends Activity {
             }
         }
 
-        // the middle square, turned and made avatar size
+        saveImage(spray ? makeSpray(source, matrix) : makeAvatar(source, matrix), spray);
+    }
+
+    private static Bitmap makeSpray(Bitmap source, Matrix orientation) {
+        Bitmap oriented = Bitmap.createBitmap(source, 0, 0, source.getWidth(), source.getHeight(), orientation, true);
+        Bitmap spray = Bitmap.createBitmap(SPRAY_SIZE, SPRAY_SIZE, Bitmap.Config.ARGB_8888);
+        float scale = (float) SPRAY_SIZE / Math.max(oriented.getWidth(), oriented.getHeight());
+        Matrix fit = new Matrix();
+        fit.setScale(scale, scale);
+        fit.postTranslate((SPRAY_SIZE - oriented.getWidth() * scale) / 2, (SPRAY_SIZE - oriented.getHeight() * scale) / 2);
+        new Canvas(spray).drawBitmap(oriented, fit, new Paint(Paint.FILTER_BITMAP_FLAG));
+        return spray;
+    }
+
+    private static Bitmap makeAvatar(Bitmap source, Matrix matrix) {
+        // The middle square, turned and made avatar size.
         int side = Math.min(source.getWidth(), source.getHeight());
         float scale = (float) SIZE / side;
         matrix.preScale(scale, scale);
@@ -163,27 +180,33 @@ public class AvatarPickerActivity extends Activity {
         ring.setStrokeWidth(7f);
         ring.setColor(0xFFFF3B2F);
         canvas.drawCircle(SIZE / 2f, SIZE / 2f, SIZE / 2f - 3.5f, ring);
+        return avatar;
+    }
 
-        // write it whole under a temporary name, then give it the name the menu waits for
-        File dir = new File(getFilesDir(), "game/cstrike");
+    private void saveImage(Bitmap image, boolean spray) throws IOException {
+        File dir = new File(getFilesDir(), spray ? "game/cstrike/logos" : "game/cstrike");
         if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("no game folder " + dir);
-        File part = new File(dir, "czm_avatar.part");
-        try (FileOutputStream out = new FileOutputStream(part)) {
-            avatar.compress(Bitmap.CompressFormat.PNG, 100, out);
+        File part = File.createTempFile("czm_photo", ".part", dir);
+        try {
+            try (FileOutputStream out = new FileOutputStream(part)) {
+                if (!image.compress(Bitmap.CompressFormat.PNG, 100, out)) throw new IOException("PNG encoding failed");
+            }
+            if (!part.renameTo(new File(dir, fileName))) throw new IOException("rename failed");
+        } finally {
+            part.delete();
         }
 
-        // only the newest photo is kept
+        String prefix = spray ? "czm_spray_" : "czm_avatar_";
         File[] old = dir.listFiles();
         if (old != null) {
             for (File f : old) {
                 String name = f.getName();
-                if (name.startsWith("czm_avatar_") && name.endsWith(".png") && !name.equals(fileName) && !f.delete()) {
+                if (name.startsWith(prefix) && validName(name) && !name.equals(fileName) && !f.delete()) {
                     Log.w(TAG, "could not delete " + name);
                 }
             }
         }
 
-        if (!part.renameTo(new File(dir, fileName))) throw new IOException("rename failed");
-        Log.i(TAG, "avatar saved: " + fileName);
+        Log.i(TAG, "photo saved: " + fileName);
     }
 }

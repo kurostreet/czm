@@ -1616,7 +1616,9 @@ void CCzmShop::DrawInfo( const CzmShopItem *item )
 	char action[80];
 	if( Survival() )
 	{
-		if( RowEnabled( m_iInfo )) label = ru ? "ВЫБРАТЬ" : "SELECT";
+		if( RowEnabled( m_iInfo ))
+			label = m_wmenu.shop.equipmentSelection && item->weapon == SelectedWeapon() ?
+				( ru ? "СНЯТЬ ВЫБОР" : "REMOVE SELECTION" ) : ( ru ? "ВЫБРАТЬ" : "SELECT" );
 		else if( item->weapon == SelectedWeapon() ) label = ru ? "В КОМПЛЕКТЕ" : "IN LOADOUT";
 		else label = ru ? "ПРОСМОТР" : "PREVIEW";
 	}
@@ -1840,12 +1842,19 @@ void CCzmShop::DrawSurvivalTop()
 		DrawSurvivalButton( m_tabs[i], labels[i], i == m_wmenu.shop.tab, true, IsPressed( HIT_TAB + i ));
 }
 
-static void FormatShopPair( char *out, size_t size, int primary, int pistol, bool ru )
+static void FormatShopLoadout( char *out, size_t size, int primary, int pistol, int gear, bool legacy, bool ru )
 {
 	const CzmShopItem *a = primary ? ShopWeapon( primary ) : NULL;
 	const CzmShopItem *b = pistol ? ShopWeapon( pistol ) : NULL;
-	const char *starter = ru ? "Штатное" : "Starter";
-	snprintf( out, size, "%s + %s", a ? ItemName( *a ) : starter, b ? ItemName( *b ) : starter );
+	const char *empty = legacy ? ( ru ? "Штатное" : "Starter" ) : "—";
+	int len = snprintf( out, size, "%s + %s", a ? ItemName( *a ) : empty, b ? ItemName( *b ) : empty );
+	if( gear && len >= 0 && (size_t)len < size )
+	{
+		int count = 0;
+		for( int i = 0; i < 4; i++ )
+			if( gear & ( 1 << i )) ++count;
+		snprintf( out + len, size - len, ru ? " + %d снаряж." : " + %d gear", count );
+	}
 }
 
 void CCzmShop::DrawSurvivalFooter()
@@ -1857,7 +1866,7 @@ void CCzmShop::DrawSurvivalFooter()
 	const HFont title = CZM_Font( CZMF_UI_LABEL );
 	const HFont noteFont = CZM_Font( CZMF_UI_META );
 	char summary[96];
-	FormatShopPair( summary, sizeof( summary ), shop.primary, shop.pistol, ru );
+	FormatShopLoadout( summary, sizeof( summary ), shop.primary, shop.pistol, shop.equipment, !shop.equipmentSelection, ru );
 	const bool round = RoundShop(), pending = shop.status == Pending, ready = ( shop.flags & CanConfirm ) != 0;
 	const char *status = ru ? "Комплект оружия" : "Weapon loadout";
 	const char *hint = ru ? "Купленное оружие выдаётся со следующего раунда" : "Purchased weapons are issued from the next round";
@@ -1889,10 +1898,10 @@ void CCzmShop::DrawSurvivalFooter()
 		hint = ru ? "Войди в профиль, чтобы купить оружие" : "Sign in to buy weapons";
 	const char *noticesRu[] = { "", "Не хватает кредитов", "Войди в профиль, чтобы купить оружие", "Покупка сейчас недоступна",
 		"Не удалось выполнить действие", "Цена или раунд изменились. Проверь комплект", "Покупка отменена. Кредиты возвращены",
-		"Снаряжение выдано", "Уже получено в этой жизни", "Комплект выдан", "Заказ на следующий раунд оплачен", "Заказ заменён" };
+		"Снаряжение выдано", "Уже получено в этой жизни", "Комплект выдан", "Заказ на следующий раунд оплачен", "Заказ заменён", "Заказ отменён" };
 	const char *noticesEn[] = { "", "Not enough credits", "Sign in to buy weapons", "Purchase unavailable right now",
 		"Could not complete the action", "The price or round changed. Check the loadout", "Purchase cancelled. Credits returned",
-		"Equipment received", "Already received this life", "Loadout equipped", "Next round's order paid", "Order replaced" };
+		"Equipment received", "Already received this life", "Loadout equipped", "Next round's order paid", "Order replaced", "Order cancelled" };
 	if( shop.notice ) hint = ( ru ? noticesRu : noticesEn )[shop.notice];
 
 	const int top = H * ( round ? .710f : .750f );
@@ -1901,14 +1910,14 @@ void CCzmShop::DrawSurvivalFooter()
 	if( round )
 	{
 		char pair[96], line[144];
-		FormatShopPair( pair, sizeof( pair ), shop.currentPrimary, shop.currentPistol, ru );
+		FormatShopLoadout( pair, sizeof( pair ), shop.currentPrimary, shop.currentPistol, shop.currentEquipment, !shop.equipmentSelection, ru );
 		snprintf( line, sizeof( line ), ru ? "Этот раунд · %s" : "This round · %s",
-			shop.currentPrimary || shop.currentPistol ? pair : ( ru ? "нет покупки" : "no purchase" ));
+			shop.currentPrimary || shop.currentPistol || shop.currentEquipment ? pair : ( ru ? "нет покупки" : "no purchase" ));
 		CZM_DrawText( noteFont, x, H * .726f, width * .49f, line, CZM_White() );
-		FormatShopPair( pair, sizeof( pair ), shop.nextPrimary, shop.nextPistol, ru );
+		FormatShopLoadout( pair, sizeof( pair ), shop.nextPrimary, shop.nextPistol, shop.nextEquipment, !shop.equipmentSelection, ru );
 		snprintf( line, sizeof( line ), ru ? "Следующий · %s" : "Next round · %s", pending ? pair : ( ru ? "нет заказа" : "no order" ));
 		CZM_DrawText( noteFont, x + width * .51f, H * .726f, width * .49f, line, PackRGBA( 245, 180, 99, 255 ));
-		snprintf( line, sizeof( line ), ru ? "Выбрано · %s" : "Selected · %s", shop.primary || shop.pistol ? summary : "—" );
+		snprintf( line, sizeof( line ), ru ? "Выбрано · %s" : "Selected · %s", shop.primary || shop.pistol || shop.equipment ? summary : "—" );
 		CZM_DrawText( title, x, H * .776f, width, line, CZM_White() );
 	}
 	else
@@ -1934,14 +1943,28 @@ void CCzmShop::DrawSurvivalFooter()
 	if( m_quick[2].w ) DrawSurvivalButton( m_quick[2], "›", false, true, IsPressed( HIT_QUICK + 2 ));
 	if( m_quick[3].w )
 	{
-		const bool advance = !round && ( pending || ( shop.locked & ( 1 << shop.tab )));
+		const bool advance = shop.equipmentSelection || ( !round && ( pending || ( shop.locked & ( 1 << shop.tab ))));
 		DrawSurvivalButton( m_quick[3], advance ? ( ru ? "Далее" : "Next" ) : ( ru ? "Пропустить" : "Skip" ),
 			false, true, IsPressed( HIT_QUICK + 3 ));
 	}
 
 	char action[96], price[32];
 	FormatMoney( shop.total, price, sizeof( price ));
-	if( round )
+	if( shop.equipmentSelection )
+	{
+		if( m_cancel.w ) DrawSurvivalButton( m_cancel, ru ? "Отменить" : "Cancel", false, true, IsPressed( HIT_CANCEL ));
+		const char *confirm = ru ? "Подтвердить" : "Confirm";
+		const int delta = shop.total - shop.reserved;
+		Q_strncpy( action, confirm, sizeof( action ));
+		if( ready && delta != 0 )
+		{
+			FormatMoney( delta < 0 ? -delta : delta, price, sizeof( price ));
+			snprintf( action, sizeof( action ), "%s · %s%s", confirm, delta < 0 ? "+" : "", price );
+			if( CZM_TextWidth( title, action ) > m_quick[4].w - m_quick[4].h * 2 / 7 )
+				Q_strncpy( action, confirm, sizeof( action ));
+		}
+	}
+	else if( round )
 	{
 		if( m_cancel.w ) DrawSurvivalButton( m_cancel, ru ? "Отменить" : "Cancel", false, true, IsPressed( HIT_CANCEL ));
 		if( !ready ) Q_strncpy( action, pending ? ( ru ? "Заказ оплачен" : "Order paid" ) :
@@ -1971,6 +1994,7 @@ void CCzmShop::DrawSurvivalFooter()
 void CCzmShop::DrawSurvivalGear()
 {
 	const bool ru = CZM_IsRussian();
+	const auto &shop = m_wmenu.shop;
 	const HFont title = CZM_Font( CZMF_UI_LABEL ), note = CZM_Font( CZMF_UI_META );
 	const char *ruNames[] = { "Огненная граната", "Замораживающая граната", "Осветительная граната", "Броня + шлем" };
 	const char *enNames[] = { "Fire grenade", "Frost grenade", "Flare grenade", "Armor + helmet" };
@@ -1981,10 +2005,11 @@ void CCzmShop::DrawSurvivalGear()
 		const CzmRect &r = m_cards[i];
 		const int key = m_wmenu.keys[i], price = Price( i );
 		const bool armor = key == 3, enabled = RowEnabled( i );
-		const unsigned color = !enabled ? PackRGBA( 120, 201, 158, 255 ) :
+		const bool selected = ( shop.equipment & ( 1 << key )) != 0;
+		const unsigned color = selected ? CZM_White() : !enabled ? PackRGBA( 120, 201, 158, 255 ) :
 			price <= m_iMoney ? PackRGBA( 250, 183, 94, 255 ) : PackRGBA( 244, 122, 118, 255 );
 		const int pad = H * .018f, icon = H * ( armor ? .17f : .083f );
-		DrawSurvivalButton( r, "", false, enabled, IsPressed( HIT_ITEM + i ));
+		DrawSurvivalButton( r, "", selected, enabled, IsPressed( HIT_ITEM + i ));
 		DrawWeapon( *m_slots[i], armor ? r.x + ( r.w - icon ) / 2 : r.x + pad,
 			armor ? r.y + H * .040f : r.y + ( r.h - icon ) / 2, icon, icon, CZM_White( enabled ? 255 : 140 ));
 		const int x = armor ? r.x + pad : r.x + pad * 2 + icon;
@@ -1992,7 +2017,9 @@ void CCzmShop::DrawSurvivalGear()
 		const int w = r.x + r.w - pad - x, align = armor ? QM_CENTER : QM_LEFT;
 		CZM_DrawText( title, x, y, w, ( ru ? ruNames : enNames )[key], CZM_White(), align );
 		char action[64];
-		if( enabled ) snprintf( action, sizeof( action ), ru ? "Купить сейчас · $%d" : "Buy now · $%d", price );
+		if( selected ) snprintf( action, sizeof( action ), ru ? "✓ Выбрано · $%d" : "✓ Selected · $%d", price );
+		else if( enabled && shop.equipmentSelection ) snprintf( action, sizeof( action ), ru ? "Выбрать · $%d" : "Select · $%d", price );
+		else if( enabled ) snprintf( action, sizeof( action ), ru ? "Купить сейчас · $%d" : "Buy now · $%d", price );
 		else Q_strncpy( action, RoundShop() && !( m_wmenu.shop.flags & CzmSurvivalShop::CanBuyGear ) ?
 			( ru ? "Доступно за людей" : "Available as a human" ) : ( ru ? "Получено" : "Owned" ), sizeof( action ));
 		CZM_DrawText( note, x, y + H * .050f, w, action, color, align );

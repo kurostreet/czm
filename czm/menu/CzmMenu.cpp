@@ -331,7 +331,7 @@ static const struct { const char *key, *ru, *en; } s_strings[] =
 	{ "s_avatar_photo", "Фото", "Photo" },
 	{ "s_avatar_wait", "Выбери картинку в галерее", "Pick a picture in the gallery" },
 	{ "s_spray", "Спрей", "Spray" },
-	{ "s_spray_hint", "Рисуется кнопкой спрея в игре", "Drawn with the spray button in the game" },
+	{ "s_spray_hint", "Выбери рисунок или фото и нанеси его кнопкой спрея в игре", "Choose a design or photo, then use the spray button in the match" },
 	// server list
 	{ "srv_title", "СЕРВЕРЫ", "SERVERS" },
 	{ "srv_tab_all", "Все", "All" },
@@ -500,12 +500,12 @@ void CZM_Init( void )
 	EngFuncs::CvarRegister( "czm_shop_anim", "1", FCVAR_ARCHIVE );
 	EngFuncs::CvarRegister( "czm_shop_auto", "0", FCVAR_ARCHIVE );  // open the shop when a round starts
 	EngFuncs::CvarRegister( "czm_menu_cards", "1", FCVAR_ARCHIVE ); // server menus as cards
-	EngFuncs::CvarRegister( "czm_hud_style", "0", FCVAR_ARCHIVE );
+	EngFuncs::CvarRegister( "czm_hud_style", "1", FCVAR_ARCHIVE );
 	EngFuncs::CvarRegister( "czm_parallax", "1", FCVAR_ARCHIVE );
-	EngFuncs::CvarRegister( "czm_hud_radar_style", "2", FCVAR_ARCHIVE ); // classic, tactical, minimal (default)
-	EngFuncs::CvarRegister( "czm_hud_msg_style", "1", FCVAR_ARCHIVE );   // chat and server messages: classic, CZM, outline
-	EngFuncs::CvarRegister( "czm_hud_msg_list", "0", FCVAR_ARCHIVE );    // server texts: as the server places them, or as a list
-	EngFuncs::CvarRegister( "czm_hud_spec_style", "1", FCVAR_ARCHIVE );  // spectator overlay: minimal, card (default), cinema
+	EngFuncs::CvarRegister( "czm_hud_radar_style", "1", FCVAR_ARCHIVE );
+	EngFuncs::CvarRegister( "czm_hud_msg_style", "1", FCVAR_ARCHIVE );
+	EngFuncs::CvarRegister( "czm_hud_msg_list", "1", FCVAR_ARCHIVE );
+	EngFuncs::CvarRegister( "czm_hud_spec_style", "2", FCVAR_ARCHIVE );
 	for( int i=0;i<CzmHud::BLOCKS;i++ ) for( int k=0;k<5;k++ ) {
 		char name[64],value[32];
 		CzmHud::Key(name,sizeof(name),i,CzmHud::fields[k]);
@@ -528,6 +528,7 @@ void CZM_Init( void )
 	EngFuncs::CvarRegister( "czm_avatar", "", FCVAR_ARCHIVE );       // "", "1".."10" or "photo"
 	EngFuncs::CvarRegister( "czm_avatar_photo", "", FCVAR_ARCHIVE ); // the player's own photo file
 	EngFuncs::CvarRegister( "czm_avatar_sent", "", FCVAR_ARCHIVE );  // the photo the service already has
+	EngFuncs::CvarRegister( "czm_spray_photo", "", FCVAR_ARCHIVE );   // name of the selected gallery spray
 	EngFuncs::CvarRegister( "czm_news_seen", "0", FCVAR_ARCHIVE );   // the newest news the player opened
 	EngFuncs::CvarRegister( "czm_chat_room", "0", FCVAR_ARCHIVE );   // 0 global, 1 ru, 2 en
 	EngFuncs::CvarRegister( "czm_ui_volume", "0.65", FCVAR_ARCHIVE );
@@ -2491,6 +2492,20 @@ static const char *s_sprays[] =
 };
 static char s_preparedSpray[32];
 static double s_sprayRetry;
+#ifdef __ANDROID__
+static char s_sprayPending[32];
+static double s_sprayPickTime, s_sprayCheckTime;
+#endif
+
+static const char *SprayPhotoName()
+{
+	const char *name = EngFuncs::GetCvarString( "czm_spray_photo" );
+	static const char prefix[] = "czm_spray_";
+	if( !name || strncmp( name, prefix, sizeof( prefix ) - 1 )) return "";
+	const char *number = name + sizeof( prefix ) - 1;
+	const size_t length = strlen( number );
+	return length > 0 && length <= 9 && strspn( number, "0123456789" ) == length ? name : "";
+}
 
 int CZM_SprayCount( void )
 {
@@ -2499,14 +2514,16 @@ int CZM_SprayCount( void )
 
 const char *CZM_SprayName( int index )
 {
+	if( index == CZM_SprayCount() ) return SprayPhotoName();
 	return ( index >= 0 && index < CZM_SprayCount()) ? s_sprays[index] : "";
 }
 
 const char *CZM_SprayImage( int index )
 {
 	static char path[64];
-
-	snprintf( path, sizeof( path ), "logos/%s.png", CZM_SprayName( index ));
+	const char *name = CZM_SprayName( index );
+	if( !name[0] ) return "";
+	snprintf( path, sizeof( path ), "logos/%s.png", name );
 	return path;
 }
 
@@ -2514,9 +2531,9 @@ int CZM_CurrentSpray( void )
 {
 	const char *current = EngFuncs::GetCvarString( "cl_logofile" );
 
-	for( int i = 0; current && i < CZM_SprayCount(); i++ )
+	for( int i = 0; current && current[0] && i <= CZM_SprayCount(); i++ )
 	{
-		if( !stricmp( current, s_sprays[i] ))
+		if( !stricmp( current, CZM_SprayName( i )))
 			return i;
 	}
 
@@ -2527,40 +2544,75 @@ void CZM_SetSpray( int index )
 {
 	int length = 0;
 	byte *data;
+	const char *name = CZM_SprayName( index );
 
-	if( index < 0 || index >= CZM_SprayCount())
+	if( !name[0] )
 		return;
 
 	// Keep the legacy menu cache in sync; the engine uploads the selected source PNG.
 	data = EngFuncs::COM_LoadFile( CZM_SprayImage( index ), &length );
-	if( !data || length <= 0 )
+	if( !data )
 		return;
 
-	int saved = EngFuncs::COM_SaveFile( "logos/remapped.png", data, length );
+	int saved = length > 0 && EngFuncs::COM_SaveFile( "logos/remapped.png", data, length );
 	EngFuncs::COM_FreeFile( data );
 	if( !saved )
 		return;
 	EngFuncs::DeleteFile( "logos/remapped.bmp" );
 
 	EngFuncs::CvarSetString( "cl_logoext", "png" );
-	EngFuncs::CvarSetString( "cl_logofile", s_sprays[index] );
+	EngFuncs::CvarSetString( "cl_logofile", name );
 	EngFuncs::CvarSetValue( "cl_allowupload", 1 );
 	EngFuncs::CvarSetValue( "@cl_logoupdate", !EngFuncs::GetCvarFloat( "@cl_logoupdate" ));
-	Q_strncpy( s_preparedSpray, s_sprays[index], sizeof( s_preparedSpray ));
+	Q_strncpy( s_preparedSpray, name, sizeof( s_preparedSpray ));
+}
+
+void CZM_PickSprayPhoto( void )
+{
+#ifdef __ANDROID__
+	char url[128];
+	snprintf( s_sprayPending, sizeof( s_sprayPending ), "czm_spray_%d", EngFuncs::RandomLong( 100000, 999999 ));
+	snprintf( url, sizeof( url ), "czmavatar://pick?file=%s.png", s_sprayPending );
+	s_sprayPickTime = EngFuncs::DoubleTime();
+	s_sprayCheckTime = s_sprayPickTime;
+	EngFuncs::ShellExecute( url, NULL, false );
+#endif
 }
 
 void CZM_SprayFrame( void )
 {
-	int index=CZM_CurrentSpray();
-	const char *name=EngFuncs::GetCvarString("cl_logofile");
-	if(EngFuncs::DoubleTime()<s_sprayRetry)return;
-	if(index<0 && name && !strcmp(name,"lambda")){
-		index=0;
-		for(int i=0;i<CZM_SprayCount();i++)if(!strcmp(s_preparedSpray,s_sprays[i]))index=i;
+	const double now = EngFuncs::DoubleTime();
+#ifdef __ANDROID__
+	if( s_sprayPending[0] && now >= s_sprayCheckTime )
+	{
+		char path[64];
+		snprintf( path, sizeof( path ), "logos/%s.png", s_sprayPending );
+		s_sprayCheckTime = now + 0.5;
+		if( EngFuncs::FileExists( path, true ))
+		{
+			EngFuncs::CvarSetString( "czm_spray_photo", s_sprayPending );
+			s_sprayPending[0] = 0;
+			CZM_SetSpray( CZM_SprayCount() );
+			EngFuncs::ClientCmd( false, "host_writeconfig\n" );
+		}
+		else if( now - s_sprayPickTime > 300.0 ) s_sprayPending[0] = 0;
 	}
-	if(index>=0 && (strcmp(s_preparedSpray,s_sprays[index]) || strcmp(name,s_sprays[index]) || strcmp(EngFuncs::GetCvarString("cl_logoext"),"png"))){
-		s_sprayRetry=EngFuncs::DoubleTime()+2.0;
-		CZM_SetSpray(index);
+#endif
+	if( now < s_sprayRetry ) return;
+	int index = CZM_CurrentSpray();
+	const char *name = EngFuncs::GetCvarString( "cl_logofile" );
+	if( index < 0 && name && !strcmp( name, "lambda" ))
+	{
+		index = 0;
+		for( int i = 0; s_preparedSpray[0] && i <= CZM_SprayCount(); i++ )
+			if( !strcmp( s_preparedSpray, CZM_SprayName( i ))) index = i;
+	}
+	const char *selected = CZM_SprayName( index );
+	if( selected[0] && ( strcmp( s_preparedSpray, selected ) || strcmp( name, selected )
+		|| strcmp( EngFuncs::GetCvarString( "cl_logoext" ), "png" )))
+	{
+		s_sprayRetry = now + 2.0;
+		CZM_SetSpray( index );
 	}
 }
 

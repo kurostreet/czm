@@ -62,7 +62,7 @@ struct EngFuncs{static float GetCvarFloat(const char*){return 0;}static const ch
  static void CvarSetString(const char*,const char*){}static void ClientCmd(bool,const char*){saves++;}};
 int CZM_DiagnosticsMode(){return mode;}void CZM_SetDiagnosticsMode(int v){mode=v;changes++;saves++;}
 bool CZM_ColorPickerEvent(int&,int&,int&){return false;}bool CL_IsActive(){return false;}
-int CZM_SprayCount(){return 5;}int AvatarCards(){return 12;}
+int CZM_SprayCount(){return 5;}int SprayCards(){return 6;}int AvatarCards(){return 12;}
 void CZM_PlayClick(){}void CZM_SetTouchScheme(int,bool){}int CZM_TouchScheme(){return 1;}void CZM_TouchResetHud(){}
 void CZM_OpenTouchEditor(){}void CZM_LayoutsShow(){}const char*CZM_OnlineKey(){return "test";}
 void CZM_AccountShow(const char*,const char*){}void CZM_SetSpray(int){}void CZM_SetAvatar(int){}
@@ -70,7 +70,7 @@ void CZM_CommunityShow(const char*,int){}int CZM_OnlinePlayer(){return 7;}bool C
 void CZM_OnlineAvatarChanged(){}const char*CZM_AvatarPhoto(){return "";}int CZM_CurrentAvatar(){return 0;}void CZM_PickAvatarPhoto(){}
 void CZM_CleanName(const char*in,char*out,size_t n){snprintf(out,n,"%s",in);}bool CZM_NickIsValid(const char*){return true;}
 void CZM_ColorPickerShow(int,int,int){}
-bool CZM_RulesAllow(void(*)()){return true;}void ChoosePhoto(){}
+bool CZM_RulesAllow(void(*)()){return true;}void ChoosePhoto(){}void ChooseSprayPhoto(){}
 enum{CZM_LIMIT_TEXT,CZM_LIMIT_VOICE,CZM_LIMIT_PHOTO};static bool photoLimited;static int notices;
 bool CZM_OnlineLimited(int k,char*t=nullptr,size_t n=0){if(k!=CZM_LIMIT_PHOTO||!photoLimited)return false;if(t&&n)snprintf(t,n,"%s","photo limited");return true;}
 bool CZM_IsRussian(){return true;}void CZM_ShowNotice(const char*,const char*,const char* ="",bool=false){notices++;}

@@ -196,7 +196,7 @@ def brand_udll_int(source):
         source,
         "\t\tEngFuncs::KEY_ClearStates();\n\n\t\tswitch( menuType )\n",
         "\t\tEngFuncs::KEY_ClearStates();\n\n"
-        "\t\tif( CZM_TeamShow( menuType, param1 ))\n\t\t\treturn;\n\n"
+        "\t\tif( CZM_TeamShow( menuType, param1, param2 ))\n\t\t\treturn;\n\n"
         "\t\tif( CZM_ShopShow( menuType, param2 ))\n\t\t\treturn;\n\n"
         "\t\tif( CZM_RadioShow( menuType ))\n\t\t\treturn;\n\n"
         "\t\tswitch( menuType )\n",

@@ -220,7 +220,7 @@ void CZM_SetTouchScheme( int scheme, bool fromPreset )
 
 	if( fromPreset || !EngFuncs::FileExists( path, true ))
 	{
-		EngFuncs::ClientCmdF( true, "exec touch_presets/czm_scheme%d.cfg\n", scheme );
+		EngFuncs::ClientCmdF( true, "exec touch_presets/czm_scheme%d.cfg\n", fromPreset ? 1 : scheme );
 		EngFuncs::CvarSetString( "touch_config_file", path );
 		CZM_SaveTouchConfig();
 	}
@@ -242,6 +242,7 @@ void CZM_TouchStartup( void )
 	if( EngFuncs::GetCvarFloat( "czm_touch_version" ) < 1.0f )
 	{
 		CZM_SetTouchScheme( 1, true );
+		CZM_TouchResetHud();
 		EngFuncs::CvarSetValue( "czm_touch_version", 1.0f );
 		EngFuncs::ClientCmd( false, "host_writeconfig\n" );
 	}
@@ -471,16 +472,16 @@ static void WriteHud( const CzmHudBlock *blocks, int style, int radarStyle, int 
 	EngFuncs::ClientCmd( false, "host_writeconfig\n" );
 }
 
-// places, sizes and opacity back to the defaults, hidden blocks come back; the chosen styles stay
+// Reset the HUD along with the active control scheme.
 void CZM_TouchResetHud( void )
 {
 	CzmHudBlock blocks[HUD_BLOCKS];
 
 	for( int i = 0; i < HUD_BLOCKS; i++ )
 		blocks[i] = HudDefault( i );
-	WriteHud( blocks, (int)CzmHud::Clamp( EngFuncs::GetCvarFloat( "czm_hud_style" ), 0, HUD_STYLES - 1, 0 ),
-		(int)CzmHud::Clamp( EngFuncs::GetCvarFloat( "czm_hud_radar_style" ), 0, CzmHud::RADAR_STYLES - 1, CzmHud::defaultRadarStyle ),
-		(int)CzmHud::Clamp( EngFuncs::GetCvarFloat( "czm_hud_msg_style" ), 0, CzmHud::MSG_STYLES - 1, 1 ));
+	EngFuncs::CvarSetValue( "czm_hud_msg_list", CzmHud::defaultMessageList );
+	EngFuncs::CvarSetValue( "czm_hud_spec_style", CzmHud::defaultSpectatorStyle );
+	WriteHud( blocks, CzmHud::defaultHudStyle, CzmHud::defaultRadarStyle, CzmHud::defaultMessageStyle );
 }
 
 // the shared HUD painter drawing with menu calls: the preview is the HUD of the match
@@ -902,6 +903,7 @@ private:
 		HIT_OV_SAY_ADD,
 		HIT_OV_CMD_FIELD,
 		HIT_OV_CMD_ADD,
+		HIT_OV_NEW_ICON,
 		HIT_HUD_STYLE,    // + style, panel of a HUD block
 		HIT_HUD_RESET = HIT_HUD_STYLE + HUD_STYLES,
 		HIT_HUD_HIDE,
@@ -925,6 +927,7 @@ private:
 	void AddButton( const char *icon, const char *command );
 	void SetAction( const char *command );
 	void FinishCustom( bool chat );
+	void ClosePicker();
 
 	CzmRect ButtonRect( int i ) const;
 	int ButtonAt( int x, int y ) const;
@@ -971,6 +974,8 @@ private:
 	int m_overlay;
 	int m_iPendingScheme;
 	int m_iGroup;
+	int m_iNewIcon = -1;
+	bool m_bPickingNewIcon = false;
 	int m_iPressed;
 	int m_iDragButton;
 	float m_flGrabX, m_flGrabY;
@@ -991,6 +996,7 @@ private:
 	CzmRect m_hudStyles[HUD_STYLES], m_hudHide, m_hudReset; // panel of a HUD block
 	CzmRect m_ovPanel, m_ovClose, m_ovYes, m_ovNo, m_ovClip, m_groups[GROUP_COUNT];
 	CzmRect m_sayField, m_sayAdd, m_cmdField, m_cmdAdd;
+	CzmRect m_newIconPreview, m_newIconPick;
 	CzmRect m_items[CZM_ICONS > CZM_ACTIONS ? CZM_ICONS : CZM_ACTIONS];
 	int m_itemIndex[CZM_ICONS > CZM_ACTIONS ? CZM_ICONS : CZM_ACTIONS];
 	int m_iItems;
@@ -1144,6 +1150,7 @@ void CCzmTouchEditor::Toast( const char *ru, const char *en )
 void CCzmTouchEditor::Show()
 {
 	m_overlay = OV_NONE;
+	m_bPickingNewIcon = false;
 	m_iPressed = HIT_NONE;
 	m_iDragButton = m_iDragHud = -1;
 	m_bSnapX = false;
@@ -1423,12 +1430,21 @@ void CCzmTouchEditor::FinishCustom( bool chat )
 	}
 
 	if( m_overlay == OV_ADD )
-		AddButton( chat ? "chat" : "custom", command );
+		AddButton( m_iNewIcon >= 0 ? s_icons[m_iNewIcon] : chat ? "chat" : "custom", command );
 	else if( m_iSelected >= 0 )
 		SetAction( command );
 
 	edit.text[0] = 0;
 	m_overlay = OV_NONE;
+}
+
+void CCzmTouchEditor::ClosePicker()
+{
+	m_say.End();
+	m_cmd.End();
+	m_overlay = m_bPickingNewIcon ? OV_ADD : OV_NONE;
+	m_bPickingNewIcon = false;
+	m_iPickerScroll = 0;
 }
 
 /*
@@ -1529,6 +1545,8 @@ void CCzmTouchEditor::Layout( void )
 			m_sayAdd = CZM_Rect( m_sayField.x + m_sayField.w + cardGap, m_sayField.y, addW, fieldH );
 			m_cmdField = CZM_Rect( listX, y0 + H * 0.27f, listW - addW - cardGap, fieldH );
 			m_cmdAdd = CZM_Rect( m_cmdField.x + m_cmdField.w + cardGap, m_cmdField.y, addW, fieldH );
+			m_newIconPreview = CZM_Rect( listX, y0 + H * 0.50f, m_cmdField.w, fieldH );
+			m_newIconPick = CZM_Rect( m_cmdAdd.x, m_newIconPreview.y, addW, fieldH );
 			m_iPickerMaxScroll = 0;
 		}
 		else
@@ -1607,6 +1625,8 @@ int CCzmTouchEditor::HitTest( void ) const
 					return HIT_OV_CMD_FIELD;
 				if( m_cmdAdd.Contains( x, y ))
 					return HIT_OV_CMD_ADD;
+				if( m_overlay == OV_ADD && ( m_newIconPick.Contains( x, y ) || m_newIconPreview.Contains( x, y )))
+					return HIT_OV_NEW_ICON;
 			}
 		}
 
@@ -1807,6 +1827,12 @@ void CCzmTouchEditor::Activate( int hit )
 	{
 		int index = hit - HIT_ITEM;
 
+		if( m_overlay == OV_ICON && m_bPickingNewIcon && index < CZM_ICONS )
+		{
+			m_iNewIcon = index;
+			ClosePicker();
+			return;
+		}
 		if( m_overlay == OV_ICON && index < CZM_ICONS && m_iSelected >= 0 )
 		{
 			snprintf( m_buttons[m_iSelected].texture, sizeof( m_buttons[0].texture ), TOUCH_DIR "%s", s_icons[index] );
@@ -1826,6 +1852,7 @@ void CCzmTouchEditor::Activate( int hit )
 	case HIT_ADD:
 		m_overlay = OV_ADD;
 		m_iPickerScroll = 0;
+		m_iNewIcon = -1;
 		break;
 	case HIT_HIDDEN:
 		m_bShowHidden = !m_bShowHidden;
@@ -1873,9 +1900,14 @@ void CCzmTouchEditor::Activate( int hit )
 		break;
 	case HIT_OV_CLOSE:
 	case HIT_OV_BACKDROP:
+		ClosePicker();
+		break;
+	case HIT_OV_NEW_ICON:
 		m_say.End();
 		m_cmd.End();
-		m_overlay = OV_NONE;
+		m_bPickingNewIcon = true;
+		m_overlay = OV_ICON;
+		m_iPickerScroll = 0;
 		break;
 	case HIT_OV_SAY_FIELD:
 		m_cmd.End();
@@ -1988,7 +2020,7 @@ bool CCzmTouchEditor::KeyDown( int key )
 			m_cmd.End();
 		}
 		else if( m_overlay != OV_NONE )
-			m_overlay = OV_NONE;
+			ClosePicker();
 		else if( m_iSelected >= 0 || m_iHudSelected >= 0 )
 			m_iSelected = m_iHudSelected = -1;
 		else
@@ -2582,6 +2614,18 @@ void CCzmTouchEditor::DrawPicker( void )
 		CZM_DrawText( smallFont, m_cmdField.x, m_cmdField.y + m_cmdField.h + H * 0.03f, m_ovClip.w,
 			CZM_IsRussian() ? "Команды с + работают, пока кнопка нажата: +forward, +jump, +duck" :
 			"Commands with + work while the button is held: +forward, +jump, +duck", PackRGBA( 140, 146, 156, 255 ));
+		if( m_overlay == OV_ADD )
+		{
+			const CzmRect &r = m_newIconPreview;
+			const int inset = r.h / 8, icon = r.h - 2 * inset;
+			CZM_DrawSliced( UI_DIR "button_secondary.png", r.x, r.y, r.w, r.h, 24, inset, CZM_White());
+			CZM_DrawImage( IconPath( m_iNewIcon >= 0 ? s_icons[m_iNewIcon] : "custom" ),
+				r.x + inset, r.y + inset, icon, icon, CZM_White());
+			CZM_DrawText( font, r.x + icon + 2 * inset, r.y + ( r.h - CZM_FontHeight( font )) / 2,
+				r.w - icon - 3 * inset, CZM_IsRussian() ? "Иконка" : "Icon", CZM_White());
+			CZM_DrawButton( UI_DIR "button_secondary.png", m_newIconPick, CZM_IsRussian() ? "Выбрать" : "Choose",
+				CZM_White(), IsPressed( HIT_OV_NEW_ICON ), CZMF_TILE_STATUS );
+		}
 		return;
 	}
 
@@ -2594,7 +2638,8 @@ void CCzmTouchEditor::DrawPicker( void )
 		bool pressed = IsPressed( HIT_ITEM + index );
 		const char *icon = m_overlay == OV_ICON ? s_icons[index] : s_actions[index].icon;
 		int iconSize = m_overlay == OV_ICON ? r.w * 0.78f : r.w * 0.56f;
-		bool current = m_overlay == OV_ICON && m_iSelected >= 0 && !stricmp( m_buttons[m_iSelected].texture + strlen( TOUCH_DIR ), icon );
+		bool current = m_overlay == OV_ICON && ( m_bPickingNewIcon ? index == m_iNewIcon :
+			m_iSelected >= 0 && !stricmp( m_buttons[m_iSelected].texture + strlen( TOUCH_DIR ), icon ));
 
 		if( r.y + r.h < m_ovClip.y || r.y > m_ovClip.y + m_ovClip.h )
 			continue;

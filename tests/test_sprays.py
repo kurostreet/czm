@@ -225,6 +225,11 @@ int main(){
  now+=.2;CZM_SprayFrame();assert(reads==3);
  now+=3;available=true;CZM_SprayFrame();assert(loaded=="logos/czm_skull.png"&&saves==3);
  CZM_SetSpray(7);assert(loaded=="logos/czm_gg.png"&&vars["cl_logofile"]=="czm_gg");
+ vars["czm_spray_photo"]="czm_spray_123456";
+ CZM_SetSpray(CZM_SprayCount());
+ assert(loaded=="logos/czm_spray_123456.png"&&CZM_CurrentSpray()==CZM_SprayCount());
+ vars["czm_spray_photo"]="czm_spray_../secret";
+ assert(!CZM_SprayImage(CZM_SprayCount())[0]);
 }
 '''
         path=self.folder/"selection.cpp";path.write_text(harness);exe=self.folder/"selection"

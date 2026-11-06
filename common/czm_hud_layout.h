@@ -11,15 +11,24 @@ enum { RADAR_CLASSIC, RADAR_TACTICAL, RADAR_MINIMAL, RADAR_STYLES };
 // the chat and the server messages: as in CS, on dark plates, with a dark outline
 enum { MSG_CLASSIC, MSG_CZM, MSG_OUTLINE, MSG_STYLES };
 static const char *const keys[BLOCKS] = { "hp", "armor", "time", "money", "ammo", "radar", "chat", "msgs", "dl", "progress", "aim" };
-// The default layout, made by the owner in the game (scripts/layouts/scheme1.json): health, time
-// and armor in the bottom row, money under the radar on the left, the ammo shown on the reload
-// button instead of its own block. The frame of server messages is the whole screen, so they
-// stay where the server put them. The download indicator sits at the bottom left, beside the
-// health block. A reset in the editor brings these back.
-static const float defaults[BLOCKS][2] = {{.3944f,.9474f},{.6033f,.9474f},{.5f,.9362f},{.0553f,.3273f},{.6681f,.9477f},{.068f,.138f},{.156f,.6858f},{.5f,.5f},{.176813f,.952833f},{.5f,.84f},{.5f,.64f}};
-static const float defaultScale[BLOCKS] = { .7535f, .7547f, 1, .7484f, .7484f, 1, .6f, 1, 1, 1, 1 };
+// Defaults for the shared layout in scripts/layouts/scheme1.json.
+static const float defaults[BLOCKS][2] = {
+    { 0.435233f, 0.947400f },
+    { 0.564440f, 0.947400f },
+    { 0.500000f, 0.063833f },
+    { 0.307851f, 0.947400f },
+    { 0.841028f, 0.957053f },
+    { 0.068000f, 0.138000f },
+    { 0.156000f, 0.685800f },
+    { 0.500000f, 0.500000f },
+    { 0.155764f, 0.952833f },
+    { 0.101551f, 0.309222f },
+    { 0.500000f, 0.862222f }
+};
+static const float defaultScale[BLOCKS] = { 0.753500f, 0.754700f, 1.0f, 0.748400f, 0.748400f, 1.0f, 0.600000f, 1.0f, 1.0f, 0.837981f, 0.755976f };
 static const bool defaultHidden[BLOCKS] = { false, false, false, false, true, false, false, false, false, false, false };
-static const int defaultHudStyle = 0, defaultRadarStyle = RADAR_MINIMAL, defaultMessageStyle = MSG_CZM;
+static const int defaultHudStyle = 1, defaultRadarStyle = RADAR_TACTICAL, defaultMessageStyle = MSG_CZM;
+static const int defaultMessageList = 1, defaultSpectatorStyle = 2;
 static const int chatLines = 5;
 // The HUD grows with the screen height, but on screens narrower than 2.1:1 (16:9 phones, tablets)
 // it follows the width instead: then the blocks keep their gaps as on the phone where the layout was made.

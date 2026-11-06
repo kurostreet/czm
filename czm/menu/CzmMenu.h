@@ -279,6 +279,7 @@ const char *CZM_SprayName( int index );  // file name without the extension
 const char *CZM_SprayImage( int index ); // logos/<name>.png
 int CZM_CurrentSpray( void );            // -1 if the player uses a stock spray
 void CZM_SetSpray( int index );
+void CZM_PickSprayPhoto( void );
 void CZM_SprayFrame( void );
 
 // avatars: the game logo, our pictures, the player's own photo from the gallery
@@ -325,7 +326,7 @@ bool CZM_ShopShow( int menuType, int team );
 bool CZM_ShopWeaponFrame( const char *value );
 bool CZM_IsWeaponMenu( const char *value );
 // the team menu as our card; on our servers the class is picked by itself
-bool CZM_TeamShow( int menuType, int param1 );
+bool CZM_TeamShow( int menuType, int param1, int param2 );
 // the client asks for the radio selector; true if our radio wheel took it (CzmWheels.cpp)
 bool CZM_RadioShow( int menuType );
 // the touch wheels over the game, drawn from the engine's czm_wheel (CzmWheels.cpp)

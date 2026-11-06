@@ -200,7 +200,7 @@ int CHudMenu :: Init( void )
 	_extended_menus = CVAR_CREATE("_extended_menus", "1", FCVAR_ARCHIVE);
 	CVAR_CREATE( "czm_profile_ui", "1", 0 );
 	CVAR_CREATE( "czm_loadout_ui", "1", 0 );
-	CVAR_CREATE( "czm_round_shop_ui", "1", 0 );
+	CVAR_CREATE( "czm_round_shop_ui", "2", 0 );
 	CVAR_CREATE( "czm_profile_challenge", "", 0 );
 
 	InitHUDData();
@@ -540,7 +540,7 @@ void CHudMenu::ShowVGUIMenu( int menuType )
 			if( haveCancel )
 				param |= 1 << 2;
 
-			g_pMenu->ShowVGUIMenu( menuType, param, 0 );
+			g_pMenu->ShowVGUIMenu( menuType, param, gHUD.GetGameType() == GAME_CZERO );
 			return;
 		}
 		case MENU_CLASS_T:
