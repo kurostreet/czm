@@ -298,7 +298,19 @@ bool CZM_AccountEvent( CUtlString &body )
 	return found;
 }
 
-void CZM_LayoutsShow( void ) { JNIEnv *env;jclass cls;if(!CZM_Begin(&env,&cls))return;jmethodID m=CZM_Method(env,cls,"layoutsShow","()V");if(m)env->CallStaticVoidMethod(cls,m);CZM_End(env); }
+void CZM_LayoutsShow( void )
+{
+	JNIEnv *env;
+	jclass cls;
+	if( !CZM_Begin( &env, &cls )) return;
+	jmethodID method = CZM_Method( env, cls, "layoutsShow", "(I)V" );
+	if( method )
+	{
+		EngFuncs::ClientCmd( true, "host_writeconfig\n" );
+		env->CallStaticVoidMethod( cls, method, (jint)CZM_TouchScheme() );
+	}
+	CZM_End( env );
+}
 
 
 bool CZM_WidgetEvent( CUtlString &body )

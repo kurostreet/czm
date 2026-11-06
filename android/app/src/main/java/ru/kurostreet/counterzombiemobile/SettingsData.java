@@ -1,6 +1,7 @@
 /* Versioned settings and data-only touch layouts. GPL-3.0-or-later. */
 package ru.kurostreet.counterzombiemobile;
 import java.io.*;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.regex.*;
@@ -43,15 +44,69 @@ final class SettingsData {
     static String read(File file) throws IOException {
         if(file.length()>262144)throw new IOException("size");try(InputStream in=new FileInputStream(file);ByteArrayOutputStream out=new ByteArrayOutputStream()){byte[] b=new byte[4096];int n;while((n=in.read(b))!=-1){out.write(b,0,n);if(out.size()>262144)throw new IOException("size");}return new String(out.toByteArray(),StandardCharsets.UTF_8);}
     }
-    static JSONObject capture() throws Exception {
-        File root=new File(CzmNet.gameDir());JSONObject cvars=new JSONObject(),layouts=new JSONObject();
+    private static JSONObject readCvars(File root) throws Exception {
+        JSONObject cvars = new JSONObject();
         for(String line:read(new File(root,"config.cfg")).split("\n")){List<String> t=tokens(line);if(t.size()==2&&KEYS.contains(t.get(0))&&validValue(t.get(0),t.get(1)))cvars.put(t.get(0),t.get(1));}
+        return cvars;
+    }
+
+    private static File schemeFile(File root, int scheme) {
+        return new File(root, "touch_profiles/czm_scheme" + scheme + ".cfg");
+    }
+
+    private static JSONArray readButtons(File cfg) throws Exception {
+        JSONArray buttons = new JSONArray();
+        for (String line : read(cfg).split("\n")) {
+            List<String> fields = tokens(line);
+            if (fields.size() < 12 || !fields.get(0).equals("touch_addbutton")) continue;
+            JSONArray button = new JSONArray();
+            for (int i = 1; i <= 3; i++) button.put(fields.get(i));
+            for (int i = 4; i <= 7; i++) button.put(Double.parseDouble(fields.get(i)));
+            for (int i = 8; i <= 11; i++) button.put(Integer.parseInt(fields.get(i)));
+            button.put(fields.size() > 12 ? Integer.parseInt(fields.get(12)) : 0);
+            buttons.put(button);
+        }
+        return buttons;
+    }
+
+    static boolean copyHud(JSONObject from, JSONObject to) throws JSONException {
+        boolean copied = false;
+        for (String key : SettingsSchema.KEYS) {
+            if (!key.startsWith("czm_hud_") || !from.has(key)) continue;
+            to.put(key, from.getString(key));
+            copied = true;
+        }
+        return copied;
+    }
+
+    private static void fitAxis(JSONArray button, int start, int end) throws JSONException {
+        double lo = button.getDouble(start), hi = button.getDouble(end), size = hi - lo;
+        if (size <= 0 || size > 1) return;
+        if (lo < 0) button.put(start, 0).put(end, size);
+        else if (hi > 1) button.put(start, 1 - size).put(end, 1);
+    }
+
+    static JSONObject captureLayout(int scheme) throws Exception {
+        File root = new File(CzmNet.gameDir());
+        JSONArray buttons = readButtons(schemeFile(root, scheme));
+        for (int i = 0; i < buttons.length(); i++) {
+            // A round button can extend past an edge when its aspect is recalculated.
+            JSONArray button = buttons.getJSONArray(i);
+            fitAxis(button, 3, 5);
+            fitAxis(button, 4, 6);
+        }
+        String key = Integer.toString(scheme);
+        JSONObject cvars = new JSONObject().put("czm_touch_scheme", key);
+        if (new File(root, "config.cfg").isFile()) copyHud(readCvars(root), cvars);
+        JSONObject layouts = new JSONObject().put(key, buttons);
+        return validate(new JSONObject().put("schema", 1).put("cvars", cvars).put("layouts", layouts));
+    }
+
+    static JSONObject capture() throws Exception {
+        File root=new File(CzmNet.gameDir());JSONObject cvars=readCvars(root),layouts=new JSONObject();
         for(int scheme=1;scheme<=3;scheme++){
-            File cfg=new File(root,"touch_profiles/czm_scheme"+scheme+".cfg");if(!cfg.isFile())continue;JSONArray buttons=new JSONArray();
-            for(String line:read(cfg).split("\n")){
-                List<String> t=tokens(line);if(t.size()<13||!t.get(0).equals("touch_addbutton"))continue;
-                JSONArray b=new JSONArray();for(int i=1;i<=3;i++)b.put(t.get(i));for(int i=4;i<=7;i++)b.put(Double.parseDouble(t.get(i)));for(int i=8;i<=12;i++)b.put(Integer.parseInt(t.get(i)));buttons.put(b);
-            }
+            File cfg=schemeFile(root,scheme);if(!cfg.isFile())continue;
+            JSONArray buttons=readButtons(cfg);
             if(buttons.length()>0)layouts.put(""+scheme,buttons);
         }
         return validate(new JSONObject().put("schema",1).put("cvars",cvars).put("layouts",layouts));
@@ -63,7 +118,9 @@ final class SettingsData {
             for(int n=0;n<buttons.length();n++){
                 JSONArray b=buttons.getJSONArray(n);cfg.append("touch_addbutton");
                 for(int k=0;k<3;k++)cfg.append(" \"").append(b.getString(k)).append('"');
-                for(int k=3;k<12;k++)cfg.append(' ').append(b.get(k));
+                // The engine's coordinate parser reads decimals without exponents.
+                for(int k=3;k<7;k++)cfg.append(' ').append(BigDecimal.valueOf(b.getDouble(k)).toPlainString());
+                for(int k=7;k<12;k++)cfg.append(' ').append(b.getInt(k));
                 // round buttons stay round on another screen: the engine recalculates the height (aspect 1)
                 String tex=b.getString(1);if(!tex.isEmpty()&&!tex.startsWith("#"))cfg.append(" 1");cfg.append('\n');
             }files.put(""+i,cfg.toString());

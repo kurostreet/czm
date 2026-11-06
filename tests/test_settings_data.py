@@ -36,7 +36,7 @@ class SettingsDataTests(unittest.TestCase):
             subprocess.run(["javac", "--release", "11", "-encoding", "UTF-8", "-cp", jar, "-d", temporary,
                             str(stub)]+[str(f) for f in files]+[str(ROOT/"tests"/(t+".java")) for t in tests], check=True)
             for test in tests:
-                result = subprocess.run(["java", "-cp", temporary+os.pathsep+jar,
+                result = subprocess.run(["java", "-Dczm.test.dir="+temporary, "-cp", temporary+os.pathsep+jar,
                                          "ru.kurostreet.counterzombiemobile."+test], check=True,
                                         capture_output=True, text=True, timeout=10)
                 self.assertIn("_OK", result.stdout)

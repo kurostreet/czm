@@ -80,7 +80,11 @@ public final class CzmNet {
     public static void colorShow(int r, int g, int b, boolean ru) { CzmColorPicker.show(r, g, b, ru); }
     public static byte[] colorEvent() { return CzmColorPicker.event(); }
     public static byte[] cloudEvent() { byte[] event=CzmCloud.event();return event!=null?event:CzmLayoutActivity.event(); }
-    public static void layoutsShow() { Context ctx=context();if(ctx instanceof android.app.Activity)((android.app.Activity)ctx).runOnUiThread(()->ctx.startActivity(new Intent(ctx,CzmLayoutActivity.class))); }
+    public static void layoutsShow(int scheme) {
+        Context ctx = context();
+        if (ctx instanceof android.app.Activity) ((android.app.Activity)ctx).runOnUiThread(() ->
+            ctx.startActivity(new Intent(ctx, CzmLayoutActivity.class).putExtra(CzmLayoutActivity.EXTRA_SCHEME, scheme)));
+    }
     public static void cloudApplied(int request, boolean success) { CzmCloud.applied(request,success); }
     public static void loadingProgress(int session,int status,int percent,byte[] label){CzmDownloads.progress(session,status,percent,new String(label,StandardCharsets.UTF_8));}
     public static void loadingBackground(){CzmDownloads.request();}

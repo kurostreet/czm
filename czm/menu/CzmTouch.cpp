@@ -923,7 +923,7 @@ private:
 	void Activate( int hit );
 	void SetSlider( int which );
 	void AddButton( const char *icon, const char *command );
-	void SetAction( const char *icon, const char *command );
+	void SetAction( const char *command );
 	void FinishCustom( bool chat );
 
 	CzmRect ButtonRect( int i ) const;
@@ -1361,12 +1361,12 @@ void CCzmTouchEditor::SetButtonSize( int i, float size )
 {
 	CzmTouchButton &b = m_buttons[i];
 	float cx = ( b.x1 + b.x2 ) * 0.5f, cy = ( b.y1 + b.y2 ) * 0.5f;
-	float h = size * W / H; // round on screen
+	float h = Q_min( 1.0f, size * W / H ); // round on screen
 
-	b.x1 = cx - size * 0.5f;
-	b.x2 = cx + size * 0.5f;
-	b.y1 = cy - h * 0.5f;
-	b.y2 = cy + h * 0.5f;
+	b.x1 = bound( 0.0f, cx - size * 0.5f, 1.0f - size );
+	b.y1 = bound( 0.0f, cy - h * 0.5f, 1.0f - h );
+	b.x2 = Q_min( 1.0f, b.x1 + size );
+	b.y2 = Q_min( 1.0f, b.y1 + h );
 }
 
 void CCzmTouchEditor::AddButton( const char *icon, const char *command )
@@ -1393,12 +1393,11 @@ void CCzmTouchEditor::AddButton( const char *icon, const char *command )
 	m_bDirty = true;
 }
 
-void CCzmTouchEditor::SetAction( const char *icon, const char *command )
+void CCzmTouchEditor::SetAction( const char *command )
 {
 	CzmTouchButton &b = m_buttons[m_iSelected];
 
 	Q_strncpy( b.command, command, sizeof( b.command ));
-	snprintf( b.texture, sizeof( b.texture ), TOUCH_DIR "%s", icon );
 	m_bDirty = true;
 }
 
@@ -1426,7 +1425,7 @@ void CCzmTouchEditor::FinishCustom( bool chat )
 	if( m_overlay == OV_ADD )
 		AddButton( chat ? "chat" : "custom", command );
 	else if( m_iSelected >= 0 )
-		SetAction( chat ? "chat" : "custom", command );
+		SetAction( command );
 
 	edit.text[0] = 0;
 	m_overlay = OV_NONE;
@@ -1816,7 +1815,7 @@ void CCzmTouchEditor::Activate( int hit )
 		else if( m_overlay == OV_ADD && index < CZM_ACTIONS )
 			AddButton( s_actions[index].icon, s_actions[index].command );
 		else if( m_overlay == OV_COMMAND && index < CZM_ACTIONS && m_iSelected >= 0 )
-			SetAction( s_actions[index].icon, s_actions[index].command );
+			SetAction( s_actions[index].command );
 
 		m_overlay = OV_NONE;
 		return;
