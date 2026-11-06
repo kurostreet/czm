@@ -67,9 +67,11 @@ struct CHudMenu {
     bool CardsEnabled(){return true;}
     void PublishCards(bool);
     void PresentSurvivalShop(bool);
-    void UserCmd_OldStyleMenuClose(){PublishCards(false);}
+    void UserCmd_OldStyleMenuClose();
+    void Reset(){m_fWaitingForMore=0;}
     void ShowVGUIMenu(int){classicMenus++;}
     int MsgFunc_ShowMenu(const char *,int,void *);
+    int MsgFunc_VGUIMenu(const char *,int,void *);
 };
 '''
 
@@ -135,6 +137,12 @@ int main() {
     assert(published.find(loadout)!=std::string::npos && commands==before && touchSlots.empty());
     style=0;vgui=0;Receive(menu,loadout,513);
     assert(touchSlots=="slot1 slot10 " && classicMenus==oldClassic);
+    Receive(menu,"#stock",513);
+    assert(!g_szRichMenuString[0] && touchSlots.empty() && menu.m_bitsValidSlots==513);
+    Receive(menu,loadout,513);
+    unsigned char replacement[]={MENU_RADIOA,1,0};
+    menu.MsgFunc_VGUIMenu("VGUIMenu",sizeof(replacement),replacement);
+    assert(!g_szRichMenuString[0] && !s_bCardsShown && touchSlots.empty() && menu.m_bitsValidSlots==1);
 
 }
 '''
@@ -146,7 +154,8 @@ class ServerMenuTransportTests(unittest.TestCase):
         code = PREAMBLE
         for signature in ("void CHudMenu::PublishCards(", "static void CZM_PlainMenuText(",
                           "static void CZM_SurvivalClassicButtons(",
-                          "void CHudMenu::PresentSurvivalShop(", "int CHudMenu :: MsgFunc_ShowMenu("):
+                          "void CHudMenu::PresentSurvivalShop(", "int CHudMenu :: MsgFunc_ShowMenu(",
+                          "void CHudMenu::UserCmd_OldStyleMenuClose(", "int CHudMenu::MsgFunc_VGUIMenu("):
             code += function(source, signature) + "\n"
         code += SCENARIO
         with tempfile.TemporaryDirectory(prefix="czm-menu-wire-") as folder:

@@ -357,6 +357,12 @@ int CHudMenu :: MsgFunc_ShowMenu( const char *pszName, int iSize, void *pbuf )
 
 	menustring = reader.ReadString();
 	const bool survival = CzmSurvivalShop::Wire( m_fWaitingForMore ? g_szPrelocalisedMenuString : menustring );
+	if( !survival && CzmSurvivalShop::Wire( g_szRichMenuString ))
+	{
+		g_szRichMenuString[0] = 0;
+		Touch_CloseMenu();
+		PublishCards( false );
+	}
 
 	// menu will be replaced by scripted touch config
 	// so execute it and exit
@@ -442,6 +448,7 @@ int CHudMenu :: MsgFunc_ShowMenu( const char *pszName, int iSize, void *pbuf )
 int CHudMenu::MsgFunc_VGUIMenu( const char *pszName, int iSize, void *pbuf )
 {
 	BufferReader reader( pszName, pbuf, iSize );
+	if( CzmSurvivalShop::Wire( g_szRichMenuString )) UserCmd_OldStyleMenuClose();
 
 	int menuType = reader.ReadByte();
 	m_bitsValidSlots = reader.ReadShort(); // is ignored
@@ -452,7 +459,8 @@ int CHudMenu::MsgFunc_VGUIMenu( const char *pszName, int iSize, void *pbuf )
 
 int CHudMenu::MsgFunc_BuyClose(const char *pszName, int iSize, void *pbuf)
 {
-	Touch_CloseMenu();
+	if( CzmSurvivalShop::Wire( g_szRichMenuString )) UserCmd_OldStyleMenuClose();
+	else Touch_CloseMenu();
 
 	if (g_pMenu)
 		g_pMenu->HideVGUIMenu();
@@ -479,6 +487,7 @@ void CHudMenu::UserCmd_OldStyleMenuClose()
 {
 	m_fMenuDisplayed = 0; // no valid slots means that the menu should be turned off
 	m_bitsValidSlots = 0;
+	g_szRichMenuString[0] = 0;
 	Reset();
 	m_iFlags &= ~HUD_DRAW;
 
