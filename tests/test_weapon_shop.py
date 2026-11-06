@@ -93,6 +93,18 @@ int main(){
 }
 '''
   cpp(code)
+ def test_purchase_metadata_does_not_change_other_servers(self):
+  cpp(BASE+r'''
+int main(){
+ auto m=CzmWeapons::Parse("8 1023\n#czmw1\tprimary\t0\t2\t1\t0\t0\t0\tbuy\t4\t5\t0\n");
+ assert(m.valid&&m.purchase&&m.primary&&m.pages==2&&m.queued&&m.price==4&&m.balance==5);
+ m=CzmWeapons::Parse("#czmw1\tsecondary\t0\t1\t1\t0\t0\t0\tbuy\t1\t0\t1\n");
+ assert(m.valid&&m.purchase&&!m.primary&&m.price==1&&m.notice==1);
+ m=CzmWeapons::Parse("#czmw1\tprimary\t0\t1\t1\t28\t0\t0\n");
+ assert(m.valid&&!m.purchase&&m.queued);
+ assert(!CzmWeapons::Parse("#czmw1\tprimary\t0\t1\t1\t0\t0\t0\tbuy\t-1\t5\t0").purchase);
+}
+''')
  def test_official_team_buttons_use_distinct_commands(self):
   s=(ROOT/'czm/menu/CzmServerMenu.cpp').read_text()
   code=BASE+r'''

@@ -3,7 +3,10 @@
 #include <cstdio>
 #include <cstring>
 namespace CzmWeapons {
-struct Meta { bool valid,primary,queued,automatic;int page,pages,selected,remember; };
+struct Meta {
+ bool valid,primary,queued,automatic,purchase;
+ int page,pages,selected,remember,price,balance,notice;
+};
 inline const char *Text(const char *value) {
  if(!value) return "";
  int serial,slots,n=0;
@@ -12,9 +15,15 @@ inline const char *Text(const char *value) {
 }
 inline bool Wire(const char *value) { return std::strncmp(Text(value),"#czmw1\t",7)==0; }
 inline Meta Parse(const char *value) {
- Meta m={};char kind[16];int q,a;
- if(std::sscanf(Text(value),"#czmw1\t%15[^\t]\t%d\t%d\t%d\t%d\t%d\t%d",kind,&m.page,&m.pages,&q,&m.selected,&m.remember,&a)!=7)return m;
+ Meta m={};char kind[16];int q,a,n=0;
+ if(std::sscanf(Text(value),"#czmw1\t%15[^\t]\t%d\t%d\t%d\t%d\t%d\t%d%n",kind,&m.page,&m.pages,&q,&m.selected,&m.remember,&a,&n)!=7)return m;
  if((std::strcmp(kind,"primary")&&std::strcmp(kind,"secondary"))||m.page<0||m.pages<1||m.pages>128||m.page>=m.pages||(q!=0&&q!=1)||(a!=0&&a!=1))return m;
+ const char *tail=Text(value)+n;
+ int price,balance,notice,end=0;
+ if(std::sscanf(tail,"\tbuy\t%d\t%d\t%d%n",&price,&balance,&notice,&end)==3 &&
+    (tail[end]=='\n'||tail[end]==0) && price>=0 && balance>=0 && notice>=0 && notice<=4) {
+  m.purchase=true;m.price=price;m.balance=balance;m.notice=notice;
+ }
  m.valid=true;m.primary=std::strcmp(kind,"primary")==0;m.queued=q!=0;m.automatic=a!=0;return m;
 }
 inline bool WeaponText(const char *value) {

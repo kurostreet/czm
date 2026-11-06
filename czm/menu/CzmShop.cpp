@@ -577,6 +577,8 @@ static bool ParseWeaponMenu( const char *value, CzmWeaponMenu &m )
 				bool off = Contains( open, "off" ) || Contains( open, "disabled" ) || strstr( open, "ыкл" );
 				m.toggleOn = !off && ( Contains( open, "on" ) || Contains( open, "enabled" ) || strstr( open, "Вкл" ) || strstr( open, "вкл" ));
 			}
+			else if( m.meta.purchase && key == 9 && m.meta.pages > 1 )
+				continue; // separate previous/next controls use the page command
 			else if( m.extras < CZM_WEAPON_EXTRA )
 			{
 				m.extraKeys[m.extras] = key;
@@ -655,6 +657,8 @@ private:
 	void Buy( const CzmShopItem &item );
 	void Toast( const char *text );
 	bool Owned( const CzmShopItem &item ) const;
+	bool ShowPrice() const { return !m_bServerMenu || m_wmenu.meta.purchase; }
+	int Price( const CzmShopItem &item ) const { return m_wmenu.meta.purchase && m_bServerMenu ? m_wmenu.meta.price : item.price; }
 
 	void DrawTop( void );
 	void DrawTabs( void );
@@ -756,6 +760,7 @@ void CCzmShop::ReadState( void )
 		m_bHelmet = helmet != 0;
 		m_bAlive = alive != 0;
 	}
+	if( m_bServerMenu && m_wmenu.meta.purchase ) m_iMoney = m_wmenu.meta.balance;
 }
 
 void CCzmShop::SelectCategory( int category )
@@ -967,7 +972,9 @@ int CCzmShop::QuickCount( void ) const
 {
 	if( !m_bServerMenu )
 		return CZM_QUICK;
-	return Q_min( CZM_QUICK, ( m_wmenu.toggleKey ? 1 : 0 ) + ( m_wmenu.meta.valid ? ( m_wmenu.meta.pages > 1 ? 2 : 0 ) : m_wmenu.extras ) );
+	const int pages = m_wmenu.meta.valid && m_wmenu.meta.pages > 1 ? 2 : 0;
+	const int extras = !m_wmenu.meta.valid || m_wmenu.meta.purchase ? m_wmenu.extras : 0;
+	return Q_min( CZM_QUICK, ( m_wmenu.toggleKey ? 1 : 0 ) + pages + extras );
 }
 
 // the menu key of a bottom button of a server menu: the switch first, then the rest
@@ -982,10 +989,14 @@ int CCzmShop::QuickKey( int i, const char **text ) const
 		}
 		i--;
 	}
-	if( m_wmenu.meta.valid )
+	if( m_wmenu.meta.valid && m_wmenu.meta.pages > 1 )
 	{
-		*text = i == 0 ? ( CZM_IsRussian() ? "‹ НАЗАД" : "‹ PREVIOUS" ) : ( CZM_IsRussian() ? "ДАЛЕЕ ›" : "NEXT ›" );
-		return i == 0 ? -1 : -2;
+		if( i < 2 )
+		{
+			*text = i == 0 ? ( CZM_IsRussian() ? "‹ НАЗАД" : "‹ PREVIOUS" ) : ( CZM_IsRussian() ? "ДАЛЕЕ ›" : "NEXT ›" );
+			return i == 0 ? -1 : -2;
+		}
+		i -= 2;
 	}
 	if( i < m_wmenu.extras )
 	{
@@ -1221,14 +1232,23 @@ void CCzmShop::DrawTop( void )
 	if( m_bServerMenu )
 	{
 		const char *title = m_wmenu.meta.valid ? ( m_wmenu.meta.primary ? ( ru ? "ГЛАВНОЕ ОРУЖИЕ" : "PRIMARY WEAPON" ) :
-			( ru ? "ДОП. ОРУЖИЕ" : "SECONDARY WEAPON" ) ) : m_wmenu.title;
+			( ru ? "ПИСТОЛЕТЫ" : "PISTOLS" ) ) : m_wmenu.title;
 		x = W * .05f;
 		CZM_DrawText( titleFont, x, H * .025f, m_close.x - x - H * .03f, title, CZM_White());
-		CZM_DrawText( teamFont, x, H * .096f, W * .8f, ru ? "ВЫБЕРИ СНАРЯЖЕНИЕ ДЛЯ БОЯ" : "CHOOSE YOUR LOADOUT", PackRGBA( 206, 160, 110, 255 ));
+		const char *subtitle = m_wmenu.meta.purchase ? ( m_wmenu.meta.primary
+			? ( ru ? "ШАГ 1 ИЗ 4 · ОСНОВНОЕ ОРУЖИЕ" : "STEP 1 OF 4 · PRIMARY WEAPON" )
+			: ( ru ? "ШАГ 2 ИЗ 4 · ПИСТОЛЕТ" : "STEP 2 OF 4 · PISTOL" ))
+			: ( ru ? "ВЫБЕРИ СНАРЯЖЕНИЕ ДЛЯ БОЯ" : "CHOOSE YOUR LOADOUT" );
+		CZM_DrawText( teamFont, x, H * .096f, W * .8f, subtitle, PackRGBA( 206, 160, 110, 255 ));
 		if( m_wmenu.meta.valid )
 		{
 			char page[32]; snprintf( page, sizeof( page ), "%d / %d", m_wmenu.meta.page + 1, m_wmenu.meta.pages );
 			CZM_DrawText( teamFont, m_close.x - H * .2f, H * .04f, H * .16f, page, PackRGBA( 255, 175, 85, 255 ), QM_RIGHT );
+		}
+		if( m_wmenu.meta.purchase )
+		{
+			FormatMoney( m_iMoney, money, sizeof( money ));
+			CZM_DrawText( moneyFont, W * .52f, H * .081f, m_close.x - W * .53f, money, PackRGBA( 74, 222, 128, 255 ), QM_RIGHT );
 		}
 		closeIcon = m_close.h * .42f;
 		CZM_DrawImage( SHOP_DIR "arsenal_button.png", m_close.x, m_close.y, m_close.w, m_close.h );
@@ -1349,7 +1369,8 @@ void CCzmShop::DrawWheel( void )
 	for( int i = 0; i < n; i++ )
 	{
 		const CzmShopItem &item = *m_slots[i];
-		bool afford = m_bServerMenu || item.price <= m_iMoney;
+		const int price = Price( item );
+		bool afford = !ShowPrice() || price <= m_iMoney;
 		float angle = ( -90.0f + i * 360.0f / n ) * M_PI / 180.0f;
 		float radius = n == 1 ? 0.0f : m_iWheelR * 0.64f;
 		int cx = m_iWheelX + cosf( angle ) * radius;
@@ -1358,7 +1379,7 @@ void CCzmShop::DrawWheel( void )
 		int boxW = n <= 2 ? m_iWheelR * 0.62f : Q_min( (int)( m_iWheelR * 0.62f ), (int)( m_iWheelR * 1.25f * sinf( M_PI / n )));
 		int textW = Q_max( boxW * 13 / 10, (int)( m_iWheelR * 0.5f ));
 		int imgH = m_iWheelR * 0.19f;
-		int nameH = CZM_FontHeight( nameFont ), priceH = m_bServerMenu ? 0 : CZM_FontHeight( priceFont );
+		int nameH = CZM_FontHeight( nameFont ), priceH = ShowPrice() ? CZM_FontHeight( priceFont ) : 0;
 		int top = cy - ( imgH + nameH + priceH + H * 0.012f ) / 2;
 
 		if( n == 1 )
@@ -1366,9 +1387,9 @@ void CCzmShop::DrawWheel( void )
 
 		DrawWeapon( item, cx - boxW / 2, top, boxW, imgH, CZM_White( afford ? 255 : 100 ));
 		CZM_DrawText( nameFont, cx - textW / 2, top + imgH + H * 0.008f, textW, ItemName( item ), CZM_White( afford ? 255 : 110 ), QM_CENTER );
-		if( !m_bServerMenu )
+		if( ShowPrice() )
 		{
-			FormatMoney( item.price, money, sizeof( money ));
+			FormatMoney( price, money, sizeof( money ));
 			CZM_DrawText( priceFont, cx - textW / 2, top + imgH + H * 0.012f + nameH, textW, money,
 				afford ? PackRGBA( 74, 222, 128, 255 ) : PackRGBA( 248, 113, 113, 255 ), QM_CENTER );
 		}
@@ -1514,9 +1535,19 @@ void CCzmShop::DrawInfo( const CzmShopItem *item )
 	// the buy button
 	CZM_DrawSliced( UI_DIR "tab_on.png", m_buy.x, m_buy.y, m_buy.w, m_buy.h, 30, (int)( H * 0.02f ),
 		IsPressed( HIT_ITEM + m_iInfo ) && m_info.HasCursor() ? CZM_Grey() : CZM_White());
-	CZM_DrawText( buyFont, m_buy.x, m_buy.y + ( m_buy.h - CZM_FontHeight( buyFont )) / 2, m_buy.w,
-		m_bServerMenu ? ( m_wmenu.meta.queued ? ( ru ? "НА СЛЕДУЮЩИЙ РАУНД" : "FOR NEXT ROUND" ) : ( ru ? "ВЗЯТЬ" : "TAKE" ) ) : Owned( *item ) ? ( ru ? "КУПИТЬ ЕЩЁ" : "BUY AGAIN" ) : ( ru ? "КУПИТЬ" : "BUY" ),
-		CZM_White(), QM_CENTER );
+	const char *label = ru ? "КУПИТЬ" : "BUY";
+	char action[80];
+	if( m_bServerMenu && m_wmenu.meta.purchase )
+	{
+		FormatMoney( m_wmenu.meta.price, money, sizeof( money ));
+		snprintf( action, sizeof( action ), "%s · %s", label, money );
+		label = action;
+	}
+	else if( m_bServerMenu )
+		label = m_wmenu.meta.queued ? ( ru ? "НА СЛЕДУЮЩИЙ РАУНД" : "FOR NEXT ROUND" ) : ( ru ? "ВЗЯТЬ" : "TAKE" );
+	else if( Owned( *item ))
+		label = ru ? "КУПИТЬ ЕЩЁ" : "BUY AGAIN";
+	CZM_DrawText( buyFont, m_buy.x, m_buy.y + ( m_buy.h - CZM_FontHeight( buyFont )) / 2, m_buy.w, label, CZM_White(), QM_CENTER );
 }
 
 void CCzmShop::DrawGrid( void )
@@ -1529,7 +1560,8 @@ void CCzmShop::DrawGrid( void )
 	{
 		const CzmShopItem &item = *m_slots[i];
 		CzmRect r = m_cards[i];
-		bool afford = m_bServerMenu || item.price <= m_iMoney;
+		const int price = Price( item );
+		bool afford = !ShowPrice() || price <= m_iMoney;
 		bool selected = m_bServerMenu && m_wmenu.meta.valid ? item.weapon == m_wmenu.meta.selected : Owned( item );
 		bool active = IsPressed( HIT_ITEM + i ) || r.HasCursor();
 		float t = mode ? bound( 0.0f, ( age - i * 14 ) / 180.0f, 1.0f ) : 1;
@@ -1541,9 +1573,9 @@ void CCzmShop::DrawGrid( void )
 		CZM_DrawImage( selected || active ? SHOP_DIR "arsenal_selected.png" : SHOP_DIR "arsenal_card.png", r.x, r.y, r.w, r.h, CZM_White( alpha ));
 		DrawWeapon( item, r.x + r.w * .055f, r.y + pad * .8f + slide, r.w * .89f, textY - r.y - pad - slide, CZM_White( afford ? alpha : alpha * .4f ));
 		CZM_DrawText( nameFont, r.x + pad * 2.5f, textY, r.w - pad * 3.5f, ItemName( item ), CZM_White( alpha ));
-		if( !m_bServerMenu )
+		if( ShowPrice() )
 		{
-			char money[32]; FormatMoney( item.price, money, sizeof( money ));
+			char money[32]; FormatMoney( price, money, sizeof( money ));
 			CZM_DrawText( priceFont, r.x + pad, r.y + pad, r.w - pad * 2, money,
 				afford ? PackRGBA( 255, 179, 93, alpha ) : PackRGBA( 248, 113, 113, alpha ), QM_RIGHT );
 		}
@@ -1585,8 +1617,19 @@ void CCzmShop::Draw()
 	DrawQuick();
 	if( m_bServerMenu && m_wmenu.meta.valid )
 	{
-		const char *hint = m_wmenu.meta.queued ? ( CZM_IsRussian() ? "Выбор применится в следующем раунде" : "Your choice will apply next round" ) :
-			( CZM_IsRussian() ? "Одна закупка за матч · Нажми на оружие" : "One purchase per match · Tap a weapon" );
+		const bool ru = CZM_IsRussian();
+		const char *hint = m_wmenu.meta.queued ? ( ru ? "Выдача со следующего раунда" : "Issued from the next round" ) :
+			( ru ? "Одна закупка за матч · Нажми на оружие" : "One purchase per match · Tap a weapon" );
+		if( m_wmenu.meta.purchase )
+		{
+			switch( m_wmenu.meta.notice )
+			{
+			case 1: hint = ru ? "Не хватает кредитов" : "Not enough credits"; break;
+			case 2: hint = ru ? "Сохрани профиль в разделе «Мой прогресс»" : "Save your profile under My progress"; break;
+			case 3: hint = ru ? "Оружие уже куплено на этот матч" : "Weapon already bought for this match"; break;
+			case 4: hint = ru ? "Не удалось сохранить покупку" : "The purchase could not be saved"; break;
+			}
+		}
 		CZM_DrawText( CZM_Font( CZMF_UI_META ), W * .05f, H * .824f, W * .9f, hint, PackRGBA( 205, 184, 161, 255 ));
 	}
 

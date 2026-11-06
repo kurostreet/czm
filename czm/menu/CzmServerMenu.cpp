@@ -842,7 +842,7 @@ void CCzmServerWindow::Layout( int shift )
   const int titleH=H*.067f,bottom=H*.067f;
   m_content.y+=titleH;m_content.h-=titleH;
   if(m_menu.kind==CzmServerView::Form){
-   int fieldH=H*.125f;
+   int fieldH=H*(CzmServerView::ProfileCodeCommand(m_menu.command)?.085f:.125f);
    m_submit=CZM_Rect(m_content.x+m_content.w-H*.26f,m_body.y+m_body.h-cpad-bottom,H*.26f,bottom);
    m_field=CZM_Rect(m_content.x,m_submit.y-fieldH-gap,m_content.w,fieldH);
    m_content.h=Q_max(H/18,m_field.y-gap-m_content.y);
@@ -970,7 +970,10 @@ void CCzmServerWindow::Activate( int hit )
 		}
 		m_iPicked = hit - HIT_CARD;
 		m_iPickTime = uiStatic.realTime;
-		EngFuncs::ClientCmdF( false, "slot%d\n", c.key );
+		if( !strcmp( m_menu.tab, "loadout" ))
+			EngFuncs::ClientCmdF( false, "czm_shop_select %d %d\n", m_menu.serial, c.key );
+		else
+			EngFuncs::ClientCmdF( false, "slot%d\n", c.key );
 	}
 	else if( hit >= 200 && hit < 206 && m_menu.kind == CzmServerView::Friends )
 		InviteFriend( m_friendPage * 6 + hit - 200 );
