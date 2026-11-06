@@ -1,5 +1,6 @@
 """The spectator overlay looks and the download indicator stay on any screen, with any name."""
 from pathlib import Path
+import json
 import shutil
 import subprocess
 import tempfile
@@ -110,7 +111,9 @@ class SpectatorOverlayTests(unittest.TestCase):
         self.assertIn("if( !czm )", spectator)
         self.assertIn("CZM_DownloadsDraw();", (ROOT / "cl_dll/hud_redraw.cpp").read_text())
         menu = (ROOT / "czm/menu/CzmMenu.cpp").read_text()
-        self.assertIn('CvarRegister( "czm_hud_spec_style", "1"', menu)
+        layout = json.loads((ROOT / "scripts/layouts/scheme1.json").read_text())
+        style = layout["cvars"]["czm_hud_spec_style"]
+        self.assertIn(f'CvarRegister( "czm_hud_spec_style", "{style}"', menu)
         self.assertIn("ROW_SPECSTYLE", (ROOT / "czm/menu/CzmSettings.cpp").read_text())
         engine = (ROOT / "patches/xash3d-fwgs/0018-czm-download-indicator.patch").read_text()
         self.assertIn("&& host.allow_console", engine)
