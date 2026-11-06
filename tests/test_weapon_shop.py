@@ -119,11 +119,13 @@ namespace EngFuncs{
 }
 class CCzmShop{
 public:
- enum{HIT_NONE=0,HIT_CLOSE,HIT_HUB,HIT_TAB=10,HIT_QUICK=30,HIT_ITEM=100};
+ enum{HIT_NONE=0,HIT_CLOSE,HIT_HUB,HIT_SELECT,HIT_CANCEL,HIT_TAB=10,HIT_QUICK=30,HIT_ITEM=100};
  bool m_bGrid=false;
  int W,H,m_iSlots=0,m_iPressed=0,m_iHover=-1,m_iPickTime=0,m_iInfo=0,m_iWheelX,m_iWheelY,m_iWheelR;
  CzmWeaponMenu m_wmenu={};
- CzmRect m_top,m_close,m_tabs[CAT_COUNT],m_quick[CZM_QUICK],m_info,m_buy,m_cards[8];
+ const CzmShopItem *m_slots[8]={};
+ CzmRect m_top,m_close,m_tabs[CAT_COUNT],m_quick[CZM_QUICK],m_info,m_buy,m_cancel,m_cards[8];
+ bool RoundShop()const{return m_wmenu.shop.roundPurchase;}
  bool Gear()const{return m_wmenu.shop.tab==CzmSurvivalShop::Equipment;}
  bool RowEnabled(int row)const{return m_wmenu.shop.rows[m_wmenu.keys[row]].enabled;}
  bool Waiting()const{return m_iPickTime&&uiStatic.realTime-m_iPickTime<700;}
@@ -175,6 +177,26 @@ int main(){
  View bad={};
  assert(!Parse("#czms1\t2147483648\t0\t0\t1\t5\t4\t0\t0\t28\t0\t0\t0\t3\n",bad));
  assert(!Parse("#czms1\t24\t2\t0\t1\t5\t0\t2\t0\t28\t26\t3\t0\t2\n#item\t0\t4\t6\t1\n",bad));
+ assert(!Parse("#czms2\t25\t0\t0\t1\t10\t0\t0\t0\t0\t0\t0\t0\t6\n#round\t14\t1\t0\t0\t0\t0\t0\t30001\n",bad));
+ assert(ParseWeaponMenu("6 1023\n#czms2\t24\t0\t0\t2\t12\t5\t1\t1\t28\t26\t0\t0\t7\n"
+  "#round\t14\t2\t16\t26\t22\t26\t4\t0\n#item\t0\t14\t4\t1\n#item\t1\t28\t4\t1\nPrimary",s.m_wmenu));
+ s.m_iSlots=s.m_wmenu.count;
+ for(int i=0;i<s.m_iSlots;i++)s.m_slots[i]=s.m_wmenu.items[i];
+ assert(s.RoundShop()&&s.m_wmenu.shop.nextPrimary==22&&s.m_wmenu.shop.reserved==4);
+ for(auto width:{640,780,1536}){
+  s.W=width;s.H=width==640?360:width==780?440:716;
+  for(int format:{1,2}){
+   s.m_wmenu.shop.preview=14;s.m_iInfo=0;style=format;s.LayoutSurvival();
+   if(format==2)assert(s.m_cards[1].x+s.m_cards[1].w<s.m_info.x);
+   CzmRect item=format==2?s.m_cards[1]:CZM_Rect(s.m_iWheelX,s.m_iWheelY+s.m_iWheelR*3/4,1,1);
+   click(s,item);assert(command=="czm_loadout 24 1 1\n"&&s.m_iInfo==1);
+   command.clear();click(s,s.m_buy);assert(command.empty()); // wait for the highlighted row from the server
+   s.m_wmenu.shop.preview=28;
+   click(s,s.m_buy);assert(command=="czm_loadout 24 12 28\n");
+   click(s,s.m_cancel);assert(command=="czm_loadout 24 6 0\n");
+   click(s,s.m_quick[4]);assert(command=="czm_loadout 24 5 0\n");
+  }
+ }
 }
 """
   cpp(code)
@@ -194,7 +216,7 @@ int main(){
  def test_equipment_releases_the_previous_weapon_window(self):
   source=(ROOT/'czm/menu/CzmServerMenu.cpp').read_text()
   cpp(BASE+r'''
-static bool shopOpen=true, closeShop=false, gearOpen=false;
+static bool shopOpen=true, closeShop=false, gearOpen=false, parsedFallback=false;
 static const char *value="21 513\n#czm1\tmenu\tloadout\tGrenades\n1. HE grenade\n0. Exit";
 namespace EngFuncs {
  const char *GetCvarString(const char *) { return value; }
@@ -215,7 +237,7 @@ static bool ServerWindowFrame(const char *v) {
 static struct { int serial,layoutW,layoutH;bool buttons; } s_menu;
 static void SpectatorExitFrame(const char *) {}
 static void RemoveButtons() {}
-static void ParseMenu(const char *) {}
+static void ParseMenu(const char *) {parsedFallback=true;}
 static void Layout() {}
 static void AddButtons() {}
 static void DrawMenu() {}
@@ -224,6 +246,8 @@ int main(){
  CZM_DrawGameOverlay(); assert(closeShop&&!gearOpen);
  shopOpen=false; // deferred close, before rendering the next frame
  CZM_DrawGameOverlay(); assert(gearOpen);
+ gearOpen=false;value="22 513\n#czms2\t17\t2\t0\t1\t5\t0\t2\t0\t0\t0\t0\t0\t7\n";
+ CZM_DrawGameOverlay();assert(!parsedFallback); // a closing shop's packet must not appear as plain text
 }
 ''')
  def test_official_team_buttons_use_distinct_commands(self):

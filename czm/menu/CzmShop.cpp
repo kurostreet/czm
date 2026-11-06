@@ -665,6 +665,8 @@ private:
 		HIT_NONE = 0,
 		HIT_CLOSE,
 		HIT_HUB,
+		HIT_SELECT,
+		HIT_CANCEL,
 		HIT_TAB = 10,     // + category
 		HIT_QUICK = 30,   // + quick button
 		HIT_ITEM = 100,   // + slot in the current category
@@ -680,6 +682,7 @@ private:
 	void ActivateSurvival( int hit );
 	void SendSurvival( int action, int value );
 	bool Survival() const { return m_bServerMenu && m_wmenu.shop.token != 0; }
+	bool RoundShop() const { return Survival() && m_wmenu.shop.roundPurchase; }
 	bool Gear() const { return Survival() && m_wmenu.shop.tab == CzmSurvivalShop::Equipment; }
 	bool RowEnabled( int row ) const { return !Survival() || m_wmenu.shop.rows[m_wmenu.keys[row]].enabled; }
 	int SelectedWeapon() const
@@ -723,18 +726,18 @@ private:
 	int m_iSlots;
 	int m_iPressed;
 	int m_iHover;      // wheel: slot under the finger, -1 none
-	int m_iInfo;       // wheel: slot shown in the info panel
+	int m_iInfo;       // slot shown in the info panel
 	char m_szToast[96];
 	int m_iToastTime;
 	bool m_bGrid;
 	bool m_bClosing;
 	bool m_bServerMenu;      // a weapon menu of the server, not the CS shop
 	CzmWeaponMenu m_wmenu;
-	int m_iPickTime, m_iOpenTime;
+	int m_iPickTime, m_iOpenTime, m_iPacketTime;
 
 	// layout, recalculated every frame
 	int W, H;
-	CzmRect m_top, m_close, m_tabs[CAT_COUNT], m_quick[CZM_QUICK], m_info, m_buy, m_cards[CZM_MAX_SECTORS];
+	CzmRect m_top, m_close, m_tabs[CAT_COUNT], m_quick[CZM_QUICK], m_info, m_buy, m_cancel, m_cards[CZM_MAX_SECTORS];
 	int m_iWheelX, m_iWheelY, m_iWheelR;
 	CMenuPlayerModelView m_skinView;
 	char m_szSkinPath[128];
@@ -843,11 +846,13 @@ static int s_iWeaponClosed = -1;
 void CCzmShop::OpenServerMenu( const CzmWeaponMenu &menu )
 {
 	bool open = m_bServerMenu && CZM_ClientMenuOpen( this );
+	if( !open || !menu.shop.roundPurchase || m_wmenu.shop.tab != menu.shop.tab || m_wmenu.shop.page != menu.shop.page )
+		m_iOpenTime = uiStatic.realTime;
 
 	m_bServerMenu = true;
 	m_wmenu = menu;
 	m_iPickTime = 0;
-	m_iOpenTime = uiStatic.realTime;
+	m_iPacketTime = uiStatic.realTime;
 	ReadState();
 	m_bGrid = Gear() || EngFuncs::GetCvarFloat( "czm_shop" ) == 2.0f;
 	m_iSlots = menu.count;
@@ -856,8 +861,11 @@ void CCzmShop::OpenServerMenu( const CzmWeaponMenu &menu )
 	m_iHover = -1;
 	m_iInfo = m_iSlots > 0 ? 0 : -1;
 	if( Survival() && !Gear() )
+	{
+		const int preview = RoundShop() ? m_wmenu.shop.preview : SelectedWeapon();
 		for( int i = 0; i < m_iSlots; ++i )
-			if( m_slots[i]->weapon == SelectedWeapon() ) m_iInfo = i;
+			if( m_slots[i]->weapon == preview ) m_iInfo = i;
+	}
 	m_iPressed = HIT_NONE;
 	m_szToast[0] = 0;
 	if( open )
@@ -1098,6 +1106,11 @@ int CCzmShop::HitTest( void ) const
 		if( m_quick[i].Contains( x, y ))
 			return HIT_QUICK + i;
 	}
+	if( RoundShop() )
+	{
+		if( m_cancel.Contains( x, y )) return HIT_CANCEL;
+		if( !Gear() && m_iInfo >= 0 && m_buy.Contains( x, y )) return HIT_SELECT;
+	}
 
 	if( m_bGrid )
 	{
@@ -1214,7 +1227,7 @@ bool CCzmShop::KeyDown( int key )
 		Layout();
 		m_iPressed = HitTest();
 
-		// the wheel works like in shooters: the slot under the finger is shown, release buys
+		// The slot under the finger is shown while moving around the wheel.
 		if( !m_bGrid && m_iPressed >= HIT_ITEM && !m_info.HasCursor( ))
 			m_iHover = m_iInfo = m_iPressed - HIT_ITEM;
 		return true;
@@ -1457,7 +1470,7 @@ void CCzmShop::DrawWheel( void )
 				afford ? PackRGBA( 74, 222, 128, 255 ) : PackRGBA( 248, 113, 113, 255 ), QM_CENTER );
 		}
 
-		if( Owned( item ))
+		if( Owned( item ) || ( RoundShop() && item.weapon == SelectedWeapon() ))
 		{
 			int d = H * 0.032f;
 			CZM_DrawImage( UI_DIR "dot.png", cx + boxW / 2 - d, top - d / 3, d, d, PackRGBA( 255, 255, 255, 255 ));
@@ -1597,6 +1610,7 @@ void CCzmShop::DrawInfo( const CzmShopItem *item )
 
 	// the buy button
 	CZM_DrawSliced( UI_DIR "tab_on.png", m_buy.x, m_buy.y, m_buy.w, m_buy.h, 30, (int)( H * 0.02f ),
+		RoundShop() ? ( RowEnabled( m_iInfo ) && !IsPressed( HIT_SELECT ) ? CZM_White() : CZM_Grey() ) :
 		IsPressed( HIT_ITEM + m_iInfo ) && m_info.HasCursor() ? CZM_Grey() : CZM_White());
 	const char *label = ru ? "КУПИТЬ" : "BUY";
 	char action[80];
@@ -1632,7 +1646,7 @@ void CCzmShop::DrawGrid( void )
 		const int price = Price( i );
 		bool afford = !ShowPrice() || price <= m_iMoney;
 		bool selected = m_bServerMenu && ( m_wmenu.meta.valid || Survival() ) ? item.weapon == SelectedWeapon() : Owned( item );
-		bool active = IsPressed( HIT_ITEM + i ) || r.HasCursor();
+		bool active = IsPressed( HIT_ITEM + i ) || ( RoundShop() ? m_iInfo == i : r.HasCursor() );
 		float t = mode ? bound( 0.0f, ( age - i * 14 ) / 180.0f, 1.0f ) : 1;
 		t = 1 - ( 1 - t ) * ( 1 - t );
 		int alpha = mode == 1 ? (int)( 255 * t ) : 255;
@@ -1678,7 +1692,10 @@ void CCzmShop::Draw()
 	if( Gear() )
 		DrawSurvivalGear();
 	else if( m_bGrid )
+	{
 		DrawGrid();
+		if( RoundShop() ) DrawInfo( m_iInfo >= 0 && m_iInfo < m_iSlots ? m_slots[m_iInfo] : NULL );
+	}
 	else
 	{
 		DrawWheel();
@@ -1730,7 +1747,8 @@ void CCzmShop::LayoutSurvival()
 
 	const auto &shop = m_wmenu.shop;
 	const int x = W * .035f, gap = H * .014f, width = W - 2 * x;
-	const int y = H * .216f, end = H * .731f;
+	const bool round = RoundShop();
+	const int y = H * .216f, end = H * ( round ? .695f : .731f );
 	const CzmRect empty = CZM_Rect( 0, 0, 0, 0 );
 	m_top = CZM_Rect( 0, 0, W, H * .198f );
 	m_close = CZM_Rect( W - x - H * .069f, H * .016f, H * .069f, H * .069f );
@@ -1745,6 +1763,23 @@ void CCzmShop::LayoutSurvival()
 	m_quick[2] = shop.page + 1 < shop.pages ? CZM_Rect( x + width * .385f, by, width * .05f, bh ) : empty;
 	m_quick[3] = Gear() ? empty : CZM_Rect( x + width * .45f, by, width * .187f, bh );
 	m_quick[4] = CZM_Rect( x + width * .658f, by, width * .342f, bh );
+	m_cancel = empty;
+	if( round )
+	{
+		m_quick[0].w = width * .258f;
+		if( m_quick[1].w ) m_quick[1].x = x + width * .271f;
+		if( m_quick[2].w ) m_quick[2].x = x + width * .329f;
+		if( m_quick[3].w ) m_quick[3] = CZM_Rect( x + width * .39f, by, width * .117f, bh );
+		if( shop.status == CzmSurvivalShop::Pending ) m_cancel = CZM_Rect( x + width * .516f, by, width * .145f, bh );
+		m_quick[4] = CZM_Rect( x + width * .671f, by, width * .329f, bh );
+	}
+
+	if( !Gear() && ( round || !m_bGrid ))
+	{
+		const int infoW = Q_min( (int)( width * .49f ), (int)( H * .86f ));
+		m_info = CZM_Rect( W - x - infoW, y, infoW, end - y );
+		m_buy = CZM_Rect( m_info.x + gap, end - H * .092f, infoW - 2 * gap, H * .077f );
+	}
 
 	if( Gear() )
 	{
@@ -1755,34 +1790,35 @@ void CCzmShop::LayoutSurvival()
 	}
 	else if( m_bGrid )
 	{
-		const int columns = 3, rows = Q_max( 1, ( m_iSlots + columns - 1 ) / columns );
-		const int cardW = ( width - gap * ( columns - 1 )) / columns;
+		const int gridW = round ? m_info.x - x - gap : width;
+		const int columns = round && gridW < H * .95f ? 2 : 3;
+		const int rows = Q_max( 1, ( m_iSlots + columns - 1 ) / columns );
+		const int cardW = ( gridW - gap * ( columns - 1 )) / columns;
 		const int cardH = ( end - y - gap * ( rows - 1 )) / rows;
 		for( int i = 0; i < m_iSlots; ++i )
 		{
 			const int row = i / columns, cells = Q_min( columns, m_iSlots - row * columns );
-			const int offset = ( width - cells * cardW - ( cells - 1 ) * gap ) / 2;
+			const int offset = ( gridW - cells * cardW - ( cells - 1 ) * gap ) / 2;
 			m_cards[i] = CZM_Rect( x + offset + ( i % columns ) * ( cardW + gap ), y + row * ( cardH + gap ), cardW, cardH );
 		}
 	}
 	else
 	{
-		const int infoW = Q_min( (int)( width * .49f ), (int)( H * .86f ));
-		m_info = CZM_Rect( W - x - infoW, y, infoW, end - y );
 		m_iWheelX = ( x + m_info.x ) / 2;
 		m_iWheelY = ( y + end ) / 2;
-		m_iWheelR = Q_min( (int)( H * .237f ), ( m_info.x - x - 2 * gap ) / 2 );
-		m_buy = CZM_Rect( m_info.x + gap, end - H * .092f, infoW - 2 * gap, H * .077f );
+		m_iWheelR = Q_min( (int)( H * ( round ? .222f : .237f )), ( m_info.x - x - 2 * gap ) / 2 );
 	}
 }
 
-static void DrawSurvivalButton( const CzmRect &r, const char *label, bool accent, bool enabled, bool pressed )
+static void DrawSurvivalButton( const CzmRect &r, const char *label, bool accent, bool enabled, bool pressed, bool primary = false )
 {
 	const HFont font = CZM_Font( CZMF_UI_LABEL );
 	unsigned tint = accent ? PackRGBA( 220, 58, 54, 255 ) : PackRGBA( 57, 64, 76, 255 );
 	if( !enabled ) tint = PackRGBA( 43, 47, 54, 235 );
 	else if( pressed ) tint = accent ? PackRGBA( 166, 45, 39, 255 ) : PackRGBA( 83, 94, 110, 255 );
-	CZM_DrawSliced( UI_DIR "button_secondary.png", r.x, r.y, r.w, r.h, 24, Q_max( 4, r.h / 6 ), tint );
+	if( primary && enabled ) tint = pressed ? CZM_Grey() : CZM_White();
+	CZM_DrawSliced( primary && enabled ? UI_DIR "tab_on.png" : UI_DIR "button_secondary.png",
+		r.x, r.y, r.w, r.h, 24, Q_max( 4, r.h / 6 ), tint );
 	CZM_DrawText( font, r.x + r.h / 7, r.y + ( r.h - CZM_FontHeight( font )) / 2, r.w - r.h * 2 / 7,
 		label, enabled ? CZM_White() : PackRGBA( 150, 158, 170, 255 ), QM_CENTER );
 }
@@ -1804,6 +1840,14 @@ void CCzmShop::DrawSurvivalTop()
 		DrawSurvivalButton( m_tabs[i], labels[i], i == m_wmenu.shop.tab, true, IsPressed( HIT_TAB + i ));
 }
 
+static void FormatShopPair( char *out, size_t size, int primary, int pistol, bool ru )
+{
+	const CzmShopItem *a = primary ? ShopWeapon( primary ) : NULL;
+	const CzmShopItem *b = pistol ? ShopWeapon( pistol ) : NULL;
+	const char *starter = ru ? "Штатное" : "Starter";
+	snprintf( out, size, "%s + %s", a ? ItemName( *a ) : starter, b ? ItemName( *b ) : starter );
+}
+
 void CCzmShop::DrawSurvivalFooter()
 {
 	using namespace CzmSurvivalShop;
@@ -1812,14 +1856,26 @@ void CCzmShop::DrawSurvivalFooter()
 	const int x = m_tabs[0].x, width = W - 2 * x;
 	const HFont title = CZM_Font( CZMF_UI_LABEL );
 	const HFont noteFont = CZM_Font( CZMF_UI_META );
-	const CzmShopItem *primary = shop.primary ? ShopWeapon( shop.primary ) : NULL;
-	const CzmShopItem *pistol = shop.pistol ? ShopWeapon( shop.pistol ) : NULL;
-	const char *starter = ru ? "Штатное" : "Starter";
 	char summary[96];
-	snprintf( summary, sizeof( summary ), "%s  +  %s", primary ? ItemName( *primary ) : starter, pistol ? ItemName( *pistol ) : starter );
+	FormatShopPair( summary, sizeof( summary ), shop.primary, shop.pistol, ru );
+	const bool round = RoundShop(), pending = shop.status == Pending, ready = ( shop.flags & CanConfirm ) != 0;
 	const char *status = ru ? "Комплект оружия" : "Weapon loadout";
 	const char *hint = ru ? "Купленное оружие выдаётся со следующего раунда" : "Purchased weapons are issued from the next round";
-	if( shop.status == Pending )
+	char timer[96];
+	if( round )
+	{
+		const int left = Q_max( 0, shop.windowMs - ( uiStatic.realTime - m_iPacketTime ));
+		if( pending ) hint = ru ? "Заказ можно заменить или отменить до выдачи" : "You can replace or cancel your order before delivery";
+		else if( shop.mode == BuyNow && left > 0 )
+		{
+			snprintf( timer, sizeof( timer ), ru ? "Закупка без лимита · %d с" : "Unlimited purchases · %d s", ( left + 999 ) / 1000 );
+			hint = timer;
+		}
+		else if( shop.mode == BuyNow ) hint = ru ? "Доступна одна покупка с выдачей сразу" : "One purchase can be equipped now";
+		else if( shop.mode == BuyNext ) hint = ru ? "Следующая покупка будет выдана в новом раунде" : "Your next purchase will be delivered next round";
+		else hint = ru ? "Покупка сейчас доступна за живого человека" : "You can buy now while alive as a human";
+	}
+	else if( pending )
 	{
 		status = ru ? "Ожидает следующего раунда" : "Waiting for the next round";
 		hint = ru ? "До начала раунда покупку можно отменить" : "Cancel before the round starts for a full refund";
@@ -1829,20 +1885,37 @@ void CCzmShop::DrawSurvivalFooter()
 		status = ru ? "Куплено на эту карту" : "Purchased for this map";
 		hint = ru ? "Купленное оружие отмечено галочкой" : "Your purchased weapons are marked";
 	}
-	else if( shop.status == Guest )
+	if( shop.status == Guest )
 		hint = ru ? "Войди в профиль, чтобы купить оружие" : "Sign in to buy weapons";
-	const char *noticesRu[] = { "", "Не хватает кредитов", "Войди в профиль, чтобы купить оружие", "Проверь статус комплекта",
+	const char *noticesRu[] = { "", "Не хватает кредитов", "Войди в профиль, чтобы купить оружие", "Покупка сейчас недоступна",
 		"Не удалось выполнить действие", "Цена или раунд изменились. Проверь комплект", "Покупка отменена. Кредиты возвращены",
-		"Снаряжение выдано", "Уже получено в этой жизни" };
-	const char *noticesEn[] = { "", "Not enough credits", "Sign in to buy weapons", "Check the loadout status",
+		"Снаряжение выдано", "Уже получено в этой жизни", "Комплект выдан", "Заказ на следующий раунд оплачен", "Заказ заменён" };
+	const char *noticesEn[] = { "", "Not enough credits", "Sign in to buy weapons", "Purchase unavailable right now",
 		"Could not complete the action", "The price or round changed. Check the loadout", "Purchase cancelled. Credits returned",
-		"Equipment received", "Already received this life" };
+		"Equipment received", "Already received this life", "Loadout equipped", "Next round's order paid", "Order replaced" };
 	if( shop.notice ) hint = ( ru ? noticesRu : noticesEn )[shop.notice];
 
-	UI_FillRect( 0, H * .750f, W, H * .25f, PackRGBA( 10, 14, 20, 249 ));
-	UI_FillRect( x, H * .75f, width, CZM_LineWidth(), PackRGBA( 255, 177, 83, 135 ));
-	CZM_DrawText( title, x, H * .764f, width * .53f, summary, CZM_White() );
-	CZM_DrawText( noteFont, x + width * .535f, H * .771f, width * .465f, status, PackRGBA( 245, 180, 99, 255 ), QM_RIGHT );
+	const int top = H * ( round ? .710f : .750f );
+	UI_FillRect( 0, top, W, H - top, PackRGBA( 10, 14, 20, 249 ));
+	UI_FillRect( x, top, width, CZM_LineWidth(), PackRGBA( 255, 177, 83, 135 ));
+	if( round )
+	{
+		char pair[96], line[144];
+		FormatShopPair( pair, sizeof( pair ), shop.currentPrimary, shop.currentPistol, ru );
+		snprintf( line, sizeof( line ), ru ? "Этот раунд · %s" : "This round · %s",
+			shop.currentPrimary || shop.currentPistol ? pair : ( ru ? "нет покупки" : "no purchase" ));
+		CZM_DrawText( noteFont, x, H * .726f, width * .49f, line, CZM_White() );
+		FormatShopPair( pair, sizeof( pair ), shop.nextPrimary, shop.nextPistol, ru );
+		snprintf( line, sizeof( line ), ru ? "Следующий · %s" : "Next round · %s", pending ? pair : ( ru ? "нет заказа" : "no order" ));
+		CZM_DrawText( noteFont, x + width * .51f, H * .726f, width * .49f, line, PackRGBA( 245, 180, 99, 255 ));
+		snprintf( line, sizeof( line ), ru ? "Выбрано · %s" : "Selected · %s", shop.primary || shop.pistol ? summary : "—" );
+		CZM_DrawText( title, x, H * .776f, width, line, CZM_White() );
+	}
+	else
+	{
+		CZM_DrawText( title, x, H * .764f, width * .53f, summary, CZM_White() );
+		CZM_DrawText( noteFont, x + width * .535f, H * .771f, width * .465f, status, PackRGBA( 245, 180, 99, 255 ), QM_RIGHT );
+	}
 	CZM_DrawText( noteFont, x, H * .827f, width, hint, PackRGBA( 196, 207, 222, 255 ));
 
 	const CzmRect &remember = m_quick[0];
@@ -1861,19 +1934,38 @@ void CCzmShop::DrawSurvivalFooter()
 	if( m_quick[2].w ) DrawSurvivalButton( m_quick[2], "›", false, true, IsPressed( HIT_QUICK + 2 ));
 	if( m_quick[3].w )
 	{
-		const bool advance = shop.status == Pending || ( shop.locked & ( 1 << shop.tab ));
+		const bool advance = !round && ( pending || ( shop.locked & ( 1 << shop.tab )));
 		DrawSurvivalButton( m_quick[3], advance ? ( ru ? "Далее" : "Next" ) : ( ru ? "Пропустить" : "Skip" ),
 			false, true, IsPressed( HIT_QUICK + 3 ));
 	}
 
-	const bool ready = ( shop.flags & CanConfirm ) != 0;
 	char action[96], price[32];
 	FormatMoney( shop.total, price, sizeof( price ));
-	if( shop.status == Pending ) snprintf( action, sizeof( action ), ru ? "Отменить · +%s" : "Cancel · +%s", price );
+	if( round )
+	{
+		if( m_cancel.w ) DrawSurvivalButton( m_cancel, ru ? "Отменить" : "Cancel", false, true, IsPressed( HIT_CANCEL ));
+		if( !ready ) Q_strncpy( action, pending ? ( ru ? "Заказ оплачен" : "Order paid" ) :
+			( ru ? "Выбери оружие" : "Select weapons" ), sizeof( action ));
+		else if( pending )
+		{
+			const int delta = shop.total - shop.reserved;
+			if( delta > 0 ) snprintf( action, sizeof( action ), ru ? "Заменить · доплата $%d" : "Replace · pay $%d", delta );
+			else if( delta < 0 ) snprintf( action, sizeof( action ), ru ? "Заменить · возврат $%d" : "Replace · refund $%d", -delta );
+			else Q_strncpy( action, ru ? "Заменить заказ" : "Replace order", sizeof( action ));
+		}
+		else if( shop.mode == BuyNow ) snprintf( action, sizeof( action ), ru ? "Купить сейчас · %s" : "Buy now · %s", price );
+		else
+		{
+			snprintf( action, sizeof( action ), ru ? "Купить на следующий раунд · %s" : "Buy for next round · %s", price );
+			if( CZM_TextWidth( title, action ) > m_quick[4].w - m_quick[4].h * 2 / 7 )
+				snprintf( action, sizeof( action ), ru ? "На след. раунд · %s" : "Next round · %s", price );
+		}
+	}
+	else if( pending ) snprintf( action, sizeof( action ), ru ? "Отменить · +%s" : "Cancel · +%s", price );
 	else if( ready ) snprintf( action, sizeof( action ), ru ? "Купить комплект · %s" : "Buy loadout · %s", price );
 	else Q_strncpy( action, shop.status == Purchased ? ( ru ? "Куплено" : "Purchased" ) :
 		( ru ? "Выбери оружие" : "Select weapons" ), sizeof( action ));
-	DrawSurvivalButton( m_quick[4], action, ready, ready || shop.status == Pending, IsPressed( HIT_QUICK + 4 ));
+	DrawSurvivalButton( m_quick[4], action, ready, ready || ( !round && pending ), IsPressed( HIT_QUICK + 4 ), round );
 }
 
 void CCzmShop::DrawSurvivalGear()
@@ -1901,7 +1993,8 @@ void CCzmShop::DrawSurvivalGear()
 		CZM_DrawText( title, x, y, w, ( ru ? ruNames : enNames )[key], CZM_White(), align );
 		char action[64];
 		if( enabled ) snprintf( action, sizeof( action ), ru ? "Купить сейчас · $%d" : "Buy now · $%d", price );
-		else Q_strncpy( action, ru ? "Получено" : "Owned", sizeof( action ));
+		else Q_strncpy( action, RoundShop() && !( m_wmenu.shop.flags & CzmSurvivalShop::CanBuyGear ) ?
+			( ru ? "Доступно за людей" : "Available as a human" ) : ( ru ? "Получено" : "Owned" ), sizeof( action ));
 		CZM_DrawText( note, x, y + H * .050f, w, action, color, align );
 	}
 }
@@ -1932,19 +2025,30 @@ void CCzmShop::ActivateSurvival( int hit )
 	else if( hit >= HIT_ITEM && hit < HIT_ITEM + m_iSlots )
 	{
 		const int row = hit - HIT_ITEM;
-		if( RowEnabled( row ))
+		if( RoundShop() && !Gear() )
+		{
+			m_iInfo = row;
+			if( m_slots[row]->weapon != shop.preview ) { action = Item; value = m_wmenu.keys[row]; }
+		}
+		else if( RowEnabled( row ))
 		{
 			action = Item;
 			value = m_wmenu.keys[row];
 		}
 	}
+	else if( hit == HIT_SELECT && RoundShop() && !Gear() && m_iInfo >= 0 && m_iInfo < m_iSlots && RowEnabled( m_iInfo ))
+	{
+		value = m_slots[m_iInfo]->weapon;
+		if( value == shop.preview ) action = Select;
+	}
+	else if( hit == HIT_CANCEL && RoundShop() && shop.status == Pending ) action = Cancel;
 	else if( hit == HIT_QUICK && ( shop.flags & CanRemember )) action = Remember;
 	else if( hit == HIT_QUICK + 1 && shop.page > 0 ) { action = Page; value = shop.page - 1; }
 	else if( hit == HIT_QUICK + 2 && shop.page + 1 < shop.pages ) { action = Page; value = shop.page + 1; }
 	else if( hit == HIT_QUICK + 3 && !Gear() ) action = Skip;
 	else if( hit == HIT_QUICK + 4 )
 	{
-		if( shop.status == Pending ) action = Cancel;
+		if( !RoundShop() && shop.status == Pending ) action = Cancel;
 		else if( shop.flags & CanConfirm ) action = Confirm;
 	}
 	if( !action ) return;

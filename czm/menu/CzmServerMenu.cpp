@@ -2062,6 +2062,12 @@ void CZM_DrawGameOverlay( void )
 		RemoveButtons();
 		return;
 	}
+	// A closing shop may still have its last packet until the server replies.
+	if( CzmSurvivalShop::Wire( CzmWeapons::Text( value )))
+	{
+		RemoveButtons();
+		return;
+	}
 
 	bool show = value && value[0] && CL_IsActive() && !uiStatic.menu.IsActive() && !uiStatic.client.IsActive()
 		&& EngFuncs::GetCvarFloat( "czm_menu_cards" ) != 0.0f;

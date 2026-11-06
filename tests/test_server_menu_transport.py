@@ -118,10 +118,10 @@ int main() {
     // The same complete packet supports every style. Rendering it again never
     // issues a slot command or creates a new transaction.
     const auto before=commands;
-    const std::string loadout="#czms1\t39\t0\t0\t2\t4\t5\t1\t1\t28\t26\t3\t0\t2\n"
-        "#item\t0\t28\t4\t0\nPrimary weapon\n1. AK-47\n8. Sections\n9. Loadout\n0. Exit";
-    Receive(menu,loadout,896);
-    assert(s_bCardsShown && published.find(loadout)!=std::string::npos && menu.m_bitsValidSlots==896);
+    const std::string loadout="#czms2\t39\t0\t0\t2\t4\t5\t1\t1\t28\t26\t0\t0\t6\n"
+        "#round\t28\t2\t14\t17\t28\t26\t5\t0\n#item\t0\t28\t4\t1\nPrimary weapon\n1. AK-47\n7. Select\n8. Sections\n9. Loadout\n0. Exit";
+    Receive(menu,loadout,961);
+    assert(s_bCardsShown && published.find(loadout)!=std::string::npos && menu.m_bitsValidSlots==961);
     style=1;
     menu.PresentSurvivalShop(false);
     assert(published.find(loadout)!=std::string::npos);
@@ -129,9 +129,9 @@ int main() {
     const int oldClassic=classicMenus;
     menu.PresentSurvivalShop(false);
     assert(!s_bCardsShown && published.empty() && classicMenus==oldClassic);
-    assert(touchSlots=="slot8 slot9 slot10 ");
-    assert(strstr(g_szMenuString,"9. Loadout")&&!strstr(g_szMenuString,"#czms1")&&!strstr(g_szMenuString,"#item"));
-    assert(menu.m_fMenuDisplayed && menu.m_bitsValidSlots==896);
+    assert(touchSlots=="slot1 slot7 slot8 slot9 slot10 ");
+    assert(strstr(g_szMenuString,"7. Select")&&!strstr(g_szMenuString,"#czms2")&&!strstr(g_szMenuString,"#round")&&!strstr(g_szMenuString,"#item"));
+    assert(menu.m_fMenuDisplayed && menu.m_bitsValidSlots==961);
     vgui=1;style=2;
     menu.PresentSurvivalShop(false);
     assert(published.find(loadout)!=std::string::npos && commands==before && touchSlots.empty());
