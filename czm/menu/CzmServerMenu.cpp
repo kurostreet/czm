@@ -2056,7 +2056,8 @@ void CZM_DrawGameOverlay( void )
 
 	SpectatorExitFrame( value );
 
-	if( ServerWindowFrame( value ) || CZM_ShopWeaponFrame( value ))
+	// The weapon window must close when the next ShowMenu is an equipment card.
+	if( CZM_ShopWeaponFrame( value ) || ServerWindowFrame( value ))
 	{
 		RemoveButtons();
 		return;

@@ -105,6 +105,41 @@ int main(){
  assert(!CzmWeapons::Parse("#czmw1\tprimary\t0\t1\t1\t0\t0\t0\tbuy\t-1\t5\t0").purchase);
 }
 ''')
+ def test_equipment_releases_the_previous_weapon_window(self):
+  source=(ROOT/'czm/menu/CzmServerMenu.cpp').read_text()
+  cpp(BASE+r'''
+static bool shopOpen=true, closeShop=false, gearOpen=false;
+static const char *value="21 513\n#czm1\tmenu\tloadout\tGrenades\n1. HE grenade\n0. Exit";
+namespace EngFuncs {
+ const char *GetCvarString(const char *) { return value; }
+ float GetCvarFloat(const char *) { return 1.0f; }
+}
+static bool CL_IsActive() { return true; }
+struct WindowStack { bool IsActive() const { return shopOpen||gearOpen; } };
+static struct { WindowStack menu,client; } uiStatic;
+static bool CZM_ShopWeaponFrame(const char *v) {
+ if(shopOpen && strstr(v,"#czm1\t")) closeShop=true;
+ return false;
+}
+static bool ServerWindowFrame(const char *v) {
+ if(!strstr(v,"#czm1\t")) return false;
+ if(!uiStatic.client.IsActive()) gearOpen=true;
+ return true;
+}
+static struct { int serial,layoutW,layoutH;bool buttons; } s_menu;
+static void SpectatorExitFrame(const char *) {}
+static void RemoveButtons() {}
+static void ParseMenu(const char *) {}
+static void Layout() {}
+static void AddButtons() {}
+static void DrawMenu() {}
+'''+function(source,'void CZM_DrawGameOverlay(')+r'''
+int main(){
+ CZM_DrawGameOverlay(); assert(closeShop&&!gearOpen);
+ shopOpen=false; // deferred close, before rendering the next frame
+ CZM_DrawGameOverlay(); assert(gearOpen);
+}
+''')
  def test_official_team_buttons_use_distinct_commands(self):
   s=(ROOT/'czm/menu/CzmServerMenu.cpp').read_text()
   code=BASE+r'''
