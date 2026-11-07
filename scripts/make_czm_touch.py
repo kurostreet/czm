@@ -121,6 +121,7 @@ BADGED = {"radio1": ("delapouite/walkie-talkie.svg", "1"), "radio2": ("delapouit
 # text buttons: menu digits
 TEXT = {f"num{d}": str(d) for d in range(10)}
 TEXT["numbers"] = "123"
+TEXT.update({"skill_g": "G", "skill_r": "R", "skill_e": "E"})
 
 
 def game_icon(root, name, keep_subpath=None):
@@ -170,10 +171,13 @@ def build_icons(root, only=None):
     from playwright.sync_api import sync_playwright
 
     glyphs = dict(CUSTOM)
-    glyphs["jump"] = jump_icon(root)
-    glyphs["duckjump"] = duckjump_icon(root)
+    if not only or "jump" in only:
+        glyphs["jump"] = jump_icon(root)
+    if not only or "duckjump" in only:
+        glyphs["duckjump"] = duckjump_icon(root)
     for key, name in GAME_ICONS.items():
-        glyphs[key] = game_icon(root, name)
+        if not only or key in only:
+            glyphs[key] = game_icon(root, name)
 
     cells = []
     names = []
@@ -181,6 +185,8 @@ def build_icons(root, only=None):
         cls = "btn fire" if key == "fire" else "btn"
         cells.append((key, f'<div class="{cls}">{content}</div>'))
     for key, (name, number) in BADGED.items():
+        if only and key not in only:
+            continue
         cells.append((key, f'<div class="btn">{game_icon(root, name)}</div><div class="badge">{number}</div>'))
     for key, text in TEXT.items():
         small = " small" if len(text) > 1 else ""
@@ -218,6 +224,23 @@ def build_icons(root, only=None):
         Image.open(path).convert("RGBA").save(path, "PNG", optimize=True)
     print(len(names), "icons in", ICON_DIR.relative_to(ROOT))
     return names
+
+
+def build_skill_icons():
+    """The G/R/E controls use the same circle and the game's bundled Inter font."""
+    from PIL import Image, ImageDraw, ImageFont
+    scale = 4
+    font = ImageFont.truetype(str(FONT), 110 * scale)
+    for key, letter in (("skill_g", "G"), ("skill_r", "R"), ("skill_e", "E")):
+        image = Image.new("RGBA", (SIZE * scale, SIZE * scale))
+        draw = ImageDraw.Draw(image)
+        draw.ellipse((10*scale,10*scale,246*scale,246*scale), fill=(15,24,30,175), outline=(151,218,199,210), width=6*scale)
+        box = draw.textbbox((0,0), letter, font=font)
+        x = (SIZE*scale-(box[2]-box[0]))/2-box[0]
+        y = (SIZE*scale-(box[3]-box[1]))/2-box[1]
+        draw.text((x,y+3*scale),letter,font=font,fill=(0,0,0,150))
+        draw.text((x,y),letter,font=font,fill=(244,255,251,255))
+        image.resize((SIZE,SIZE),Image.Resampling.LANCZOS).save(ICON_DIR/(key+".png"),optimize=True)
 
 
 """

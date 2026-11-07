@@ -34,6 +34,20 @@ class SettingsTests(unittest.TestCase):
         old=copy.deepcopy(self.data);old['cvars']['sensitivity']='1'
         self.assertEqual(self.save(self.tokens[0],0,old).status_code,409)
         self.assertEqual(self.get(self.tokens[0]).json()['payload'],self.data)
+    def test_ability_buttons_survive_account_round_trip_with_an_existing_full_layout(self):
+        buttons=[]
+        for i in range(80):
+            button=copy.deepcopy(self.data['layouts']['1'][0]);button[0]='existing_%d'%i;buttons.append(button)
+        for i,command in enumerate(['czm_skill_g','czm_skill_r','+czm_skill_e']):
+            button=copy.deepcopy(buttons[0]);button[0]='ability_%d'%i;button[2]=command
+            button[3:7]=[.2+i*.1,.3,.28+i*.1,.5];buttons.append(button)
+        self.data['layouts']['1']=buttons
+        response=self.save(self.tokens[0],0,self.data)
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertEqual(self.get(self.tokens[0]).json()['payload'],self.data)
+        for i in range(80,97):
+            button=copy.deepcopy(buttons[0]);button[0]='extra_%d'%i;buttons.append(button)
+        with self.assertRaises(accounts.AuthError):settings.validate(self.data)
     def test_progress_hud_layout_round_trips_between_devices(self):
         self.data['cvars'].update({'czm_hud_progress_x':'0.41','czm_hud_progress_y':'0.75',
             'czm_hud_progress_scale':'1.25','czm_hud_progress_opacity':'0.5','czm_hud_progress_hidden':'1'})

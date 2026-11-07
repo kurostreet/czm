@@ -3,6 +3,7 @@
 #include "hud.h"
 #include "cl_util.h"
 #include "czm_hud.h"
+#include "czm_skills.h"
 #include <cstdio>
 #include <cstring>
 
@@ -42,12 +43,12 @@ void CZM_AmmoReport( int weapon, int clip, int reserve )
 	{
 		if( clip > s_seen[weapon] )
 			s_seen[weapon] = clip;
-		full = s_fullClip[weapon] > s_seen[weapon] ? s_fullClip[weapon] : s_seen[weapon];
+		full = CZM_ClipCapacity(weapon,s_fullClip[weapon] > s_seen[weapon] ? s_fullClip[weapon] : s_seen[weapon]);
 	}
 	if( full <= 0 )
 		full = clip > 0 ? clip : 1;
 
-	snprintf( state, sizeof( state ), "%d %d %d", clip, reserve < 0 ? 0 : reserve, full );
+	snprintf( state, sizeof( state ), "%d %d %d", clip, CZM_UnlimitedReserve() ? -1 : reserve < 0 ? 0 : reserve, full );
 	Publish( state );
 	s_reported = true;
 }

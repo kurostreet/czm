@@ -230,7 +230,14 @@ public:
 	const char *pszAmmo2(void) { return ItemInfoArray[m_iId].pszAmmo2; }
 	int iMaxAmmo2(void) { return ItemInfoArray[m_iId].iMaxAmmo2; }
 	const char *pszName(void) { return ItemInfoArray[m_iId].pszName; }
-	int iMaxClip(void) { return ItemInfoArray[m_iId].iMaxClip; }
+	int iMaxClip(void) {
+#ifdef CLIENT_DLL
+        extern int CZM_ClipCapacity(int weapon,int fallback);
+        return CZM_ClipCapacity(m_iId,ItemInfoArray[m_iId].iMaxClip);
+#else
+        return ItemInfoArray[m_iId].iMaxClip;
+#endif
+    }
 	int iWeight(void) { return ItemInfoArray[m_iId].iWeight; }
 	int iFlags(void) { return ItemInfoArray[m_iId].iFlags; }
 };

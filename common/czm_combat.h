@@ -1,0 +1,38 @@
+/* Runtime ability presentation. Server class IDs are 1..10; zero hides all controls. */
+#pragma once
+#include <cstdio>
+#include <cmath>
+#include <algorithm>
+namespace CzmCombat {
+enum { G, R, E, BUTTONS };
+struct State {
+    int klass, flags, primary, secondary, charge, active;
+    State():klass(0),flags(0),primary(0),secondary(0),charge(0),active(0){}
+};
+inline bool Parse(const char *text, State &s) {
+    State value; char tail;
+    if (!text || std::sscanf(text,"%d %d %d %d %d %d %c",&value.klass,&value.flags,
+        &value.primary,&value.secondary,&value.charge,&value.active,&tail)!=6 || value.klass<0 || value.klass>10
+        || value.flags<0 || value.flags>3 || value.primary<0 || value.primary>600 || value.secondary<0 || value.secondary>600
+        || value.charge<0 || value.charge>100 || value.active<0 || value.active>100) {s=State();return false;}
+    s=value;return true;
+}
+inline int Mask(int klass) {
+    static const int masks[11]={0,1,2,0,1,1,1,5,4,1,3};
+    return klass>=0&&klass<=10?masks[klass]:0;
+}
+inline int Cooldown(const State &s,int button) {
+    if (!(Mask(s.klass)&(1<<button))) return 0;
+    return button==G&&s.klass==10?s.secondary:button==E&&s.klass==7?0:s.primary;
+}
+inline const char *Name(const State &s,int button,bool ru) {
+    static const char *const names[11][2]={{"",""},{"Ускорение","Sprint"},{"Рывок","Leap"},{"Прыжок","Jump"},
+        {"Огонь","Fire"},{"Лёд","Ice"},{"Яд","Poison"},{"Сфера","Orb"},{"Чёрная дыра","Black hole"},
+        {"Телепорт","Teleport"},{"Полёт","Fly"}};
+    if (s.klass<1||s.klass>10) return "";
+    if (s.klass==7) return button==E?(s.flags&1?(ru?"Лёд":"Ice"):(ru?"Огонь":"Fire")):
+        (s.flags&1?(ru?"Ледяная сфера":"Ice orb"):(ru?"Огненная сфера":"Fire orb"));
+    if (s.klass==10&&button==G) return ru?"Невидимость":"Invisibility";
+    return names[s.klass][ru?0:1];
+}
+}

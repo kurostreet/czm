@@ -59,6 +59,15 @@ public final class SettingsDataTest {
         p=payload();p.getJSONObject("layouts").getJSONArray("1").getJSONArray(0).put(1,"../config.cfg");try{SettingsData.validate(p);throw new AssertionError();}catch(java.io.IOException expected){}
         for(String bad:new String[]{"NaN","Infinity","1;quit","1\nquit"})check(!SettingsData.validValue("volume",bad));
         p=payload();String canonical=SettingsData.canonical(p);check(SettingsData.canonical(new JSONObject(canonical)).equals(canonical));
+        JSONObject abilities=payload();JSONArray buttons=abilities.getJSONObject("layouts").getJSONArray("1");
+        JSONArray original=buttons.getJSONArray(0);
+        for(int i=1;i<80;i++){JSONArray b=new JSONArray(original.toString());b.put(0,"saved_"+i);buttons.put(b);}
+        for(String command:new String[]{"czm_skill_g","czm_skill_r","+czm_skill_e"}){
+            JSONArray b=new JSONArray(original.toString());b.put(0,"skill_"+buttons.length());b.put(2,command);buttons.put(b);
+        }
+        SettingsData.validate(abilities);
+        String restored=SettingsData.engineEvent(abilities).getJSONObject("files").getString("1");
+        check(restored.contains("\"czm_skill_g\"")&&restored.contains("\"czm_skill_r\"")&&restored.contains("\"+czm_skill_e\""));
         testActiveLayoutExport();
         System.out.println("SETTINGS_DATA_OK");
     }
