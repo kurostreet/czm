@@ -80,6 +80,7 @@ def profile(conn, viewer, target, compact=False):
               "account": row["registered"] is not None, "created": row["registered"] or row["created"],
               "status": extra["status"] if extra else "", "relation": rel,
               "theme": extra["theme"] if extra and extra["theme"] in PROFILE_THEMES else "ember",
+              "nick_color": extra["nick_color"] if extra else "",
               "online": online, "last_seen": 0 if hidden else extra["last_seen"] if extra else 0,
               "playing": online and bool(presence["server"]), "server": "", "map": ""}
     from . import moderation
@@ -168,6 +169,19 @@ def update_theme(conn, key, theme):
     accounts.rate(conn, "profile-theme", str(player["id"]), 12, 60)
     conn.execute("INSERT INTO social_profiles(player,theme) VALUES(?,?) "
                  "ON CONFLICT(player) DO UPDATE SET theme=excluded.theme", (player["id"], theme))
+    return {"profile": profile(conn, player, player["id"])}
+
+
+def update_nick_color(conn, key, nick_color):
+    """A display preference, separate from names and server-assigned role badges."""
+    player = actor(conn, key)
+    if service.active_ban(conn, player):
+        raise accounts.AuthError("banned", 403)
+    if not isinstance(nick_color, str) or (nick_color != "" and not re.fullmatch(r"#[0-9A-Fa-f]{6}", nick_color)):
+        raise accounts.AuthError("nick_color")
+    accounts.rate(conn, "profile-nick-color", str(player["id"]), 12, 60)
+    conn.execute("INSERT INTO social_profiles(player,nick_color) VALUES(?,?) "
+                 "ON CONFLICT(player) DO UPDATE SET nick_color=excluded.nick_color", (player["id"], nick_color.upper()))
     return {"profile": profile(conn, player, player["id"])}
 
 
