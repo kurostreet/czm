@@ -41,7 +41,7 @@ struct {void(*pfnHookUserMsg)(const char*,int(*)(const char*,int,void*));void(*C
 const char *(*pfnGetCvarString)(const char*);float(*GetClientTime)();} gEngfuncs={Hook,Set,Get,Time};
 struct BufferReader{const unsigned char *p;int pos=0,size;BufferReader(const char*,void *b,int n):p((unsigned char*)b),size(n){}
 int ReadByte(){assert(pos<size);return p[pos++];}int ReadShort(){int a=ReadByte(),b=ReadByte();return (short)(a|(b<<8));}};
-void CZM_SkillsFrame();void CZM_SkillsReset();
+void CZM_SkillsFrame();void CZM_SkillsReset();void CZM_ClipReset();
 ''' + code + r'''
 void Skill(int klass,int flags=0,int cd=0,int secondary=0,int charge=0){
 unsigned char b[11]={1,(unsigned char)klass,(unsigned char)flags,(unsigned char)(cd&255),(unsigned char)(cd>>8),
@@ -64,7 +64,8 @@ g_iUser1=4;CZM_SkillsFrame();assert(cvars["czm_skill_mask"]=="0");g_iUser1=0;
 unsigned char packet[33]={1};packet[1+28]=70;packet[1+20]=150;packet[1+21]=25;packet[32]=1;
 MsgFunc_CzmClip("CzmClip",sizeof(packet),packet);
 assert(CZM_ClipCapacity(28,30)==70&&CZM_ClipCapacity(20,100)==150&&CZM_ClipCapacity(21,8)==25&&CZM_UnlimitedReserve());
-assert(CZM_ClipCapacity(99,7)==7);CZM_SkillsReset();assert(CZM_ClipCapacity(28,30)==30&&!CZM_UnlimitedReserve());
+assert(CZM_ClipCapacity(99,7)==7);CZM_SkillsReset();assert(CZM_ClipCapacity(28,30)==70&&CZM_UnlimitedReserve());
+CZM_ClipReset();assert(CZM_ClipCapacity(28,30)==30&&!CZM_UnlimitedReserve());
 assert(!CzmCombat::Parse("8 0 0 0 1000 0",s)&&CzmCombat::Mask(s.klass)==0);
 assert(!CzmCombat::Parse("1 0 0 0 0 0 trailing",s));
 return 0;}

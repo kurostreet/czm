@@ -33,12 +33,14 @@ static int MsgFunc_CzmClip(const char *name,int size,void *buffer) {
 void CZM_SkillsInit() {
     gEngfuncs.pfnHookUserMsg("CzmSkill",MsgFunc_CzmSkill);
     gEngfuncs.pfnHookUserMsg("CzmClip",MsgFunc_CzmClip);
+    CZM_ClipReset();
     CZM_SkillsReset();
 }
 void CZM_SkillsReset() {
-    s_skill=CzmCombat::State();s_received=0;std::memset(s_clips,0,sizeof(s_clips));s_unlimited=false;
+    s_skill=CzmCombat::State();s_received=0;
     gEngfuncs.Cvar_Set("czm_skill_mask","0");gEngfuncs.Cvar_Set("czm_skill_state","");
 }
+void CZM_ClipReset() {std::memset(s_clips,0,sizeof(s_clips));s_unlimited=false;}
 void CZM_SkillsFrame() {
     CzmCombat::State value=s_skill;
     // A dead or spectating player never keeps controls from their last life.

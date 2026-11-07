@@ -27,6 +27,8 @@
 #include "StudioModelRenderer.h"
 #include "GameStudioModelRenderer.h"
 #include "hud/czm_tags.h"
+#include "hud/czm_hud.h"
+#include "hud/czm_skills.h"
 
 void IN_StopAutoRun( void ); // input_xash3d.cpp
 bool CL_IsDead( void );
@@ -117,6 +119,8 @@ int CHud :: MsgFunc_ViewMode( const char *pszName, int iSize, void *pbuf )
 
 int CHud :: MsgFunc_InitHUD( const char *pszName, int iSize, void *pbuf )
 {
+	CZM_ClipReset(); // connection-scoped policy survives renderer/VidInit resets
+	CZM_AmmoReset(); // forget the previous server's observed magazine sizes
 	CZM_TagsReset(); // also reconnecting to another server on the same map
 	// prepare all hud data
 	HUDLIST *pList = m_pHudList;
