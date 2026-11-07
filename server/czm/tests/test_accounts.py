@@ -348,6 +348,44 @@ class AccountTests(unittest.TestCase):
             conn.execute("UPDATE account_sessions SET seen=?", (db.now()-accounts.SESSION_IDLE-1,))
         self.assertEqual(self.post("me", token).status_code, 401)
 
+    def test_email_link_conflict_is_explicit_and_does_not_send_or_rebind(self):
+        owner = self.verified_email("owner@example.com")
+        with db.db() as conn:
+            peer = service.hello(conn, "email-peer-secret-123456789", "email-peer", "Peer", "", "ru", "test")["id"]
+            peer_token = accounts.register(conn, "email-peer-secret-123456789", "EmailPeer", "Password123", "Password123", "peer-ip")["token"]
+        with self.mail() as sent:
+            conflict = self.post("email", peer_token, email=" OWNER@example.com ")
+            self.assertEqual((conflict.status_code, conflict.json()), (409, {"error": "email_used"}))
+            self.assertEqual(sent, [])
+            self.assertEqual(self.post("me", owner).json()["email"], "owner@example.com")
+            self.assertEqual(self.post("me", peer_token).json()["email"], "")
+            with db.db() as conn:
+                self.assertIsNone(conn.execute("SELECT 1 FROM auth_codes WHERE player=?", (peer,)).fetchone())
+            free = self.post("email", peer_token, email=" Free@example.com ")
+            self.assertEqual(free.status_code, 200, free.text)
+            self.assertEqual((sent[-1][0], sent[-1][2]), ("free@example.com", "email"))
+            self.assertEqual(self.post("me", peer_token).json()["email"], "")
+            self.assertEqual(self.post("email-confirm", peer_token, code=sent[-1][1]).json()["email"], "free@example.com")
+            # The account's own verified address is not another account's conflict.
+            self.assertEqual(self.post("email", peer_token, email="free@example.com").status_code, 200)
+            self.assertEqual(self.post("me", owner).json()["email"], "owner@example.com")
+
+    def test_email_link_conflict_is_rechecked_when_confirming_a_pending_code(self):
+        token = self.verified_email("original@example.com")
+        with self.mail() as sent:
+            self.assertEqual(self.post("email", token, email="available@example.com").status_code, 200)
+            code = sent[-1][1]
+            with db.db() as conn:
+                peer = service.hello(conn, "email-race-secret-123456789", "email-race", "Peer", "", "ru", "test")["id"]
+                accounts.register(conn, "email-race-secret-123456789", "EmailRace", "Password123", "Password123", "peer-ip")
+                conn.execute("UPDATE accounts SET email=? WHERE player=?", ("available@example.com", peer))
+            conflict = self.post("email-confirm", token, code=code)
+            self.assertEqual((conflict.status_code, conflict.json()), (409, {"error": "email_used"}))
+            self.assertEqual(self.post("me", token).json()["email"], "original@example.com")
+            with db.db() as conn:
+                self.assertEqual(conn.execute("SELECT email FROM accounts WHERE player=?", (peer,)).fetchone()[0], "available@example.com")
+            self.assertEqual(len(sent), 1)
+
     def test_optional_mail_is_honest_when_sender_missing(self):
         token = self.register()
         self.assertFalse(self.post("me", token).json()["mail_ready"])
