@@ -34,7 +34,7 @@ virtual void Draw(){}virtual bool IsRoot()const{return false;}virtual bool KeyDo
 #define ADD_MENU3(cmd,type,fn) static type*cmd=new type();void fn()
 namespace UI{namespace Key{inline bool IsBackspace(int k){return k==8;}inline bool IsEnter(int k){return k==13;}inline bool IsEscape(int k){return k==27;}inline bool IsLeftMouse(int k){return k==1;}}
 namespace Scissor{inline void PushScissor(int,int,int,int){}inline void PopScissor(){}}}
-struct Cursor{int cursorY;} ;extern Cursor uiStatic;
+struct Cursor{int cursorX,cursorY;} ;extern Cursor uiStatic;
 struct EngFuncs{static const char*GetCvarString(const char*);static float GetCvarFloat(const char*);static void CvarSetString(const char*,const char*);static void CvarSetValue(const char*,float);static double DoubleTime();static void SetTextInputRect(int,int,int,int){}};
 inline bool CL_IsActive(){return false;}
 void UI_EnableTextInput(bool);void CZM_Init();bool CZM_IsRussian();unsigned CZM_White();unsigned CZM_Grey();
@@ -66,6 +66,7 @@ int ScreenWidth=1536,ScreenHeight=716,cursorX,cursorY;Cursor uiStatic;Stack stac
 static double now=100;static std::string key="legacy-device-key";static int me=7,ids,logins,lastButtonFont,identity=1;static bool authenticated=true,drawTrace;static bool russian=true;
 static std::map<std::string,std::string> vars;static std::map<int,std::pair<int,std::string>> replies;
 static std::vector<std::string> drawnLabels;
+struct DrawnText{int x,y,w,font;unsigned color;std::string text;};static std::vector<DrawnText> drawnText;
 struct Request{int id;std::string url,body;};static std::vector<Request> requests;
 const char*EngFuncs::GetCvarString(const char*k){return vars[k].c_str();}float EngFuncs::GetCvarFloat(const char*k){return atof(GetCvarString(k));}void EngFuncs::CvarSetString(const char*k,const char*v){vars[k]=v;}void EngFuncs::CvarSetValue(const char*k,float v){vars[k]=std::to_string(v);}double EngFuncs::DoubleTime(){return now;}
 void UI_EnableTextInput(bool){}void CZM_Init(){}bool CZM_IsRussian(){return russian;}unsigned CZM_White(){return 0xffffffff;}unsigned CZM_Grey(){return PackRGBA(150,164,184,255);}
@@ -73,11 +74,11 @@ static std::map<int,std::string> loadedArt;
 HIMAGE CZM_MapPreview(const char*){return 0;}const char*CZM_MapModeArt(const char*,const char*){return "gfx/czm/maps/_zombie.png";}
 HIMAGE CZM_Image(const char*path){int id=(int)loadedArt.size()+1;loadedArt[id]=path;return id;}
 void CZM_DrawCover(HIMAGE image,int x,int y,int w,int h){if(drawTrace)printf("C\t%d\t%d\t%d\t%d\t%s\n",x,y,w,h,loadedArt[image].c_str());}
-HFont CZM_Font(int i){return i;}int CZM_FontHeight(HFont f){return (f==CZMF_PANEL_TITLE?42:f==CZMF_NICK?29:f==CZMF_LANG?24:f==CZMF_SMALL?17:f==CZMF_UI_TITLE?32:f==CZMF_UI_META?15:f==CZMF_UI_LABEL?20:f==CZMF_PROFILE_NAME?40:f==CZMF_PROFILE_TEXT?24:f==CZMF_CHAT_TEXT?23:21)*ScreenHeight/768;}
+HFont CZM_Font(int i){return i;}int CZM_FontHeight(HFont f){return (f==CZMF_PANEL_TITLE?42:f==CZMF_NICK?29:f==CZMF_LANG?24:f==CZMF_SMALL?17:f==CZMF_UI_TITLE?32:f==CZMF_UI_META?15:f==CZMF_UI_LABEL?20:f==CZMF_PROFILE_TITLE?62:f==CZMF_PROFILE_NAME?40:f==CZMF_PROFILE_TEXT?24:f==CZMF_CHAT_TEXT?23:21)*ScreenHeight/768;}
 int CZM_TextWidth(HFont f,const char*s){int n=0;for(;*s;s++)if((*s&0xc0)!=0x80)n++;return n*CZM_FontHeight(f)*62/100;}
 int CZM_WrapText(HFont f,const char*s,int w,int*starts,int max){int lines=0,i=0,last=0;starts[0]=0;for(;s[i]&&lines<max;){int from=i,n=0;while(s[i]&&(n*CZM_FontHeight(f)/2<w||!n)){i++;while((s[i]&0xc0)==0x80)i++;n++;}if(i==from)break;lines++;starts[lines]=i;last=i;}return lines;}
 void CZM_WrapLine(const char*s,const int*starts,int n,char*out,size_t size){int len=std::min((int)size-1,starts[n+1]-starts[n]);memcpy(out,s+starts[n],len);out[len]=0;}
-void CZM_DrawText(HFont f,int x,int y,int w,const char*s,unsigned c,unsigned just){drawnLabels.emplace_back(s);if(drawTrace){printf("T\t%d\t%d\t%d\t%d\t%u\t%u\t%s\n",x,y,w,CZM_FontHeight(f),c,just,s);}}
+void CZM_DrawText(HFont f,int x,int y,int w,const char*s,unsigned c,unsigned just){drawnLabels.emplace_back(s);drawnText.push_back({x,y,w,f,c,s});if(drawTrace){printf("T\t%d\t%d\t%d\t%d\t%u\t%u\t%s\n",x,y,w,CZM_FontHeight(f),c,just,s);}}
 void UI_FillRect(int x,int y,int w,int h,unsigned c){if(drawTrace)printf("R\t%d\t%d\t%d\t%d\t%u\n",x,y,w,h,c);}
 void CZM_DrawImage(const char*p,int x,int y,int w,int h,unsigned c){if(drawTrace)printf("I\t%d\t%d\t%d\t%d\t%u\t%s\n",x,y,w,h,c,p);}
 void CZM_DrawPill(const char*,int x,int y,int w,int h,unsigned c){UI_FillRect(x,y,w,h,c);}
@@ -173,7 +174,7 @@ int main(int argc,char**argv){
     w.m_profile.serverOwner=true;w.m_profile.ownedCount=5;strcpy(w.m_profile.project,"Project CZM");
     for(int i=0;i<5;i++){snprintf(w.m_profile.owned[i].address,64,"8.8.8.8:%d",27015+i);snprintf(w.m_profile.owned[i].name,388,"Project server %d",i+1);}
    }
-   w.Draw();assert(w.m_panel.x>=0&&w.m_panel.y>=0&&w.m_panel.y+w.m_panel.h<=ScreenHeight);
+   w.Draw();if(!(w.m_panel.x>=0&&w.m_panel.y>=0&&w.m_panel.y+w.m_panel.h<=ScreenHeight))fprintf(stderr,"profile overflow %dx%d %s self%d panel %d+%d\n",ScreenWidth,ScreenHeight,role,self,w.m_panel.y,w.m_panel.h);assert(w.m_panel.x>=0&&w.m_panel.y>=0&&w.m_panel.y+w.m_panel.h<=ScreenHeight);
    assert(!w.m_telegram.w);
    for(int i=0;i<w.m_profile.ownedCount;i++){
     const CzmRect&r=w.m_projectRows[i];assert(r.w>0&&r.h>=24);
@@ -279,6 +280,8 @@ int main(int argc,char**argv){
    for(const char*label:{"SUPPORT","MODERATOR","OFFICIAL TESTER CZM","SERVER OWNER","TOP 10"})assert(std::count(drawnLabels.begin(),drawnLabels.end(),label)==1);
    assert(w.m_panel.y>=0&&w.m_panel.y+w.m_panel.h<=ScreenHeight);
    assert(w.m_theme.w&&w.m_nickEdit.w);
+   const int themeNeeded=CZM_TextWidth(CZM_Font(CZMF_UI_LABEL),russian?"Фон":"Style")+w.m_theme.h/2+w.m_theme.h*40/100+w.m_theme.h/5;
+   assert(w.m_theme.w>=themeNeeded);
    w.Activate(w.THEME);w.Layout();assert(w.m_themeOpen);
    assert(w.m_themePanel.y>=0&&w.m_themePanel.y+w.m_themePanel.h<=ScreenHeight);
    for(int i=0;i<4;i++){
@@ -294,6 +297,57 @@ int main(int argc,char**argv){
  assert(requests.back().url=="/api/v1/social/theme"&&requests.back().body=="{\"theme\":\"frost\"}");
  replies[w.m_write]={200,"{\"profile\":{\"id\":"+std::to_string(me)+",\"nick\":\"Kuro\",\"account\":true,\"relation\":\"self\",\"theme\":\"frost\"}}"};
  w.Frame();assert(!w.m_themeOpen&&!strcmp(w.m_profile.theme,"frost"));
+ // Color selection is local until Save, keeps the status draft, and uses a separate hit target.
+ for(auto resolution:{std::pair<int,int>{640,320},{800,360},{960,540},{1536,716},{1024,768}}){
+  ScreenWidth=resolution.first;ScreenHeight=resolution.second;
+  w.OpenProfile(me,true);w.Read(j,w.READ_PROFILE);w.m_profile.id=me;w.m_appear=0;w.Layout();
+  assert(w.m_nickColor.w&&w.m_nickColor.x>=w.m_nickEdit.x+w.m_nickEdit.w);
+  cursorX=uiStatic.cursorX=w.m_nickColor.x+w.m_nickColor.w/2;cursorY=uiStatic.cursorY=w.m_nickColor.y+w.m_nickColor.h/2;
+  assert(w.Hit()==w.COLOR);strcpy(w.m_input,"Unsent biography");auto before=requests.size();w.Activate(w.COLOR);w.Layout();assert(w.m_colorOpen&&w.m_colorAuto&&!strcmp(w.m_input,"Unsent biography"));assert(w.SelectedColor()==PackRGBA(245,179,188,255));
+  assert(w.m_colorPanel.x>=0&&w.m_colorPanel.y>=0&&w.m_colorPanel.y+w.m_colorPanel.h<=ScreenHeight);
+  for(const CzmRect*r:{&w.m_colorWheel,&w.m_colorPreview,&w.m_colorHex,&w.m_colorValue,&w.m_colorReset,&w.m_colorApply,&w.m_colorCancel}){
+   assert(r->w>0&&r->h>0&&r->x>=w.m_colorPanel.x&&r->x+r->w<=w.m_colorPanel.x+w.m_colorPanel.w);
+   assert(r->y>=w.m_colorPanel.y&&r->y+r->h<=w.m_colorPanel.y+w.m_colorPanel.h);
+  }
+  assert(w.m_colorReset.y+w.m_colorReset.h<=w.m_colorApply.y);
+  for(int i=0;i<5;i++){const auto&r=w.m_colorPresets[i];assert(r.x+r.w<=w.m_colorPanel.x+w.m_colorPanel.w);cursorX=uiStatic.cursorX=r.x+r.w/2;cursorY=uiStatic.cursorY=r.y+r.h/2;assert(w.Hit()==w.COLOR_PRESET+i);}
+  w.Activate(w.COLOR_PRESET);assert(!strcmp(w.m_colorText,"#3DD6FF")&&!w.m_colorAuto&&!w.m_profile.nickColor[0]&&requests.size()==before);
+  // Wheel angle matches the existing texture: right is red, bottom is yellow/green.
+  cursorX=uiStatic.cursorX=w.m_colorWheel.x+w.m_colorWheel.w-1;cursorY=uiStatic.cursorY=w.m_colorWheel.y+w.m_colorWheel.h/2;
+  w.KeyDown(1);assert(w.m_colorDrag==1);w.MouseMove(cursorX,cursorY);w.KeyUp(1);assert(!w.m_colorDrag&&(w.m_colorHue<.01f||w.m_colorHue>.99f)&&w.m_colorSaturation>.95f);
+  cursorX=uiStatic.cursorX=w.m_colorValue.x;cursorY=uiStatic.cursorY=w.m_colorValue.y+w.m_colorValue.h/2;
+  w.KeyDown(1);w.KeyUp(1);assert(!strcmp(w.m_colorText,"#000000"));
+  w.Activate(w.COLOR_HEX);for(int n=0;n<7;n++)w.KeyDown(8);w.Char('#');w.Char('G');assert(!strcmp(w.m_colorText,"#")&&!w.m_colorAuto);
+  w.Activate(w.COLOR_SAVE);assert(requests.size()==before&&w.m_colorOpen);for(char c:std::string("abc123"))w.Char(c);assert(!strcmp(w.m_colorText,"#ABC123"));
+  w.Activate(w.COLOR_CANCEL);assert(!w.m_colorOpen&&!w.m_colorTyping&&requests.size()==before&&!w.m_profile.nickColor[0]);
+ }
+ ScreenWidth=1536;ScreenHeight=716;w.OpenProfile(me,true);w.Read(j,w.READ_PROFILE);w.m_profile.id=me;w.Layout();
+ w.Activate(w.COLOR);w.Activate(w.COLOR_PRESET);w.m_nextFetch=0;w.Fetch();const int oldColorRead=w.m_read;assert(oldColorRead);w.Activate(w.COLOR_SAVE);assert(!w.m_read);
+ assert(requests.back().url=="/api/v1/social/nick-color"&&requests.back().body=="{\"nick_color\":\"#3DD6FF\"}");
+ replies[w.m_write]={200,"{\"profile\":{\"id\":"+std::to_string(me)+",\"nick\":\"Kuro\",\"account\":true,\"relation\":\"self\",\"nick_color\":\"#3DD6FF\"}}"};
+ w.Frame();assert(!w.m_colorOpen&&!strcmp(w.m_profile.nickColor,"#3DD6FF"));replies[oldColorRead]={200,"{\"profile\":{\"id\":7,\"nick_color\":\"\"}}"};w.Frame();assert(!strcmp(w.m_profile.nickColor,"#3DD6FF"));drawnText.clear();w.Draw();
+ bool colorDrawn=false;for(const auto&t:drawnText)if(t.text=="Kuro"&&t.color==CzmNicknameColor::Parse("#3DD6FF",0))colorDrawn=true;assert(colorDrawn);
+ w.Activate(w.COLOR);w.Activate(w.COLOR_RESET);w.Activate(w.COLOR_SAVE);assert(requests.back().body=="{\"nick_color\":\"\"}");
+ // A late save cannot replace the next player's profile.
+ w.OpenProfile(8,true);w.Read(j,w.READ_PROFILE);replies[w.m_write]={200,"{\"profile\":{\"id\":7,\"nick_color\":\"#FF0000\"}}"};w.Frame();assert(w.m_profile.id==8&&!w.m_profile.nickColor[0]);
+ w.Activate(w.COLOR);assert(!w.m_colorOpen); // another player's color cannot be edited
+ // Auto preview matches own community messages, including each system role; Reset still saves empty.
+ for(const char*role:{"support","moderator","tester","server_owner"}){
+  w.OpenProfile(me,true);w.Read(j,w.READ_PROFILE);w.m_profile.id=me;strcpy(w.m_profile.role,role);w.Layout();w.Activate(w.COLOR);
+  assert(w.m_colorAuto&&w.SelectedColor()==CZM_RoleColor(role));char expected[8];CzmNicknameColor::Hex(CZM_RoleColor(role),expected);assert(!strcmp(w.m_colorText,expected));
+  w.Activate(w.COLOR_PRESET);assert(w.SelectedColor()==CzmNicknameColor::Parse("#3DD6FF",0));w.Activate(w.COLOR_RESET);assert(w.m_colorAuto&&w.SelectedColor()==CZM_RoleColor(role)&&!strcmp(w.m_colorText,expected));
+  w.Activate(w.COLOR_CANCEL);
+ }
+ // Short biographies receive the display font; long UTF-8 text remains within two lines.
+ w.OpenProfile(me,true);w.Read(j,w.READ_PROFILE);w.m_profile.id=me;w.Layout();
+ for(const char*bio:{"Help Support","Выживаем вместе и помогаем новичкам. Очень длинный статус игрока на русском языке, который должен вместиться."}){
+  drawnText.clear();CzmProfileStyle::Biography(w.m_profileStatus,bio,true,false,true,false);int lines=0;
+  for(const auto&t:drawnText)if(t.text!="О СЕБЕ"&&t.text!="ABOUT ME"){
+   lines++;assert(t.x>=w.m_profileStatus.x&&t.y>=w.m_profileStatus.y&&t.y+CZM_FontHeight(t.font)<=w.m_profileStatus.y+w.m_profileStatus.h);
+   assert(CZM_TextWidth(t.font,t.text.c_str())<=t.w);if(!strcmp(bio,"Help Support"))assert(t.font==CZMF_PROFILE_TITLE);
+  }assert(lines>=1&&lines<=2);
+ }
+ vars["czm_profile_motion"]="0";assert(!CzmProfileStyle::Motion());w.m_appear=0;w.Layout();const int still=w.m_panel.y;w.m_appear=EngFuncs::DoubleTime();w.Layout();assert(still==w.m_panel.y);vars["czm_profile_motion"]="1";
  // The card rises into place; no callback changes another account's card.
  w.OpenProfile(8,false);w.Read(j,w.READ_PROFILE);assert(w.m_appear>0);
  w.m_appear=0;w.Layout();const int risen=w.m_panel.y;
@@ -320,7 +374,9 @@ int main(int argc,char**argv){
  ScreenWidth=1536;ScreenHeight=716;
  if(argc>1){drawTrace=true;if(strcmp(argv[1],"dialog")&&strcmp(argv[1],"translated")&&strcmp(argv[1],"friends")){
   w.OpenProfile(8,false);w.Read(j,w.READ_PROFILE);
-  if(!strncmp(argv[1],"own",3)||!strcmp(argv[1],"themes")){w.m_profile.id=me;strcpy(w.m_profile.nick,"Kuro");strcpy(w.m_profile.status,"Help Support");strcpy(w.m_profile.role,"support");w.m_profile.support=true;w.m_profile.topPlace=5;w.m_profile.topSeconds=780;support=actorAdmin=true;}
+  if(!strncmp(argv[1],"own",3)||!strcmp(argv[1],"themes")||!strcmp(argv[1],"color")){w.m_profile.id=me;strcpy(w.m_profile.nick,"Kuro");strcpy(w.m_profile.status,"Help Support");strcpy(w.m_profile.role,"support");w.m_profile.support=true;w.m_profile.topPlace=5;w.m_profile.topSeconds=780;support=actorAdmin=true;}
+  if(!strcmp(argv[1],"own_long"))strcpy(w.m_profile.status,"Выживаем вместе и помогаем новичкам. Очень длинный статус игрока на русском языке, который должен вместиться.");
+  if(!strcmp(argv[1],"color")){strcpy(w.m_profile.nickColor,"#3DD6FF");w.Layout();w.Activate(w.COLOR);}
   if(!strcmp(argv[1],"own_frost"))strcpy(w.m_profile.theme,"frost");
   if(!strcmp(argv[1],"themes")){w.Layout();w.Activate(w.THEME);}
   if(!strcmp(argv[1],"add"))strcpy(w.m_profile.relation,"none");
@@ -351,12 +407,13 @@ class SocialMenuTests(unittest.TestCase):
             (p / "utlvector.h").write_text(vector)
             (p / "utlstring.h").write_text(STRING.replace("void Set(const char *v)", "void Clear(){s.clear();}void Set(const char *v)"))
             # the profile card draws with the shared CZM surfaces and their fonts
-            (p / "stub.h").write_text(STUB.replace("CZMF_NICK,QM_CENTER=1", "CZMF_NICK,CZMF_TILE_STATUS,CZMF_UI_TITLE,CZMF_UI_ACTION,CZMF_UI_LABEL,CZMF_UI_META,CZMF_PROFILE_NAME,CZMF_PROFILE_TEXT,CZMF_CHAT_TEXT,QM_LEFT=0,QM_CENTER=1"))
+            (p / "stub.h").write_text(STUB.replace("CZMF_NICK,QM_CENTER=1", "CZMF_NICK,CZMF_TILE_STATUS,CZMF_UI_TITLE,CZMF_UI_ACTION,CZMF_UI_LABEL,CZMF_UI_META,CZMF_PROFILE_NAME,CZMF_PROFILE_TEXT,CZMF_CHAT_TEXT,CZMF_PROFILE_TITLE,QM_LEFT=0,QM_CENTER=1"))
             for name in ["extdll_menu.h", "BaseMenu.h", "Utils.h", "Framework.h", "Scissor.h", "keydefs.h", "CzmMenu.h"]:
                 (p / name).write_text('#include "stub.h"\n')
             (p / "CzmJson.h").write_text((ROOT / "czm/menu/CzmJson.h").read_text())
             (p / "CzmDesign.h").write_text((ROOT / "czm/menu/CzmDesign.h").read_text())
             (p / "CzmProfileStyle.h").write_text((ROOT / "czm/menu/CzmProfileStyle.h").read_text())
+            (p / "CzmNicknameColor.h").write_text((ROOT / "czm/menu/CzmNicknameColor.h").read_text())
             for name in ["CzmConversationStyle.h", "CzmTranslation.h", "CzmTextLanguage.h", "CzmTranslation.cpp"]:
                 (p / name).write_text((ROOT / "czm/menu" / name).read_text())
             source = (ROOT / "czm/menu/CzmSocial.cpp").read_text().replace('#include "../../common/czm_tab.h"', '#include "czm_tab.h"').replace("private:\n\tenum", "public:\n\tenum")
@@ -370,7 +427,7 @@ class SocialMenuTests(unittest.TestCase):
             preview = os.environ.get("CZM_SOCIAL_PREVIEW_DIR")
             if preview:
                 output = Path(preview); output.mkdir(parents=True, exist_ok=True)
-                for view in ["profile", "own", "own_frost", "themes", "add", "guest", "join", "report", "dialog", "translated", "friends", "more", "edit"]:
+                for view in ["profile", "own", "own_frost", "own_long", "color", "themes", "add", "guest", "join", "report", "dialog", "translated", "friends", "more", "edit"]:
                     result = subprocess.run([str(exe), view], check=True, capture_output=True, text=True)
                     (output/(view+".tsv")).write_text(result.stdout)
 

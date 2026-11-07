@@ -1,6 +1,7 @@
 /* Native profile presentation; data and permissions stay with the social service. */
 #pragma once
 #include "CzmDesign.h"
+#include "CzmNicknameColor.h"
 
 namespace CzmProfileStyle {
 enum { Ember, Frost, City, Lab, ThemeCount };
@@ -29,7 +30,9 @@ inline unsigned ThemeColor(int index) {
 inline unsigned RoleAccent(const char *role) {
     return role&&!strcmp(role,"support")?PackRGBA(255,80,57,255):CZM_RoleColor(role);
 }
+inline bool Motion() { return EngFuncs::GetCvarString("czm_profile_motion")[0]!='0'; }
 inline void Frame(const CzmRect &r,unsigned accent,double time) {
+    if(!Motion())time=0;
     const int line=Q_max(1,ScreenHeight/600),cut=Q_max(5,ScreenHeight/85);
     const unsigned left=PackRGBA(143,180,196,200),right=WithOpacity(accent,180+(int)(35*sin(time*1.25)));
     UI_FillRect(r.x+cut,r.y,r.w/2-cut,line,left);
@@ -46,15 +49,25 @@ inline void Frame(const CzmRect &r,unsigned accent,double time) {
         UI_FillRect(r.x+cut-i-1,r.y+r.h-i-1,line,1,left);UI_FillRect(r.x+r.w-cut+i,r.y+r.h-i-1,line,1,right);
     }
     const int length=Q_max(18,r.w/12);
-    UI_FillRect(r.x+r.w-cut-length,r.y+line,length,line,WithOpacity(accent,90));
+    const int travel=Q_max(1,r.w-cut*2-length),position=Motion()?(int)(fmod(time*.12,1.0)*travel):travel;
+    UI_FillRect(r.x+cut+position,r.y+line,length,line,WithOpacity(accent,110));
+    UI_FillRect(r.x+r.w-cut-position-length,r.y+r.h-line*2,length,line,WithOpacity(ThemeColor(Lab),105));
+    if(Motion()){
+        const int glint=Q_max(3,length/7);
+        UI_FillRect(r.x+cut+position+length/2,r.y,glint,line,PackRGBA(240,250,255,225));
+    }
 }
 inline void Background(const CzmRect &r,int theme,double time,bool particles=true) {
     UI::Scissor::PushScissor(r.x,r.y,r.w,r.h);
     HIMAGE image=CZM_Image(ThemeArt(theme));
-    if(image)CZM_DrawCover(image,r.x,r.y,r.w,r.h);
+    if(image){
+        const int extra=Motion()&&particles?Q_max(3,r.h/45):0;
+        const int dx=extra?(int)(sin(time*.17)*extra*.55):0,dy=extra?(int)(cos(time*.13)*extra*.35):0;
+        CZM_DrawCover(image,r.x-extra+dx,r.y-extra+dy,r.w+extra*2,r.h+extra*2);
+    }
     else UI_FillRect(r.x,r.y,r.w,r.h,PackRGBA(9,17,26,255));
     CZM_DrawImage("gfx/czm/fade_left.png",r.x,r.y,r.w,r.h,PackRGBA(255,255,255,110));
-    if(particles){
+    if(particles&&Motion()){
         for(int i=0;i<7;i++){
             const double phase=fmod(time*.035+i*.173,1.0);
             const int side=Q_max(2,ScreenHeight/300)+(i%2);
@@ -102,15 +115,59 @@ template<class Profile> inline int NameY(const CzmRect &r,const Profile &p) {
     const int width=Q_max(0,r.w*78/100-(av+gap*4)),bh=CZM_FontHeight(CZM_Font(CZMF_UI_LABEL))+Q_max(5,gap),space=Q_max(3,gap/2);
     Tag tags[5];const int count=Tags(p,tags),rows=TagRows(tags,count,width,bh,space);
     const int group=CZM_FontHeight(CZM_Font(CZMF_PROFILE_NAME))+gap+CZM_FontHeight(CZM_Font(CZMF_UI_LABEL))+(rows?rows*(bh+space)-space+gap:0);
-    return r.y+Q_max(gap,(r.h-footer-group)/2);
+    return p.serverOwner&&ScreenHeight<480?r.y+Q_max(gap,(r.h-footer-group)/2):r.y+gap*3;
 }
 
-template<class Profile> inline void Banner(const CzmRect &r,const CzmRect &copy,const CzmRect &edit,
+template<class Profile> inline CzmRect BioRect(const CzmRect &r,const Profile &p) {
+    const int gap=Q_max(4,(int)(ScreenHeight*.012f)),footer=CZM_FontHeight(CZM_Font(CZMF_UI_LABEL))+gap*2;
+    const int av=Q_min(r.h-footer-gap*2,Q_max(44,(int)(ScreenHeight*.22f)));
+    const int x=r.x+av+gap*4,width=Q_max(0,r.w*78/100-(x-r.x));
+    Tag tags[5];const int count=Tags(p,tags),bh=CZM_FontHeight(CZM_Font(CZMF_UI_LABEL))+Q_max(5,gap),space=Q_max(3,gap/2);
+    const int rows=TagRows(tags,count,width,bh,space);
+    const int y=NameY(r,p)+CZM_FontHeight(CZM_Font(CZMF_PROFILE_NAME))+gap+(rows?rows*(bh+space)-space+gap:0)+CZM_FontHeight(CZM_Font(CZMF_UI_LABEL))+gap*2;
+    return CZM_Rect(x,y,width,Q_max(0,r.y+r.h-footer-gap-y));
+}
+inline void Biography(const CzmRect &r,const char *text,bool self,bool pressed,bool present,bool compact) {
+    if(r.w<=0||r.h<=0)return;
+    const int gap=Q_max(4,(int)(ScreenHeight*.012f)),pencil=self?Q_max(12,CZM_FontHeight(CZM_Font(CZMF_UI_LABEL))):0;
+    if(compact)CzmStyle::Surface(r,pressed?PackRGBA(30,40,52,255):PackRGBA(17,24,34,255),PackRGBA(54,65,78,255));
+    const int inset=compact?gap:0,labelH=compact?0:CZM_FontHeight(CZM_Font(CZMF_UI_META))+gap/2;
+    if(!compact){
+        CZM_DrawText(CZM_Font(CZMF_UI_META),r.x+gap*2,r.y,r.w-gap*2,CZM_IsRussian()?"О СЕБЕ":"ABOUT ME",CzmStyle::Muted());
+        UI_FillRect(r.x+gap*2+CZM_TextWidth(CZM_Font(CZMF_UI_META),CZM_IsRussian()?"О СЕБЕ":"ABOUT ME")+gap,r.y+labelH/2,Q_max(0,r.w/2),1,PackRGBA(117,153,171,80));
+    }
+    const int x=r.x+inset+gap*2,width=Q_max(1,r.w-inset*2-gap*3-pencil),height=r.h-labelH-inset*2;
+    HFont font=CZM_Font(compact?CZMF_PROFILE_TEXT:CZMF_PROFILE_TITLE);
+    const int roles[]={CZMF_PROFILE_TITLE,CZMF_PROFILE_NAME,CZMF_PROFILE_TEXT,CZMF_UI_LABEL,CZMF_SMALL};
+    int starts[4],lines=0;
+    for(int i=compact?2:0;i<5;i++){
+        font=CZM_Font(roles[i]);lines=CZM_WrapText(font,text,width,starts,3);
+        if(lines<=2&&lines*(CZM_FontHeight(font)+2)<=height)break;
+    }
+    lines=CZM_WrapText(font,text,width,starts,2);
+    const int lh=CZM_FontHeight(font)+2,top=r.y+labelH+inset+Q_max(0,(height-Q_min(lines,2)*lh)/2);
+    // The final wrapper entry may contain the entire remainder; clip it at UTF-8 boundaries.
+    UI::Scissor::PushScissor(r.x,r.y,r.w,r.h);
+    for(int i=0;i<lines&&i<2;i++){
+        char line[410];CZM_WrapLine(text,starts,i,line,sizeof(line));
+        if(CZM_TextWidth(font,line)>width){
+            size_t length=strlen(line);
+            while(length&&CZM_TextWidth(font,line)+CZM_TextWidth(font,"…")>width){length--;while(length&&((unsigned char)line[length]&0xc0)==0x80)length--;line[length]=0;}
+            if(length+4<sizeof(line))strcat(line,"…");
+        }
+        CZM_DrawText(font,x,top+i*lh,width,line,present?CzmStyle::Ink():CzmStyle::Muted());
+    }
+    UI_FillRect(r.x+inset,r.y+labelH+inset,Q_max(2,ScreenHeight/160),Q_max(1,height),pressed?PackRGBA(255,115,126,255):CzmStyle::AccentRed());
+    if(self)CZM_DrawImage("gfx/czm/ui/icon_pencil.png",r.x+r.w-inset-pencil,r.y+labelH+Q_max(0,(r.h-labelH-pencil)/2),pencil,pencil,pressed?CzmStyle::Ink():CzmStyle::Muted());
+    UI::Scissor::PopScissor();
+}
+
+template<class Profile> inline void Banner(const CzmRect &r,const CzmRect &copy,const CzmRect &edit,const CzmRect &color,
     const Profile &p,const char *presence,bool self,bool copying,bool editing) {
     using namespace CzmStyle;
     const int gap=Q_max(4,(int)(ScreenHeight*.012f)),theme=ThemeIndex(p.theme);
     const unsigned accent=p.role[0]?RoleAccent(p.role):ThemeColor(theme);
-    const double time=EngFuncs::DoubleTime(),wave=.5+.5*sin(time*1.25);
+    const double time=Motion()?EngFuncs::DoubleTime():0,wave=.5+.5*sin(time*1.25);
     const HFont meta=CZM_Font(CZMF_UI_LABEL),nick=CZM_Font(CZMF_PROFILE_NAME),small=CZM_Font(CZMF_UI_LABEL);
     Background(r,theme,time);
     const int footer=CZM_FontHeight(small)+gap*2,upper=r.h-footer;
@@ -118,7 +175,7 @@ template<class Profile> inline void Banner(const CzmRect &r,const CzmRect &copy,
     UI_FillRect(r.x+gap,r.y+upper,r.w-gap*2,1,WithOpacity(accent,70));
     const bool compact=p.serverOwner&&ScreenHeight<480;
     const int av=Q_min(upper-gap*2,Q_max(44,(int)(ScreenHeight*(compact?.18f:.22f))));
-    const int ax=r.x+gap*2,ay=r.y+(upper-av)/2,ring=Q_max(2,av/32);
+    const int ax=r.x+gap*2,ay=compact?r.y+(upper-av)/2:r.y+gap*3,ring=Q_max(2,av/32);
     CZM_DrawImage("gfx/czm/ui/glow.png",ax-av/3,ay-av/3,av*5/3,av*5/3,WithOpacity(accent,55+(int)(20*wave)));
     CZM_DrawImage("gfx/czm/ui/dot.png",ax-3,ay-3,av+6,av+6,PackRGBA(9,16,25,255));
     CZM_DrawImage(CZM_AvatarFor(p.avatar,p.id),ax,ay,av,av);
@@ -127,7 +184,8 @@ template<class Profile> inline void Banner(const CzmRect &r,const CzmRect &copy,
     const int tx=ax+av+gap*2,tw=Q_max(0,r.w*78/100-(tx-r.x));
     const int nh=CZM_FontHeight(nick),pencil=self?Q_max(10,nh*3/5):0;
     const int nameY=NameY(r,p);
-    CZM_DrawText(nick,tx,nameY,tw-(self?pencil+gap:0),p.nick,Ink());
+    CZM_DrawText(nick,tx,nameY,self&&edit.w?Q_max(0,edit.w-pencil-gap):tw,p.nick,CzmNicknameColor::Parse(p.nickColor,Ink()));
+    if(self&&color.w){UI_FillRect(color.x-gap/2,color.y,1,color.h,PackRGBA(157,180,198,110));CZM_DrawImage("gfx/czm/ui/color_wheel.png",color.x,color.y,color.w,color.h);}
     if(self&&edit.w)CZM_DrawImage("gfx/czm/ui/icon_pencil.png",edit.x+edit.w-pencil-gap/2,edit.y+(nh-pencil)/2,pencil,pencil,editing?Ink():PackRGBA(177,192,207,240));
     Tag tags[5];const int count=Tags(p,tags);
     const int bh=CZM_FontHeight(meta)+Q_max(5,gap),space=Q_max(3,gap/2),fh=CZM_FontHeight(small);

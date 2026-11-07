@@ -282,6 +282,36 @@ int main(){
  PlainAsRich("11 769\nKick Player Menu 2/3\n1. Bob\n9. Дальше...\n0. Назад",&root,next);
  assert(next.navigation&&next.canGoBack&&next.nextSlot==9&&next.prevSlot==10&&next.numCards==1);
  assert(!strcmp(next.cards[0].name,"Bob")&&!next.menuPages);
+ PlainAsRich("12 513\nConfirm transfer\nRecipient: Alice\nAmount: 500 tokens\nCheck the name before confirming\n1. Confirm\n0. Back",&root,next);
+ assert(!next.chip[0]&&!strcmp(next.body,"Recipient: Alice\nAmount: 500 tokens\nCheck the name before confirming\n"));
+}
+"""
+        run_cpp(code)
+
+    def test_balance_metadata_is_typed_and_never_inherited_by_a_new_packet(self):
+        source = (ROOT / 'czm/menu/CzmServerMenu.cpp').read_text()
+        code = CPP_MENU + '\n'.join(re.findall(r'^#define (?:MAX_CARDS|MAX_LINES|SM_MAX_TABS|SM_MAX_CARDS) .*$', source, re.M)) + '\n'
+        code += source[source.index('struct CzmCard'):source.index('static void TrimCopy')]
+        code += source[source.index('struct CzmMenuTab'):source.index('static bool IsRichMenu')]
+        for signature in ('static void TrimCopy(', 'static void SplitLine(', 'static void ParseMenu(', 'static void NextField(', 'static unsigned int HexColor(', 'static void ParseRich(', 'static void PlainAsRich('):
+            code += function(source, signature) + '\n'
+        code += r"""
+int main(){
+ CzmRichMenu m,child;
+ const std::string header="1 1023\n#czm1\tmenu\tmain\tMenu\t\tTokens 999999\t\n";
+ for(const char*value:{"0","5047","2147483647"}){
+  ParseRich((header+"#tokens\t"+value+"\n1. Item\n").c_str(),m);
+  assert(m.hasTokens&&m.tokens==atoi(value)&&!m.plain);
+ }
+ for(const char*value:{"","-1","+1","1x","12.3"," 12","12 ","2147483648","00000000000000005047"}){
+  ParseRich((header+"#tokens\t"+value+"\n1. Item\n").c_str(),m);
+  assert(!m.hasTokens);
+ }
+ ParseRich((header+"#tokens\t5047\n1. Item\n").c_str(),m);
+ PlainAsRich("2 1023\nForeign menu\n1. Shop\n0. Back",&m,child);
+ assert(child.plain&&!child.hasTokens&&child.tokens==0);
+ ParseRich((header+"1. Item\n").c_str(),m);assert(!m.hasTokens&&m.tokens==0);
+ ParseRich((header+"#tokens\t5047\n#tokens\tinvalid\n1. Item\n").c_str(),m);assert(!m.hasTokens);
 }
 """
         run_cpp(code)
@@ -292,13 +322,15 @@ int main(){
         code += source[source.index('struct CzmMenuTab'):source.index('static bool IsRichMenu')]
         code += r"""
 static int ScreenWidth,ScreenHeight;
-enum { CZMF_UI_META };
+typedef int HFont;
+enum { CZMF_UI_META, CZMF_UI_LABEL };
 static int CZM_Font(int font){return font;}
 static int CZM_FontHeight(int){return 15;}
+static int CZM_WrapText(int,const char*,int,int*,int){return 3;}
 struct CCzmServerWindow{
- CzmRichMenu m_menu={};int m_iTabFirst=0,m_iTabRows=0,W,H;
+ CzmRichMenu m_menu={};int m_iTabFirst=0,m_iTabRows=0,m_iCardRows=0,m_scroll=0,m_scrollMax=0,W,H;
  CzmRect m_win,m_head,m_side,m_body,m_foot,m_close,m_back,m_tabsUp,m_tabsDown;
- CzmRect m_navPrev,m_navNext,m_cardInfo;
+ CzmRect m_navPrev,m_navNext,m_cardInfo,m_return;
  CzmRect m_content,m_field,m_submit,m_prev,m_next,m_refresh,m_friendRows[6];
  void Layout(int);
 };
@@ -316,8 +348,11 @@ int main(){
    auto t=w.m_menu.tabs[i].rect;
    if(i>=w.m_iTabFirst&&i<w.m_iTabFirst+w.m_iTabRows)assert(inside(t,w.m_side));else assert(t.w==0&&t.h==0);
   }
-  for(int i=0;i<9;i++){assert(inside(w.m_menu.cards[i].rect,w.m_body));if(nested)assert(w.m_menu.cards[i].rect.y>=w.m_back.y+w.m_back.h);}
-  if(nested)assert(inside(w.m_back,w.m_body));
+  int visible=0;for(int i=0;i<9;i++){auto r=w.m_menu.cards[i].rect;if(r.w){assert(inside(r,w.m_body));visible++;}else assert(r.h==0);}
+  assert(visible==7&&w.m_scrollMax>0);
+  assert(inside(w.m_return,w.m_foot));
+  if(nested)assert(inside(w.m_back,w.m_head));
+  w.m_scroll=w.m_scrollMax;w.Layout(0);assert(w.m_menu.cards[8].rect.w>0&&w.m_menu.cards[0].rect.w==0);
   if(tabs>10){assert(inside(w.m_tabsUp,w.m_side)&&inside(w.m_tabsDown,w.m_side));assert(w.m_iTabRows>0);}
   if(tabs==32&&first==31)assert(w.m_menu.tabs[31].rect.w>0);
  }

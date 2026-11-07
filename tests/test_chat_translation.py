@@ -15,14 +15,15 @@ class ChatTranslationTests(unittest.TestCase):
         source=(ROOT/'czm/menu/CzmChat.cpp').read_text()
         hits=re.search(r'enum EHit\n\t\{.*?\n\t\};',source,re.S).group()
         methods='\n'.join(function(source,name) for name in (
-            'bool CCzmChat::DateBefore(', 'int CCzmChat::MessageHeight(',
+            'bool CCzmChat::DateBefore(', 'bool CCzmChat::Grouped(', 'int CCzmChat::ContentHeight(', 'int CCzmChat::MessageHeight(',
             'int CCzmChat::RowHeight(', 'int CCzmChat::HitTest(', 'void CCzmChat::Activate('))
         harness=HARNESS+r'''
 #include "CzmConversationStyle.h"
+#include "CzmCommunityChatStyle.h"
 #include "CzmTextLanguage.h"
 #define ROOMS 3
 #define MAX_MESSAGES 100
-struct CzmChatMessage{int id,player,time,place;char nick[100],avatar[24],text[1604],role[16],project[132];};
+struct CzmChatMessage{int id,player,time,place;char nick[100],nickColor[8],avatar[24],text[1604],role[16],project[132];};
 struct CzmChatRoom{CUtlVector<CzmChatMessage>messages;double nextPoll=0;};
 static std::vector<std::pair<int,int>>profiles;
 void CZM_OpenProfile(int id,int message){profiles.push_back({id,message});}
@@ -33,10 +34,10 @@ class CCzmChat{public:
  float m_flScroll=0,m_flVelocity=0;int W=1536,H=716,reports=0;bool ended=false;
  CzmChatRoom m_rooms[ROOMS];
  CzmRect m_popup={},m_popupCopy={},m_popupAvatar={},m_popupMessage={},m_popupCancel={};
- CzmRect m_back={},m_handle={},m_sheet={},m_rooms_[ROOMS]={},m_send={},m_input={},m_clip={};
+ CzmRect m_back={},m_close={},m_handle={},m_sheet={},m_rooms_[ROOMS]={},m_send={},m_input={},m_clip={};
  void Hide(){}void BeginInput(){}void Send(){}void Toast(const char*){}void Report(bool avatar){assert(!avatar);reports++;}
  void EndInput(){ended=true;}
- bool DateBefore(int)const;int MessageHeight(CzmChatMessage&);int RowHeight(int);int HitTest()const;void Activate(int);
+ bool DateBefore(int)const;bool Grouped(int)const;int ContentHeight();int MessageHeight(CzmChatMessage&,bool=false);int RowHeight(int);int HitTest()const;void Activate(int);
 };
 '''+methods+r'''
 void point(const CzmRect&r){cursorX=uiStatic.cursorX=r.x+r.w/2;cursorY=uiStatic.cursorY=r.y+r.h/2;}
@@ -56,7 +57,7 @@ int main(){
  for(int room=0;room<ROOMS;room++){
   CzmChatMessage message={};message.id=70+room;message.player=8+room;message.time=1792240000;
   strcpy(message.nick,"Friend");strcpy(message.text,"Hello, join our game!");chat.m_rooms[room].messages.AddToTail(message);chat.m_iRoom=room;
-  const auto b=CzmConversation::Layout(chat.m_clip,chat.m_clip.y+chat.m_clip.h-chat.RowHeight(0)+CzmConversation::DateHeight(),message.text,message.nick,false);
+  const auto b=CzmCommunityChat::Layout(chat.m_clip,chat.m_clip.y+CzmCommunityChat::DateHeight(),message.text,message.nick,false);
   assert(b.canTranslate);point(b.body);assert(chat.HitTest()==chat.HIT_NONE);
   point(b.menu);assert(chat.HitTest()==chat.HIT_OPTIONS);chat.Activate(chat.HitTest());
   assert(chat.m_iPopup==0&&chat.m_popupId==message.id&&chat.ended&&!chat.m_reportConfirm);
@@ -103,14 +104,14 @@ int main(){
 '''
         with tempfile.TemporaryDirectory() as folder:
             p=Path(folder)
-            stub=STUB.replace('CZMF_NICK,QM_CENTER=1','CZMF_NICK,CZMF_TILE_STATUS,CZMF_UI_TITLE,CZMF_UI_ACTION,CZMF_UI_LABEL,CZMF_UI_META,CZMF_PROFILE_NAME,CZMF_PROFILE_TEXT,CZMF_CHAT_TEXT,QM_LEFT=0,QM_CENTER=1')
+            stub=STUB.replace('CZMF_NICK,QM_CENTER=1','CZMF_NICK,CZMF_TILE_STATUS,CZMF_UI_TITLE,CZMF_UI_ACTION,CZMF_UI_LABEL,CZMF_UI_META,CZMF_PROFILE_TITLE,CZMF_PROFILE_NAME,CZMF_PROFILE_TEXT,CZMF_CHAT_TEXT,QM_LEFT=0,QM_CENTER=1')
             stub=stub.replace('struct Cursor{int cursorY;}','struct Cursor{int cursorY,cursorX;}')
             stub=stub.replace('struct CzmRect {int x,y,w,h;','struct CzmRect {int x,y,w,h;bool Contains(int a,int b)const{return a>=x&&a<x+w&&b>=y&&b<y+h;}CzmRect Grown(int n)const{return{x-n,y-n,w+2*n,h+2*n};}')
             (p/'stub.h').write_text(stub)
             (p/'utlvector.h').write_text(VECTOR.replace('void RemoveAll(){v.clear();}','void RemoveAll(){v.clear();}void Remove(int n){v.erase(v.begin()+n);}'))
             (p/'utlstring.h').write_text(STRING.replace('void Set(const char *v)','void Clear(){s.clear();}void Set(const char *v)'))
             for name in ['extdll_menu.h','BaseMenu.h','CzmMenu.h','Scissor.h']:(p/name).write_text('#include "stub.h"\n')
-            for name in ['CzmJson.h','CzmDesign.h','CzmTextLanguage.h','CzmTranslation.h','CzmTranslation.cpp','CzmConversationStyle.h']:(p/name).write_text((ROOT/'czm/menu'/name).read_text())
+            for name in ['CzmJson.h','CzmDesign.h','CzmTextLanguage.h','CzmTranslation.h','CzmTranslation.cpp','CzmConversationStyle.h','CzmCommunityChatStyle.h']:(p/name).write_text((ROOT/'czm/menu'/name).read_text())
             (p/'main.cpp').write_text(harness)
             exe=p/'chat'
             subprocess.run(['g++','-std=c++11','-w','-I'+folder,str(p/'main.cpp'),str(p/'CzmTranslation.cpp'),str(ROOT/'czm/menu/CzmJson.cpp'),'-o',str(exe)],check=True)

@@ -14,6 +14,7 @@
 #include "CzmJson.h"
 #include "CzmDesign.h"
 #include "CzmProfileStyle.h"
+#include "CzmNicknameColor.h"
 #include "CzmConversationStyle.h"
 #include "../../common/czm_tab.h"
 
@@ -21,7 +22,7 @@
 
 namespace {
 const char *T( const char *ru, const char *en ) { return CZM_IsRussian() ? ru : en; }
-const int PROFILE_STATUS_LINES=4;
+const int PROFILE_STATUS_LINES=2;
 const char *s_kinds[] = { "friends", "dialogs", "followers", "following", "blocked" };
 char s_key[80];
 int s_epoch, s_unread, s_requests, s_friends, s_followers, s_following;
@@ -83,7 +84,7 @@ struct Person
 	bool account, online, playing, support;
 	bool serverOwner; int ownedCount;
 	char role[16], project[132], telegram[104];
-	char theme[12]; unsigned roleFlags;
+	char theme[12],nickColor[8]; unsigned roleFlags;
 	struct { char address[64], name[388]; } owned[5];
 	int topPlace, topSeconds; // the Top 100: the exact place and the time on servers (0: no time yet)
 	char nick[100], avatar[32], status[404], relation[24], server[64], map[65], last[1604];
@@ -115,6 +116,8 @@ void ReadPerson( Person &p, const CzmJson &j, int item )
 	p.id = j.Int( j.Get( item, "id" )); p.created = j.Int( j.Get( item, "created" )); p.lastSeen = j.Int( j.Get( item, "last_seen" ));
 	p.support = !strcmp( j.String( j.Get( item, "role" )), "support" );
 	Q_strncpy(p.role,j.String(j.Get(item,"role")),sizeof(p.role));
+	const char *nickColor=j.String(j.Get(item,"nick_color"));
+	if(CzmNicknameColor::Valid(nickColor))CzmNicknameColor::Hex(CzmNicknameColor::Parse(nickColor,0),p.nickColor);
 	Q_strncpy(p.theme,CzmProfileStyle::ThemeKey(CzmProfileStyle::ThemeIndex(j.String(j.Get(item,"theme")))),sizeof(p.theme));
 	Q_strncpy(p.project,j.String(j.Get(item,"project")),sizeof(p.project));
 	if(!p.role[0])Q_strncpy(p.telegram,j.String(j.Get(item,"telegram")),sizeof(p.telegram));
@@ -207,7 +210,9 @@ void ActionButton( const CzmRect &r, const char *icon, const char *label, bool p
 	const int total = textW + ( withIcon ? side + space : 0 ), x = r.x + ( r.w - total ) / 2;
 	const unsigned color = !enabled ? CzmStyle::Muted() : accent && !primary ? accent : CzmStyle::Ink();
 	if( withIcon ) CZM_DrawImage( icon, x, r.y + ( r.h - side ) / 2, side, side, color );
-	CZM_DrawText( f, x + ( withIcon ? side + space : 0 ), r.y + ( r.h - CZM_FontHeight( f )) / 2, textW + 2, label, color );
+	const int textX=x+(withIcon?side+space:0);
+ // Use the allocated label space after centering, including room for glyph overhang.
+ CZM_DrawText(f,textX,r.y+(r.h-CZM_FontHeight(f))/2,Q_max(1,r.x+r.w-r.h/4-textX),label,color);
 }
 }
 
@@ -230,15 +235,17 @@ private:
 	enum { LIST, PROFILE, DIALOG };
 	enum { BACK=1, MINE, BLOCKED, REFRESH, FIELD, SEARCH, SEND, PREVIOUS, NEXT, PRIMARY, SECONDARY, BLOCK, REPORT, COPY, EDIT, SETTINGS, JOIN, CANCEL, CONFIRM, PEER, LOGIN, REPORT_CHAT, BACKDROP, INVITE, PARTY_INVITE, MODERATE, MORE, MORE_CLOSE, TELEGRAM, PROJECT_MANAGE, TAB=100, PICK=200, MORE_ROW=300, COUNT=400, PROJECT=500, ROW=1000 };
 	enum { THEME=40, THEME_SAVE, THEME_CANCEL, THEME_PICK=600, MORE_ROWS = 4 };
+	enum { COLOR=70,COLOR_WHEEL,COLOR_VALUE,COLOR_HEX,COLOR_RESET,COLOR_CANCEL,COLOR_SAVE,COLOR_PRESET=700 };
 	enum { MAX_PICKS = 4 };
 	enum { MSG_COPY=50,MSG_REPORT,MSG_CLOSE,DIALOG_MORE,MSG_PROFILE,MSG_BLOCK,
 		MESSAGE_MENU=10000,TRANSLATE=11000,FRIEND_MESSAGE=12000,FRIEND_JOIN=13000 };
-	enum { READ_LIST=1, READ_PROFILE, READ_DIALOG, WRITE_ACTION, WRITE_STATUS, WRITE_MESSAGE, WRITE_REPORT, WRITE_THEME };
+	enum { READ_LIST=1, READ_PROFILE, READ_DIALOG, WRITE_ACTION, WRITE_STATUS, WRITE_MESSAGE, WRITE_REPORT, WRITE_THEME, WRITE_COLOR };
 	void Layout(); void LayoutProfile(); int Hit(); void Activate( int hit ); void Navigate( int mode ); void Fetch();
 	void Write( int kind, const char *path, const char *body ); void Follow( const char *action ); void Send();
 	void Input( const char *value ); void EndInput(); void Notice( const char *text ); void Read( const CzmJson &j, int kind );
 	void DrawList(); void DrawProfile(); void DrawMore(); void DrawDialog(); void Field( const char *placeholder );
 	void LayoutTheme(); void DrawTheme();
+	void LayoutColor();void DrawColor();void OpenColor();void UpdateColor(bool wheel);void ColorHex();unsigned SelectedColor() const;unsigned AutomaticColor() const;
 	const char *ProfileStatusText() const;
 	int MessageHeight( const Message &m );
 	int DialogRowHeight(int index);bool DateBefore(int index)const;
@@ -263,6 +270,8 @@ private:
 	CzmRect m_hero, m_profileStatus, m_profileInfo, m_profileCounts[3], m_profileHint, m_profileServer, m_reportChat;
 	CzmRect m_theme,m_nickEdit,m_themePanel,m_themeOptions[4],m_themeApply,m_themeCancel;
 	bool m_themeOpen; int m_themeChoice;
+	CzmRect m_nickColor,m_colorPanel,m_colorWheel,m_colorPreview,m_colorValue,m_colorHex,m_colorReset,m_colorPresets[5],m_colorApply,m_colorCancel;
+	bool m_colorOpen,m_colorAuto,m_colorTyping;int m_colorDrag;float m_colorHue,m_colorSaturation,m_colorBrightness;char m_colorText[8];
 	CzmRect m_telegram, m_projectPanel, m_projectTitle, m_projectManage, m_projectRows[5];
 	// "invite to game": the server I play on now and the servers pinned with a heart
 	bool m_pickOpen; int m_pickCount;
@@ -284,6 +293,7 @@ CCzmSocial::CCzmSocial() : CMenuFramework( "CzmSocial" )
 	m_open=m_typing=m_loaded=m_canSend=m_editStatus=m_outside=m_joinPending=m_drag=m_moved=false;
 	m_pickOpen=false; m_pickCount=0; m_moreOpen=false; m_moreCount=0; m_appear=0;
 	m_themeOpen=false; m_themeChoice=0;
+	m_colorOpen=m_colorTyping=false;m_colorAuto=true;m_colorDrag=0;m_colorHue=0;m_colorSaturation=0;m_colorBrightness=1;m_colorText[0]=0;
 	m_messageMenu=m_messageRows=0;m_reportQuote[0]=m_reportNick[0]=0;
 	m_scroll=m_downScroll=0; m_downY=0; m_nextFetch=m_noticeUntil=0; W=H=pad=0;
 	m_input[0]=m_sent[0]=m_nonce[0]=m_nonceText[0]=m_notice[0]=m_confirm[0]=0;
@@ -304,7 +314,7 @@ void CCzmSocial::Show()
 void CCzmSocial::Hide()
 {
 	EndInput(); m_open=false; m_chatMessage=0; m_confirm[0]=0; m_input[0]=m_sent[0]=m_nonce[0]=m_nonceText[0]=0;
-	m_pickOpen=false; m_pressed=0; m_moreOpen=false; m_themeOpen=false;m_messageMenu=0;
+	m_pickOpen=false; m_pressed=0; m_moreOpen=false; m_themeOpen=false;m_colorOpen=false;m_colorDrag=0;m_messageMenu=0;
 	m_view++; CMenuFramework::Hide();
 }
 void CCzmSocial::OpenProfile( int id, bool outside, int chatMessage )
@@ -318,7 +328,7 @@ void CCzmSocial::Navigate( int mode )
 {
 	EndInput(); m_mode=mode; m_view++; m_loaded=false; m_scroll=0; m_nextFetch=0; m_pressed=0;
 	m_chatMessage=0;m_messageMenu=0;
-	m_editStatus=false; m_confirm[0]=0; m_input[0]=0; m_notice[0]=0; m_joinPending=false; m_pickOpen=false; m_moreOpen=false; m_themeOpen=false;
+	m_editStatus=false; m_confirm[0]=0; m_input[0]=0; m_notice[0]=0; m_joinPending=false; m_pickOpen=false; m_moreOpen=false; m_themeOpen=false;m_colorOpen=false;m_colorDrag=0;
 	if( mode==LIST ) { m_offset=0; m_people.RemoveAll(); }
 	if( mode==DIALOG ) { m_before=m_nextBefore=0; m_messages.RemoveAll(); m_canSend=false; if(m_profile.id!=m_target)memset(&m_profile,0,sizeof(m_profile)); }
 	if( mode==PROFILE ) memset( &m_profile,0,sizeof( m_profile ));
@@ -330,7 +340,7 @@ void CCzmSocial::Input( const char *value )
 	m_typing=true;
 	EngFuncs::SetTextInputRect( m_field.x,m_field.y,m_field.w,m_field.h ); UI_EnableTextInput( true );
 }
-void CCzmSocial::EndInput() { if( m_typing ) UI_EnableTextInput( false ); m_typing=false; }
+void CCzmSocial::EndInput() { if( m_typing||m_colorTyping ) UI_EnableTextInput( false ); m_typing=false;m_colorTyping=false; }
 
 void CCzmSocial::Fetch()
 {
@@ -348,6 +358,8 @@ void CCzmSocial::Fetch()
 void CCzmSocial::Write( int kind,const char *path,const char *body )
 {
 	if( m_write ) return;
+	// A profile read started before a saved color must not restore its stale value later.
+	if(kind==WRITE_COLOR)Abandon(m_read);
 	m_writeKind=kind; m_writeView=m_view;
 	m_write=CZM_NetRequest("POST",CZM_OnlineUrl(path),CZM_OnlineKey(),body);
 	if( !m_write ) Notice( SocialError( "" ));
@@ -427,6 +439,7 @@ void CCzmSocial::Frame()
 				if(m_writeKind==WRITE_MESSAGE){if(!strcmp(m_input,m_sent))m_input[0]=0;m_nonce[0]=0;m_before=0;m_scroll=0;}
 				if(m_writeKind==WRITE_STATUS){m_editStatus=false;EndInput();m_input[0]=0;}
 				if(m_writeKind==WRITE_THEME){m_themeOpen=false;Read(j,READ_PROFILE);Notice(T("Оформление сохранено","Profile style saved"));}
+				if(m_writeKind==WRITE_COLOR){EndInput();m_colorOpen=false;Read(j,READ_PROFILE);Notice(T("Цвет ника сохранён","Nickname color saved"));}
 				if(m_writeKind==WRITE_REPORT)Notice(T("Жалоба отправлена","Report sent"));
 				m_nextFetch=0;
 			}
@@ -450,7 +463,7 @@ void CCzmSocial::LayoutProfile()
  const CzmRect empty=CZM_Rect(0,0,0,0);
  m_primary=m_secondary=m_block=m_report=m_edit=m_settings=m_join=m_field=m_search=empty;
  m_copy=m_hero=m_profileStatus=m_profileInfo=m_profileHint=m_profileServer=m_partyInvite=empty;
- m_more=m_moderate=m_refresh=m_theme=m_nickEdit=empty;
+ m_more=m_moderate=m_refresh=m_theme=m_nickEdit=m_nickColor=empty;
  m_telegram=m_projectPanel=m_projectTitle=m_projectManage=empty;
  for(int i=0;i<5;i++)m_projectRows[i]=empty;
  for(int i=0;i<3;i++)m_profileCounts[i]=empty;
@@ -459,7 +472,12 @@ void CCzmSocial::LayoutProfile()
  m_back=CZM_Rect(pad,y,bh,bh);
  if(m_loaded&&self){
   m_settings=CZM_Rect(right-bh,y,bh,bh);right-=bh+gap;
-  if(Account()){const int w=bh*11/5;m_theme=CZM_Rect(right-w,y,w,bh);right-=w+gap;}
+  if(Account()){
+   // Match ActionButton's icon, gap and side insets to the measured localized label.
+   const int label=CZM_TextWidth(CZM_Font(CZMF_UI_LABEL),T("Фон","Style"));
+   const int w=Q_max(bh*11/5,label+bh/2+bh*40/100+bh/5+gap*3);
+   m_theme=CZM_Rect(right-w,y,w,bh);right-=w+gap;
+  }
  }
  if(CZM_OnlineSupport()&&m_loaded&&m_profile.id>0&&!(m_profile.support&&!self)){
   const int w=self&&CZM_OnlineAdmin()?bh*4:bh;
@@ -472,24 +490,27 @@ void CCzmSocial::LayoutProfile()
  y+=bh+gap;const int contentY=y;
  if(!m_loaded)y+=(int)(H*.30f);
  else{
-  m_hero=CZM_Rect(pad,y,compact?inner:width-pad*2,Q_max(compact?108:100,(int)(H*(compact?.33f:.35f))));
+  m_hero=CZM_Rect(pad,y,compact?inner:width-pad*2,Q_max(compact?108:100,(int)(H*(compact?.33f:m_editStatus?.35f:.44f))));
   char id[32];snprintf(id,sizeof(id),"ID %d",m_profile.id);
   const int chipH=Q_max(18,CZM_FontHeight(meta)+gap),icon=chipH*62/100;
   m_copy=CZM_Rect(m_hero.x+m_hero.w-gap-(CZM_TextWidth(meta,id)+icon+gap*3),y+gap,CZM_TextWidth(meta,id)+icon+gap*3,chipH);
   const int footer=CZM_FontHeight(CZM_Font(CZMF_UI_LABEL))+gap*2;
   const int av=Q_min(m_hero.h-footer-gap*2,Q_max(44,(int)(H*(compact?.18f:.22f))));
   const int tx=m_hero.x+gap*4+av,tw=Q_max(0,m_hero.w*78/100-(tx-m_hero.x));
-  if(self)m_nickEdit=CZM_Rect(tx,CzmProfileStyle::NameY(m_hero,m_profile),Q_min(tw,CZM_TextWidth(CZM_Font(CZMF_PROFILE_NAME),m_profile.nick)+bh/2+gap),CZM_FontHeight(CZM_Font(CZMF_PROFILE_NAME))+gap);
+  if(self){
+   const int nh=CZM_FontHeight(CZM_Font(CZMF_PROFILE_NAME)),side=Q_max(22,nh*4/5),nameY=CzmProfileStyle::NameY(m_hero,m_profile);
+   m_nickEdit=CZM_Rect(tx,nameY,Q_max(nh,Q_min(tw-side-gap*2,CZM_TextWidth(CZM_Font(CZMF_PROFILE_NAME),m_profile.nick)+nh*3/5+gap*2)),nh+gap);
+   if(Account())m_nickColor=CZM_Rect(m_nickEdit.x+m_nickEdit.w+gap,nameY+(nh-side)/2,side,side);
+  }
   y+=m_hero.h+gap;
   const int projectY=compact?contentY:y;
   if(m_editStatus){
    const int half=(inner-gap)/2;m_field=CZM_Rect(pad,y,inner,bh);y+=bh+gap;
    m_secondary=CZM_Rect(pad,y,half,bh);m_primary=CZM_Rect(pad+half+gap,y,half,bh);y+=bh+gap;
   }else{
-   int starts[PROFILE_STATUS_LINES+1];const int lineH=CZM_FontHeight(body)+2,iconW=self?bh/2+gap:0;
-   const int lines=CZM_WrapText(body,ProfileStatusText(),inner-gap*2-iconW,starts,PROFILE_STATUS_LINES);
-   m_profileStatus=CZM_Rect(pad,y,inner,Q_max(1,lines)*lineH+gap*2);if(self)m_edit=m_profileStatus;
-   y+=m_profileStatus.h+gap;
+   if(compact){int starts[PROFILE_STATUS_LINES+1];const int lines=CZM_WrapText(body,ProfileStatusText(),inner-gap*5-(self?bh/2:0),starts,PROFILE_STATUS_LINES);m_profileStatus=CZM_Rect(pad,y,inner,Q_max(1,lines)*(CZM_FontHeight(body)+2)+gap*2);y+=m_profileStatus.h+gap;}
+   else m_profileStatus=CzmProfileStyle::BioRect(m_hero,m_profile);
+   if(self)m_edit=m_profileStatus;
   }
   const int cw=(inner-gap*2)/3,ch=Q_max(36,(int)(H*.098f));
   for(int i=0;i<3;i++)m_profileCounts[i]=CZM_Rect(pad+i*(cw+gap),y,cw,ch);
@@ -534,10 +555,11 @@ void CCzmSocial::LayoutProfile()
  m_clip=CZM_Rect(pad,contentY,inner,y-contentY);
  const int height=y+pad;
  const double t=bound(0.0,(EngFuncs::DoubleTime()-m_appear)/.28,1.0),ease=1.0-(1.0-t)*(1.0-t)*(1.0-t);
- m_panel=CZM_Rect((W-width)/2,(H-height)/2+(int)((1.0-ease)*H*.025f),width,height);
+ const int rise=CzmProfileStyle::Motion()?(int)((1.0-ease)*H*.025f):0;
+ m_panel=CZM_Rect((W-width)/2,bound(0,(H-height)/2+rise,Q_max(0,H-height)),width,height);
  CzmRect *rects[]={&m_back,&m_moderate,&m_peer,&m_hero,&m_copy,&m_profileStatus,&m_profileInfo,
   &m_profileCounts[0],&m_profileCounts[1],&m_profileCounts[2],&m_profileHint,&m_profileServer,
-  &m_primary,&m_secondary,&m_block,&m_report,&m_edit,&m_settings,&m_theme,&m_nickEdit,&m_join,&m_partyInvite,&m_more,&m_field,&m_clip,
+  &m_primary,&m_secondary,&m_block,&m_report,&m_edit,&m_settings,&m_theme,&m_nickEdit,&m_nickColor,&m_join,&m_partyInvite,&m_more,&m_field,&m_clip,
   &m_telegram,&m_projectPanel,&m_projectTitle,&m_projectManage,&m_projectRows[0],&m_projectRows[1],&m_projectRows[2],&m_projectRows[3],&m_projectRows[4]};
  for(unsigned i=0;i<sizeof(rects)/sizeof(rects[0]);i++)if(rects[i]->w&&rects[i]->h){rects[i]->x+=m_panel.x;rects[i]->y+=m_panel.y;}
  if(m_moreOpen&&!self&&m_loaded){
@@ -549,6 +571,105 @@ void CCzmSocial::LayoutProfile()
   for(int i=0;i<m_moreCount;i++)m_moreRows[i]=CZM_Rect(m_moreSheet.x+pad,m_moreSheet.y+pad+title+i*(bh+gap),sw-pad*2,bh);
  }
  if(m_themeOpen)LayoutTheme();
+ if(m_colorOpen)LayoutColor();
+}
+
+void CCzmSocial::OpenColor()
+{
+ EndInput();m_themeOpen=false;m_colorOpen=true;m_colorDrag=0;
+ m_colorAuto=!CzmNicknameColor::Valid(m_profile.nickColor);
+ const unsigned selected=CzmNicknameColor::Parse(m_profile.nickColor,AutomaticColor());
+ CzmNicknameColor::ToHsv(selected,m_colorHue,m_colorSaturation,m_colorBrightness);
+ CzmNicknameColor::Hex(selected,m_colorText);LayoutColor();
+}
+unsigned CCzmSocial::AutomaticColor() const
+{
+ // This is the own-message fallback used by the community chat; badges keep their role color.
+ return m_profile.role[0]?CZM_RoleColor(m_profile.role):PackRGBA(245,179,188,255);
+}
+unsigned CCzmSocial::SelectedColor() const
+{
+ return m_colorAuto?AutomaticColor():CzmNicknameColor::Hsv(m_colorHue,m_colorSaturation,m_colorBrightness);
+}
+void CCzmSocial::ColorHex()
+{
+ if(!CzmNicknameColor::Valid(m_colorText))return;
+ const unsigned color=CzmNicknameColor::Parse(m_colorText,CzmStyle::Ink());
+ CzmNicknameColor::ToHsv(color,m_colorHue,m_colorSaturation,m_colorBrightness);
+ CzmNicknameColor::Hex(color,m_colorText);m_colorAuto=false;
+}
+void CCzmSocial::UpdateColor(bool wheel)
+{
+ if(m_write)return;
+ if(wheel){
+  const float radius=m_colorWheel.w*.5f,dx=(uiStatic.cursorX-m_colorWheel.x-radius)/radius,dy=(uiStatic.cursorY-m_colorWheel.y-radius)/radius;
+  m_colorHue=atan2f(dy,dx)/(2*M_PI);if(m_colorHue<0)m_colorHue+=1;
+  m_colorSaturation=CzmNicknameColor::Clamp(sqrtf(dx*dx+dy*dy));
+ }else m_colorBrightness=CzmNicknameColor::Clamp((uiStatic.cursorX-m_colorValue.x)/(float)Q_max(1,m_colorValue.w));
+ m_colorAuto=false;CzmNicknameColor::Hex(SelectedColor(),m_colorText);
+}
+void CCzmSocial::LayoutColor()
+{
+ const int gap=Q_max(6,(int)(H*.014f)),bh=Q_max(32,(int)(H*.066f)),inset=Q_max(8,(int)(H*.023f));
+ const int width=Q_min((int)(W*.94f),(int)(H*1.68f)),height=(int)(H*.88f);
+ const int title=CZM_FontHeight(CZM_Font(CZMF_UI_TITLE))+CZM_FontHeight(CZM_Font(CZMF_UI_META))+gap;
+ m_colorPanel=CZM_Rect((W-width)/2,(H-height)/2,width,height);
+ const int top=m_colorPanel.y+inset+title,body=height-inset*2-title-bh-gap;
+ const int side=Q_min(body,(int)(width*.43f));
+ m_colorWheel=CZM_Rect(m_colorPanel.x+inset,top+(body-side)/2,side,side);
+ const int x=m_colorWheel.x+side+gap*2,w=m_colorPanel.x+width-inset-x;
+ const int valueH=Q_max(22,bh/2),preset=Q_min(bh,Q_max(20,body*12/100)),reset=Q_max(24,bh*4/5),label=CZM_FontHeight(CZM_Font(CZMF_UI_META));
+ const int preview=body-bh-valueH-preset-reset-label-gap*4;
+ m_colorPreview=CZM_Rect(x,top,w,preview);
+ m_colorHex=CZM_Rect(x,top+preview+gap,w,bh);
+ m_colorValue=CZM_Rect(x,m_colorHex.y+bh+gap+label,w,valueH);
+ const int py=m_colorValue.y+valueH+gap,space=Q_min(gap*2,Q_max(2,(w-preset*5)/4));
+ for(int i=0;i<5;i++)m_colorPresets[i]=CZM_Rect(x+i*(preset+space),py,preset,preset);
+ m_colorReset=CZM_Rect(x,py+preset+gap,w,reset);
+ const int half=(width-inset*2-gap)/2,bottom=m_colorPanel.y+height-inset-bh;
+ m_colorCancel=CZM_Rect(m_colorPanel.x+inset,bottom,half,bh);
+ m_colorApply=CZM_Rect(m_colorCancel.x+half+gap,bottom,width-inset*2-gap-half,bh);
+ if(m_colorTyping)EngFuncs::SetTextInputRect(m_colorHex.x,m_colorHex.y,m_colorHex.w,m_colorHex.h);
+}
+void CCzmSocial::DrawColor()
+{
+ using namespace CzmStyle;
+ const int gap=Q_max(6,(int)(H*.014f)),inset=Q_max(8,(int)(H*.023f));
+ const HFont title=CZM_Font(CZMF_UI_TITLE),meta=CZM_Font(CZMF_UI_META),body=CZM_Font(CZMF_UI_LABEL);
+ const unsigned selected=SelectedColor();
+ UI_FillRect(0,0,W,H,PackRGBA(0,0,0,210));
+ Surface(m_colorPanel,PackRGBA(14,20,30,255),PackRGBA(91,118,142,235),Q_max(8,H/45));
+ CZM_DrawText(title,m_colorPanel.x+inset,m_colorPanel.y+inset,m_colorPanel.w-inset*2,T("Цвет ника","Nickname color"),Ink());
+ CZM_DrawText(meta,m_colorPanel.x+inset,m_colorPanel.y+inset+CZM_FontHeight(title),m_colorPanel.w-inset*2,T("Выбери оттенок — его увидят в чате","Choose a shade — players will see it in chat"),Muted());
+ CZM_DrawImage(UI_DIR "color_wheel.png",m_colorWheel.x,m_colorWheel.y,m_colorWheel.w,m_colorWheel.h);
+ const float angle=m_colorHue*2*M_PI,radius=m_colorWheel.w*.5f*m_colorSaturation;
+ const int marker=Q_max(12,H/30),mx=m_colorWheel.x+m_colorWheel.w/2+(int)(cosf(angle)*radius),my=m_colorWheel.y+m_colorWheel.h/2+(int)(sinf(angle)*radius);
+ CZM_DrawImage(UI_DIR "icon_ring.png",mx-marker/2-1,my-marker/2-1,marker+2,marker+2,PackRGBA(0,0,0,180));
+ CZM_DrawImage(UI_DIR "icon_ring.png",mx-marker/2,my-marker/2,marker,marker,Ink());
+ Surface(m_colorPreview,PackRGBA(8,15,25,255),PackRGBA(54,74,94,255));
+ const int textH=CZM_FontHeight(body),ph=m_colorPreview.h;
+ CZM_DrawText(meta,m_colorPreview.x+gap,m_colorPreview.y+gap/2,m_colorPreview.w-gap*2,T("ПРЕДПРОСМОТР В ЧАТЕ","CHAT PREVIEW"),Muted());
+ const int ny=m_colorPreview.y+Q_max(CZM_FontHeight(meta)+gap,ph/2-textH/2);
+ CZM_DrawText(body,m_colorPreview.x+gap,ny,m_colorPreview.w-gap*2,m_profile.nick,selected);
+ CZM_DrawText(meta,m_colorPreview.x+gap,ny+textH+2,m_colorPreview.w-gap*2,T("Привет, команда!","Hello, team!"),Ink());
+ Surface(m_colorHex,PackRGBA(22,30,44,255),m_colorTyping?AccentRed():Border());
+ CZM_DrawText(meta,m_colorHex.x+gap,m_colorHex.y+(m_colorHex.h-CZM_FontHeight(meta))/2,m_colorHex.w/4,"HEX",Muted());
+ CZM_DrawText(body,m_colorHex.x+m_colorHex.w/4,m_colorHex.y+(m_colorHex.h-textH)/2,m_colorHex.w*3/4-gap,m_colorText,Ink());
+ if(m_colorTyping&&((int)(EngFuncs::DoubleTime()*2)%2)==0){const int cx=m_colorHex.x+m_colorHex.w/4+CZM_TextWidth(body,m_colorText)+2;UI_FillRect(cx,m_colorHex.y+m_colorHex.h/4,Q_max(1,H/400),m_colorHex.h/2,AccentRed());}
+ CZM_DrawText(meta,m_colorValue.x,m_colorValue.y-CZM_FontHeight(meta),m_colorValue.w,T("Яркость","Brightness"),Muted());
+ const int track=Q_max(5,H/90),ty=m_colorValue.y+(m_colorValue.h-track)/2,steps=Q_min(128,m_colorValue.w);
+ for(int i=0;i<steps;i++){const int sx=m_colorValue.x+i*m_colorValue.w/steps,ex=m_colorValue.x+(i+1)*m_colorValue.w/steps;UI_FillRect(sx,ty,ex-sx,track,CzmNicknameColor::Hsv(m_colorHue,m_colorSaturation,i/(float)Q_max(1,steps-1)));}
+ const int handle=Q_max(12,H/40),hx=m_colorValue.x+(int)(m_colorValue.w*m_colorBrightness);
+ CZM_DrawImage(UI_DIR "dot.png",hx-handle/2,m_colorValue.y+(m_colorValue.h-handle)/2,handle,handle,Ink());
+ static const char *colors[]={"#3DD6FF","#FF4E61","#FFC857","#AE8CFF","#FFFFFF"};
+ for(int i=0;i<5;i++){
+  const CzmRect &r=m_colorPresets[i];const unsigned c=CzmNicknameColor::Parse(colors[i],Ink());
+  CZM_DrawImage(UI_DIR "dot.png",r.x,r.y,r.w,r.h,c);
+  if(!m_colorAuto&&selected==c)CZM_DrawImage(UI_DIR "icon_ring.png",r.x-2,r.y-2,r.w+4,r.h+4,Ink());
+ }
+ ActionButton(m_colorReset,UI_DIR "icon_refresh.png",m_colorAuto?T("Авто · стандартный цвет","Auto · default color"):T("Сбросить цвет","Reset color"),false,Pressed(COLOR_RESET),!m_write);
+ ActionButton(m_colorCancel,"",T("Отмена","Cancel"),false,Pressed(COLOR_CANCEL),!m_write);
+ ActionButton(m_colorApply,UI_DIR "icon_check.png",m_write?T("Сохраняем…","Saving…"):T("Сохранить","Save"),true,Pressed(COLOR_SAVE),!m_write&&(m_colorAuto||CzmNicknameColor::Valid(m_colorText)));
 }
 
 void CCzmSocial::LayoutTheme()
@@ -615,6 +736,16 @@ void CCzmSocial::Layout()
 
 int CCzmSocial::Hit()
 {
+ if(m_colorOpen){
+  if(m_colorWheel.HasCursor())return m_write?0:COLOR_WHEEL;
+  if(m_colorValue.HasCursor())return m_write?0:COLOR_VALUE;
+  if(m_colorHex.HasCursor())return m_write?0:COLOR_HEX;
+  for(int i=0;i<5;i++)if(m_colorPresets[i].HasCursor())return m_write?0:COLOR_PRESET+i;
+  if(m_colorReset.HasCursor())return m_write?0:COLOR_RESET;
+  if(m_colorApply.HasCursor())return m_write?0:COLOR_SAVE;
+  if(m_colorCancel.HasCursor()||!m_colorPanel.HasCursor())return m_write?0:COLOR_CANCEL;
+  return 0;
+ }
 	if(m_themeOpen){
 		for(int i=0;i<4;i++)if(m_themeOptions[i].HasCursor())return THEME_PICK+i;
 		if(m_themeApply.HasCursor())return m_write?0:THEME_SAVE;
@@ -649,6 +780,7 @@ int CCzmSocial::Hit()
 		if(m_moderate.w&&m_moderate.HasCursor())return MODERATE;
 		if(m_settings.w&&m_settings.HasCursor())return SETTINGS;
 		if(m_theme.w&&m_theme.HasCursor())return THEME;
+		if(m_nickColor.w&&m_nickColor.HasCursor())return COLOR;
 		if(m_nickEdit.w&&m_nickEdit.HasCursor())return SETTINGS;
 		if(m_copy.HasCursor())return COPY;
 		if(m_telegram.w&&m_telegram.HasCursor())return TELEGRAM;
@@ -718,7 +850,19 @@ void CCzmSocial::Activate( int hit )
 			}
 		}m_messageMenu=0;return;
 	}
-	if(hit==THEME){
+	if(hit==COLOR){if(m_mode==PROFILE&&m_loaded&&m_profile.id==CZM_OnlinePlayer()&&Account())OpenColor();return;}
+ if(m_colorOpen){
+  if(hit==COLOR_CANCEL){EndInput();m_colorOpen=false;m_colorDrag=0;}
+  else if(hit==COLOR_RESET&&!m_write){EndInput();m_colorAuto=true;CzmNicknameColor::ToHsv(AutomaticColor(),m_colorHue,m_colorSaturation,m_colorBrightness);CzmNicknameColor::Hex(SelectedColor(),m_colorText);}
+  else if(hit>=COLOR_PRESET&&hit<COLOR_PRESET+5&&!m_write){EndInput();static const char *colors[]={"#3DD6FF","#FF4E61","#FFC857","#AE8CFF","#FFFFFF"};Q_strncpy(m_colorText,colors[hit-COLOR_PRESET],sizeof(m_colorText));ColorHex();}
+  else if(hit==COLOR_HEX&&!m_write){EndInput();m_colorTyping=true;EngFuncs::SetTextInputRect(m_colorHex.x,m_colorHex.y,m_colorHex.w,m_colorHex.h);UI_EnableTextInput(true);}
+  else if((hit==COLOR_WHEEL||hit==COLOR_VALUE)&&!m_write){EndInput();UpdateColor(hit==COLOR_WHEEL);}
+  else if(hit==COLOR_SAVE&&!m_write&&m_profile.id==CZM_OnlinePlayer()&&Account()){
+   if(!m_colorAuto&&!CzmNicknameColor::Valid(m_colorText)){Notice(T("HEX: # и шесть цифр, например #3DD6FF","HEX: # and six digits, for example #3DD6FF"));return;}
+   if(!m_colorAuto)ColorHex();EndInput();char body[40];snprintf(body,sizeof(body),"{\"nick_color\":\"%s\"}",m_colorAuto?"":m_colorText);Write(WRITE_COLOR,"/api/v1/social/nick-color",body);
+  }return;
+ }
+ if(hit==THEME){
 		if(m_loaded&&m_profile.id==CZM_OnlinePlayer()&&Account()){
 			EndInput();m_themeChoice=CzmProfileStyle::ThemeIndex(m_profile.theme);m_themeOpen=true;LayoutTheme();
 		}return;
@@ -819,6 +963,17 @@ void CCzmSocial::Activate( int hit )
 bool CCzmSocial::KeyDown( int key )
 {
 	Layout();
+ if(m_colorOpen){
+  if(UI::Key::IsEscape(key)){EndInput();m_colorOpen=false;m_colorDrag=0;return true;}
+  if(m_colorTyping&&UI::Key::IsBackspace(key)){size_t n=strlen(m_colorText);if(n)m_colorText[n-1]=0;m_colorAuto=false;return true;}
+  if(m_colorTyping&&UI::Key::IsEnter(key)){Activate(COLOR_SAVE);return true;}
+  if(UI::Key::IsLeftMouse(key)){
+   m_pressed=Hit();m_moved=false;m_drag=false;m_colorDrag=m_pressed==COLOR_WHEEL?1:m_pressed==COLOR_VALUE?2:0;
+   if(m_colorDrag){EndInput();UpdateColor(m_colorDrag==1);}else if(m_colorTyping&&m_pressed!=COLOR_HEX)EndInput();
+   return true;
+  }
+  return true;
+ }
 	if(m_typing&&UI::Key::IsBackspace(key)){size_t n=strlen(m_input);if(n){n--;while(n&&((unsigned char)m_input[n]&0xc0)==0x80)n--;m_input[n]=0;}return true;}
 	if(m_typing&&UI::Key::IsEnter(key)){Activate(m_mode==LIST?SEARCH:SEND);return true;}
 	if(UI::Key::IsEscape(key)){if(m_themeOpen)m_themeOpen=false;else if(m_messageMenu)m_messageMenu=0;else if(m_moreOpen)m_moreOpen=false;else if(m_confirm[0])m_confirm[0]=0;else if(m_typing)EndInput();else Activate(BACK);return true;}
@@ -828,14 +983,21 @@ bool CCzmSocial::KeyDown( int key )
 }
 bool CCzmSocial::KeyUp( int key )
 {
-	if(UI::Key::IsLeftMouse(key)){int hit=Hit();if(!m_moved&&hit&&hit==m_pressed)Activate(hit);m_pressed=0;m_drag=false;return true;}return CMenuFramework::KeyUp(key);
+	if(UI::Key::IsLeftMouse(key)){if(m_colorOpen&&m_colorDrag){UpdateColor(m_colorDrag==1);m_colorDrag=0;m_pressed=0;return true;}int hit=Hit();if(!m_moved&&hit&&hit==m_pressed)Activate(hit);m_pressed=0;m_drag=false;return true;}return CMenuFramework::KeyUp(key);
 }
 bool CCzmSocial::MouseMove( int x,int y )
 {
-	CMenuFramework::MouseMove(x,y);if(m_drag){int d=uiStatic.cursorY-m_downY;if(abs(d)>H*.02f)m_moved=true;if(m_moved)m_scroll=m_downScroll+d*(m_mode==LIST?-1:1);}return true;
+	CMenuFramework::MouseMove(x,y);if(m_colorOpen&&m_colorDrag){UpdateColor(m_colorDrag==1);return true;}if(m_drag){int d=uiStatic.cursorY-m_downY;if(abs(d)>H*.02f)m_moved=true;if(m_moved)m_scroll=m_downScroll+d*(m_mode==LIST?-1:1);}return true;
 }
 void CCzmSocial::Char( int key )
 {
+ if(m_colorOpen){
+  if(!m_colorTyping||m_write||key<32||key>127)return;
+  size_t n=strlen(m_colorText);if(n>=7)return;
+  if((!n&&key=='#')||(n&&CzmNicknameColor::HexDigit((char)key)>=0)){
+   m_colorAuto=false;m_colorText[n]=(char)key;m_colorText[n+1]=0;if(CzmNicknameColor::Valid(m_colorText))ColorHex();
+  }return;
+ }
 	if(!m_typing||m_write||key<32||key==127)return;
 	if(m_mode==LIST&&(key<'0'||key>'9'))return;
 	size_t n=strlen(m_input);int limit=m_mode==LIST?10:m_editStatus?100:400;
@@ -951,7 +1113,7 @@ void CCzmSocial::DrawProfile()
  const int theme=CzmProfileStyle::ThemeIndex(p.theme);
  const unsigned accent=p.role[0]?CzmProfileStyle::RoleAccent(p.role):CzmProfileStyle::ThemeColor(theme);
  char seen[160];SeenText(p,seen,sizeof(seen));
- CzmProfileStyle::Banner(m_hero,m_copy,m_nickEdit,p,seen,self,Pressed(COPY),Pressed(SETTINGS));
+ CzmProfileStyle::Banner(m_hero,m_copy,m_nickEdit,m_nickColor,p,seen,self,Pressed(COPY),Pressed(SETTINGS));
 
 	// the status: the whole row edits it on the own card
 	if(m_editStatus){
@@ -963,16 +1125,9 @@ void CCzmSocial::DrawProfile()
 		ActionButton(m_secondary,"",T("Отмена","Cancel"),false,Pressed(CANCEL));
 		ActionButton(m_primary,UI_DIR "icon_check.png",m_write?T("Сохраняем…","Saving…"):T("Сохранить","Save"),true,Pressed(SEND),!m_write);
 	}else{
-		const bool down=self&&Pressed(EDIT);
-		Surface(m_profileStatus,down?PackRGBA(33,42,56,255):PackRGBA(20,24,32,255),PackRGBA(44,51,63,255));
-		const char *status=ProfileStatusText();
-		const int iconW=self?m_back.h/2+gap:0,lineH=CZM_FontHeight(body)+2;
-		int starts[PROFILE_STATUS_LINES+1];
-		const int lines=CZM_WrapText(body,status,m_profileStatus.w-gap*2-iconW,starts,PROFILE_STATUS_LINES);
-		for(int i=0;i<lines;i++){char line[410];CZM_WrapLine(status,starts,i,line,sizeof(line));
-			CZM_DrawText(body,m_profileStatus.x+gap,m_profileStatus.y+gap+i*lineH,m_profileStatus.w-gap*2-iconW,line,p.status[0]?Ink():Muted());}
-		if(self){const int icon=Q_min(m_back.h/2,m_profileStatus.h-gap);CZM_DrawImage(UI_DIR "icon_pencil.png",m_profileStatus.x+m_profileStatus.w-gap-icon,m_profileStatus.y+(m_profileStatus.h-icon)/2,icon,icon,p.status[0]?Muted():AccentRed());}
-	}
+  CzmProfileStyle::Biography(m_profileStatus,ProfileStatusText(),self,self&&Pressed(EDIT),p.status[0],p.serverOwner&&H<480);
+ }
+
 	// friends, followers, following: a clear number, a calm caption; the own lists open
 	if(m_telegram.w)ActionButton(m_telegram,UI_DIR "icon_chat.png","Telegram",false,Pressed(TELEGRAM),true,AccentBlue());
 	if(m_projectPanel.w){
@@ -1229,6 +1384,7 @@ void CCzmSocial::Draw()
 	if(m_notice[0]&&EngFuncs::DoubleTime()<m_noticeUntil){CzmRect r=CZM_Rect(W*.12f,H*.035f,W*.76f,H*.075f);CZM_DrawPill(UI_DIR "button_secondary.png",r.x,r.y,r.w,r.h);Label(CZM_Rect(r.x+pad,r.y,r.w-pad*2,r.h),m_notice,CZMF_LANG);}
 	if(m_pickOpen)DrawPicker();
 	if(m_themeOpen)DrawTheme();
+	if(m_colorOpen)DrawColor();
 	if(m_moreOpen&&m_mode==PROFILE&&m_moreCount)DrawMore();
 	if(m_messageMenu)DrawMessageMenu();
 	if(m_confirm[0]){

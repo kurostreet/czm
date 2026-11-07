@@ -1,6 +1,6 @@
 """Execute the real server window, its forms and invitation requests against controlled replies."""
 from pathlib import Path
-import os,subprocess,tempfile,unittest
+import os,subprocess,tempfile,unittest,re
 from test_loading_errors import function
 from test_social_menu import STUB,HARNESS
 from test_tab_avatars import VECTOR,STRING
@@ -17,6 +17,12 @@ int main(int argc,char**argv){
  uiStatic.realTime=1000;CCzmServerWindow w;auto root=sample();w.Open(root);w.m_iOpenTime=0;w.m_iChangeTime=0;
  if(argc>1){drawTrace=true;
   std::string view=argv[1];if(view=="compact"){ScreenWidth=640;ScreenHeight=360;}
+  if(argc>3){ScreenWidth=atoi(argv[2]);ScreenHeight=atoi(argv[3]);}
+  if(view=="standalone"||view=="submenu"){
+   CzmRichMenu m={};ParseRich("81 1023\n#czm1\tmenu\tstandalone\tМЕНЮ СЕРВЕРА\t\tLVL 8 | WR 64%\t\n#nav\t0\t1\t1\tstar\n#tokens\t117766\n1. Прогресс и токены\t\tchart\n2. Игровой магазин\t\tcart\n\\d3. Голосования\t\tflag\n4. Настройки игрока\t\tgear\n5. Мой инвентарь\t\tbox\n\\d6. Лавка игроков\t\tusers\n7. Язык\t\tglobe\t\tRU\n0. Выход",m);
+   if(view=="submenu")ParseRich("82 1023\n#czm1\tmenu\tstandalone\tПрогресс и токены\t\tLVL 8 | WR 64%\t\n#nav\t1\t1\t2\tchart\n#tokens\t117766\n1. Моя статистика\t\tchart\n2. Прогресс уровня\t\ttarget\n3. Передать токены\t\tcoins\n4. Мой прогресс\t\tuser\n5. История токенов\t\tclock\n\\d6. Боевой пропуск\t\tticket\n8. Назад\n9. Далее\n0. Выход",m);
+   survivalPeer=true;w.Update(m);
+  }
   if(view=="form"){auto m=root;m.kind=CzmServerView::Form;strcpy(m.parent,"server");strcpy(m.pageTitle,"Сообщение админу");strcpy(m.command,"czm_admin_msg");strcpy(m.body,"Опиши проблему. Обращение получит администрация сервера. В общий чат оно не попадёт.\n\nПосле отправки здесь появится результат.");strcpy(m.hint,"Нажмите, чтобы ввести сообщение…");w.Update(m);strcpy(w.m_input,"На карте застрял игрок. Нужна помощь администрации.");}
   if(view=="friends"){auto m=root;m.kind=CzmServerView::Friends;strcpy(m.parent,"players");strcpy(m.pageTitle,"Пригласить друга");w.Update(m);w.m_friendsLoaded=true;w.m_friendCount=4;const char*n[]={"KuroStreet","Hunter","ZombieMaster","Алексей"};for(int i=0;i<4;i++){w.m_friends[i].id=i+20;w.m_friends[i].online=i<2;strcpy(w.m_friends[i].nick,n[i]);}}
   w.m_iChangeTime=0;w.Draw();return 0;
@@ -39,7 +45,8 @@ int main(int argc,char**argv){
  assert(!strcmp(admin.headerIcon,"shield")&&!strcmp(admin.cards[0].icon,"coins")&&!admin.body[0]);
  w.Open(admin);w.Layout(0);
  auto tap=[&](CzmRect r){assert(r.w&&r.h);uiStatic.cursorX=r.x+r.w/2;uiStatic.cursorY=r.y+r.h/2;sentCommands.clear();w.KeyDown(1);w.KeyUp(1);};
- assert(inside(w.m_navNext,w.m_foot)&&inside(w.m_back,w.m_foot)&&inside(w.m_menu.cards[0].rect,w.m_body));
+ assert(inside(w.m_navNext,w.m_foot)&&inside(w.m_back,w.m_head)&&inside(w.m_menu.cards[0].rect,w.m_body));
+ assert(w.m_back.y+w.m_back.h<w.m_navNext.y&&inside(w.m_return,w.m_foot));
  tap(w.m_navNext);assert(sentCommands=="slot9\n");
  admin.menuPage=2;admin.nextSlot=0;w.Update(admin);w.Layout(0);
  tap(w.m_navPrev);assert(sentCommands=="czm_menu_prev\n");
@@ -75,6 +82,27 @@ int main(int argc,char**argv){
  w.FetchFriends(40);w.Draw();pending=w.m_request;replies[pending]={200,"{\"people\":[{\"id\":13,\"nick\":\"Next\"}],\"next\":-1}"};w.FriendsFrame();w.FetchFriends(0);assert(w.m_friendPage==-1);w.Draw(); // loading a preceding page must not index a negative friend row
  pending=w.m_request;identity++;replies[pending]={200,"{\"people\":[{\"id\":8,\"nick\":\"other profile\"}],\"next\":-1}"};w.FriendsFrame();assert(!w.m_friendCount);
  authenticated=false;w.Submit();assert(logins==1);authenticated=true;
+ // A foreign numbered menu uses the compact list but keeps its exact slots,
+ // including 0/Back; local Return to game does not accidentally select it.
+ CzmRichMenu foreign;
+ PlainAsRich("71 1021\nForeign server\n1. First\n\\d2. Locked\n3. Third\n4. Fourth\n5. Fifth\n6. Sixth\n7. Seventh\n8. Eighth\n9. Next page\n0. Back",NULL,foreign);
+ assert(foreign.plain&&foreign.numCards==10&&!foreign.cards[1].enabled);
+ ScreenWidth=1536;ScreenHeight=716;w.Open(foreign);w.Layout(0);
+ assert(w.m_iCardRows==7&&w.m_scrollMax>0&&w.m_menu.cards[9].rect.w==0);
+ sentCommands.clear();w.Activate(w.HIT_CARD+1);assert(sentCommands.empty());
+ w.m_scroll=w.m_scrollMax;w.Layout(0);assert(w.m_menu.cards[9].rect.w>0);
+ tap(w.m_menu.cards[9].rect);assert(sentCommands=="slot10\n");
+ w.Update(foreign);w.Layout(0);sentCommands.clear();w.KeyDown('9');assert(sentCommands=="slot9\n");
+ w.Update(foreign);w.Layout(0);sentCommands.clear();w.KeyDown('0');assert(sentCommands=="slot10\n");
+ w.Update(foreign);w.Layout(0);tap(w.m_return);assert(sentCommands=="client_buy_close\n"&&w.m_bClosing);
+ // Updating another plain submenu must not lose its own 0/Back action.
+ PlainAsRich("72 513\nChild\n1. Confirm\n0. Back",&foreign,foreign);
+ assert(foreign.numCards==2&&foreign.cards[1].key==10&&!foreign.hasTokens);
+ // The actual header only displays a typed current balance on our server.
+ CzmRichMenu balance;ParseRich("73 1\n#czm1\tmenu\tmain\tMenu\t\tTokens 999999\t\n#tokens\t7321\n1. Item",balance);
+ w.Open(balance);w.Layout(0);drawnLabels.clear();w.DrawHeader(255);
+ bool wallet=false;for(auto&label:drawnLabels)if(label=="CZM Token: 7321")wallet=true;assert(!wallet);
+ survivalPeer=true;drawnLabels.clear();w.DrawHeader(255);for(auto&label:drawnLabels)if(label=="CZM Token: 7321")wallet=true;assert(wallet);survivalPeer=false;
  // Every view remains within the window on the supported aspect ratios.
  for(auto wh:{std::make_pair(640,360),std::make_pair(1536,716),std::make_pair(2340,1080),std::make_pair(1024,768)}){
   ScreenWidth=wh.first;ScreenHeight=wh.second;
@@ -83,6 +111,21 @@ int main(int argc,char**argv){
    if(kind==CzmServerView::Friends)for(int i=0;i<6;i++)assert(inside(w.m_friendRows[i],w.m_body));
   }
  }
+ // The live frame converts compatible foreign menus, preserves serial updates,
+ // and leaves the classic opt-out and weapon-specific views available.
+ stack.current=nullptr;vars["czm_menu_cards"]="1";
+ assert(ServerWindowFrame("91 513\nForeign\n1. First\n0. Back")&&menu_czmserver->Serial()==91);
+ assert(menu_czmserver->Menu().plain&&menu_czmserver->Menu().numCards==2);
+ ServerWindowFrame("91 513\nForeign\n1. Duplicate serial\n0. Back");
+ assert(!strcmp(menu_czmserver->Menu().cards[0].name,"First"));
+ ServerWindowFrame("92 512\nChild\n\\d1. Locked\n0. Back");
+ assert(menu_czmserver->Serial()==92&&!menu_czmserver->Menu().cards[0].enabled);
+ menu_czmserver->Close(true);assert(!CZM_ClientMenuOpen(menu_czmserver));
+ ServerWindowFrame("92 512\nChild\n1. Closed serial\n0. Back");assert(!CZM_ClientMenuOpen(menu_czmserver));
+ ServerWindowFrame("93 1\nChild\n1. Next serial");assert(CZM_ClientMenuOpen(menu_czmserver));
+ vars["czm_menu_cards"]="0";assert(!ServerWindowFrame("94 1\nClassic\n1. Item")&&!CZM_ClientMenuOpen(menu_czmserver));
+ vars["czm_menu_cards"]="1";weaponMenu=true;assert(!ServerWindowFrame("95 1\nWeapon\n1. Item"));weaponMenu=false;
+ assert(!ServerWindowFrame("96 0\nText without numbered choices"));
 }
 '''
 
@@ -92,9 +135,9 @@ class ServerMenuWindowTests(unittest.TestCase):
    p=Path(folder)
    (p/'utlvector.h').write_text(VECTOR.replace('void RemoveAll(){v.clear();}','void RemoveAll(){v.clear();} void Remove(int n){v.erase(v.begin()+n);} T&Tail(){return v.back();}'))
    (p/'utlstring.h').write_text(STRING)
-   stub=STUB.replace('CZMF_NICK,QM_CENTER=1','CZMF_NICK,CZMF_NAV,CZMF_SHOP_PRICE,CZMF_MENU_TITLE,CZMF_TILE_STATUS,CZMF_UI_TITLE,CZMF_UI_ACTION,CZMF_UI_LABEL,CZMF_UI_META,CZMF_TINY,CZMF_PROFILE_NAME,CZMF_PROFILE_TEXT,CZMF_CHAT_TEXT,KEY_MENU=100,QM_LEFT=0,QM_CENTER=1')
+   stub=STUB.replace('CZMF_NICK,QM_CENTER=1','CZMF_NICK,CZMF_NAV,CZMF_SHOP_PRICE,CZMF_MENU_TITLE,CZMF_TILE_STATUS,CZMF_UI_TITLE,CZMF_UI_ACTION,CZMF_UI_LABEL,CZMF_UI_META,CZMF_TINY,CZMF_PROFILE_NAME,CZMF_PROFILE_TEXT,CZMF_CHAT_TEXT,CZMF_PROFILE_TITLE,KEY_MENU=100,QM_LEFT=0,QM_CENTER=1')
    stub=stub.replace('bool HasCursor()const{','bool Contains(int a,int b)const{return w>0&&h>0&&a>=x&&a<x+w&&b>=y&&b<y+h;}CzmRect Grown(int n)const{return{x-n,y-n,w+n*2,h+n*2};}bool HasCursor()const{')
-   stub=stub.replace('struct Cursor{int cursorY;}', 'struct Cursor{int cursorY=0,cursorX=0,realTime=1000;}')
+   stub=re.sub(r'struct Cursor\{[^}]*\}', 'struct Cursor{int cursorY=0,cursorX=0,realTime=1000;struct Layer{bool active=false;bool IsActive()const{return active;}}menu,client;}', stub)
    stub=stub.replace('struct EngFuncs{','struct EngFuncs{static void KEY_SetDest(int){}static void ClientCmd(bool,const char*);static void ClientCmdF(bool,const char*,...);')
    stub=stub.replace('inline bool CL_IsActive(){return false;}','inline bool CL_IsActive(){return true;}')
    stub=stub.replace('unsigned CZM_White();','unsigned CZM_White(int=255);')
@@ -109,11 +152,13 @@ class ServerMenuWindowTests(unittest.TestCase):
    harness=harness.replace(old,r'''int CZM_WrapText(HFont f,const char*s,int w,int*starts,int max){int n=0,i=0;starts[0]=0;while(s[i]&&n<max){int begin=i,width=0;while(s[i]&&s[i]!='\n'){int k=i;i++;while((s[i]&0xc0)==0x80)i++;width+=CZM_FontHeight(f)*62/100;if(width>w&&k>begin){i=k;break;}}if(s[i]=='\n')i++;starts[++n]=i;}return n;}''')
    harness+='''\n#include <cstdarg>\nstatic std::string sentCommands;void EngFuncs::ClientCmd(bool,const char*s){sentCommands+=s;}void EngFuncs::ClientCmdF(bool,const char*f,...){char b[1600];va_list a;va_start(a,f);vsnprintf(b,sizeof(b),f,a);va_end(a);sentCommands+=b;}\nvoid CZM_KeepClientMenu(CMenuFramework*){}void CZM_CloseClientMenuSoon(CMenuFramework*p){p->CMenuFramework::Hide();}int CZM_ImageAspect1000(const char*){return 1000;}\n'''
    source=(ROOT/'czm/menu/CzmServerMenu.cpp').read_text()
-   defs='\n#define UI_DIR "gfx/czm/ui/"\n#define MAX_CARDS 10\n#define MAX_LINES 3\n#define SM_MAX_TABS 32\n#define SM_MAX_CARDS 9\n#include "czm_server_view.h"\n#include "CzmJson.h"\n#include "CzmDesign.h"\n'
+   defs='\n#define UI_DIR "gfx/czm/ui/"\n#define MAX_CARDS 10\n#define MAX_LINES 3\n#define SM_MAX_TABS 32\n#define SM_MAX_CARDS 10\n#include "czm_server_view.h"\n#include "CzmJson.h"\n#include "CzmDesign.h"\n'
    defs+=source[source.index('struct CzmCard'):source.index('static void TrimCopy')]
    defs+=source[source.index('struct CzmMenuTab'):source.index('static bool IsRichMenu')]
-   for sig in ['static void TrimCopy(','static void SplitLine(','static void ParseMenu(','static void NextField(','static unsigned int HexColor(','static unsigned int Tint(','static const char *MenuIcon(','static void ParseRich(']:defs+=function(source,sig)+'\n'
+   for sig in ['static void TrimCopy(','static void SplitLine(','static void ParseMenu(','static bool IsRichMenu(','static void NextField(','static unsigned int HexColor(','static unsigned int Tint(','static const char *MenuIcon(','static void ParseRich(','static void PlainAsRich(']:defs+=function(source,sig)+'\n'
    window=source[source.index('class CCzmServerWindow'):source.index('ADD_MENU3( menu_czmserver')].replace('private:','public:')
+   window+='\nstatic CCzmServerWindow*menu_czmserver=new CCzmServerWindow();static bool CZM_ClientMenuOpen(CMenuFramework*m){return stack.current==m;}\nstatic bool weaponMenu;namespace CzmWeapons{static bool Wire(const char*){return weaponMenu;}}static bool CZM_IsWeaponMenu(const char*){return weaponMenu;}\n'
+   window+=function(source,'static bool ServerWindowFrame(')
    (p/'main.cpp').write_text(harness+defs+window+SCENARIOS)
    exe=p/'window'
    subprocess.run(['g++','-std=c++11','-w','-I'+folder,'-I'+str(ROOT/'common'),str(p/'main.cpp'),str(ROOT/'czm/menu/CzmJson.cpp'),'-o',str(exe)],check=True)
@@ -121,5 +166,9 @@ class ServerMenuWindowTests(unittest.TestCase):
    preview=os.environ.get('CZM_SERVER_MENU_PREVIEW_DIR')
    if preview:
     out=Path(preview);out.mkdir(parents=True,exist_ok=True)
-    for view in ['main','form','friends','compact']:
+    for view in ['main','form','friends','compact','standalone','submenu']:
      r=subprocess.run([str(exe),view],check=True,capture_output=True,text=True);(out/(view+'.tsv')).write_text(r.stdout)
+    for width,height in [(640,360),(1536,716),(2340,1080),(1024,768)]:
+     for view in ['standalone','submenu']:
+      r=subprocess.run([str(exe),view,str(width),str(height)],check=True,capture_output=True,text=True)
+      (out/(f'{view}-{width}x{height}.tsv')).write_text(r.stdout)
