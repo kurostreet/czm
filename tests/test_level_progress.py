@@ -61,6 +61,8 @@ class LevelProgressTests(unittest.TestCase):
 static CzmHud::ProgressInfo s_progress;
 static int s_tags[33],s_toasts[3];static bool s_have[33],s_aimShown,s_aimReceived;
 static CzmAim::Target s_aim;
+static int skillResets;
+void CZM_SkillsReset(){++skillResets;}
 struct BufferReader {
  const unsigned char *p;
  BufferReader(const char *,void *buf,int):p((const unsigned char *)buf){}
@@ -79,6 +81,7 @@ int main(){
  packet[0]=0;MsgFunc_CzmProgress("CzmProgress",sizeof(packet),packet);assert(s_progress.level==0);
  packet[0]=99;MsgFunc_CzmProgress("CzmProgress",sizeof(packet)-1,packet);assert(s_progress.level==0);
  s_aimShown=true;CZM_TagsReset();assert(s_progress.level<0&&s_progress.tokens==0&&!s_aimShown);
+ assert(skillResets==2); // reconnect clears the ability state together with the progress HUD
 }
 '''
         with tempfile.TemporaryDirectory(prefix='czm-progress-wire-') as folder:
