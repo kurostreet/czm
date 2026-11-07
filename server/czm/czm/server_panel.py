@@ -29,7 +29,7 @@ class Config:
     fastdl: str = "/srv/czm-zm-test/fastdl"
     socket: str = "/run/czm-server-panel/control.sock"
     origin: str = "https://counter-zombie.ru"
-    address: str = "194.226.112.249:27016"
+    address: str = "176.118.222.43:27016"
     owners: tuple = ()
     auth_file: str = "/etc/czm-server-panel/credentials.json"
 
