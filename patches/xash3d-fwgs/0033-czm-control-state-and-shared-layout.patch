@@ -1,0 +1,33 @@
+diff --git a/engine/client/input/in_touch.c b/engine/client/input/in_touch.c
+--- a/engine/client/input/in_touch.c
++++ b/engine/client/input/in_touch.c
+@@ -1444,7 +1444,9 @@
+     if( !force && ( !touch.config_loaded || cls.state != ca_active || !(int)czm_skill_mask.value )) return;
+     static const char *commands[] = { "czm_skill_g", "czm_skill_r", "+czm_skill_e" };
+     static const char *names[] = { "czm_skill_g", "czm_skill_r", "czm_skill_e" };
+-    static const float positions[] = { 0.70f, 0.775f, 0.625f };
++    // Owner's shared layout; only missing actions use these positions.
++    static const float positions[] = { 0.152319f, 0.812293f, 0.867021f };
++    static const float tops[] = { 0.353722f, 0.287056f, 0.348861f };
+     byte color[4] = { 255, 255, 255, 235 };
+     for( int i = 0; i < 3; i++ )
+     {
+@@ -1455,7 +1457,7 @@
+         char texture[80];
+         Q_snprintf( texture, sizeof( texture ), "gfx/czm/touch/skill_%c.png", "gre"[i] );
+         touch_button_t *b = Touch_AddButton( &touch.list_user, names[i], texture, commands[i],
+-            positions[i], 0.61f, positions[i] + 0.055f, 0.61f + 0.055f / Touch_AspectRatio(), color, true );
++            positions[i], tops[i], positions[i] + 0.06f, tops[i] + 0.06f / Touch_AspectRatio(), color, true );
+         b->aspect = 1.0f;
+         touch.configchanged = true;
+     }
+@@ -1487,7 +1489,8 @@
+     Q_snprintf( value, sizeof( value ), "%d %d %d %d %d %d %d %d %d %d %d %d",
+         bounds[0],bounds[1],bounds[2],bounds[3],bounds[4],bounds[5],bounds[6],bounds[7],
+         bounds[8],bounds[9],bounds[10],bounds[11] );
+-    if( Q_strcmp( value, czm_touch_anchors.string )) Cvar_DirectSet( &czm_touch_anchors, value );
++    // Keep script writes blocked while publishing the engine-owned snapshot.
++    if( Q_strcmp( value, czm_touch_anchors.string )) Cvar_DirectFullSet( &czm_touch_anchors, value, 0 );
+ }
+ 
+ static void Touch_DrawTexture( float x1, float y1, float x2, float y2, int texture, byte *color )
