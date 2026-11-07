@@ -1,1 +1,1 @@
-Official Counter Zombie Mobile servers: Survival and Escape cards on the main screen show players, map and ping and join in one tap. In the server list our server stands out with a golden frame and an "Official" label.
+New compact server menu with sections and a live CZM Token balance. Community chat shows more messages with grouped authors and channel navigation. Profiles feature a prominent bio, subtle card animation and a nickname color picker. Match chat includes compact history and a native RU/EN/123 keyboard with staged closing and draft preservation.

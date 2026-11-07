@@ -111,12 +111,84 @@ static float flScrollTime = 0;  // the time at which the lines next scroll up
 static int Y_START = 0;
 static int line_height = 0;
 
+// A bounded, lossless bridge to the native menu DLL. Publish the slot before the
+// head so the UI never observes a half-written message. Text is hex, never a
+// console command: server names, colour controls and Unicode remain data.
+static unsigned int s_czmChatHead;
+static unsigned int s_czmChatEpoch;
+
+static void CzmMatchChatRegister( void )
+{
+	gEngfuncs.pfnRegisterVariable( "czm_mc_head", "0", FCVAR_PRIVILEGED );
+	gEngfuncs.pfnRegisterVariable( "czm_mc_epoch", "0", FCVAR_PRIVILEGED );
+	for( int i = 0; i < 32; ++i )
+	{
+		char name[32];
+		snprintf( name, sizeof( name ), "czm_mc_line%d", i );
+		gEngfuncs.pfnRegisterVariable( name, "", FCVAR_PRIVILEGED );
+	}
+}
+
+static void CzmMatchChatReset( void )
+{
+	char epoch[32];
+	s_czmChatHead = 0;
+	if( ++s_czmChatEpoch > 1000000000u ) s_czmChatEpoch = 1;
+	snprintf( epoch, sizeof( epoch ), "%u", s_czmChatEpoch );
+	gEngfuncs.Cvar_Set( "czm_mc_head", "0" );
+	gEngfuncs.Cvar_Set( "czm_mc_epoch", epoch );
+}
+
+static void CzmMatchChatPublish( const char *text, int size, int clientIndex )
+{
+	if( !text || !text[0] || size <= 0 ) return;
+	char hex[MAX_CHARS_PER_LINE * 2], line[MAX_CHARS_PER_LINE * 2 + 96];
+	char name[32], head[32];
+	const char digits[] = "0123456789ABCDEF";
+	int bytes = 0, nameLength = 0;
+	unsigned int red = 204, green = 204, blue = 204;
+	while( bytes < size && bytes < MAX_CHARS_PER_LINE - 1 && text[bytes] ) ++bytes;
+	// Do not split the last UTF-8 character when a server sends a long line.
+	if( text[bytes] && ( (unsigned char)text[bytes] & 0xC0 ) == 0x80 )
+		while( bytes > 0 && ( (unsigned char)text[bytes] & 0xC0 ) == 0x80 ) --bytes;
+	if( !bytes ) return;
+	if( clientIndex > 0 && clientIndex <= MAX_PLAYERS )
+	{
+		GetPlayerInfo( clientIndex, &g_PlayerInfoList[clientIndex] );
+		const char *nick = g_PlayerInfoList[clientIndex].name;
+		const char *found = nick && *nick ? strstr( text, nick ) : NULL;
+		if( found ) nameLength = (int)( found - text ) + (int)strlen( nick );
+		if( nameLength > bytes ) nameLength = 0;
+		const float *color = GetClientColor( clientIndex );
+		red = (unsigned int)( color[0] * 255 );
+		green = (unsigned int)( color[1] * 255 );
+		blue = (unsigned int)( color[2] * 255 );
+	}
+	for( int i = 0; i < bytes; ++i )
+	{
+		hex[i * 2] = digits[(unsigned char)text[i] >> 4];
+		hex[i * 2 + 1] = digits[(unsigned char)text[i] & 15];
+	}
+	hex[bytes * 2] = 0;
+	if( ++s_czmChatHead > 1000000000u )
+	{
+		CzmMatchChatReset();
+		s_czmChatHead = 1;
+	}
+	snprintf( name, sizeof( name ), "czm_mc_line%u", ( s_czmChatHead - 1 ) % 32 );
+	snprintf( line, sizeof( line ), "%u %02X%02X%02X %d %s", s_czmChatHead, red, green, blue, nameLength, hex );
+	snprintf( head, sizeof( head ), "%u", s_czmChatHead );
+	gEngfuncs.Cvar_Set( name, line );
+	gEngfuncs.Cvar_Set( "czm_mc_head", head );
+}
+
 int CHudSayText :: Init( void )
 {
 	gHUD.AddHudElem( this );
 
 	HOOK_MESSAGE( gHUD.m_SayText, SayText );
 
+	CzmMatchChatRegister();
 	InitHUDData();
 
 	m_HUD_saytext =			gEngfuncs.pfnRegisterVariable( "hud_saytext_internal", "1", 0 );
@@ -131,6 +203,7 @@ int CHudSayText :: Init( void )
 
 void CHudSayText :: InitHUDData( void )
 {
+	CzmMatchChatReset();
 	memset( g_szLineBuffer, 0, sizeof g_szLineBuffer );
 	memset( g_pflNameColors, 0, sizeof g_pflNameColors );
 	memset( g_iNameLengths, 0, sizeof g_iNameLengths );
@@ -199,7 +272,7 @@ int CHudSayText :: Draw( float flTime )
 			lines++;
 	}
 	y = (int)( area.y + area.h ) - lines * line_height;
-	if( hidden )
+	if( hidden || gEngfuncs.pfnGetCvarFloat( "czm_match_chat_active" ) > 0 )
 		return 1;
 
 	for (int i = 0; i < MAX_LINES; i++)
@@ -458,6 +531,8 @@ int CHudSayText :: MsgFunc_SayText( const char *pszName, int iSize, void *pbuf )
 
 void CHudSayText :: SayTextPrint( const char *pszBuf, int iBufSize, int clientIndex )
 {
+	if( !pszBuf || !*pszBuf ) return;
+	CzmMatchChatPublish( pszBuf, iBufSize, clientIndex );
 	if ( m_HUD_saytext_console->value && pszBuf && *pszBuf )
 	{
 		// Print it straight to the console

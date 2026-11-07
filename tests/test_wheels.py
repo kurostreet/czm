@@ -126,6 +126,7 @@ void CZM_CloseClientMenuSoon( CMenuBaseWindow *window );
 void CZM_KeepClientMenu( CMenuBaseWindow *window );
 bool CZM_ClientMenuOpen( CMenuBaseWindow *window );
 void CZM_ClientMenuFrame( void );
+inline void CZM_MatchChatAfterClientMenuFrame( bool ) {}
 '''
 
 SCENARIOS = r'''

@@ -1,0 +1,435 @@
+diff --git a/engine/client/cl_main.c b/engine/client/cl_main.c
+--- a/engine/client/cl_main.c
++++ b/engine/client/cl_main.c
+@@ -1781,6 +1781,7 @@
+ */
+ void CL_ClearState( void )
+ {
++	Con_CzmMatchChatReset();
+ 	Cvar_DirectFullSet( &czm_tab_state, "", FCVAR_READ_ONLY|FCVAR_PRIVILEGED );
+ 	CL_ClearResourceLists();
+ 
+diff --git a/engine/client/client.h b/engine/client/client.h
+--- a/engine/client/client.h
++++ b/engine/client/client.h
+@@ -1170,6 +1170,7 @@
+ void Con_CharEvent( int key );
+ void Key_Console( int key );
+ void Key_Message( int key );
++void Con_CzmMatchChatReset( void );
+ void Con_FastClose( void );
+ void Con_Bottom( void );
+ void Con_PageDown( int lines );
+diff --git a/engine/client/console.c b/engine/client/console.c
+--- a/engine/client/console.c
++++ b/engine/client/console.c
+@@ -38,6 +38,15 @@
+ static int g_codepage = 0;
+ 
+ static qboolean g_messagemode_privileged = true;
++
++static CVAR_DEFINE_AUTO( czm_match_chat, "1", FCVAR_ARCHIVE | FCVAR_PRIVILEGED, "native match chat, 0 uses the system keyboard" );
++static CVAR_DEFINE_AUTO( czm_match_chat_keep_open, "0", FCVAR_ARCHIVE | FCVAR_PRIVILEGED, "keep match chat open after sending" );
++static CVAR_DEFINE_AUTO( czm_match_chat_request, "0 0", FCVAR_READ_ONLY | FCVAR_PRIVILEGED, "native chat request serial and team channel" );
++static CVAR_DEFINE_AUTO( czm_match_chat_epoch, "1", FCVAR_READ_ONLY | FCVAR_PRIVILEGED, "match input session generation" );
++static CVAR_DEFINE_AUTO( czm_match_chat_active, "0", FCVAR_PRIVILEGED, "native match chat owns input" );
++static CVAR_DEFINE_AUTO( czm_match_chat_ime_pending, "0", FCVAR_READ_ONLY | FCVAR_PRIVILEGED, "deferred system chat keyboard: 0 none, 1 all, 2 team" );
++static unsigned int czm_chat_request_serial;
++static unsigned int czm_chat_epoch = 1;
+ 
+ #define CON_TIMES		4	// notify lines
+ #define CON_MAX_TIMES	64	// notify max lines
+@@ -232,6 +241,148 @@
+ 	Cmd_AutoCompleteClear();
+ }
+ 
++// A native chat submission is data, never text fed back into Cbuf. Limit the
++// wire payload to the CS chat limit, reject controls and malformed/overlong UTF-8.
++static qboolean Con_CzmValidChat( const char *text )
++{
++	const byte *p = (const byte *)text;
++	size_t length = Q_strlen( text );
++	qboolean visible = false;
++	if( !length || length > 190 ) return false;
++	for( size_t i = 0; i < length; )
++	{
++		const byte c = p[i];
++		int count;
++		if( c < 32 || c == 127 ) return false;
++		if( c != ' ' ) visible = true;
++		if( c < 128 ) { ++i; continue; }
++		if( c >= 0xC2 && c <= 0xDF ) count = 2;
++		else if( c >= 0xE0 && c <= 0xEF ) count = 3;
++		else if( c >= 0xF0 && c <= 0xF4 ) count = 4;
++		else return false;
++		if( i + count > length ) return false;
++		for( int k = 1; k < count; ++k )
++			if(( p[i + k] & 0xC0 ) != 0x80 ) return false;
++		if(( c == 0xE0 && p[i + 1] < 0xA0 ) || ( c == 0xED && p[i + 1] >= 0xA0 )
++			|| ( c == 0xF0 && p[i + 1] < 0x90 ) || ( c == 0xF4 && p[i + 1] > 0x8F )) return false;
++		i += count;
++	}
++	return visible;
++}
++
++static int Con_CzmHexDigit( char c )
++{
++	if( c >= '0' && c <= '9' ) return c - '0';
++	if( c >= 'A' && c <= 'F' ) return c - 'A' + 10;
++	if( c >= 'a' && c <= 'f' ) return c - 'a' + 10;
++	return -1;
++}
++
++static qboolean Con_CzmDecodeChatHex( const char *hex, char text[191] )
++{
++	const size_t length = Q_strlen( hex );
++	if( !length || length > 380 || ( length & 1 )) return false;
++	for( size_t i = 0; i < length; i += 2 )
++	{
++		const int a = Con_CzmHexDigit( hex[i] ), b = Con_CzmHexDigit( hex[i + 1] );
++		if( a < 0 || b < 0 || ( a == 0 && b == 0 )) return false;
++		text[i / 2] = (char)(( a << 4 ) | b );
++	}
++	text[length / 2] = 0;
++	return Con_CzmValidChat( text );
++}
++
++static void Con_CzmReleaseChatInput( void )
++{
++	Touch_ResetLoadingInput();
++	Key_ClearStates();
++	Key_EnableTextInput( false, true );
++}
++
++void Con_CzmMatchChatReset( void )
++{
++	char value[32];
++	if( ++czm_chat_epoch > 1000000000u ) czm_chat_epoch = 1;
++	Q_snprintf( value, sizeof( value ), "%u", czm_chat_epoch );
++	Cvar_DirectFullSet( &czm_match_chat_epoch, value, 0 );
++	Cvar_DirectFullSet( &czm_match_chat_request, "0 0", 0 );
++	Cvar_DirectFullSet( &czm_match_chat_ime_pending, "0", 0 );
++	Cvar_DirectSet( &czm_match_chat_active, "0" );
++	Con_CzmReleaseChatInput();
++	if( cls.key_dest == key_message )
++	{
++		Con_ClearField( &con.chat );
++		Key_SetKeyDest( key_game );
++	}
++}
++
++static qboolean Con_CzmWriteChat( qboolean team, const char *text )
++{
++	char command[208];
++	if( cls.state != ca_active || cls.demoplayback || host.status != HOST_FRAME || !Con_CzmValidChat( text )) return false;
++	// SV_ExecuteClientCommand tokenizes this ONE network string. It does not
++	// split semicolons, and quotes remain inside the raw say argument string.
++	Q_snprintf( command, sizeof( command ), "%s \"%s\"", team ? "say_team" : "say", text );
++	MSG_BeginClientCmd( &cls.netchan.message, clc_stringcmd );
++	MSG_WriteString( &cls.netchan.message, command );
++	return true;
++}
++
++static qboolean Con_CzmRequestChat( qboolean team )
++{
++	char request[48];
++	if( !czm_match_chat.value || !gameui.hInstance ) return false;
++	if( cls.state != ca_active || cls.demoplayback || host.status != HOST_FRAME ) return true;
++	Cvar_DirectFullSet( &czm_match_chat_ime_pending, "0", 0 );
++	Con_CzmReleaseChatInput();
++	Key_SetKeyDest( key_menu ); // consume subsequent fingers before the UI frame
++	Cvar_DirectSet( &czm_match_chat_active, "1" );
++	if( ++czm_chat_request_serial > 1000000000u ) czm_chat_request_serial = 1;
++	Q_snprintf( request, sizeof( request ), "%u %d", czm_chat_request_serial, team ? 1 : 0 );
++	Cvar_DirectFullSet( &czm_match_chat_request, request, 0 );
++	return true;
++}
++
++static void Con_CzmMatchChatSend_f( void )
++{
++	char text[191];
++	if( Cmd_Argc() != 4 || !czm_match_chat_active.value || cls.key_dest != key_menu ) return;
++	if( Q_strcmp( Cmd_Argv( 1 ), "0" ) && Q_strcmp( Cmd_Argv( 1 ), "1" )) return;
++	if( Q_strcmp( Cmd_Argv( 2 ), czm_match_chat_epoch.string )) return;
++	if( Con_CzmDecodeChatHex( Cmd_Argv( 3 ), text ))
++		Con_CzmWriteChat( !Q_strcmp( Cmd_Argv( 1 ), "1" ), text );
++}
++
++static void Con_CzmMatchChatClose_f( void )
++{
++	if( Cmd_Argc() == 2 && (unsigned int)Q_atoi( Cmd_Argv( 1 )) != czm_chat_request_serial ) return;
++	Cvar_DirectSet( &czm_match_chat_active, "0" );
++	Con_CzmReleaseChatInput();
++	// The menu stack owns returning to key_game; do not dismiss another menu.
++}
++
++static void Con_CzmMatchChatIme_f( void )
++{
++	if( cls.state != ca_active || cls.demoplayback || host.status != HOST_FRAME ) return;
++	const qboolean defer = czm_match_chat_active.value != 0;
++	// Argv[1] is the channel here, not the close command's request serial.
++	Cvar_DirectSet( &czm_match_chat_active, "0" );
++	Con_CzmReleaseChatInput();
++	// The native stack must close before it can return keyboard ownership.
++	Cvar_DirectFullSet( &czm_match_chat_ime_pending, defer ? ( !Q_strcmp( Cmd_Argv( 1 ), "1" ) ? "2" : "1" ) : "0", 0 );
++	if( defer ) return;
++	g_messagemode_privileged = Cmd_CurrentCommandIsPrivileged();
++	Q_strncpy( con.chat_cmd, !Q_strcmp( Cmd_Argv( 1 ), "1" ) ? "say_team" : "say", sizeof( con.chat_cmd ));
++	Con_ClearField( &con.chat );
++	Key_SetKeyDest( key_message );
++}
++
++static void Con_CzmMatchChatFrame( void )
++{
++	if( czm_match_chat_active.value && ( cls.state != ca_active || cls.demoplayback
++		|| host.status != HOST_FRAME || cls.key_dest != key_menu )) Con_CzmMatchChatReset();
++}
++
+ /*
+ ================
+ Con_MessageMode_f
+@@ -239,12 +390,17 @@
+ */
+ static void Con_MessageMode_f( void )
+ {
++	if( ( Cmd_Argc() == 1 || ( Cmd_Argc() == 2 && !Q_strcmp( Cmd_Argv( 1 ), "say" )))
++		&& Con_CzmRequestChat( false )) return;
++	if( Cmd_Argc() == 2 && !Q_strcmp( Cmd_Argv( 1 ), "say_team" ) && Con_CzmRequestChat( true )) return;
+ 	g_messagemode_privileged = Cmd_CurrentCommandIsPrivileged();
+ 
+ 	if( Cmd_Argc() == 2 )
+ 		Q_strncpy( con.chat_cmd, Cmd_Argv( 1 ), sizeof( con.chat_cmd ));
+ 	else Q_strncpy( con.chat_cmd, "say", sizeof( con.chat_cmd ));
+ 
++	Cvar_DirectFullSet( &czm_match_chat_ime_pending, "0", 0 );
++	Con_CzmReleaseChatInput();
+ 	Key_SetKeyDest( key_message );
+ }
+ 
+@@ -255,9 +411,12 @@
+ */
+ static void Con_MessageMode2_f( void )
+ {
++	if( Con_CzmRequestChat( true )) return;
+ 	g_messagemode_privileged = Cmd_CurrentCommandIsPrivileged();
+ 
+ 	Q_strncpy( con.chat_cmd, "say_team", sizeof( con.chat_cmd ));
++	Cvar_DirectFullSet( &czm_match_chat_ime_pending, "0", 0 );
++	Con_CzmReleaseChatInput();
+ 	Key_SetKeyDest( key_message );
+ }
+ 
+@@ -767,6 +926,12 @@
+ 		return; // dedicated server already have console
+ 
+ 	// must be init before startup video subsystem
++	Cvar_RegisterVariable( &czm_match_chat );
++	Cvar_RegisterVariable( &czm_match_chat_keep_open );
++	Cvar_RegisterVariable( &czm_match_chat_request );
++	Cvar_RegisterVariable( &czm_match_chat_epoch );
++	Cvar_RegisterVariable( &czm_match_chat_active );
++	Cvar_RegisterVariable( &czm_match_chat_ime_pending );
+ 	Cvar_RegisterVariable( &scr_conspeed );
+ 	Cvar_RegisterVariable( &con_notifytime );
+ 	Cvar_RegisterVariable( &con_fontsize );
+@@ -797,6 +962,9 @@
+ 
+ 	Cmd_AddCommand( "toggleconsole", Con_ToggleConsole_f, "opens or closes the console" );
+ 	Cmd_AddRestrictedCommand( "clear", Con_Clear_f, "clear console history" );
++	Cmd_AddRestrictedCommand( "czm_match_chat_send", Con_CzmMatchChatSend_f, "send hex UTF-8 to the current match chat session" );
++	Cmd_AddRestrictedCommand( "czm_match_chat_close", Con_CzmMatchChatClose_f, "release native chat input" );
++	Cmd_AddRestrictedCommand( "czm_match_chat_ime", Con_CzmMatchChatIme_f, "open the fallback system chat keyboard, 0 all 1 team" );
+ 	Cmd_AddCommand( "messagemode", Con_MessageMode_f, "enable message mode \"say\"" );
+ 	Cmd_AddCommand( "messagemode2", Con_MessageMode2_f, "enable message mode \"say_team\"" );
+ 	Cmd_AddCommand( "contimes", Con_SetTimes_f, "change number of console overlay lines (4-64)" );
+@@ -1630,11 +1798,18 @@
+ 	{
+ 		if( con.chat.buffer[0] && cls.state == ca_active )
+ 		{
+-			Q_snprintf( buffer, sizeof( buffer ), "%s \"%s\"\n", con.chat_cmd, con.chat.buffer );
+-
+-			if( g_messagemode_privileged )
+-				Cbuf_AddText( buffer );
+-			else Cbuf_AddFilteredText( buffer );
++			if( !Q_strcmp( con.chat_cmd, "say" ) || !Q_strcmp( con.chat_cmd, "say_team" ))
++			{
++				if( !Con_CzmWriteChat( !Q_strcmp( con.chat_cmd, "say_team" ), con.chat.buffer )) return;
++			}
++			else
++			{
++				Q_snprintf( buffer, sizeof( buffer ), "%s \"%s\"\n", con.chat_cmd, con.chat.buffer );
++
++				if( g_messagemode_privileged )
++					Cbuf_AddText( buffer );
++				else Cbuf_AddFilteredText( buffer );
++			}
+ 		}
+ 
+ 		Key_SetKeyDest( key_game );
+@@ -2239,6 +2414,7 @@
+ */
+ void Con_RunConsole( void )
+ {
++	Con_CzmMatchChatFrame();
+ 	Con_SetColor( );
+ 
+ 	con.showlines = Con_DestHeight();
+diff --git a/engine/client/input/in_keys.c b/engine/client/input/in_keys.c
+--- a/engine/client/input/in_keys.c
++++ b/engine/client/input/in_keys.c
+@@ -903,8 +903,19 @@
+ */
+ void Key_EnableTextInput( qboolean enable, qboolean force )
+ {
+-	if( osk_enable.value )
+-	{
++	// Keep desktop/Bluetooth Unicode events while CZM draws its own keyboard.
++	// Platform backends suppress only the soft keyboard for this input owner.
++	const qboolean native_chat = cls.key_dest == key_menu && cls.state == ca_active
++		&& host.status == HOST_FRAME && Cvar_VariableInteger( "czm_match_chat_active" );
++	if( native_chat ) enable = true;
++	if( osk_enable.value && !native_chat )
++	{
++		if( key_textinput_enabled )
++		{
++			Platform_EnableTextInput( false, 0, 0, 0, 0 );
++			key_textinput_enabled = false;
++			host.textmode = false;
++		}
+ 		OSK_EnableTextInput( enable, force );
+ 		return;
+ 	}
+diff --git a/engine/client/input/in_touch.c b/engine/client/input/in_touch.c
+--- a/engine/client/input/in_touch.c
++++ b/engine/client/input/in_touch.c
+@@ -690,6 +690,11 @@
+ 
+ 	Touch_ResetSticks();
+ 	Touch_CzmWheelClose();
++	// Fingers were cleared above; release the accumulated motion explicitly,
++	// including legacy touch_move/dpad inputs which are not stick buttons.
++	touch.move_button = NULL;
++	touch.forward = touch.side = touch.yaw = touch.pitch = 0;
++	touch.precision = false;
+ 	touch.move_finger = touch.resize_finger = touch.look_finger = touch.wheel_finger = -1;
+ }
+ 
+diff --git a/engine/platform/sdl1/host_sdl1.c b/engine/platform/sdl1/host_sdl1.c
+--- a/engine/platform/sdl1/host_sdl1.c
++++ b/engine/platform/sdl1/host_sdl1.c
+@@ -265,6 +265,7 @@
+ 	}
+ 	else
+ 	{
++		if( cls.initialized ) Con_CzmMatchChatReset();
+ 		host.status = HOST_NOFOCUS;
+ 
+ 		if( cls.key_dest == key_game )
+diff --git a/engine/platform/sdl2/host_sdl2.c b/engine/platform/sdl2/host_sdl2.c
+--- a/engine/platform/sdl2/host_sdl2.c
++++ b/engine/platform/sdl2/host_sdl2.c
+@@ -228,7 +228,9 @@
+ 		int ch = (byte)*text;
+ 
+ 		// do not pass UTF-8 sequence into the engine, convert it here
+-		if( !cls.accept_utf8 )
++		const qboolean native_chat = cls.key_dest == key_menu && cls.state == ca_active
++			&& host.status == HOST_FRAME && Cvar_VariableInteger( "czm_match_chat_active" );
++		if( !cls.accept_utf8 && !native_chat )
+ 			ch = Con_UtfProcessCharForce( ch );
+ 
+ 		if( !ch )
+@@ -254,6 +256,7 @@
+ 	{
+ 		// Stop capture before background frames can skip Voice_Idle.
+ 		if( cls.initialized ) Voice_RecordStop();
++		if( cls.initialized ) Con_CzmMatchChatReset();
+ 		host.status = HOST_NOFOCUS;
+ 
+ 		if( cls.key_dest == key_game )
+@@ -406,6 +409,7 @@
+ 				Cvar_DirectSet( &vid_maximized, "0" );
+ 			break;
+ 		case SDL_WINDOWEVENT_MINIMIZED:
++			if( cls.initialized ) Con_CzmMatchChatReset();
+ 			if( cls.initialized ) Voice_RecordStop();
+ 			host.status = HOST_SLEEP;
+ 			Cvar_DirectSet( &vid_maximized, "0" );
+diff --git a/engine/platform/sdl2/in_sdl2.c b/engine/platform/sdl2/in_sdl2.c
+--- a/engine/platform/sdl2/in_sdl2.c
++++ b/engine/platform/sdl2/in_sdl2.c
+@@ -202,7 +202,20 @@
+ 
+ 	// Android reads the rect when the on-screen keyboard is shown, so set it before starting
+ 	SDL_SetTextInputRect( &rect );
++	// SDL must keep Unicode text events for physical keyboards without showing
++	// Android's IME. Restore the caller's hint immediately after SDL reads it.
++	const qboolean native_chat = cls.key_dest == key_menu && cls.state == ca_active
++		&& host.status == HOST_FRAME && Cvar_VariableInteger( "czm_match_chat_active" );
++	const char *old_hint = native_chat ? SDL_GetHint( SDL_HINT_ENABLE_SCREEN_KEYBOARD ) : NULL;
++	char *saved_hint = old_hint ? SDL_strdup( old_hint ) : NULL;
++	if( native_chat ) SDL_SetHintWithPriority( SDL_HINT_ENABLE_SCREEN_KEYBOARD, "0", SDL_HINT_OVERRIDE );
+ 	SDL_StartTextInput();
++	if( native_chat )
++	{
++		if( saved_hint ) SDL_SetHintWithPriority( SDL_HINT_ENABLE_SCREEN_KEYBOARD, saved_hint, SDL_HINT_OVERRIDE );
++		else SDL_ResetHint( SDL_HINT_ENABLE_SCREEN_KEYBOARD );
++		SDL_free( saved_hint );
++	}
+ }
+ 
+ #endif // !XASH_PSVITA
+diff --git a/engine/platform/sdl3/host_sdl3.c b/engine/platform/sdl3/host_sdl3.c
+--- a/engine/platform/sdl3/host_sdl3.c
++++ b/engine/platform/sdl3/host_sdl3.c
+@@ -35,6 +35,7 @@
+ 	{
+ 		// Stop capture before background frames can skip Voice_Idle.
+ 		if( cls.initialized ) Voice_RecordStop();
++		if( cls.initialized ) Con_CzmMatchChatReset();
+ 		host.status = HOST_NOFOCUS;
+ 
+ 		if( cls.key_dest == key_game )
+@@ -191,7 +192,9 @@
+ 		int ch = (byte)*s;
+ 
+ 		// convert to single byte encoding if game doesn't request UTF-8
+-		if( !cls.accept_utf8 )
++		const qboolean native_chat = cls.key_dest == key_menu && cls.state == ca_active
++			&& host.status == HOST_FRAME && Cvar_VariableInteger( "czm_match_chat_active" );
++		if( !cls.accept_utf8 && !native_chat )
+ 			ch = Con_UtfProcessCharForce( ch );
+ 
+ 		if( !ch )
+@@ -284,6 +287,7 @@
+ 			Cvar_DirectSet( &vid_maximized, "0" );
+ 		break;
+ 	case SDL_EVENT_WINDOW_MINIMIZED:
++		if( cls.initialized ) Con_CzmMatchChatReset();
+ 		if( cls.initialized ) Voice_RecordStop();
+ 		host.status = HOST_SLEEP;
+ 		Cvar_DirectSet( &vid_maximized, "0" );
+diff --git a/engine/platform/sdl3/in_sdl3.c b/engine/platform/sdl3/in_sdl3.c
+--- a/engine/platform/sdl3/in_sdl3.c
++++ b/engine/platform/sdl3/in_sdl3.c
+@@ -224,7 +224,20 @@
+ 
+ 	// Android reads the rect when the on-screen keyboard is shown, so set it before starting
+ 	SDL_SetTextInputArea( host.hWnd, &rect, 0 );
++	// SDL must keep Unicode text events for physical keyboards without showing
++	// Android's IME. Restore the caller's hint immediately after SDL reads it.
++	const qboolean native_chat = cls.key_dest == key_menu && cls.state == ca_active
++		&& host.status == HOST_FRAME && Cvar_VariableInteger( "czm_match_chat_active" );
++	const char *old_hint = native_chat ? SDL_GetHint( SDL_HINT_ENABLE_SCREEN_KEYBOARD ) : NULL;
++	char *saved_hint = old_hint ? SDL_strdup( old_hint ) : NULL;
++	if( native_chat ) SDL_SetHintWithPriority( SDL_HINT_ENABLE_SCREEN_KEYBOARD, "0", SDL_HINT_OVERRIDE );
+ 	SDL_StartTextInput( host.hWnd );
++	if( native_chat )
++	{
++		if( saved_hint ) SDL_SetHintWithPriority( SDL_HINT_ENABLE_SCREEN_KEYBOARD, saved_hint, SDL_HINT_OVERRIDE );
++		else SDL_ResetHint( SDL_HINT_ENABLE_SCREEN_KEYBOARD );
++		SDL_free( saved_hint );
++	}
+ }
+ 
+ int Platform_GetClipboardText( char *buffer, size_t size )

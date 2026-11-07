@@ -103,6 +103,7 @@ jobs:
           python3 -m unittest discover -s tests -p test_community_layout.py -v
           python3 -m unittest discover -s tests -p test_match_chat.py -v
           python3 -m unittest discover -s tests -p test_match_chat_transport.py -v
+          python3 -m unittest discover -s tests -p test_match_chat_hardware.py -v
           python3 -m unittest discover -s tests -p test_rules_window.py -v
           python3 -m unittest discover -s tests -p test_moderation_window.py -v
           python3 -m unittest discover -s tests -p test_top_window.py -v

@@ -34,7 +34,7 @@ virtual void Draw(){}virtual bool IsRoot()const{return false;}virtual bool KeyDo
 #define ADD_MENU3(cmd,type,fn) static type*cmd=new type();void fn()
 namespace UI{namespace Key{inline bool IsBackspace(int k){return k==8;}inline bool IsEnter(int k){return k==13;}inline bool IsEscape(int k){return k==27;}inline bool IsLeftMouse(int k){return k==1;}}
 namespace Scissor{inline void PushScissor(int,int,int,int){}inline void PopScissor(){}}}
-struct Cursor{int cursorX,cursorY;} ;extern Cursor uiStatic;
+struct Cursor{int cursorY;} ;extern Cursor uiStatic;
 struct EngFuncs{static const char*GetCvarString(const char*);static float GetCvarFloat(const char*);static void CvarSetString(const char*,const char*);static void CvarSetValue(const char*,float);static double DoubleTime();static void SetTextInputRect(int,int,int,int){}};
 inline bool CL_IsActive(){return false;}
 void UI_EnableTextInput(bool);void CZM_Init();bool CZM_IsRussian();unsigned CZM_White();unsigned CZM_Grey();
@@ -407,7 +407,10 @@ class SocialMenuTests(unittest.TestCase):
             (p / "utlvector.h").write_text(vector)
             (p / "utlstring.h").write_text(STRING.replace("void Set(const char *v)", "void Clear(){s.clear();}void Set(const char *v)"))
             # the profile card draws with the shared CZM surfaces and their fonts
-            (p / "stub.h").write_text(STUB.replace("CZMF_NICK,QM_CENTER=1", "CZMF_NICK,CZMF_TILE_STATUS,CZMF_UI_TITLE,CZMF_UI_ACTION,CZMF_UI_LABEL,CZMF_UI_META,CZMF_PROFILE_NAME,CZMF_PROFILE_TEXT,CZMF_CHAT_TEXT,CZMF_PROFILE_TITLE,QM_LEFT=0,QM_CENTER=1"))
+            stub = STUB.replace("CZMF_NICK,QM_CENTER=1", "CZMF_NICK,CZMF_TILE_STATUS,CZMF_UI_TITLE,CZMF_UI_ACTION,CZMF_UI_LABEL,CZMF_UI_META,CZMF_PROFILE_NAME,CZMF_PROFILE_TEXT,CZMF_CHAT_TEXT,CZMF_PROFILE_TITLE,QM_LEFT=0,QM_CENTER=1")
+            # Keep the shared base declaration stable for the other native fixtures.
+            stub = stub.replace("struct Cursor{int cursorY;}", "struct Cursor{int cursorX,cursorY;}")
+            (p / "stub.h").write_text(stub)
             for name in ["extdll_menu.h", "BaseMenu.h", "Utils.h", "Framework.h", "Scissor.h", "keydefs.h", "CzmMenu.h"]:
                 (p / name).write_text('#include "stub.h"\n')
             (p / "CzmJson.h").write_text((ROOT / "czm/menu/CzmJson.h").read_text())
