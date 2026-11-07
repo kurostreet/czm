@@ -35,4 +35,20 @@ inline const char *Name(const State &s,int button,bool ru) {
     if (s.klass==10&&button==G) return ru?"Невидимость":"Invisibility";
     return names[s.klass][ru?0:1];
 }
+// Pixel geometry shared by the drawing and hit testing of the touch-only digit panel.
+struct Keypad {
+    int x,y,w,h,key,gap,header;
+    Keypad(int width,int height) {
+        key=(int)std::fmin(height*.105f,width*.17f);gap=(int)std::fmax(5.f,height*.012f);
+        header=(int)(height*.075f);w=3*key+4*gap;h=header+4*key+5*gap;x=(width-w)/2;y=(height-h)/2;
+    }
+    void Cell(int digit,int &cx,int &cy) const {
+        int index=digit?digit-1:10;cx=x+gap+(index%3)*(key+gap);cy=y+header+gap+(index/3)*(key+gap);
+    }
+    int Hit(int px,int py) const {
+        if(px>=x+w-header&&px<x+w&&py>=y&&py<y+header)return 10;
+        for(int digit=0;digit<=9;digit++){int cx,cy;Cell(digit,cx,cy);if(px>=cx&&px<cx+key&&py>=cy&&py<cy+key)return digit;}
+        return -1;
+    }
+};
 }

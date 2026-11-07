@@ -19,7 +19,7 @@ int main()
 {
 	for( int i = 0; i < CzmHud::BLOCKS; i++ )
 		printf( "%s %.6f %.6f %.6f %d\n", CzmHud::keys[i], CzmHud::defaults[i][0], CzmHud::defaults[i][1], CzmHud::defaultScale[i], CzmHud::defaultHidden[i] ? 1 : 0 );
-	printf( "styles %d %d %d\n", CzmHud::defaultHudStyle, CzmHud::defaultRadarStyle, CzmHud::defaultMessageStyle );
+	printf( "styles %d %d %d %d %d\n", CzmHud::defaultHudStyle, CzmHud::defaultRadarStyle, CzmHud::defaultMessageStyle, CzmHud::defaultMessageList, CzmHud::defaultSpectatorStyle );
 	return 0;
 }
 '''
@@ -64,10 +64,12 @@ class DefaultLayoutTests(unittest.TestCase):
             self.assertAlmostEqual(float(y), float(cvars[f"czm_hud_{key}_y"]), places=5, msg=key)
             self.assertAlmostEqual(float(scale), float(cvars[f"czm_hud_{key}_scale"]), places=5, msg=key)
             self.assertEqual(int(hidden), int(float(cvars[f"czm_hud_{key}_hidden"])), key)
-        hud, radar, msg = map(int, out[-1].split()[1:])
+        hud, radar, msg, msg_list, spectator = map(int, out[-1].split()[1:])
         self.assertEqual((hud, radar, msg), (int(cvars["czm_hud_style"]), int(cvars["czm_hud_radar_style"]), int(cvars["czm_hud_msg_style"])))
+        self.assertEqual((msg_list, spectator), (int(cvars["czm_hud_msg_list"]), int(cvars["czm_hud_spec_style"])))
         menu = (ROOT / "czm/menu/CzmMenu.cpp").read_text()
-        for name, value in (("czm_hud_style", hud), ("czm_hud_radar_style", radar), ("czm_hud_msg_style", msg)):
+        for name, value in (("czm_hud_style", hud), ("czm_hud_radar_style", radar), ("czm_hud_msg_style", msg),
+                            ("czm_hud_msg_list", msg_list), ("czm_hud_spec_style", spectator)):
             self.assertRegex(menu, r'CvarRegister\( "%s", "%d"' % (name, value))
 
 

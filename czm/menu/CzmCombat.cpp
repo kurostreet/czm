@@ -4,7 +4,9 @@
 #include <cmath>
 #include "extdll_menu.h"
 #include "BaseMenu.h"
+#include "BaseClientWindow.h"
 #include "Utils.h"
+#include "keydefs.h"
 #include "CzmMenu.h"
 #include "../../common/czm_combat.h"
 #define UI_DIR "gfx/czm/ui/"
@@ -41,4 +43,50 @@ void CZM_DrawCombatControls() {
         FittedText(font,x,y,labelW,labelH,CzmCombat::Name(state,button,CZM_IsRussian()),
             remaining>0&&!charging?PackRGBA(164,176,191,255):PackRGBA(132,239,201,255));
     }
+}
+
+class CCzmDigits:public CMenuBaseClientWindow {
+public:
+    typedef CMenuBaseClientWindow BaseClass;
+    CCzmDigits():BaseClass("CzmDigits"),pressed(-1),closing(false){}
+    void Init() override {BaseClass::Init();pos.x=uiStatic.xOffset;pos.y=uiStatic.yOffset;size.w=uiStatic.width;size.h=768;}
+    void VidInit() override {pos.x=uiStatic.xOffset;pos.y=uiStatic.yOffset;size.w=uiStatic.width;size.h=768;BaseClass::VidInit();}
+    void Open(){pressed=-1;closing=false;CZM_KeepClientMenu(this);Show();}
+    void Show() override {EngFuncs::KEY_SetDest(KEY_MENU);EngFuncs::ClientCmd(true,"touch_setclientonly 1");BaseClass::Show();}
+    void Close(){if(!closing){closing=true;pressed=-1;CZM_CloseClientMenuSoon(this);}}
+    void Hide() override {Close();}
+    bool KeyDown(int key) override {
+        if(UI::Key::IsEscape(key)){Close();return true;}
+        if(UI::Key::IsLeftMouse(key)){CzmCombat::Keypad pad(ScreenWidth,ScreenHeight);pressed=pad.Hit(uiStatic.cursorX,uiStatic.cursorY);}
+        return true;
+    }
+    bool KeyUp(int key) override {
+        if(!UI::Key::IsLeftMouse(key))return true;
+        CzmCombat::Keypad pad(ScreenWidth,ScreenHeight);int hit=pad.Hit(uiStatic.cursorX,uiStatic.cursorY),down=pressed;pressed=-1;
+        if(hit!=down||hit<0)return true;
+        if(hit==10){Close();return true;}
+        CZM_PlayClick();EngFuncs::ClientCmdF(false,"slot%d\n",hit?hit:10);
+        return true;
+    }
+    bool MouseMove(int,int) override {return true;}
+    void Draw() override {
+        if(closing||!CL_IsActive()){Close();return;}
+        CzmCombat::Keypad pad(ScreenWidth,ScreenHeight);
+        CZM_DrawPanel(CZM_Rect(pad.x,pad.y,pad.w,pad.h));
+        FittedText(CZM_Font(CZMF_TILE_TITLE),pad.x+pad.gap,pad.y,pad.w-pad.header-pad.gap,pad.header,"CZM  123",CZM_White());
+        CzmRect cross=CZM_Rect(pad.x+pad.w-pad.header,pad.y,pad.header,pad.header);
+        CZM_DrawImage(UI_DIR "icon_close.png",cross.x+cross.w/4,cross.y+cross.h/4,cross.w/2,cross.h/2,pressed==10?CZM_Grey():CZM_White());
+        for(int digit=0;digit<=9;digit++) {
+            int x,y;pad.Cell(digit,x,y);char text[2]={(char)('0'+digit),0};
+            CzmRect cell=CZM_Rect(x,y,pad.key,pad.key);
+            CZM_DrawButton(UI_DIR "button_secondary.png",cell,"",CZM_White(),pressed==digit);
+            FittedText(CZM_Font(CZMF_PANEL_TITLE),x,y,pad.key,pad.key,text,pressed==digit?PackRGBA(255,181,88,255):CZM_White());
+        }
+    }
+private:int pressed;bool closing;
+};
+ADD_MENU3(menu_czmdigits,CCzmDigits,UI_CzmDigits_Menu);
+void UI_CzmDigits_Menu() {
+    if(!menu_czmdigits||!CL_IsActive())return;
+    if(CZM_ClientMenuOpen(menu_czmdigits))menu_czmdigits->Close();else menu_czmdigits->Open();
 }

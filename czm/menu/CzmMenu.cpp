@@ -496,7 +496,8 @@ void CZM_Init( void )
 	EngFuncs::CvarRegister( "czm_connect_adr", "", 0 );
 	EngFuncs::CvarRegister( "czm_touch_scheme", "1", FCVAR_ARCHIVE );
 	EngFuncs::CvarRegister( "czm_touch_version", "0", FCVAR_ARCHIVE );
-    EngFuncs::CvarRegister( "czm_skill_ui", "1", FCVAR_PRIVILEGED );
+    // Public capability query: the server must be able to read it before sending CzmSkill.
+    EngFuncs::CvarRegister( "czm_skill_ui", "1", 0 );
     EngFuncs::CvarRegister( "czm_skill_state", "", FCVAR_PRIVILEGED );
 	EngFuncs::CvarRegister( "czm_shop", "1", FCVAR_ARCHIVE );       // 1 wheel, 2 grid
 	EngFuncs::CvarRegister( "czm_shop_anim", "1", FCVAR_ARCHIVE );
@@ -506,7 +507,7 @@ void CZM_Init( void )
 	EngFuncs::CvarRegister( "czm_parallax", "1", FCVAR_ARCHIVE );
 	EngFuncs::CvarRegister( "czm_hud_radar_style", "1", FCVAR_ARCHIVE );
 	EngFuncs::CvarRegister( "czm_hud_msg_style", "1", FCVAR_ARCHIVE );
-	EngFuncs::CvarRegister( "czm_hud_msg_list", "1", FCVAR_ARCHIVE );
+	EngFuncs::CvarRegister( "czm_hud_msg_list", "0", FCVAR_ARCHIVE );
 	EngFuncs::CvarRegister( "czm_hud_spec_style", "2", FCVAR_ARCHIVE );
 	for( int i=0;i<CzmHud::BLOCKS;i++ ) for( int k=0;k<5;k++ ) {
 		char name[64],value[32];

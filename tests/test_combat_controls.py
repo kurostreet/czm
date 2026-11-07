@@ -1,4 +1,4 @@
-"""Execute the actual combat state, touch migration, keypad input and PCM meter."""
+"""Execute the actual capability query, combat state, touch migration and keypad input."""
 from pathlib import Path
 import re
 import subprocess
@@ -20,6 +20,56 @@ def build(source):
 
 
 class CombatControlsTests(unittest.TestCase):
+    def test_server_capability_query_and_readonly_anchor_publication(self):
+        menu = (ROOT / "czm/menu/CzmMenu.cpp").read_text()
+        registration = re.search(r'EngFuncs::CvarRegister\( "czm_skill_ui",[^;]+;', menu).group()
+        parser = (ENGINE / "parse/cl_parse.c").read_text()
+        cvars = (ROOT / "3rdparty/xash3d-fwgs/engine/common/cvar.c").read_text()
+        build(r'''
+#include <cassert>
+#include <cstring>
+#include <string>
+#include <cstdlib>
+typedef bool qboolean;typedef unsigned uint32_t;
+enum{FCVAR_PRIVILEGED=1<<10,FCVAR_READ_ONLY=1<<17,FCVAR_SERVER=4,FCVAR_PROTECTED=32,FCVAR_CHEAT=256,FCVAR_LATCH=1<<16};
+enum connprotocol_t{PROTO_GOLDSRC,PROTO_CURRENT};
+enum{clc_goldsrc_requestcvarvalue2,clc_requestcvarvalue2,clc_goldsrc_requestcvarvalue,clc_requestcvarvalue};
+struct sizebuf_t{};struct {struct{sizebuf_t message;}netchan;}cls;
+struct convar_t{const char*name;char*string;float value;unsigned flags;};
+convar_t capability={"czm_skill_ui",nullptr,0,0};
+namespace EngFuncs{void CvarRegister(const char*,const char*value,unsigned flags){capability.string=strdup(value);capability.value=atof(value);capability.flags=flags;}}
+const char *query="czm_skill_ui";std::string response;int errors=0;
+convar_t *Cvar_FindVar(const char*){return &capability;}
+int MSG_ReadLong(sizebuf_t*){return 7;}const char *MSG_ReadString(sizebuf_t*){return query;}
+void MSG_BeginClientCmd(sizebuf_t*,int){}void MSG_WriteLong(sizebuf_t*,int){}
+void MSG_WriteString(sizebuf_t*,const char*value){response=value;}
+#define Q_stricmp strcasecmp
+#define Q_strlen strlen
+#define Q_strncpy(dst,src,n) snprintf(dst,n,"%s",src)
+#define FBitSet(v,b) ((v)&(b))
+#define SetBits(v,b) ((v)|=(b))
+#define Q_atof atof
+#define Mem_Realloc(pool,ptr,n) ((char*)realloc(ptr,n))
+int cvar_pool;void Cvar_Changed(convar_t*){}
+void Con_Printf(const char*,...){errors++;}
+struct{bool allow_cheats=false;}host;bool SV_Active(){return false;}bool CL_Active(){return true;}
+''' + function(parser, 'static void CL_ParseCvarValue')
+          + function(cvars, 'static qboolean Cvar_CanSet')
+          + function(cvars, 'void Cvar_DirectFullSet') + r'''
+int main(){
+''' + registration + r'''
+sizebuf_t msg;
+for(auto protocol:{PROTO_GOLDSRC,PROTO_CURRENT})for(bool extended:{false,true}){
+response.clear();CL_ParseCvarValue(&msg,extended,protocol);assert(response=="1");}
+capability.flags=FCVAR_PRIVILEGED;CL_ParseCvarValue(&msg,true,PROTO_GOLDSRC);
+assert(response=="CVAR is privileged"); // reproduces the previous failed handshake
+capability.name="czm_touch_anchors";capability.flags=FCVAR_READ_ONLY;errors=0;
+assert(!Cvar_CanSet(&capability));errors=0;
+Cvar_DirectFullSet(&capability,"10 20 30 40",0);
+assert(std::string(capability.string)=="10 20 30 40"&&capability.flags==FCVAR_READ_ONLY&&errors==0);
+free(capability.string);return 0;}
+''')
+
     def test_server_state_and_magazines_reset_between_lives_and_servers(self):
         code = (ROOT / "cl_dll/hud/czm_skills.cpp").read_text()
         code = re.sub(r'#include "[^"]+"\n', '', code)
@@ -96,7 +146,7 @@ struct{List list_user;bool config_loaded=false,configchanged=false,clientonly=fa
 struct{int state=ca_active;}cls;struct{int maxclients=32;}cl;
 struct Cvar{float value=0;std::string text;const char *string="";};Cvar czm_skill_mask,czm_touch_anchors;
 std::vector<std::string> commands;
-void Cvar_DirectSet(Cvar *c,const char *s){c->text=s;c->string=c->text.c_str();}
+void Cvar_DirectFullSet(Cvar *c,const char *s,unsigned flags){assert(flags==0);c->text=s;c->string=c->text.c_str();}
 void Touch_AddButtonCommand(const touch_button_t*,const char *s){commands.push_back(s);}
 bool Touch_CzmLeftFireHidden(touch_button_t*){return false;}
 enum{dc_arrow,dc_none};void Touch_DisableEdit_f(){}void Platform_SetCursorType(int){}void IN_ActivateMouse(){}void IN_DeactivateMouse(){}
@@ -109,6 +159,7 @@ int main(){byte color[4]={};auto saved=Touch_AddButton(&touch.list_user,"custom"
 saved->flags=TOUCH_FL_HIDE;Touch_CzmEnsureSkills(true);assert(touch.configchanged);
 int count=0;touch_button_t *e=nullptr,*r=nullptr;for(auto b=touch.list_user.first;b;b=b->next){count++;if(!strcmp(b->command,"+czm_skill_e"))e=b;if(!strcmp(b->command,"czm_skill_r"))r=b;}
 assert(count==3&&e&&r&&saved->x1==.2f&&saved->y1==.3f&&saved->flags==TOUCH_FL_HIDE);
+assert(r->x1==.812293f&&r->y1==.287056f&&e->x1==.867021f&&e->y1==.348861f);
 touch.config_loaded=true;czm_skill_mask.value=5;Touch_CzmEnsureSkills(false);
 assert(Touch_IsVisible(saved)&&Touch_IsVisible(e)&&!Touch_IsVisible(r));
 assert(r->next==e&&e->next==nullptr); // no duplicates or replacement
@@ -119,6 +170,28 @@ touch.state=state_edit;assert(Touch_IsVisible(saved)&&Touch_IsVisible(r)&&Touch_
 e->finger=73;Touch_SetClientOnly(1);assert(e->finger==-1&&commands.size()==2&&commands.back()=="-czm_skill_e\n");
 Touch_SetClientOnly(1);assert(commands.size()==2);e->latched=true;Touch_CzmCancelSkillHolds();assert(!e->latched&&commands.size()==3);
 return 0;}
+''')
+
+    def test_digit_panel_repeated_touches_close_and_cancelled_presses(self):
+        text = (ROOT / "czm/menu/CzmCombat.cpp").read_text()
+        code = text[text.index('class CCzmDigits:'):text.index('ADD_MENU3(')]
+        build(UI_STUB + code + r'''
+int main(){
+for(auto dims:std::vector<std::pair<int,int>>{{1536,716},{2400,1080},{1920,1200},{720,1280}}){
+ScreenWidth=dims.first;ScreenHeight=dims.second;CzmCombat::Keypad pad(ScreenWidth,ScreenHeight);
+assert(pad.x>=0&&pad.y>=0&&pad.x+pad.w<=ScreenWidth&&pad.y+pad.h<=ScreenHeight);
+CCzmDigits panel;panel.Init();commands.clear();panel.Open();panel.Draw();
+assert(commands.size()==1&&commands[0]=="touch_setclientonly 1");commands.clear();int before=closes;
+for(int digit: {1,1,2,4,9,0,3,5,6,7,8}){int x,y;pad.Cell(digit,x,y);uiStatic.cursorX=x+pad.key/2;uiStatic.cursorY=y+pad.key/2;
+assert(panel.KeyDown(1));assert(panel.KeyUp(1));assert(closes==before);}
+assert((commands==std::vector<std::string>{"slot1\n","slot1\n","slot2\n","slot4\n","slot9\n","slot10\n","slot3\n","slot5\n","slot6\n","slot7\n","slot8\n"}));
+uiStatic.cursorX=pad.x-10;uiStatic.cursorY=pad.y;panel.KeyDown(1);panel.KeyUp(1);assert(commands.size()==11&&closes==before);
+int x,y;pad.Cell(1,x,y);uiStatic.cursorX=x+1;uiStatic.cursorY=y+1;panel.KeyDown(1);
+pad.Cell(2,x,y);uiStatic.cursorX=x+1;uiStatic.cursorY=y+1;panel.KeyUp(1);assert(commands.size()==11);
+assert(panel.KeyDown(19)&&panel.KeyUp(19)&&commands.size()==11); // captured keys cannot fire through
+uiStatic.cursorX=pad.x+pad.w-pad.header/2;uiStatic.cursorY=pad.y+pad.header/2;panel.KeyDown(1);panel.KeyUp(1);assert(closes==before+1);
+panel.Open();assert(panel.KeyDown(27)&&closes==before+2);
+}return 0;}
 ''')
 
 

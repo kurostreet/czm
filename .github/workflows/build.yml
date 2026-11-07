@@ -164,6 +164,9 @@ jobs:
                            "gfx/czm/maps/zm_3rooms.png", "gfx/czm/avatars/avatar_01.png", "gfx/czm/avatars/avatar_10.png",
                            "gfx/czm/radar/radar_classic.png", "gfx/czm/radar/radar_tactical.png", "gfx/czm/radar/mark_dot.png"]:
                   assert apk.read("assets/" + name) == Path("3rdparty/czm_project", name).read_bytes(), name
+              for name in ("touch_default/numbers.cfg", "touch_presets/czm_scheme1.cfg",
+                           "gfx/czm/touch/skill_g.png", "gfx/czm/touch/skill_r.png", "gfx/czm/touch/skill_e.png"):
+                  assert apk.read("assets/" + name) == Path("3rdparty/czm_project", name).read_bytes(), name
               with wave.open(io.BytesIO(apk.read("assets/sound/czm/tapscroll.wav"))) as tap:
                   assert (tap.getnchannels(), tap.getsampwidth(), tap.getframerate(), tap.getcomptype()) == (1, 2, 44100, "NONE")
                   assert 0.05 < tap.getnframes() / tap.getframerate() < 1.0
@@ -174,6 +177,7 @@ jobs:
                                   "menu_android_" + suffix, "yapb_android_" + suffix]:
                       assert "lib/" + abi + "/lib" + library + ".so" in apk.namelist(), (abi, library)
                   menu = apk.read("lib/" + abi + "/libmenu_android_" + suffix + ".so")
+                  assert b"menu_czmdigits" in menu and b"czm_skill_ui" in menu, abi
                   assert b"Counter Zombie Mobile 32 players build %s" in menu
                   assert b"cs16-client build %s" not in menu
                   assert b"czm_loading_session" in menu and b"gfx/czm/loading_%d.png" in menu, abi
@@ -207,6 +211,7 @@ jobs:
                   assert b"czm_queryserver" in engine and b"czm_mictest" in engine, abi
                   assert b"czm_tab_state" in engine and b"czm_tag" in engine, abi
                   client = apk.read("lib/" + abi + "/libclient_android_" + suffix + ".so")
+                  assert b"CzmSkill" in client and b"CzmClip" in client, abi
                   assert b"czm_autorun" in client and b"czm_buy_state" in client and b"czm_menu" in client, abi
                   assert b"czm_tab_style" in client, abi
                   assert b"czm_tab/%s" in client and b"czm_tab_avatar_%d" in client, abi
