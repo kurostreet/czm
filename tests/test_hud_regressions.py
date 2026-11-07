@@ -26,15 +26,17 @@ class HudRegressionTests(unittest.TestCase):
         entry = entry[:entry.index("\tg_iFreezeTimeOver = 0;")] + "return 1;\n}"
         run_cpp(r'''
 #include <cassert>
-static int tagResets=0,widgetResets=0;
+static int tagResets=0,widgetResets=0,clipResets=0,ammoResets=0;
 void CZM_TagsReset(){tagResets++;}
+void CZM_ClipReset(){clipResets++;}
+void CZM_AmmoReset(){ammoResets++;}
 struct Widget {void InitHUDData(){widgetResets++;}};
 struct HUDLIST {Widget *p;HUDLIST *pNext;};
 struct CHud {HUDLIST *m_pHudList;int MsgFunc_InitHUD(const char *,int,void *);};
 ''' + entry + r'''
 int main(){Widget widget;HUDLIST first={&widget,nullptr};CHud hud={&first};
 hud.MsgFunc_InitHUD("InitHUD",0,nullptr);hud.MsgFunc_InitHUD("InitHUD",0,nullptr);
-assert(tagResets==2&&widgetResets==2);}
+assert(tagResets==2&&widgetResets==2&&clipResets==2&&ammoResets==2);}
 ''')
 
     def test_live_peer_and_configured_ownership_control_all_lvl_overlays(self):
