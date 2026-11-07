@@ -243,6 +243,7 @@ CBasePlayerWeapon :: DefaultReload
 */
 BOOL CBasePlayerWeapon :: DefaultReload( int iClipSize, int iAnim, float fDelay, int body )
 {
+    iClipSize = iMaxClip();
 	if( !m_pPlayer->m_pActiveItem )
 		return FALSE;
 

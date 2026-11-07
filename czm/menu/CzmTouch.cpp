@@ -31,7 +31,7 @@ GNU General Public License for more details.
 #define UI_DIR "gfx/czm/ui/"
 #define TOUCH_DIR "gfx/czm/touch/"
 #define CZM_SCHEMES 3
-#define CZM_MAX_BUTTONS 80
+#define CZM_MAX_BUTTONS 96
 #define TOUCH_FLAG_HIDE     ( 1 << 0 )
 #define TOUCH_FLAG_NOEDIT   ( 1 << 1 )
 #define TOUCH_FLAG_DEF_HIDE ( 1 << 6 ) // saved hidden even after "More" showed it
@@ -81,6 +81,9 @@ static const CzmAction s_actions[] =
 	{ "fire", "Огонь", "Fire", "+attack", GROUP_COMBAT },
 	{ "scope", "Прицел", "Aim", "+attack2", GROUP_COMBAT },
 	{ "reload", "Перезарядка", "Reload", "+reload", GROUP_COMBAT },
+    { "skill_g", "Способность G", "Ability G", "czm_skill_g", GROUP_COMBAT },
+    { "skill_r", "Способность R", "Ability R", "czm_skill_r", GROUP_COMBAT },
+    { "skill_e", "Способность E (держать)", "Ability E (hold)", "+czm_skill_e", GROUP_COMBAT },
 	{ "use", "Использовать", "Use", "+use", GROUP_COMBAT },
 	{ "rifle", "Основное", "Primary", "slot1", GROUP_COMBAT },
 	{ "pistol", "Пистолет", "Pistol", "slot2", GROUP_COMBAT },
@@ -163,7 +166,7 @@ static const char *s_icons[] =
 	"left", "right", "buy", "ammo1", "ammo2", "armor", "autobuy", "rebuy", "chat", "teamchat", "voice", "radio",
 	"radio1", "radio2", "radio3", "score", "zpmenu", "servermenu", "unstuck", "rs", "rtv", "top", "rank", "vip",
 	"timeleft", "nextmap", "more", "numbers", "num1", "num2", "num3", "num4", "num5", "num6", "num7", "num8", "num9",
-	"num0", "cancel", "team", "screenshot", "edit", "custom", "ddrun", "kill", "wheel",
+	"num0", "cancel", "team", "screenshot", "edit", "custom", "ddrun", "kill", "wheel", "skill_g", "skill_r", "skill_e",
 };
 
 #define CZM_ICONS ( (int)( sizeof( s_icons ) / sizeof( s_icons[0] )))
@@ -234,6 +237,9 @@ void CZM_SetTouchScheme( int scheme, bool fromPreset )
 	EngFuncs::ClientCmd( true, "alias czm_more czm_more_show\n" );
 
 	EngFuncs::CvarSetValue( "czm_touch_scheme", scheme );
+    // Upgrade every selected layout once in place, without resetting its controls.
+    EngFuncs::ClientCmd( true, "czm_skill_buttons\n" );
+    CZM_SaveTouchConfig();
 }
 
 void CZM_TouchStartup( void )

@@ -496,6 +496,8 @@ void CZM_Init( void )
 	EngFuncs::CvarRegister( "czm_connect_adr", "", 0 );
 	EngFuncs::CvarRegister( "czm_touch_scheme", "1", FCVAR_ARCHIVE );
 	EngFuncs::CvarRegister( "czm_touch_version", "0", FCVAR_ARCHIVE );
+    EngFuncs::CvarRegister( "czm_skill_ui", "1", FCVAR_PRIVILEGED );
+    EngFuncs::CvarRegister( "czm_skill_state", "", FCVAR_PRIVILEGED );
 	EngFuncs::CvarRegister( "czm_shop", "1", FCVAR_ARCHIVE );       // 1 wheel, 2 grid
 	EngFuncs::CvarRegister( "czm_shop_anim", "1", FCVAR_ARCHIVE );
 	EngFuncs::CvarRegister( "czm_shop_auto", "0", FCVAR_ARCHIVE );  // open the shop when a round starts

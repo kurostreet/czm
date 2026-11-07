@@ -30,7 +30,7 @@ def validate(payload):
         raise accounts.AuthError('settings')
     if any(not valid_value(k,v) for k,v in cvars.items()): raise accounts.AuthError('settings')
     for buttons in layouts.values():
-        if not isinstance(buttons,list) or not 1<=len(buttons)<=80: raise accounts.AuthError('settings')
+        if not isinstance(buttons,list) or not 1<=len(buttons)<=96: raise accounts.AuthError('settings')
         seen=set()
         for b in buttons:
             if not isinstance(b,list) or len(b)!=12 or not all(isinstance(x,str) for x in b[:3]): raise accounts.AuthError('settings')

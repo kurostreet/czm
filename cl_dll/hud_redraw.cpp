@@ -20,6 +20,7 @@
 #include "hud.h"
 #include "hud/czm_hud.h"
 #include "hud/czm_tags.h"
+#include "hud/czm_skills.h"
 #include "cl_util.h"
 #include "triangleapi.h"
 
@@ -171,6 +172,7 @@ int CHud :: Redraw( float flTime, int intermission )
 	CZM_UpdateShopState();
 
 	CZM_AmmoFrameBegin();
+    CZM_SkillsFrame();
 	if ( m_pCvarDraw->value && (intermission || !(m_iHideHUDDisplay & HIDEHUD_ALL) ) )
 	{
 		for( HUDLIST *pList = m_pHudList; pList; pList = pList->pNext )

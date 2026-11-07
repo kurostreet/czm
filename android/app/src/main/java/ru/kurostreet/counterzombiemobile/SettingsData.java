@@ -29,7 +29,7 @@ final class SettingsData {
         for(Iterator<String> i=cv.keys();i.hasNext();) {String k=i.next();if(!KEYS.contains(k)||!(cv.get(k) instanceof String)||!validValue(k,cv.getString(k)))throw new IOException("setting");}
         for(Iterator<String> i=layouts.keys();i.hasNext();) {
             String k=i.next();if(!Arrays.asList("1","2","3").contains(k))throw new IOException("layout");JSONArray buttons=layouts.getJSONArray(k);
-            if(buttons.length()<1||buttons.length()>80)throw new IOException("buttons");Set<String> seen=new HashSet<>();
+            if(buttons.length()<1||buttons.length()>96)throw new IOException("buttons");Set<String> seen=new HashSet<>();
             for(int n=0;n<buttons.length();n++){
                 JSONArray b=buttons.getJSONArray(n);if(b.length()!=12)throw new IOException("button");String name=b.getString(0),tex=b.getString(1),cmd=b.getString(2);
                 if(!name.matches("[A-Za-z0-9_+#.-]{1,64}")||!seen.add(name)||tex.length()>128||tex.contains("..")||tex.startsWith("/")||tex.matches("(?s).*[\\x00-\\x1f\";\\\\].*"))throw new IOException("name");

@@ -51,6 +51,7 @@ def brand_base_menu(source):
         "\tCZM_DrawGameOverlay();\n\n"
         "\t// the touch wheels (weapons, radio) over the game\n"
         "\tCZM_DrawTouchWheel();\n\n"
+        "\tCZM_DrawCombatControls();\n\n"
         "\t// answers of our service: hello, news, chat avatars\n"
         "\tCZM_OnlineFrame();\n",
         filename,

@@ -131,6 +131,9 @@ CLIENT_HARNESS = r'''
 #include <string>
 struct Hud { bool m_fPlayerDead; } gHUD;
 static std::string published; static int sets;
+static bool unlimited;static int customClip;
+int CZM_ClipCapacity(int,int fallback){return customClip?customClip:fallback;}
+bool CZM_UnlimitedReserve(){return unlimited;}
 struct Engine { void ( *Cvar_Set )( const char *, const char * ); } gEngfuncs;
 static void Set( const char *name, const char *value ) { assert( !strcmp( name, "czm_ammo_state" )); published = value; sets++; }
 #define CZM_HUD_TEST 1
@@ -156,6 +159,8 @@ int main()
 	Frame( 28, 20, 100 ); assert( published == "20 100 50" );
 	CZM_AmmoReset();
 	Frame( 28, 20, 100 ); assert( published == "20 100 30" );    // a new map forgets them
+    customClip=70;unlimited=true;
+    Frame(28,20,250);assert(published=="20 -1 70"); // authoritative full clip, unlimited reserve
 	gHUD.m_fPlayerDead = true; Frame( 28, 20, 100 ); assert( published == "" );
 	return 0;
 }
