@@ -1,3 +1,3 @@
-Добавлен индикатор микрофона в матче: при удержании кнопки виден уровень входного звука, при отпускании шкала исчезает. Индикатор следует за положением кнопки в вашей раскладке.
+Уточнена ошибка занятой почты: видно, если адрес уже привязан к другому игровому аккаунту. Во входе по почте добавлены пояснение для нового адреса и переход к созданию аккаунта.
 
-Added an in-match microphone indicator: hold the button to see the captured audio level; release it to hide the meter. The indicator follows the button in your control layout.
+Clarified the error for an email linked to another game account. Email sign-in now explains how to link a new address and includes a Create account shortcut.

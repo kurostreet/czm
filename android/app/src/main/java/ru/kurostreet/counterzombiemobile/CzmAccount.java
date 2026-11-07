@@ -139,7 +139,7 @@ final class CzmAccount {
         case "slow": return ru ? "Слишком много попыток. Попробуйте позже." : "Too many attempts. Try again later.";
         case "mail_unavailable": return ru ? "Отправка писем ещё не настроена." : "Email delivery has not been configured yet.";
         case "email": return ru ? "Проверьте адрес почты." : "Check the email address.";
-        case "email_used": return ru ? "Эта почта привязана к другому аккаунту." : "This email belongs to another account.";
+        case "email_used": return ru ? "Эта почта уже привязана к другому игровому аккаунту. Введите другую почту." : "This email is already linked to another game account. Enter a different email.";
         case "email_required": return ru ? "Сначала привяжите и подтвердите почту в аккаунте." : "Link and verify your email in the account first.";
         case "account_changed": return ru ? "Аккаунт изменился. Откройте его снова." : "Account changed. Open it again.";
         case "code": return ru ? "Код неверен или истёк. Запросите новый." : "Invalid or expired code. Request a new one.";
@@ -443,17 +443,22 @@ final class CzmAccount {
 
     private static void emailLogin(Activity a, String legacy, String nick, boolean ru, boolean confirm, String address) {
         if (!confirm) clearPending(a);
-        CzmDialog d=panel(a,ru?"Вход по почте":"Sign in with email",confirm?address:(ru?"Введите почту, подтверждённую в аккаунте":"Use the email verified in your account"),confirm?(ru?"Войти":"Sign in"):(ru?"Получить код":"Get code"),ru);
+        CzmDialog d=panel(a,ru?"Вход по почте":"Sign in with email",confirm?address:(ru?"Вход в существующий игровой аккаунт":"Sign in to an existing game account"),confirm?(ru?"Войти":"Sign in"):(ru?"Получить код":"Get code"),ru);
         EditText input=confirm?d.codeField(ru?"Код из письма":"Email code"):d.field("Email",false,254);
         input.setInputType(confirm?InputType.TYPE_CLASS_NUMBER:InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
-        if(!confirm)input.setText(address);
+        if(!confirm) {
+            input.setText(address);
+            d.note(ru?"Введите почту, уже подтверждённую в вашем игровом аккаунте.":"Enter the email already verified in your game account.");
+        }
         String throttle="login:"+address.toLowerCase(java.util.Locale.ROOT);
         if(confirm) {
             d.note(ru?"Если почта привязана к аккаунту, код отправлен. Проверьте также «Спам».":"If this email is linked, a code was sent. Also check Spam.");
             resend(d,throttle,ru,()->{try{send(d,"email-login","",new JSONObject().put("email",address),ru,result->rememberEmail(a,address));}catch(Exception e){d.fail(error("email",ru));}});
             d.link(ru?"Изменить адрес":"Change email address",v->emailLogin(a,legacy,nick,ru,false,address));
         }
-        d.link(ru?"Войти по паролю":"Use password instead",v->form(a,legacy,nick,"login",ru));
+        d.note(ru?"Новый адрес почты? Сначала войдите по нику и паролю или создайте аккаунт. Затем откройте «Аккаунт и почта» и привяжите адрес.":"New email address? Sign in with your nickname and password or create an account first. Then open Account and email to link it.");
+        d.link(ru?"Войти по нику и паролю":"Use nickname and password",v->form(a,legacy,nick,"login",ru));
+        d.link(ru?"Создать аккаунт":"Create an account",v->form(a,legacy,nick,"register",ru));
         d.submit.setOnClickListener(v->{
             try {
                 String email=confirm?address:input.getText().toString().trim();
