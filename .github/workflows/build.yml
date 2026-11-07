@@ -119,6 +119,8 @@ jobs:
           /tmp/czm-server-check/bin/python -m unittest discover -s tests -p test_sprays.py -v
           python3 -m unittest discover -s tests -p test_touch_editor.py -v
           python3 -m unittest discover -s tests -p test_combat_controls.py -v
+          python3 -m unittest discover -s tests -p test_voice_capture.py -v
+          python3 -m unittest discover -s tests -p test_voice_indicator_ui.py -v
           python3 -m unittest discover -s tests -p test_reload_ammo.py -v
           python3 -m unittest discover -s tests -p test_game_hud.py -v
           python3 -m unittest discover -s tests -p test_hud_regressions.py -v
@@ -178,6 +180,7 @@ jobs:
                       assert "lib/" + abi + "/lib" + library + ".so" in apk.namelist(), (abi, library)
                   menu = apk.read("lib/" + abi + "/libmenu_android_" + suffix + ".so")
                   assert b"menu_czmdigits" in menu and b"czm_skill_ui" in menu, abi
+                  assert all(marker in menu for marker in (b"czm_voice_held", b"czm_voice_recording", b"czm_voice_level")), abi
                   assert b"Counter Zombie Mobile 32 players build %s" in menu
                   assert b"cs16-client build %s" not in menu
                   assert b"czm_loading_session" in menu and b"gfx/czm/loading_%d.png" in menu, abi
@@ -209,6 +212,7 @@ jobs:
                   assert b"serverUserinfo" in engine, abi
                   assert b"czm_loading_enable" in engine and b"czm_loading_error" in engine, abi
                   assert b"czm_queryserver" in engine and b"czm_mictest" in engine, abi
+                  assert all(marker in engine for marker in (b"czm_voice_held", b"czm_voice_recording", b"czm_voice_level")), abi
                   assert b"czm_tab_state" in engine and b"czm_tag" in engine, abi
                   client = apk.read("lib/" + abi + "/libclient_android_" + suffix + ".so")
                   assert b"CzmSkill" in client and b"CzmClip" in client, abi
