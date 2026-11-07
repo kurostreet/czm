@@ -1,1 +1,3 @@
-Обновлено меню Survival. «Назад» возвращает в раздел, «Далее» листает страницы, а крестик закрывает всё окно. Админы могут выдавать кредиты и токены через «Админ-меню».
+Добавлен индикатор микрофона в матче: при удержании кнопки виден уровень входного звука, при отпускании шкала исчезает. Индикатор следует за положением кнопки в вашей раскладке.
+
+Added an in-match microphone indicator: hold the button to see the captured audio level; release it to hide the meter. The indicator follows the button in your control layout.
