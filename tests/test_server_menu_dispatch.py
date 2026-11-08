@@ -28,7 +28,7 @@ static std::vector<std::string> queue,network;
 static std::string packet;
 static int weaponLookups;
 struct CHudMenu {
- int m_fMenuDisplayed=0,m_bitsValidSlots=0,m_iFlags=0;
+ int m_fMenuDisplayed=0,m_bitsValidSlots=0,m_iFlags=0,m_fWaitingForMore=0;
  void PublishCards(bool);void SelectMenuItem(int);void UserCmd_OldStyleMenuClose();void Reset(){}
 };
 struct CHudAmmo {struct Cvar{float value=1;}fast;Cvar*m_pHud_FastSwitch=&fast;
@@ -95,7 +95,7 @@ static void Drain(){
  }
 }
 static void Announce(CCzmServerWindow&w){
- gHUD.m_Menu.m_fMenuDisplayed=1;gHUD.m_Menu.m_bitsValidSlots=(1<<0)|(1<<6)|(1<<8)|(1<<9);
+ gHUD.m_Menu.m_fMenuDisplayed=1;gHUD.m_Menu.m_fWaitingForMore=0;gHUD.m_Menu.m_bitsValidSlots=(1<<0)|(1<<6)|(1<<8)|(1<<9);
  gHUD.m_Menu.m_iFlags=HUD_DRAW;snprintf(g_szRichMenuString,sizeof(g_szRichMenuString),"#czm1\tmenu\tstandalone\tServer\n1. Enabled\n2. Disabled\n7. Language\n");
  gHUD.m_Menu.PublishCards(true);w.m_menu.serial=s_iCardsSerial;w.m_menu.validSlots=gHUD.m_Menu.m_bitsValidSlots;
  w.m_menu.navigation=true;w.m_menu.numCards=3;w.m_menu.menuPage=1;w.m_menu.menuPages=2;w.m_menu.nextSlot=9;
@@ -103,6 +103,16 @@ static void Announce(CCzmServerWindow&w){
  w.m_iPicked=-1;network.clear();queue.clear();weaponLookups=0;
 }
 int main(){
+ // A partial next ShowMenu already has its new mask, while the old packet
+ // serial remains visible. Even an overlapping enabled slot cannot be sent.
+ CCzmServerWindow partial;Announce(partial);const int oldSerial=s_iCardsSerial;
+ const std::string oldPacket=packet;gHUD.m_Menu.m_fWaitingForMore=1;
+ partial.Activate(partial.HIT_CARD);Drain();
+ assert(network.empty()&&weaponLookups==0&&gHUD.m_Menu.m_fMenuDisplayed);
+ assert(gHUD.m_Menu.m_fWaitingForMore&&s_bCardsShown&&s_iCardsSerial==oldSerial&&packet==oldPacket);
+ // Completion publishes a new serial and accepts its legitimate fresh choice.
+ Announce(partial);assert(!gHUD.m_Menu.m_fWaitingForMore&&s_iCardsSerial>oldSerial);
+ partial.Activate(partial.HIT_CARD);Drain();assert(network.size()==1&&network[0]=="menuselect 1");
  CCzmServerWindow w;Announce(w);int serial=s_iCardsSerial;
  w.Activate(w.HIT_CARD+1);Drain();assert(network.empty()&&gHUD.m_Menu.m_fMenuDisplayed);
  w.Activate(w.HIT_CARD);Drain();assert(network.size()==1&&network[0]=="menuselect 1");
