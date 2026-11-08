@@ -120,6 +120,28 @@ struct Model {
     }
 };
 struct Key { Rect rect;Action action;char text[16]; };
+// Feedback keeps a snapshot: switching RU/EN/123 can change every key index
+// during the release tail. Its enlarged drawing never changes the hit target.
+struct PressFeedback {
+    Key key;bool held;double until;int width,height;
+    PressFeedback(){Clear();}
+    void Clear(){key.action=None;key.rect={0,0,0,0};key.text[0]=0;held=false;until=0;width=height=0;}
+    void Begin(const Key &pressed,int W,int H){key=pressed;held=true;until=0;width=W;height=H;}
+    void Release(double now){if(key.action!=None){held=false;until=now+.09;}}
+    float Amount(double now)const{
+        if(key.action==None)return 0;
+        if(held)return 1;
+        double left=(until-now)/.09;return left<=0?0:left>=1?1:(float)left;
+    }
+};
+inline Rect FeedbackRect(const Rect &key,const Rect &bounds,int gap,float amount){
+    int room=Max(1,(gap-1)/2);
+    int growX=(int)(Min(room,Max(1,(key.w*2+99)/100))*amount+.5f);
+    int growY=(int)(Min(room,Max(1,(key.h*4+99)/100))*amount+.5f);
+    const int left=Max(bounds.x+1,key.x-growX),top=Max(bounds.y+1,key.y-growY);
+    const int right=Min(bounds.x+bounds.w-1,key.x+key.w+growX),bottom=Min(bounds.y+bounds.h-1,key.y+key.h+growY);
+    return Rect{left,top,Max(1,right-left),Max(1,bottom-top)};
+}
 struct Layout {
     Rect history,clip,composer,channel,field,send,close,keyboard;
     Key keys[MaxKeys];int count,gap,pad,keyHeight;

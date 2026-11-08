@@ -16,15 +16,15 @@ class SettingsRowsTests(unittest.TestCase):
         rows = source[source.index("enum ERowType"):source.index("void FillClipped(")]
         # The row definitions and sizing are production code; unrelated cvar
         # bindings are inert so this test runs without launching the engine.
-        getters = set(re.findall(r"\b(Get\w+)\b", rows)) - {"GetDiagnostics", "GetMatchKeyboard", "GetMatchKeepOpen", "GetProfileMotion"}
-        setters = set(re.findall(r"\b(Set\w+)\b", rows)) - {"SetDiagnostics", "SetMatchKeyboard", "SetMatchKeepOpen", "SetProfileMotion"}
+        getters = set(re.findall(r"\b(Get\w+)\b", rows)) - {"GetDiagnostics", "GetMatchKeyboard", "GetMatchKeepOpen", "GetMatchHaptic", "GetProfileMotion"}
+        setters = set(re.findall(r"\b(Set\w+)\b", rows)) - {"SetDiagnostics", "SetMatchKeyboard", "SetMatchKeepOpen", "SetMatchHaptic", "SetProfileMotion"}
         active = {"GyroAvailable", "GyroOn", "VoiceOn", "MicTestAvailable"}
         bindings = "\n".join("float %s(){return 0;}" % name for name in sorted(getters))
         bindings += "\n" + "\n".join("void %s(float){}" % name for name in sorted(setters))
         bindings += "\n" + "\n".join("bool %s(){return true;}" % name for name in sorted(active))
         bindings += "\n" + function(source, "float GetDiagnostics( void )")
         bindings += "\n" + function(source, "void SetDiagnostics( float v )")
-        for signature in ["float GetCvar(", "void SetCvar(", "float GetMatchKeyboard(", "void SetMatchKeyboard(", "float GetMatchKeepOpen(", "void SetMatchKeepOpen(", "float GetProfileMotion(", "void SetProfileMotion("]:
+        for signature in ["float GetCvar(", "void SetCvar(", "float GetMatchKeyboard(", "void SetMatchKeyboard(", "float GetMatchKeepOpen(", "void SetMatchKeepOpen(", "float GetMatchHaptic(", "void SetMatchHaptic(", "float GetProfileMotion(", "void SetProfileMotion("]:
             bindings += "\n" + function(source, signature)
         row_layout = source[source.index("\tstruct RowLayout"):source.index("\n\tvoid Layout(")]
         hit_enum = source[source.index("\tenum\n", source.index("class CCzmSettings")):source.index("\n\tstruct RowLayout")]
@@ -137,11 +137,11 @@ int main(){
   for(int tab:{CZM_TAB_GAME,CZM_TAB_PROFILE}){
    w.OpenTab(tab);w.Layout();
    for(int i=0;i<w.RowCount();i++){
-    const auto&row=w.Row(i);bool keyboard=!strcmp(row.label,"s_match_keyboard"),keep=!strcmp(row.label,"s_match_keep_open"),motion=!strcmp(row.label,"s_profile_motion");
-    if(!keyboard&&!keep&&!motion)continue;
+    const auto&row=w.Row(i);bool keyboard=!strcmp(row.label,"s_match_keyboard"),keep=!strcmp(row.label,"s_match_keep_open"),haptic=!strcmp(row.label,"s_match_haptic"),motion=!strcmp(row.label,"s_profile_motion");
+    if(!keyboard&&!keep&&!haptic&&!motion)continue;
     assert(row.hint&&row.get&&row.set);w.m_iScroll=0;w.Layout();
     w.m_iScroll=std::min(w.m_iMaxScroll,std::max(0,w.m_rows[i].rect.y-w.m_clip.y));w.Layout();
-    const char*cvar=keyboard?"czm_match_chat":keep?"czm_match_chat_keep_open":"czm_profile_motion";
+    const char*cvar=keyboard?"czm_match_chat":keep?"czm_match_chat_keep_open":haptic?"czm_match_chat_haptic":"czm_profile_motion";
     if(keyboard){
      assert(row.type==ROW_CHOICE&&row.numOptions==2&&!strcmp(row.options[0],"opt_keyboard_czm")&&!strcmp(row.options[1],"opt_keyboard_system"));
      for(int choice=0;choice<2;choice++){

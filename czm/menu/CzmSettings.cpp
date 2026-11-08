@@ -336,6 +336,8 @@ float GetMatchKeyboard( void ) { return GetCvar( "czm_match_chat" ) != 0.0f ? 0 
 void SetMatchKeyboard( float v ) { SetCvar( "czm_match_chat", v == 0.0f ? 1 : 0 ); }
 float GetMatchKeepOpen( void ) { return GetCvar( "czm_match_chat_keep_open" ) != 0.0f; }
 void SetMatchKeepOpen( float v ) { SetCvar( "czm_match_chat_keep_open", v != 0.0f ? 1 : 0 ); }
+float GetMatchHaptic( void ) { return GetCvar( "czm_match_chat_haptic" ) != 0.0f; }
+void SetMatchHaptic( float v ) { SetCvar( "czm_match_chat_haptic", v != 0.0f ? 1 : 0 ); }
 float GetProfileMotion( void ) { return GetCvar( "czm_profile_motion" ) != 0.0f; }
 void SetProfileMotion( float v ) { SetCvar( "czm_profile_motion", v != 0.0f ? 1 : 0 ); }
 
@@ -453,6 +455,7 @@ const CzmRow s_game[] =
 	{ ROW_CHOICE, "s_lang", NULL, GetLang, SetLang, NULL, 0, 1, 1, 0, { "RU", "EN" }, 2, 0 },
 	{ ROW_CHOICE, "s_match_keyboard", "s_match_keyboard_hint", GetMatchKeyboard, SetMatchKeyboard, NULL, 0, 1, 1, 0, { "opt_keyboard_czm", "opt_keyboard_system" }, 2, 0 },
 	{ ROW_SWITCH, "s_match_keep_open", "s_match_keep_open_hint", GetMatchKeepOpen, SetMatchKeepOpen, NULL, 0, 1, 1, 0, {}, 0, 0 },
+	{ ROW_SWITCH, "s_match_haptic", "s_match_haptic_hint", GetMatchHaptic, SetMatchHaptic, NULL, 0, 1, 1, 0, {}, 0, 0 },
 	{ ROW_SECTION, "s_sec_xhair", NULL, NULL, NULL, NULL, 0, 0, 0, 0, {}, 0, 0 },
 	{ ROW_XHAIR, "s_xhair", "s_xhair_hint", NULL, NULL, NULL, 0, 0, 0, 0, {}, 0, 0 },
 	{ ROW_CHOICE, "s_xhair_size", NULL, GetXhairSize, SetXhairSize, NULL, 0, 3, 1, 0, { "opt_auto", "opt_small", "opt_medium", "opt_large" }, 4, 0 },

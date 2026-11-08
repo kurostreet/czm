@@ -987,7 +987,7 @@ void CCzmServerWindow::Activate( int hit )
 		m_iPicked = SM_MAX_CARDS;
 		m_iPickTime = uiStatic.realTime;
 		if( slot )
-			EngFuncs::ClientCmdF( false, "slot%d\n", slot );
+			EngFuncs::ClientCmdF( false, "czm_shop_select %d %d\n", m_menu.serial, slot );
 		else
 			EngFuncs::ClientCmd( false, "czm_menu_prev\n" );
 		return;
@@ -1010,7 +1010,7 @@ void CCzmServerWindow::Activate( int hit )
 		return;
 	}
 
-	if( hit >= HIT_CARD && hit < HIT_CARD + m_menu.numCards && m_iPicked < 0 )
+	if( hit >= HIT_CARD && hit < HIT_CARD + m_menu.numCards && !Waiting() )
 	{
 		const CzmMenuCard &c = m_menu.cards[hit - HIT_CARD];
 
@@ -1028,10 +1028,9 @@ void CCzmServerWindow::Activate( int hit )
 		}
 		m_iPicked = hit - HIT_CARD;
 		m_iPickTime = uiStatic.realTime;
-		if( !strcmp( m_menu.tab, "loadout" ))
-			EngFuncs::ClientCmdF( false, "czm_shop_select %d %d\n", m_menu.serial, c.key );
-		else
-			EngFuncs::ClientCmdF( false, "slot%d\n", c.key );
+		// The client validates this ShowMenu serial and slot mask. A delayed
+		// tap must never fall through to weapon selection after the HUD closes.
+		EngFuncs::ClientCmdF( false, "czm_shop_select %d %d\n", m_menu.serial, c.key );
 	}
 	else if( hit >= 200 && hit < 206 && m_menu.kind == CzmServerView::Friends )
 		InviteFriend( m_friendPage * 6 + hit - 200 );
@@ -1068,7 +1067,10 @@ bool CCzmServerWindow::KeyDown( int key )
 	{
 		Layout( 0 );
 		m_iPressed = HitTest();
-		m_drag = ( m_menu.kind != CzmServerView::Cards || m_menu.Compact() ) && m_content.Contains( uiStatic.cursorX, uiStatic.cursorY );
+		// A compact menu that already fits cannot scroll. Finger jitter inside
+		// its rows must remain a tap, just like the Return-to-game button.
+		m_drag = m_scrollMax > 0 && ( m_menu.kind != CzmServerView::Cards || m_menu.Compact() )
+			&& m_content.Contains( uiStatic.cursorX, uiStatic.cursorY );
 		m_moved = false; m_downY = uiStatic.cursorY; m_downScroll = m_scroll;
 		if( m_typing && m_iPressed != HIT_FIELD && m_iPressed != HIT_SUBMIT ) EndInput();
 		return true;
@@ -1501,7 +1503,7 @@ void CCzmServerWindow::DrawCards( int a )
   };
   for(int i=0;i<m_menu.numCards;i++){
    const CzmMenuCard&c=m_menu.cards[i];const CzmRect&r=c.rect;if(r.w<=0||r.h<=0)continue;
-   const bool selected=IsPressed(HIT_CARD+i)||m_iPicked==i;
+   const bool selected=IsPressed(HIT_CARD+i)||(m_iPicked==i&&Waiting());
    CzmStyle::Surface(r,selected?PackRGBA(47,28,35,a):PackRGBA(25,32,42,a),selected?accent:PackRGBA(51,62,78,a),Q_max(4,H/110));
    const int inset=Q_max(4,r.h/5),side=r.h*.52f;
    int tx=r.x+inset;
@@ -1526,7 +1528,7 @@ void CCzmServerWindow::DrawCards( int a )
  HFont name=CZM_Font(CZMF_UI_LABEL),sub=CZM_Font(CZMF_UI_META);
  float t=Q_min(1.0f,(uiStatic.realTime-m_iChangeTime)/130.0f);int alpha=a*t;
  for(int i=0;i<m_menu.numCards;i++){
-  const CzmMenuCard&c=m_menu.cards[i];CzmRect r=c.rect;bool selected=IsPressed(HIT_CARD+i)||m_iPicked==i;
+  const CzmMenuCard&c=m_menu.cards[i];CzmRect r=c.rect;bool selected=IsPressed(HIT_CARD+i)||(m_iPicked==i&&Waiting());
   r.y+=(1-t)*H*.012f;unsigned accent=PackRGBA(255,168,66,alpha);
   CzmStyle::Surface(r,selected?PackRGBA(43,36,28,alpha):PackRGBA(25,31,40,alpha),selected?accent:PackRGBA(57,66,80,alpha),Q_max(4,H/90));
   int tile=r.h*.56f,ix=r.x+r.h*.20f,iy=r.y+(r.h-tile)/2;

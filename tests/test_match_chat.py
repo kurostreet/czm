@@ -34,6 +34,7 @@ class CMenuBaseClientWindow{public:int iFlags=0;CMenuBaseClientWindow(const char
 namespace UI{namespace Key{bool IsEscape(int k){return k==27;}bool IsEnter(int k){return k==13;}bool IsBackspace(int k){return k==127;}bool IsLeftMouse(int k){return k==1;}}namespace Scissor{void PushScissor(int x,int y,int w,int h){if(drawTrace)printf("Q\t%d\t%d\t%d\t%d\n",x,y,w,h);}void PopScissor(){if(drawTrace)puts("E");}}}
 struct EngFuncs{static const char*GetCvarString(const char*);static float GetCvarFloat(const char*);static void CvarSetValue(const char*,float);static void ClientCmd(bool,const char*);static void KEY_SetDest(int);static double DoubleTime();};
 bool CL_IsActive();bool CZM_IsRussian();void UI_EnableTextInput(bool);void CZM_KeepClientMenu(CMenuBaseClientWindow*);void CZM_CloseClientMenuSoon(CMenuBaseClientWindow*);
+void CZM_PlayClick();void CZM_MatchKeyHaptic();
 void UI_CloseClientMenu();void CZM_ClientMenuFrame();void CZM_MatchChatAfterClientMenuFrame(bool);
 HFont CZM_Font(int);int CZM_FontHeight(HFont);int CZM_TextWidth(HFont,const char*);
 void CZM_DrawText(HFont,int,int,int,const char*,unsigned,unsigned=0);void UI_FillRect(int,int,int,int,unsigned);
@@ -46,12 +47,14 @@ HARNESS = r'''
 int ScreenWidth=1536,ScreenHeight=716;Cursor uiStatic;Stack stack;
 bool drawTrace=false;
 static std::map<std::string,std::string> vars;
-static std::vector<std::string> commands,texts;static std::vector<unsigned> colors;
+static std::vector<std::string> commands,texts;static std::vector<unsigned> colors;static std::vector<CzmRect> surfaces;
+static int keyClicks,keyHaptics;
 static double now=100;static bool active=true;static int imeCalls,imeEnables,keyDest,closes;
 static CMenuBaseWindow*s_closeSoon;static bool s_clientWasActive;
 const char*EngFuncs::GetCvarString(const char*k){return vars[k].c_str();}float EngFuncs::GetCvarFloat(const char*k){return atof(GetCvarString(k));}
 void EngFuncs::CvarSetValue(const char*k,float v){vars[k]=std::to_string(v);}void EngFuncs::ClientCmd(bool,const char*c){commands.emplace_back(c);if(!strncmp(c,"czm_match_chat_ime ",19)){vars["czm_match_chat_ime_pending"]="0";keyDest=KEY_MESSAGE;imeEnables++;}}void EngFuncs::KEY_SetDest(int k){keyDest=k;}double EngFuncs::DoubleTime(){return now;}
 bool CL_IsActive(){return active;}bool CZM_IsRussian(){return true;}void UI_EnableTextInput(bool on){imeCalls++;imeEnables+=on;}
+void CZM_PlayClick(){keyClicks++;}void CZM_MatchKeyHaptic(){keyHaptics++;}
 void CZM_KeepClientMenu(CMenuBaseClientWindow*p){if(s_closeSoon==p)s_closeSoon=nullptr;}void CZM_CloseClientMenuSoon(CMenuBaseClientWindow*p){closes++;s_closeSoon=p;}
 void UI_CloseClientMenu(){stack.current=nullptr;EngFuncs::KEY_SetDest(KEY_GAME);}
 HFont CZM_Font(int f){return f;}int CZM_FontHeight(HFont f){return std::max(8,(f==CZMF_UI_ACTION?26:f==CZMF_UI_META?15:f==CZMF_CHAT_TEXT?23:f==CZMF_SMALL?17:20)*ScreenHeight/768);}
@@ -59,7 +62,7 @@ int CZM_TextWidth(HFont f,const char*s){int n=0;for(;*s;s++)if((*s&0xc0)!=0x80)n
 void CZM_DrawText(HFont f,int x,int y,int w,const char*s,unsigned c,unsigned justify){assert(x>=0&&y>=0&&w>0&&x+w<=ScreenWidth);texts.emplace_back(s);colors.push_back(c);if(drawTrace)printf("T\t%d\t%d\t%d\t%d\t%u\t%u\t%s\n",x,y,w,CZM_FontHeight(f),c,justify,s);}
 void CheckRect(int x,int y,int w,int h){assert(x>=0&&y>=0&&w>=0&&h>=0&&x+w<=ScreenWidth&&y+h<=ScreenHeight);}
 void UI_FillRect(int x,int y,int w,int h,unsigned c){CheckRect(x,y,w,h);if(drawTrace)printf("R\t%d\t%d\t%d\t%d\t%u\n",x,y,w,h,c);}
-void CZM_DrawSliced(const char*,int x,int y,int w,int h,int,int radius,unsigned c){CheckRect(x,y,w,h);if(drawTrace)printf("S\t%d\t%d\t%d\t%d\t%u\t%d\n",x,y,w,h,c,radius);}
+void CZM_DrawSliced(const char*,int x,int y,int w,int h,int,int radius,unsigned c){CheckRect(x,y,w,h);surfaces.push_back(CZM_Rect(x,y,w,h));if(drawTrace)printf("S\t%d\t%d\t%d\t%d\t%u\t%d\n",x,y,w,h,c,radius);}
 void CZM_DrawImage(const char*p,int x,int y,int w,int h,unsigned c){CheckRect(x,y,w,h);if(drawTrace)printf("I\t%d\t%d\t%d\t%d\t%u\t%s\n",x,y,w,h,c,p);}void CZM_DrawPill(const char*p,int x,int y,int w,int h,unsigned c){CZM_DrawImage(p,x,y,w,h,c);}
 '''
 SCENARIOS = r'''
@@ -74,7 +77,7 @@ static void publish(unsigned seq,const char*text){char hex[2048],value[2200],nam
 static void request(unsigned serial,bool team=false){vars["czm_match_chat_request"]=std::to_string(serial)+(team?" 1":" 0");vars["czm_match_chat_active"]="1";}
 int main(int argc,char**argv){
  auto&w=*menu_czmmatchchat;
- vars["czm_match_chat"]="1";vars["czm_match_chat_ru"]="-1";vars["czm_match_chat_epoch"]="3";vars["czm_mc_epoch"]="7";vars["czm_connect_adr"]="203.0.113.4:27015";
+ vars["czm_match_chat"]="1";vars["czm_match_chat_ru"]="-1";vars["czm_match_chat_haptic"]="1";vars["vibration_enable"]="1";vars["czm_match_chat_epoch"]="3";vars["czm_mc_epoch"]="7";vars["czm_connect_adr"]="203.0.113.4:27015";
  request(1);w.Frame();assert(w.m_shown&&w.m_model.state==MC::Typing&&keyDest==KEY_MENU&&!imeEnables);
  if(argc>1){
   std::string view=argv[1];if(view.find("compact")!=std::string::npos){ScreenWidth=640;ScreenHeight=360;}
@@ -85,6 +88,7 @@ int main(int argc,char**argv){
   publish(5,"\7FF8F66Player : \1Нужны патроны у выхода");w.Frame();
   w.m_model.state=view.find("history")!=std::string::npos?MC::History:MC::Typing;
   MC::Append(w.m_model.draft,"Прикрывайте проход, иду справа");
+  if(view.find("press")!=std::string::npos){w.Layout();cursor(w.m_layout.keys[key(w,MC::Letter,"п")].rect);w.KeyDown(1);}
   drawTrace=true;w.Draw();return 0;
  }
  for(auto size:{std::pair<int,int>{1536,716},{640,320},{800,360},{960,540},{1024,768},{2340,1080},{2960,1440}})
@@ -98,18 +102,36 @@ int main(int argc,char**argv){
     assert(inside(l.keys[i].rect,l.keyboard)&&l.keys[i].rect.h>=26);
     const char*p=l.keys[i].text;while(*p){int n=MC::Utf8Length(p);assert(n>0);p+=n;}
     if(l.keys[i].action==MC::Space)assert(!strcmp(l.keys[i].text,lang==0?"Пробел":"Space"));
-    for(int j=0;j<i;j++)assert(!overlap(l.keys[i].rect,l.keys[j].rect));
+    auto pop=MC::FeedbackRect(l.keys[i].rect,l.keyboard,l.gap,1);assert(inside(pop,l.keyboard)&&inside(l.keys[i].rect,pop));
+    assert(pop.w>=l.keys[i].rect.w&&pop.h>l.keys[i].rect.h);
+    for(int j=0;j<l.count;j++)if(j!=i){assert(!overlap(l.keys[i].rect,l.keys[j].rect));assert(!overlap(pop,l.keys[j].rect));}
    }
   }else assert(!l.count&&!l.keyboard.w);
   w.Draw();
  }
  ScreenWidth=1536;ScreenHeight=716;w.m_model.state=MC::Typing;w.m_model.russian=true;w.m_model.numbers=false;w.Layout();
+ // A touch draws its pop immediately, keeps a fixed hit target and commits on
+ // release once. A duplicate held-down event cannot retrigger sound or haptics.
+ const int first=key(w,MC::Letter,"й");const auto target=w.m_layout.keys[first].rect;cursor(target);int clicks=keyClicks,haptics=keyHaptics;
+ w.KeyDown(1);assert(!w.m_model.draft[0]&&w.m_feedback.held&&w.m_feedback.Amount(now)==1&&keyClicks==clicks+1&&keyHaptics==haptics+1);
+ const auto pop=MC::FeedbackRect(target,w.m_layout.keyboard,w.m_layout.gap,1);surfaces.clear();w.Draw();bool drawnPop=false;
+ for(auto&r:surfaces){drawnPop|=r.x==pop.x&&r.y==pop.y&&r.w==pop.w&&r.h==pop.h;}assert(drawnPop);
+ uiStatic.cursorX=target.x-1;uiStatic.cursorY=target.y+target.h/2;assert(w.Hit()!=w.HitKey+first);cursor(target);assert(w.Hit()==w.HitKey+first);
+ w.KeyDown(1);assert(keyClicks==clicks+1&&keyHaptics==haptics+1&&!w.m_model.draft[0]);w.KeyUp(1);assert(!strcmp(w.m_model.draft,"й")&&!w.m_feedback.held&&w.m_feedback.Amount(now)>0);
+ now+=.045;assert(w.m_feedback.Amount(now)>.4f&&w.m_feedback.Amount(now)<.6f);now+=.06;assert(w.m_feedback.Amount(now)==0);
+ // Each real touch observes both haptic switches. Sound is the normal CZM UI
+ // tap, while the platform helper retains OS permission/settings checks.
+ vars["czm_match_chat_haptic"]="0";press(w,MC::Letter,"ц");assert(keyHaptics==haptics+1);
+ vars["czm_match_chat_haptic"]="1";vars["vibration_enable"]="0";press(w,MC::Letter,"у");assert(keyHaptics==haptics+1);vars["vibration_enable"]="1";
+ press(w,MC::Language);assert(w.m_feedback.key.action==MC::Language&&!strcmp(w.m_feedback.key.text,"RU")&&!w.m_model.russian);
+ press(w,MC::Language);w.ClearPress();w.m_model.ResetDraft();assert(w.m_feedback.Amount(now)==0);
+ cursor(w.m_layout.keys[key(w,MC::Letter,"й")].rect);w.KeyDown(1);w.MouseMove(ScreenWidth-2,2);assert(w.m_feedback.Amount(now)==0);w.KeyUp(1);assert(!w.m_model.draft[0]);
  press(w,MC::Letter,"й");assert(!strcmp(w.m_model.draft,"й"));press(w,MC::Shift);press(w,MC::Letter,"ц");assert(!strcmp(w.m_model.draft,"йЦ")&&!w.m_model.shift);
  press(w,MC::Shift);now+=.1;press(w,MC::Shift);assert(w.m_model.caps);press(w,MC::Letter,"я");assert(strstr(w.m_model.draft,"Я"));press(w,MC::Shift);assert(!w.m_model.caps);
  press(w,MC::Language);assert(!w.m_model.russian&&vars["czm_match_chat_ru"]=="0.000000");press(w,MC::Letter,"q");press(w,MC::Numbers);press(w,MC::Letter,"1");assert(strstr(w.m_model.draft,"q1"));
- int del=key(w,MC::Backspace);cursor(w.m_layout.keys[del].rect);size_t before=strlen(w.m_model.draft);w.KeyDown(1);assert(strlen(w.m_model.draft)==before-1);now+=.43;w.Frame();assert(strlen(w.m_model.draft)==before-2);w.KeyUp(1);assert(strlen(w.m_model.draft)==before-2);
+ int del=key(w,MC::Backspace);cursor(w.m_layout.keys[del].rect);size_t before=strlen(w.m_model.draft);w.KeyDown(1);assert(strlen(w.m_model.draft)==before-1);clicks=keyClicks;haptics=keyHaptics;now+=.43;w.Frame();assert(strlen(w.m_model.draft)==before-2&&keyClicks==clicks&&keyHaptics==haptics&&w.m_feedback.held);w.KeyUp(1);assert(strlen(w.m_model.draft)==before-2);
  // Back is staged, preserving the draft, with one serial-protected close.
- std::string draft=w.m_model.draft;w.KeyDown(27);assert(w.m_shown&&w.m_model.state==MC::History&&!strcmp(w.m_model.draft,draft.c_str()));
+ std::string draft=w.m_model.draft;w.KeyDown(27);assert(w.m_shown&&w.m_model.state==MC::History&&!strcmp(w.m_model.draft,draft.c_str())&&w.m_feedback.Amount(now)==0);
  int closed=closes;w.KeyDown(27);assert(!w.m_shown&&closes==closed+1&&commands.back()=="czm_match_chat_close 1\n");
  request(2,true);w.Frame();assert(w.m_model.team&&w.m_model.state==MC::Typing&&!strcmp(w.m_model.draft,draft.c_str()));
  // The opening and closing taps cannot escape to the game's fire controls.
@@ -128,11 +150,11 @@ int main(int argc,char**argv){
  MC::Message bad;assert(!MC::ParseMessage("2 ff00zz 0 41",bad));assert(!MC::ParseMessage("2 ffffff 0 4",bad));assert(!MC::ParseMessage("2 ffffff 0 00",bad));
  for(unsigned i=3;i<40;i++){publish(i,"line");}w.Frame();assert(w.m_model.count==32&&w.m_model.messages[0].seq==8&&w.m_model.messages[31].seq==39);
  // Send once, all/team stays in the dedicated engine command, no user command text.
- w.m_model.ResetDraft();MC::Append(w.m_model.draft,"  Привет  ");vars["czm_match_chat_keep_open"]="1";int sent=sends();w.KeyDown(13);w.KeyDown(13);w.KeyUp(13);assert(sends()==sent+1&&w.m_shown&&!w.m_model.draft[0]);
+ w.m_model.ResetDraft();MC::Append(w.m_model.draft,"  Привет  ");vars["czm_match_chat_keep_open"]="1";int sent=sends();clicks=keyClicks;haptics=keyHaptics;w.KeyDown(13);w.KeyDown(13);w.KeyUp(13);assert(sends()==sent+1&&w.m_shown&&!w.m_model.draft[0]&&clicks==keyClicks&&haptics==keyHaptics);
  char hex[381];MC::Encode("Привет",hex);assert(commands[commands.size()-1]==std::string("czm_match_chat_send 1 3 ")+hex+"\n");
  MC::Append(w.m_model.draft,"next");vars["czm_match_chat_keep_open"]="0";w.Layout();tap(w,w.m_layout.send);assert(sends()==sent+2&&!w.m_shown);w.KeyUp(1);assert(sends()==sent+2);
  // Focus change clears draft but keeps same-server history; map/server reset clears both.
- request(3);w.Frame();MC::Append(w.m_model.draft,"secret draft");vars["czm_match_chat_epoch"]="4";w.Frame();assert(!w.m_shown&&!w.m_model.draft[0]&&w.m_model.count==32);
+ request(3);w.Frame();MC::Append(w.m_model.draft,"secret draft");cursor(w.m_layout.keys[key(w,MC::Letter,"1")].rect);w.KeyDown(1);vars["czm_match_chat_epoch"]="4";w.Frame();assert(!w.m_shown&&!w.m_model.draft[0]&&w.m_model.count==32&&w.m_feedback.Amount(now)==0);
  request(4);w.Frame();assert(w.m_shown);MC::Append(w.m_model.draft,"other draft");vars["czm_mc_epoch"]="8";vars["czm_mc_head"]="0";w.Frame();assert(!w.m_shown&&!w.m_model.draft[0]&&!w.m_model.count);
  request(5);w.Frame();MC::Append(w.m_model.draft,"server A");vars["czm_connect_adr"]="203.0.113.5:27015";w.Frame();assert(!w.m_shown&&!w.m_model.draft[0]);
  request(6);w.Frame();publish(40,"next server");w.Frame();MC::Append(w.m_model.draft,"bye");active=false;w.Frame();assert(!w.m_shown&&!w.m_model.count&&!w.m_model.draft[0]);
@@ -173,7 +195,7 @@ class MatchChatTests(unittest.TestCase):
             if preview:
                 dest = Path(preview)
                 dest.mkdir(parents=True, exist_ok=True)
-                for view in ["typing-ru", "history-draft", "compact-typing-ru", "compact-history-draft"]:
+                for view in ["typing-ru", "typing-press-ru", "history-draft", "compact-typing-ru", "compact-typing-press-ru", "compact-history-draft"]:
                     trace = subprocess.run([str(exe), view], check=True, capture_output=True, text=True)
                     (dest / (view + ".tsv")).write_text(trace.stdout)
 

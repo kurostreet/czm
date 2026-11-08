@@ -27,18 +27,24 @@ public:
     void Char(int key) override;
 private:
     enum { HitOutside=1,HitHistory,HitChannel,HitField,HitSend,HitClose,HitKey=16 };
-    void Layout(){m_layout.Build(ScreenWidth,ScreenHeight,m_model);}
+    void Layout(){
+        if(m_feedback.key.action!=MC::None&&(m_feedback.width!=ScreenWidth||m_feedback.height!=ScreenHeight))m_feedback.Clear();
+        m_layout.Build(ScreenWidth,ScreenHeight,m_model);
+    }
     int Hit()const;
     void Activate(int hit);
     void KeyAction(const MC::Key &key);
     void Send();
     void Back();
-    void ClearPress(){m_pressed=0;m_drag=m_moved=false;m_repeat=0;m_enterDown=false;m_model.input.Reset();}
+    void ClearPress(){m_pressed=0;m_drag=m_moved=false;m_repeat=0;m_enterDown=false;m_model.input.Reset();m_feedback.Clear();}
+    void BeginFeedback(const MC::Key &key);
+    void DrawFeedback();
     void PollHistory();
     void DrawHistory();
     void DrawComposer();
     MC::Model m_model;
     MC::Layout m_layout;
+    MC::PressFeedback m_feedback;
     bool m_shown;
     int m_pressed,m_downY,m_downScroll;
     bool m_drag,m_moved,m_enterDown;
@@ -173,6 +179,13 @@ void CCzmMatchChat::Activate(int hit){
     if(hit>=HitKey&&hit<HitKey+m_layout.count)KeyAction(m_layout.keys[hit-HitKey]);
 }
 
+void CCzmMatchChat::BeginFeedback(const MC::Key &key){
+    m_feedback.Begin(key,ScreenWidth,ScreenHeight);
+    if(key.action==MC::Letter&&(m_model.shift||m_model.caps))MC::Upper(m_feedback.key.text);
+    CZM_PlayClick();
+    if(EngFuncs::GetCvarFloat("czm_match_chat_haptic")>=.5f&&EngFuncs::GetCvarFloat("vibration_enable")>=.5f)CZM_MatchKeyHaptic();
+}
+
 bool CCzmMatchChat::KeyDown(int key){
     if(!m_shown)return true;
     Layout();
@@ -181,7 +194,10 @@ bool CCzmMatchChat::KeyDown(int key){
     if(UI::Key::IsBackspace(key)){if(m_model.state==MC::Typing){m_model.input.Reset();MC::Delete(m_model.draft);}return true;}
     if(key==K_MWHEELUP||key==K_MWHEELDOWN){m_model.scroll=MC::Max(0,m_model.scroll+(key==K_MWHEELUP?3:-3));return true;}
     if(UI::Key::IsLeftMouse(key)){
-        m_pressed=Hit();m_drag=m_pressed==HitHistory;m_moved=false;m_downY=uiStatic.cursorY;m_downScroll=m_model.scroll;
+        int hit=Hit();
+        if(m_feedback.held&&m_pressed==hit)return true;
+        m_feedback.Clear();m_pressed=hit;m_drag=m_pressed==HitHistory;m_moved=false;m_downY=uiStatic.cursorY;m_downScroll=m_model.scroll;
+        if(m_pressed>=HitKey)BeginFeedback(m_layout.keys[m_pressed-HitKey]);
         if(m_pressed>=HitKey&&m_layout.keys[m_pressed-HitKey].action==MC::Backspace){m_model.input.Reset();MC::Delete(m_model.draft);m_repeat=EngFuncs::DoubleTime()+.42;}
     }
     // Every key belongs to the overlay until it has closed, including releases.
@@ -193,6 +209,7 @@ bool CCzmMatchChat::KeyUp(int key){
     if(UI::Key::IsLeftMouse(key)){
         Layout();int pressed=m_pressed,hit=Hit();bool wasDelete=pressed>=HitKey&&pressed<HitKey+m_layout.count&&m_layout.keys[pressed-HitKey].action==MC::Backspace;
         bool activate=m_shown&&!m_moved&&pressed&&pressed==hit&&!wasDelete;
+        if(m_shown&&!m_moved&&pressed==hit)m_feedback.Release(EngFuncs::DoubleTime());else m_feedback.Clear();
         m_pressed=0;m_repeat=0;m_drag=false;
         if(activate)Activate(hit);
     }
@@ -203,6 +220,7 @@ bool CCzmMatchChat::MouseMove(int x,int y){
     CMenuBaseClientWindow::MouseMove(x,y);
     if(m_drag){int dy=uiStatic.cursorY-m_downY;if(abs(dy)>MC::Max(4,ScreenHeight/80))m_moved=true;if(m_moved)m_model.scroll=MC::Max(0,m_downScroll+dy/MC::Max(1,CZM_FontHeight(CZM_Font(CZMF_CHAT_TEXT))));}
     if(m_repeat&&Hit()!=m_pressed)m_repeat=0;
+    if(m_feedback.held&&!m_feedback.key.rect.Contains(uiStatic.cursorX,uiStatic.cursorY))m_feedback.Clear();
     return true;
 }
 
@@ -262,6 +280,17 @@ void CCzmMatchChat::DrawComposer(){
     Icon(MatchRect(m_layout.close),"gfx/czm/ui/icon_close.png");
 }
 
+void CCzmMatchChat::DrawFeedback(){
+    const float amount=m_feedback.Amount(EngFuncs::DoubleTime());if(amount<=0)return;
+    const MC::Key &key=m_feedback.key;
+    const CzmRect r=MatchRect(MC::FeedbackRect(key.rect,m_layout.keyboard,m_layout.gap,amount));
+    const bool submit=key.action==MC::Submit;
+    unsigned fill=submit?PackRGBA(190+(int)(21*amount),43+(int)(15*amount),60+(int)(17*amount),255):PackRGBA(28+(int)(13*amount),36+(int)(15*amount),48+(int)(19*amount),255);
+    unsigned border=submit?CzmStyle::AccentRed():PackRGBA(51+(int)(178*amount),62+(int)(1*amount),78-(int)(1*amount),255);
+    CzmStyle::Surface(r,fill,border);
+    CzmStyle::Text(CZM_Rect(r.x+r.h/4,r.y,r.w-r.h/2,r.h),key.text,key.action==MC::Letter?CZMF_UI_ACTION:CZMF_UI_LABEL,CzmStyle::Ink(),QM_CENTER);
+}
+
 void CCzmMatchChat::Draw(){
     if(!m_shown||m_model.state==MC::Closed)return;
     Layout();
@@ -272,8 +301,9 @@ void CCzmMatchChat::Draw(){
         const MC::Key &key=m_layout.keys[i];char text[16];snprintf(text,sizeof(text),"%s",key.text);
         if(key.action==MC::Letter&&(m_model.shift||m_model.caps))MC::Upper(text);
         const bool on=key.action==MC::Shift&&(m_model.shift||m_model.caps);
-        CzmStyle::Button(MatchRect(key.rect),text,true,key.action==MC::Submit,m_pressed==HitKey+i,on?CzmStyle::AccentRed():0,key.action==MC::Letter?CZMF_UI_ACTION:CZMF_UI_LABEL);
+        CzmStyle::Button(MatchRect(key.rect),text,true,key.action==MC::Submit,false,on?CzmStyle::AccentRed():0,key.action==MC::Letter?CZMF_UI_ACTION:CZMF_UI_LABEL);
     }
+    DrawFeedback(); // last: the small pop stays above the fixed neighbouring keys
 }
 
 ADD_MENU3(menu_czmmatchchat,CCzmMatchChat,UI_CzmMatchChat_Menu);

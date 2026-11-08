@@ -36,7 +36,7 @@ static int s_iCardsSerial=12,argc=3;
 static const char *argv[]={"czm_shop_select","12","4"};
 static std::string sent;
 struct CHudMenu{
- int m_fMenuDisplayed=1,m_bitsValidSlots=1<<3;
+ int m_fMenuDisplayed=1,m_bitsValidSlots=1<<3,m_fWaitingForMore=0;
  void UserCmd_OldStyleMenuClose(){m_fMenuDisplayed=0;s_bCardsShown=false;}
 };
 static struct {CHudMenu m_Menu;} gHUD;

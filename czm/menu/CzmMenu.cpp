@@ -283,6 +283,8 @@ static const struct { const char *key, *ru, *en; } s_strings[] =
 	{ "opt_keyboard_system", "Системная", "System" },
 	{ "s_match_keep_open", "Оставлять чат после отправки", "Keep chat open after sending" },
 	{ "s_match_keep_open_hint", "Клавиатура остаётся открытой для следующего сообщения", "The keyboard stays open for your next message" },
+	{ "s_match_haptic", "Виброотклик клавиатуры", "Keyboard vibration" },
+	{ "s_match_haptic_hint", "Короткая вибрация при вводе в чате матча", "Short vibration while typing in match chat" },
 	{ "s_profile_motion", "Анимация профиля", "Profile animation" },
 	{ "s_profile_motion_hint", "Плавные блики и движение фона в карточке", "Soft glints and background motion on the profile card" },
 	{ "s_xhair", "Предпросмотр", "Preview" },
@@ -543,6 +545,7 @@ void CZM_Init( void )
 	EngFuncs::CvarRegister( "czm_news_seen", "0", FCVAR_ARCHIVE );   // the newest news the player opened
 	EngFuncs::CvarRegister( "czm_chat_room", "0", FCVAR_ARCHIVE );   // 0 global, 1 ru, 2 en
 	EngFuncs::CvarRegister( "czm_match_chat_ru", "-1", FCVAR_ARCHIVE ); // follow UI until RU/EN is chosen
+	EngFuncs::CvarRegister( "czm_match_chat_haptic", "1", FCVAR_ARCHIVE );
 	EngFuncs::CvarRegister( "czm_profile_motion", "1", FCVAR_ARCHIVE );
 	EngFuncs::CvarRegister( "czm_ui_volume", "0.65", FCVAR_ARCHIVE );
 	EngFuncs::CvarRegister( "czm_menu_music", "0", FCVAR_ARCHIVE );  // main menu track, see CZM_MENU_TRACKS

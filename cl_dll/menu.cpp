@@ -56,7 +56,8 @@ static void SelectShopCard()
 		return;
 	CHudMenu &menu = gHUD.m_Menu;
 	const int slot = atoi( gEngfuncs.Cmd_Argv( 2 ));
-	if( slot < 1 || slot > 10 || !menu.m_fMenuDisplayed || !( menu.m_bitsValidSlots & ( 1 << ( slot - 1 ))))
+	if( slot < 1 || slot > 10 || !menu.m_fMenuDisplayed || menu.m_fWaitingForMore
+		|| !( menu.m_bitsValidSlots & ( 1 << ( slot - 1 ))))
 		return;
 	char cmd[24];
 	snprintf( cmd, sizeof( cmd ), "menuselect %d", slot );
