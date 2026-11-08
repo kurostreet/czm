@@ -352,6 +352,7 @@ void CZM_LayoutsShow( void )
 	jmethodID method = CZM_Method( env, cls, "layoutsShow", "(I)V" );
 	if( method )
 	{
+		CZM_SaveTouchConfig();
 		EngFuncs::ClientCmd( true, "host_writeconfig\n" );
 		env->CallStaticVoidMethod( cls, method, (jint)CZM_TouchScheme() );
 	}
