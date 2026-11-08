@@ -130,6 +130,7 @@ jobs:
           /tmp/czm-server-check/bin/python -m unittest discover -s tests -p test_sprays.py -v
           python3 -m unittest discover -s tests -p test_touch_editor.py -v
           python3 -m unittest discover -s tests -p test_combat_controls.py -v
+          python3 -m unittest discover -s tests -p test_fortification_controls.py -v
           python3 -m unittest discover -s tests -p test_voice_capture.py -v
           python3 -m unittest discover -s tests -p test_voice_indicator_ui.py -v
           python3 -m unittest discover -s tests -p test_reload_ammo.py -v
