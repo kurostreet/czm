@@ -47,7 +47,7 @@ int main(int argc,char**argv){
  auto tap=[&](CzmRect r){assert(r.w&&r.h);uiStatic.cursorX=r.x+r.w/2;uiStatic.cursorY=r.y+r.h/2;sentCommands.clear();w.KeyDown(1);w.KeyUp(1);};
  assert(inside(w.m_navNext,w.m_foot)&&inside(w.m_back,w.m_head)&&inside(w.m_menu.cards[0].rect,w.m_body));
  assert(w.m_back.y+w.m_back.h<w.m_navNext.y&&inside(w.m_return,w.m_foot));
- tap(w.m_navNext);assert(sentCommands=="slot9\n");
+ tap(w.m_navNext);assert(sentCommands=="czm_shop_select 20 9\n");
  admin.menuPage=2;admin.nextSlot=0;w.Update(admin);w.Layout(0);
  tap(w.m_navPrev);assert(sentCommands=="czm_menu_prev\n");
  tap(w.m_back);assert(sentCommands=="czm_menu_back\n");
@@ -91,9 +91,9 @@ int main(int argc,char**argv){
  assert(w.m_iCardRows==7&&w.m_scrollMax>0&&w.m_menu.cards[9].rect.w==0);
  sentCommands.clear();w.Activate(w.HIT_CARD+1);assert(sentCommands.empty());
  w.m_scroll=w.m_scrollMax;w.Layout(0);assert(w.m_menu.cards[9].rect.w>0);
- tap(w.m_menu.cards[9].rect);assert(sentCommands=="slot10\n");
- w.Update(foreign);w.Layout(0);sentCommands.clear();w.KeyDown('9');assert(sentCommands=="slot9\n");
- w.Update(foreign);w.Layout(0);sentCommands.clear();w.KeyDown('0');assert(sentCommands=="slot10\n");
+ tap(w.m_menu.cards[9].rect);assert(sentCommands=="czm_shop_select 71 10\n");
+ w.Update(foreign);w.Layout(0);sentCommands.clear();w.KeyDown('9');assert(sentCommands=="czm_shop_select 71 9\n");
+ w.Update(foreign);w.Layout(0);sentCommands.clear();w.KeyDown('0');assert(sentCommands=="czm_shop_select 71 10\n");
  w.Update(foreign);w.Layout(0);tap(w.m_return);assert(sentCommands=="client_buy_close\n"&&w.m_bClosing);
  // Updating another plain submenu must not lose its own 0/Back action.
  PlainAsRich("72 513\nChild\n1. Confirm\n0. Back",&foreign,foreign);
@@ -103,6 +103,33 @@ int main(int argc,char**argv){
  w.Open(balance);w.Layout(0);drawnLabels.clear();w.DrawHeader(255);
  bool wallet=false;for(auto&label:drawnLabels)if(label=="CZM Token: 7321")wallet=true;assert(!wallet);
  survivalPeer=true;drawnLabels.clear();w.DrawHeader(255);for(auto&label:drawnLabels)if(label=="CZM Token: 7321")wallet=true;assert(wallet);survivalPeer=false;
+ // Nonscrolling compact rows tolerate real touch jitter, including 1080px phones.
+ for(auto wh:{std::make_pair(1536,716),std::make_pair(2340,1080)}){
+  ScreenWidth=wh.first;ScreenHeight=wh.second;uiStatic.realTime=5000;
+  CzmRichMenu menu;ParseRich("93 603\n#czm1\tmenu\tstandalone\tCOUNTER ZOMBIE | МЕНЮ СЕРВЕРА\t\tLVL 9 | WR 64% | Токены 117772\t\n#nav\t0\t1\t1\tstar\n#tokens\t117772\nСерые разделы подготавливаются.\n1. Управление LVL\n2. Игровой магазин\n\\d3. Голосования\n4. Настройки игрока\n5. Мой инвентарь\n\\d6. Лавка игроков\n7. Язык: RU | EN\n0. Выход",menu);w.Open(menu);w.Layout(0);
+  assert(w.m_menu.numCards==7&&w.m_scrollMax==0&&w.m_cardInfo.h>0&&w.m_menu.validSlots==603&&!w.m_menu.cards[2].enabled&&!w.m_menu.cards[5].enabled);
+  const auto&r=w.m_menu.cards[0].rect;
+  uiStatic.cursorX=r.x+r.w/2;uiStatic.cursorY=r.y+r.h/2;sentCommands.clear();
+  w.KeyDown(1);assert(w.m_iPressed==w.HIT_CARD&&!w.m_drag);
+  uiStatic.cursorY+=ScreenHeight/60+1;assert(r.Contains(uiStatic.cursorX,uiStatic.cursorY));
+  w.MouseMove(uiStatic.cursorX,uiStatic.cursorY);w.KeyUp(1);
+  assert(!w.m_moved&&sentCommands=="czm_shop_select 93 1\n");
+  // A lost/no-update transition blocks duplicate taps briefly, then allows retry.
+  auto second=w.m_menu.cards[1].rect;uiStatic.cursorX=second.x+second.w/2;uiStatic.cursorY=second.y+second.h/2;
+  sentCommands.clear();uiStatic.realTime+=699;w.KeyDown(1);w.KeyUp(1);assert(w.Waiting()&&sentCommands.empty());
+  uiStatic.realTime+=2;w.KeyDown(1);w.KeyUp(1);assert(sentCommands=="czm_shop_select 93 2\n");
+  sentCommands.clear();w.KeyDown(1);w.KeyUp(1);assert(sentCommands.empty());
+  uiStatic.realTime+=701;w.KeyDown(1);w.KeyUp(1);assert(sentCommands=="czm_shop_select 93 2\n");
+ }
+ // Long foreign lists keep touch scrolling; a deliberate swipe never selects a row.
+ ScreenWidth=1536;ScreenHeight=716;CzmRichMenu longForeign;PlainAsRich("80 1023\nForeign\n1. First\n2. Second\n3. Third\n4. Fourth\n5. Fifth\n6. Sixth\n7. Seventh\n8. Eighth\n9. Ninth\n0. Back",NULL,longForeign);w.Open(longForeign);w.Layout(0);assert(w.m_scrollMax>0);
+ auto scrollStart=w.m_menu.cards[0].rect;uiStatic.cursorX=scrollStart.x+scrollStart.w/2;uiStatic.cursorY=scrollStart.y+scrollStart.h/2;
+ sentCommands.clear();w.KeyDown(1);assert(w.m_drag);
+ uiStatic.cursorY-=ScreenHeight/8;w.MouseMove(uiStatic.cursorX,uiStatic.cursorY);w.KeyUp(1);w.Layout(0);
+ assert(w.m_moved&&w.m_scroll>0&&sentCommands.empty());
+ // Short text pages also have no drag recognizer until there is an actual scroll range.
+ auto article=sample();article.kind=CzmServerView::Text;strcpy(article.body,"Short help");w.Open(article);w.Draw();assert(w.m_scrollMax==0);
+ uiStatic.cursorX=w.m_content.x+w.m_content.w/2;uiStatic.cursorY=w.m_content.y+w.m_content.h/2;w.KeyDown(1);assert(!w.m_drag);w.KeyUp(1);
  // Every view remains within the window on the supported aspect ratios.
  for(auto wh:{std::make_pair(640,360),std::make_pair(1536,716),std::make_pair(2340,1080),std::make_pair(1024,768)}){
   ScreenWidth=wh.first;ScreenHeight=wh.second;
