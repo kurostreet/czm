@@ -58,6 +58,7 @@ extern float g_flRoundTime;
 
 int CHud :: MsgFunc_ResetHUD(const char *pszName, int iSize, void *pbuf )
 {
+	CZM_SkillsReset(); // each life needs a fresh server role, even between HUD frames
 	// clear all hud data
 	HUDLIST *pList = m_pHudList;
 

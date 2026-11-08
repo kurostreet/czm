@@ -123,7 +123,7 @@ return 0;}
 
     def test_existing_layouts_gain_only_missing_controls_and_release_hidden_holds(self):
         source = (ENGINE / "input/in_touch.c").read_text()
-        names = ["static int Touch_CzmSkillSlot", "static qboolean Touch_IsVisible",
+        names = ["static int Touch_CzmSkillSlot", "static int Touch_CzmFortSlot", "static qboolean Touch_IsVisible",
                  "static void Touch_CzmEnsureSkills( qboolean force )", "static void Touch_CzmPublishAnchors",
                  "static void Touch_CzmCancelSkillHolds( void )\n{", "void Touch_SetClientOnly( byte state )"]
         code = '\n'.join(function(source, name) for name in names)
@@ -144,7 +144,7 @@ struct touch_button_t{float x1,y1,x2,y2,aspect;char name[32],command[256],textur
 struct List{touch_button_t *first=nullptr,*last=nullptr;};
 struct{List list_user;bool config_loaded=false,configchanged=false,clientonly=false;int state=0,resize_finger,move_finger,look_finger,wheel_finger;float forward,side;}touch;
 struct{int state=ca_active;}cls;struct{int maxclients=32;}cl;
-struct Cvar{float value=0;std::string text;const char *string="";};Cvar czm_skill_mask,czm_touch_anchors;
+struct Cvar{float value=0;std::string text;const char *string="";};Cvar czm_skill_mask,czm_fort_mask,czm_touch_anchors;
 std::vector<std::string> commands;
 void Cvar_DirectFullSet(Cvar *c,const char *s,unsigned flags){assert(flags==0);c->text=s;c->string=c->text.c_str();}
 void Touch_AddButtonCommand(const touch_button_t*,const char *s){commands.push_back(s);}

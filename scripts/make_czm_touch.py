@@ -7,6 +7,7 @@ Every glyph is put on the same round button (dark translucent circle, light
 ring; the fire button has a red ring) and rendered with headless Chromium.
 
 usage: make_czm_touch.py --game-icons /path/to/game-icons/icons [--screenshot editor_bg.jpg] [--only fire,jump]
+       make_czm_touch.py --native-only [--only props,lasermine]
 Needs Playwright with Chromium. The output is committed, the Android build does not run this.
 """
 import argparse
@@ -243,6 +244,48 @@ def build_skill_icons():
         image.resize((SIZE,SIZE),Image.Resampling.LANCZOS).save(ICON_DIR/(key+".png"),optimize=True)
 
 
+def build_fortification_icons(only=None):
+    """Original pallet and wall-laser glyphs, in the existing touch button style."""
+    from PIL import Image, ImageDraw
+    scale = 4
+    white = (244, 255, 251, 255)
+    dark = (15, 24, 30, 255)
+    ICON_DIR.mkdir(parents=True, exist_ok=True)
+    for key in ("props", "lasermine"):
+        if only and key not in only:
+            continue
+        image = Image.new("RGBA", (SIZE*scale, SIZE*scale))
+        draw = ImageDraw.Draw(image)
+        def rect(box, fill=white, radius=0):
+            draw.rounded_rectangle(tuple(v*scale for v in box), radius=radius*scale, fill=fill)
+        def line(points, width=6, fill=white):
+            draw.line([(x*scale, y*scale) for x, y in points], fill=fill, width=width*scale, joint="curve")
+        draw.ellipse((10*scale, 10*scale, 246*scale, 246*scale), fill=(15,24,30,175),
+                     outline=(151,218,199,210), width=6*scale)
+        if key == "props":
+            # Staggered sandbags on a pallet; seams stay readable on a small phone button.
+            for x1, y1, x2, y2 in ((64,74,126,101),(132,74,194,101),
+                                    (54,106,115,133),(121,106,184,133),
+                                    (64,138,126,165),(132,138,194,165)):
+                rect((x1,y1,x2,y2), radius=8)
+                line(((x1+7,y1+6),(x1+9,y2-6)), width=2, fill=dark)
+            rect((51,173,205,183), radius=2)
+            for x in (62,119,181):
+                rect((x,183,x+12,195), radius=1)
+        else:
+            # A wall plate, round emitter and one directed beam.
+            rect((57,76,75,181), radius=3)
+            rect((72,97,143,161), radius=7)
+            draw.ellipse((98*scale,107*scale,151*scale,151*scale), fill=dark, outline=white, width=6*scale)
+            draw.ellipse((117*scale,120*scale,135*scale,138*scale), fill=white)
+            line(((151,129),(207,129)), width=7)
+            line(((173,111),(195,101)), width=4)
+            line(((173,147),(195,157)), width=4)
+        path = ICON_DIR/(key+".png")
+        image.resize((SIZE,SIZE),Image.Resampling.LANCZOS).save(path,optimize=True)
+        print(path.relative_to(ROOT))
+
+
 """
 Layout presets. Positions are centres and diameters in a 2000 x 932 reference
 screen (the owner's screenshot). Round buttons keep their shape on any phone:
@@ -416,11 +459,18 @@ def build_background(screenshot):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--game-icons", type=Path, required=True)
+    parser.add_argument("--game-icons", type=Path)
+    parser.add_argument("--native-only", action="store_true", help="render the original fortification glyphs without Chromium or game-icons")
     parser.add_argument("--screenshot", type=Path)
     parser.add_argument("--only", help="comma-separated icon names to render")
     args = parser.parse_args()
-    build_icons(args.game_icons, set(args.only.split(",")) if args.only else None)
+    only = set(args.only.split(",")) if args.only else None
+    build_fortification_icons(only)
+    if args.native_only:
+        return
+    if not args.game_icons:
+        parser.error("--game-icons is required unless --native-only is selected")
+    build_icons(args.game_icons, only)
     build_presets()
     if args.screenshot:
         build_background(args.screenshot)

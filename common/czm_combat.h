@@ -1,10 +1,11 @@
-/* Runtime ability presentation. Server class IDs are 1..10; zero hides all controls. */
+/* Runtime combat presentation. Server class IDs are 1..10; zero hides zombie abilities. */
 #pragma once
 #include <cstdio>
 #include <cmath>
 #include <algorithm>
 namespace CzmCombat {
 enum { G, R, E, BUTTONS };
+enum { FORT_HUMAN_CT = 4 };
 struct State {
     int klass, flags, primary, secondary, charge, active;
     State():klass(0),flags(0),primary(0),secondary(0),charge(0),active(0){}
@@ -13,9 +14,14 @@ inline bool Parse(const char *text, State &s) {
     State value; char tail;
     if (!text || std::sscanf(text,"%d %d %d %d %d %d %c",&value.klass,&value.flags,
         &value.primary,&value.secondary,&value.charge,&value.active,&tail)!=6 || value.klass<0 || value.klass>10
-        || value.flags<0 || value.flags>3 || value.primary<0 || value.primary>600 || value.secondary<0 || value.secondary>600
+        || value.flags<0 || value.flags>7 || ((value.flags&FORT_HUMAN_CT) && (value.klass!=0 || value.flags!=FORT_HUMAN_CT))
+        || value.primary<0 || value.primary>600 || value.secondary<0 || value.secondary>600
         || value.charge<0 || value.charge>100 || value.active<0 || value.active>100) {s=State();return false;}
     s=value;return true;
+}
+// This bit is reported by Zombie Plague; a Counter-Strike team alone is not a role.
+inline int FortificationMask(const State &s) {
+    return s.klass==0 && (s.flags&FORT_HUMAN_CT)?3:0;
 }
 inline int Mask(int klass) {
     static const int masks[11]={0,1,2,0,1,1,1,5,4,1,3};

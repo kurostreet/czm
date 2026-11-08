@@ -1,0 +1,116 @@
+diff --git a/engine/client/input/in_touch.c b/engine/client/input/in_touch.c
+--- a/engine/client/input/in_touch.c
++++ b/engine/client/input/in_touch.c
+@@ -159,6 +159,7 @@
+ // Counter Zombie Mobile: the client keeps "clip reserve full" here while the weapon has a clip
+ static CVAR_DEFINE_AUTO( czm_ammo_state, "", FCVAR_PRIVILEGED, "clip, reserve and full clip shown on the reload button" );
+ static CVAR_DEFINE_AUTO( czm_skill_mask, "0", FCVAR_PRIVILEGED, "active server ability buttons G/R/E" );
++static CVAR_DEFINE_AUTO( czm_fort_mask, "0", FCVAR_PRIVILEGED, "server-authorized human prop/laser buttons" );
+ static CVAR_DEFINE_AUTO( czm_touch_anchors, "", FCVAR_READ_ONLY, "visible ability rectangles in screen pixels" );
+ static CVAR_DEFINE( czm_wheel_state, "czm_wheel", "", FCVAR_PRIVILEGED, "the touch wheel on screen, drawn by the menu" );
+ static CVAR_DEFINE_AUTO( czm_touch_press, "1", FCVAR_ARCHIVE, "press animation of the touch buttons" );
+@@ -207,6 +208,7 @@
+ static void Touch_InitConfig( void );
+ static void Touch_ResetSticks( void );
+ static void Touch_CzmEnsureSkills_f( void );
++static void Touch_CzmEnsureFortifications_f( void );
+ static void Touch_CzmCancelSkillHolds( void );
+ 
+ void Touch_NotifyResize( void )
+@@ -1285,8 +1287,10 @@
+ 	// not saved, just runtime state for scripting
+ 	Cvar_RegisterVariable( &touch_in_menu );
+ 	Cmd_AddRestrictedCommand( "czm_skill_buttons", Touch_CzmEnsureSkills_f, "add missing class controls to this layout" );
++	Cmd_AddRestrictedCommand( "czm_fort_buttons", Touch_CzmEnsureFortifications_f, "add missing prop and laser controls to this layout" );
+ 	Cvar_RegisterVariable( &czm_ammo_state );
+ 	Cvar_RegisterVariable( &czm_skill_mask );
++	Cvar_RegisterVariable( &czm_fort_mask );
+ 	Cvar_RegisterVariable( &czm_touch_anchors );
+ 	Cvar_RegisterVariable( &czm_wheel_state );
+ 	Cvar_RegisterVariable( &czm_touch_press );
+@@ -1413,6 +1417,13 @@
+     return -1;
+ }
+ 
++static int Touch_CzmFortSlot( const char *command )
++{
++    if( !Q_strcmp( command, "czm_props" )) return 0;
++    if( !Q_strcmp( command, "czm_lasermine" )) return 1;
++    return -1;
++}
++
+ static qboolean Touch_IsVisible( touch_button_t *button )
+ {
+ 	if( !FBitSet( button->flags, TOUCH_FL_CLIENT ) && touch.clientonly )
+@@ -1420,6 +1431,10 @@
+ 
+ 	if( touch.state >= state_edit )
+ 		return true; // draw when editor is open
++
++    const int fort = Touch_CzmFortSlot( button->command );
++    if( fort >= 0 && ( cls.state != ca_active || !((int)czm_fort_mask.value & (1 << fort))))
++        return false;
+ 
+     const int skill = Touch_CzmSkillSlot( button->command );
+     if( skill >= 0 && ( cls.state != ca_active || !((int)czm_skill_mask.value & (1 << skill))))
+@@ -1472,6 +1487,42 @@
+ 
+ static void Touch_CzmEnsureSkills_f( void ) { Touch_CzmEnsureSkills( true ); }
+ 
++// Migrate saved profiles by command, preserving their positions, icons and hidden state.
++static void Touch_CzmEnsureFortifications( qboolean force )
++{
++    if( !force && ( !touch.config_loaded || cls.state != ca_active || !(int)czm_fort_mask.value )) return;
++    static const char *commands[] = { "czm_props", "czm_lasermine" };
++    static const char *names[] = { "czm_fort_props", "czm_fort_laser" };
++    static const char *icons[] = { "props", "lasermine" };
++    static const float positions[] = { 0.65f, 0.72f };
++    byte color[4] = { 255, 255, 255, 235 };
++    for( int i = 0; i < 2; i++ )
++    {
++        qboolean exists = false;
++        for( touch_button_t *b = touch.list_user.first; b; b = b->next )
++            if( !Q_strcmp( b->command, commands[i] )) { exists = true; break; }
++        if( exists ) continue;
++        // Touch_AddButton replaces by name. A custom action may already own our preferred name.
++        char name[32], texture[80];
++        for( int suffix = 0; ; suffix++ )
++        {
++            if( suffix ) Q_snprintf( name, sizeof( name ), "%s_%d", names[i], suffix );
++            else Q_snprintf( name, sizeof( name ), "%s", names[i] );
++            qboolean taken = false;
++            for( touch_button_t *b = touch.list_user.first; b; b = b->next )
++                if( !Q_strcmp( b->name, name )) { taken = true; break; }
++            if( !taken ) break;
++        }
++        Q_snprintf( texture, sizeof( texture ), "gfx/czm/touch/%s.png", icons[i] );
++        touch_button_t *b = Touch_AddButton( &touch.list_user, name, texture, commands[i],
++            positions[i], 0.58f, positions[i] + 0.06f, 0.58f + 0.06f / Touch_AspectRatio(), color, true );
++        b->aspect = 1.0f;
++        touch.configchanged = true;
++    }
++}
++
++static void Touch_CzmEnsureFortifications_f( void ) { Touch_CzmEnsureFortifications( true ); }
++
+ static void Touch_CzmPublishAnchors( void )
+ {
+     int bounds[16] = {0};
+@@ -1479,7 +1530,8 @@
+     {
+         int slot = Touch_CzmSkillSlot( b->command );
+         if( !Q_strcmp( b->command, "+voicerecord" )) slot = 3;
+-        if( slot >= 0 && !Touch_IsVisible( b ) && (b->finger != -1 || b->latched))
++        if(( slot >= 0 || Touch_CzmFortSlot( b->command ) >= 0 )
++            && !Touch_IsVisible( b ) && (b->finger != -1 || b->latched))
+         {
+             if( b->command[0] == '+' )
+             {
+@@ -2078,6 +2130,7 @@
+ 	Touch_UpdateViewport();
+ 	Touch_InitConfig();
+ 	Touch_CzmEnsureSkills( false );
++	Touch_CzmEnsureFortifications( false );
+ 	Touch_CzmPublishAnchors();
+ 
+ 	ref.dllFuncs.GL_SetRenderMode( kRenderTransTexture );
