@@ -472,6 +472,8 @@ private:
 	void DrawDetails( void );
 	void DrawDialog( void );
 	void DrawChip( const CzmRect &r, const char *icon, bool pressed, bool active = false );
+	int DetailPlayerRowH() const { return Q_max( CZM_FontHeight( CZM_Font( CZMF_SMALL )) + H / 90, H * 44 / 1000 ); }
+	int DetailPlayerRows() const { return Q_max( 1, m_detailsPlayers.h / Q_max( 1, DetailPlayerRowH() )); }
 
 	CUtlVector<CzmEntry> m_entries;
 	int m_hash[HASH_SIZE];
@@ -494,6 +496,8 @@ private:
 	int m_iPlayersState;     // 0 nothing, 1 asked, 2 received
 	int m_iPlayersContext;
 	char m_szPlayersFor[64];
+	int m_iDetailPlayerFirst, m_iDetailPlayerDown;
+	bool m_bDetailPlayerDrag;
 
 	int m_iTab;
 	int m_iFilters;
@@ -531,7 +535,7 @@ private:
 	CzmRect m_listHead, m_sort, m_clip, m_details, m_emptyButton;
 	CzmRect m_play, m_fav, m_admin, m_report, m_verified, m_manage;
 	int m_policyRevision;
-	CzmRect m_detailsClose, m_detailsMap, m_detailsInfo;
+	CzmRect m_detailsClose, m_detailsMap, m_detailsInfo, m_detailsName, m_detailsRoster, m_detailsPlayers;
 	CzmRect m_dlgPanel, m_dlgField, m_dlgPaste, m_dlgOk, m_dlgCancel;
 	int m_iRowH, m_iRowStep;
 	bool m_bThumbs;
@@ -557,6 +561,8 @@ CCzmServers::CCzmServers() : CMenuFramework( "CzmServers" )
 	m_iPlayersState = 0;
 	m_iPlayersContext = 0;
 	m_szPlayersFor[0] = 0;
+	m_iDetailPlayerFirst = m_iDetailPlayerDown = 0;
+	m_bDetailPlayerDrag = false;
 	m_iTab = TAB_ALL;
 	m_iFilters = 0;
 	m_iSort = SORT_PLAYERS;
@@ -1292,6 +1298,7 @@ void CCzmServers::Select( CzmEntry *e )
 
 	if( strcmp( m_szSelected, e->address ))
 	{
+		m_iDetailPlayerFirst = 0;
 		Q_strncpy( m_szSelected, e->address, sizeof( m_szSelected ));
 		m_iNumPlayers = 0;
 		m_iPlayersState = 0;
@@ -1554,31 +1561,39 @@ void CCzmServers::Layout( void )
 		m_emptyButton = CZM_Rect( m_clip.x + ( m_clip.w - bw ) / 2, m_clip.y + m_clip.h * 0.56f, bw, bh );
 	}
 
-	// The details card keeps its square photo independent of title length.
+	// A compact landscape map leaves room for real server data and the roster.
 	{
 		const int pad = Q_max( 8, (int)( H * 0.028f )), gap = Q_max( 5, (int)( H * 0.018f ));
-		const int dw = Q_min( W - m_iMargin * 2, (int)( H * 1.42f ));
-		const int dh = Q_min( H - pad * 2, (int)( H * 0.73f ));
-		const int bh = Q_max( 30, (int)( H * 0.068f )), head = Q_max( 28, (int)( H * 0.06f ));
+		const int dw = Q_min( W - m_iMargin * 2, (int)( H * 1.53f ));
+		const int dh = Q_min( H - pad * 2, (int)( H * 0.82f ));
+		const int bh = Q_max( 30, (int)( H * 0.072f )), head = Q_max( 28, (int)( H * 0.052f ));
 		m_details = CZM_Rect( ( W - dw ) / 2, ( H - dh ) / 2, dw, dh );
 		const int inner = dw - pad * 2, left = m_details.x + pad;
-		const int footer = m_details.y + dh - pad - bh, bodyY = m_details.y + pad + head + gap;
+		const int nameY = m_details.y + pad + head + gap / 2;
+		m_detailsName = CZM_Rect( left, nameY, inner, CZM_FontHeight( CZM_Font( CZMF_UI_TITLE )) * 2 );
+		const int footer = m_details.y + dh - pad - bh, bodyY = nameY + m_detailsName.h + gap;
 		const int bodyH = footer - gap - bodyY;
-		const int side = Q_min( bodyH - CZM_FontHeight( CZM_Font( CZMF_UI_META )) - gap, inner * 38 / 100 );
+		const int leftW = inner * 34 / 100, mapW = Q_min( leftW, (int)( H * 0.465f ));
 		m_detailsClose = CZM_Rect( m_details.x + dw - pad - head, m_details.y + pad, head, head );
 		m_report = CZM_Rect( m_detailsClose.x - gap - head * 4, m_detailsClose.y, head * 4, head );
 		m_manage = CZM_OnlineAdmin() ? CZM_Rect( m_report.x - gap - head * 3, m_report.y, head * 3, head ) : CZM_Rect( 0, 0, 0, 0 );
-		m_detailsMap = CZM_Rect( left, bodyY, side, side );
-		m_detailsInfo = CZM_Rect( left + side + gap * 2, bodyY, inner - side - gap * 2, bodyH );
+		m_detailsMap = CZM_Rect( left, bodyY, mapW, mapW * 2 / 3 );
+		m_detailsInfo = CZM_Rect( left + leftW + gap, bodyY, inner - leftW - gap, bodyH );
 		m_verified = CZM_Rect( 0, 0, 0, 0 );
+		int rosterY = bodyY + Q_max( 34, (int)( H * 0.074f )) + gap;
 		CzmEntry *selected = Selected();
 		if( selected && CZM_ServerOwner( selected->address ) )
 		{
 			const int vh = CZM_FontHeight( CZM_Font( CZMF_UI_LABEL )) + gap / 2;
 			const int vw = CzmStyle::VerifiedWidth( vh );
-			m_verified = CZM_Rect( m_detailsInfo.x + m_detailsInfo.w - vw,
-				bodyY + CZM_FontHeight( CZM_Font( CZMF_UI_ACTION )) * 2 + gap, vw, vh );
+			m_verified = CZM_Rect( m_detailsInfo.x, rosterY, vw, vh );
+			rosterY += vh + gap / 2;
 		}
+		m_detailsRoster = CZM_Rect( m_detailsInfo.x, rosterY, m_detailsInfo.w, bodyY + bodyH - rosterY );
+		const int rp = Q_max( 4, (int)( H * 0.014f )), rh = Q_max( 14, (int)( H * 0.035f ));
+		m_detailsPlayers = CZM_Rect( m_detailsRoster.x + rp, rosterY + rp + rh, m_detailsRoster.w - rp * 2,
+			Q_max( 1, m_detailsRoster.h - rp * 2 - rh ));
+		m_iDetailPlayerFirst = bound( 0, m_iDetailPlayerFirst, Q_max( 0, m_iNumPlayers - DetailPlayerRows() ));
 		const int fw = inner * 26 / 100, aw = inner * 25 / 100;
 		m_fav = CZM_Rect( left, footer, fw, bh );
 		m_admin = CZM_Rect( left + fw + gap, footer, aw, bh );
@@ -1913,12 +1928,21 @@ bool CCzmServers::KeyDown( int key )
 		m_flVelocity = 0.0f;
 		m_bScrolling = false;
 		m_bMaybeScroll = m_iDialog == DLG_NONE && !m_bDetailsOpen && m_clip.HasCursor();
+		m_bDetailPlayerDrag = m_iDialog == DLG_NONE && m_bDetailsOpen && m_detailsPlayers.HasCursor()
+			&& m_iPlayersState == 2 && m_iNumPlayers > DetailPlayerRows();
+		m_iDetailPlayerDown = m_iDetailPlayerFirst;
 		return true;
 	}
 
 	if( key == K_MWHEELDOWN || key == K_MWHEELUP )
 	{
-		if( m_bDetailsOpen || m_iDialog != DLG_NONE ) return true;
+		if( m_iDialog != DLG_NONE ) return true;
+		if( m_bDetailsOpen )
+		{
+			if( m_detailsPlayers.HasCursor() && m_iPlayersState == 2 )
+				m_iDetailPlayerFirst = bound( 0, m_iDetailPlayerFirst + ( key == K_MWHEELDOWN ? 1 : -1 ), Q_max( 0, m_iNumPlayers - DetailPlayerRows() ));
+			return true;
+		}
 		m_flScroll += ( key == K_MWHEELDOWN ? 1 : -1 ) * m_iRowStep;
 		ClampScroll();
 		return true;
@@ -1958,6 +1982,7 @@ bool CCzmServers::KeyUp( int key )
 			m_flVelocity = 0.0f;
 
 		m_bMaybeScroll = m_bScrolling = false;
+		m_bDetailPlayerDrag = false;
 
 		if( tap && hit != HIT_NONE && hit == pressed )
 			Activate( hit );
@@ -1971,6 +1996,16 @@ bool CCzmServers::KeyUp( int key )
 bool CCzmServers::MouseMove( int x, int y )
 {
 	CMenuFramework::MouseMove( x, y );
+	if( m_bDetailPlayerDrag )
+	{
+		const int dy = uiStatic.cursorY - m_iDownY;
+		if( abs( dy ) > ScreenHeight * 0.02f )
+		{
+			m_bScrolling = true; m_iPressed = HIT_NONE;
+			m_iDetailPlayerFirst = bound( 0, m_iDetailPlayerDown - dy / Q_max( 1, DetailPlayerRowH() ), Q_max( 0, m_iNumPlayers - DetailPlayerRows() ));
+		}
+		return true;
+	}
 
 	if( m_bMaybeScroll )
 	{
@@ -2455,121 +2490,96 @@ void CCzmServers::DrawList( void )
 
 void CCzmServers::DrawDetails( void )
 {
-	CzmEntry *e = Selected();
-	if( !e ) { m_bDetailsOpen = false; return; }
-	const CzmRect &d = m_details, &photo = m_detailsMap, &info = m_detailsInfo;
-	const int gap = Q_max( 5, (int)( H * 0.018f ));
-	const int pad = Q_max( 8, (int)( H * 0.028f ));
-	const int x = info.x, w = info.w;
-	const HFont nameFont = CZM_Font( CZMF_UI_ACTION );
-	const HFont statFont = CZM_Font( CZMF_UI_LABEL );
-	const HFont smallFont = CZM_Font( CZMF_UI_META );
-	const HFont textFont = CZM_Font( CZMF_SMALL );
-	const HFont badgeFont = CZM_Font( CZMF_SHOP_PRICE );
-	const unsigned dim = CzmStyle::Muted();
-	char text[160];
-	UI_FillRect( 0, 0, W, H, PackRGBA( 3, 7, 13, 205 ));
-	CzmStyle::Surface( d, PackRGBA( 14, 20, 29, 255 ) );
-	CzmStyle::Text( CZM_Rect( d.x + pad, d.y + pad, ( m_manage.w ? m_manage.x : m_report.x ) - d.x - pad - gap, m_detailsClose.h ),
-		s_lobbyPicker ? ( CZM_IsRussian() ? "Выбор сервера" : "Select a server" ) :
-		( CZM_IsRussian() ? "Сервер" : "Server" ), CZMF_UI_ACTION );
-	CzmStyle::Button( m_detailsClose, "", true, false, IsPressed( HIT_DETAILS_CLOSE ) );
-	CzmStyle::Icon( m_detailsClose, UI_DIR "icon_close.png" );
-	CzmStyle::Button( m_report, CZM_IsRussian() ? "Заблокировать" : "Block", true, false, IsPressed( HIT_REPORT ), 0, CZMF_SMALL );
-	if( m_manage.w ) CzmStyle::Button( m_manage, CZM_IsRussian() ? "Управлять" : "Manage", true, false, IsPressed( HIT_MANAGE ), 0, CZMF_SMALL );
+ CzmEntry *e=Selected();if(!e){m_bDetailsOpen=false;return;}
+ const CzmRect &d=m_details,&photo=m_detailsMap,&info=m_detailsInfo;
+ const int gap=Q_max(5,(int)(H*.018f)),pad=Q_max(8,(int)(H*.028f));
+ const HFont small=CZM_Font(CZMF_UI_META),font=CZM_Font(CZMF_SMALL);
+ const unsigned dim=CzmStyle::Muted(),ink=CzmStyle::Ink();char text[160];
+ UI_FillRect(0,0,W,H,PackRGBA(3,7,13,205));
+ CzmStyle::Surface(d,PackRGBA(14,20,29,255));
+ UI_FillRect(d.x+pad,d.y,Q_max(20,d.w/6),Q_max(2,H/400),CzmStyle::AccentRed());
+ CzmStyle::Text(CZM_Rect(d.x+pad,d.y+pad,(m_manage.w?m_manage.x:m_report.x)-d.x-pad-gap,m_detailsClose.h),
+  s_lobbyPicker?(CZM_IsRussian()?"ВЫБОР СЕРВЕРА":"SELECT SERVER"):(CZM_IsRussian()?"СЕРВЕР":"SERVER"),CZMF_UI_META,CzmStyle::AccentRed());
+ CzmStyle::Button(m_detailsClose,"",true,false,IsPressed(HIT_DETAILS_CLOSE));
+ CzmStyle::Icon(m_detailsClose,UI_DIR "icon_close.png");
+ CzmStyle::Button(m_report,CZM_IsRussian()?"Заблокировать":"Block",true,false,IsPressed(HIT_REPORT),0,CZMF_SMALL);
+ if(m_manage.w)CzmStyle::Button(m_manage,CZM_IsRussian()?"Управлять":"Manage",true,false,IsPressed(HIT_MANAGE),0,CZMF_SMALL);
+ CzmStyle::TextLines(m_detailsName,e->answered&&e->name[0]?e->name:e->address,CZMF_UI_TITLE);
 
-	DrawMapPicture( e, photo.x, photo.y, photo.w, photo.h );
-	if( e->badge[0] )
-	{
-		const int bh = Q_max( 14, (int)( H * 0.035f ));
-		const int bw = Q_min( photo.w - gap, CZM_TextWidth( badgeFont, e->badge ) + bh );
-		CzmStyle::Round( CZM_Rect( photo.x + gap / 2, photo.y + gap / 2, bw, bh ), ModeColor( e->mode ) );
-		CZM_DrawText( badgeFont, photo.x + gap / 2, photo.y + gap / 2 + ( bh - CZM_FontHeight( badgeFont ) ) / 2,
-			bw, e->badge, CZM_White(), QM_CENTER );
-	}
-	CzmStyle::Text( CZM_Rect( photo.x, photo.y + photo.h + gap / 2, photo.w, CZM_FontHeight( smallFont ) ),
-		e->map[0] ? e->map : ( CZM_IsRussian() ? "Карта уточняется" : "Checking map" ), CZMF_UI_META, dim );
+ CzmStyle::Surface(CZM_Rect(photo.x-1,photo.y-1,photo.w+2,photo.h+2),PackRGBA(20,26,36,255));
+ DrawMapPicture(e,photo.x,photo.y,photo.w,photo.h);
+ const int labelH=Q_max(16,CZM_FontHeight(small)+gap);
+ CzmRect mapLabel=CZM_Rect(photo.x+gap/2,photo.y+photo.h-labelH-gap/2,photo.w-gap,labelH);
+ CzmStyle::Round(mapLabel,PackRGBA(10,16,24,235),Q_max(3,H/150));
+ CzmStyle::Text(CZM_Rect(mapLabel.x+gap/2,mapLabel.y,mapLabel.w-gap,mapLabel.h),
+  e->map[0]?e->map:(CZM_IsRussian()?"Карта уточняется":"Checking map"),CZMF_UI_META,ink);
+ if(e->badge[0]){
+  const int bh=Q_max(16,(int)(H*.035f)),bw=Q_min(photo.w-gap,CZM_TextWidth(CZM_Font(CZMF_SHOP_PRICE),e->badge)+bh);
+  CzmStyle::Round(CZM_Rect(photo.x+gap/2,photo.y+gap/2,bw,bh),ModeColor(e->mode));
+  CzmStyle::Text(CZM_Rect(photo.x+gap/2,photo.y+gap/2,bw,bh),e->badge,CZMF_SHOP_PRICE,ink,QM_CENTER);
+ }
+ int y=photo.y+photo.h+gap;
+ CZM_DrawText(small,photo.x,y,photo.w,CZM_IsRussian()?"АДРЕС СЕРВЕРА":"SERVER ADDRESS",dim);
+ y+=CZM_FontHeight(small)+gap/3;
+ CZM_DrawText(CZM_Font(CZMF_UI_LABEL),photo.x,y,photo.w,e->address,ink);
+ y+=CZM_FontHeight(CZM_Font(CZMF_UI_LABEL))+gap;
+ if(e->password){
+  const int side=CZM_FontHeight(small);CZM_DrawImage(UI_DIR "icon_lock.png",photo.x,y,side,side,CzmStyle::AccentGold());
+  CZM_DrawText(small,photo.x+side+gap/2,y,photo.w-side-gap/2,CZM_T("srv_password"),CzmStyle::AccentGold());
+ }
 
-	const int nameH = CZM_FontHeight( nameFont ) * 2;
-	CzmStyle::TextLines( CZM_Rect( x, info.y, w, nameH ), e->answered ? e->name : e->address, CZMF_UI_ACTION );
-	int y = info.y + nameH + gap;
-	if( m_verified.w ) CzmStyle::Verified( m_verified );
-	const int icon = CZM_FontHeight( statFont );
-	if( e->answered )
-	{
-		CZM_DrawImage( UI_DIR "icon_users.png", x, y, icon, icon, dim );
-		int sx = x + icon + gap / 2;
-		snprintf( text, sizeof( text ), "%d/%d", e->players, e->maxPlayers );
-		CZM_DrawText( statFont, sx, y, x + w - sx, text, CzmStyle::Ink() );
-		sx += CZM_TextWidth( statFont, text ) + gap * 2;
-		if( e->ping >= 0 )
-		{
-			const int dot = Q_max( 3, icon / 2 );
-			CZM_DrawImage( UI_DIR "dot.png", sx, y + ( icon - dot ) / 2, dot, dot, CZM_PingColor( e->ping ) );
-			sx += dot + gap / 2;
-			snprintf( text, sizeof( text ), "%d %s", e->ping, CZM_T( "ms" ) );
-			CZM_DrawText( statFont, sx, y, Q_max( 0, x + w - sx - ( m_verified.w ? m_verified.w + gap : 0 )), text, CZM_PingColor( e->ping ) );
-		}
-	}
-	else
-		CZM_DrawText( statFont, x, y, w, CZM_T( IsStale( *e ) ? "offline" : "querying" ), dim );
-	y += icon + gap / 2;
-	snprintf( text, sizeof( text ), "IP  %s", e->address );
-	CZM_DrawText( smallFont, x, y, w, text, dim );
-	y += CZM_FontHeight( smallFont ) + gap / 2;
-	if( e->password )
-	{
-		CZM_DrawText( smallFont, x, y, w, CZM_T( "srv_password" ), CzmStyle::AccentGold() );
-		y += CZM_FontHeight( smallFont ) + gap / 2;
-	}
+ const int statH=Q_max(34,(int)(H*.074f)),statW=(info.w-gap)/2;
+ for(int i=0;i<2;i++){
+  CzmRect r=CZM_Rect(info.x+i*(statW+gap),info.y,statW,statH);
+  CzmStyle::Surface(r,PackRGBA(25,32,42,255));
+  const int icon=Q_max(10,statH*36/100),ix=r.x+gap,tx=ix+icon+gap/2;
+  CZM_DrawImage(i?UI_DIR "icon_clock.png":UI_DIR "icon_users.png",ix,r.y+(r.h-icon)/2,icon,icon,i&&e->answered&&e->ping>=0?CZM_PingColor(e->ping):dim);
+  if(e->answered){
+   if(i==0)snprintf(text,sizeof(text),"%d / %d",e->players,e->maxPlayers);
+   else if(e->ping>=0)snprintf(text,sizeof(text),"%d %s",e->ping,CZM_T("ms"));
+   else Q_strncpy(text,"—",sizeof(text));
+  }else Q_strncpy(text,"—",sizeof(text));
+  const int valueH=CZM_FontHeight(CZM_Font(CZMF_UI_ACTION));
+  CZM_DrawText(CZM_Font(CZMF_UI_ACTION),tx,r.y+gap/2,r.x+r.w-gap-tx,text,i&&e->answered&&e->ping>=0?CZM_PingColor(e->ping):ink);
+  CZM_DrawText(small,tx,r.y+gap/2+valueH,r.x+r.w-gap-tx,i?(CZM_IsRussian()?"Задержка":"Latency"):(CZM_IsRussian()?"Игроки онлайн":"Players online"),dim);
+ }
+ if(m_verified.w)CzmStyle::Verified(m_verified);
 
-	const int bottom = info.y + info.h;
-	const int lineH = CZM_FontHeight( textFont ) + gap / 2;
-	if( y + CZM_FontHeight( smallFont ) + lineH + gap <= bottom )
-	{
-		UI_FillRect( x, y, w, CZM_LineWidth(), CzmStyle::Border() );
-		y += gap / 2;
-		const bool playersHere = m_iPlayersState == 2 && !strcmp( m_szPlayersFor, e->address );
-		if( playersHere && m_iNumPlayers > 0 )
-			snprintf( text, sizeof( text ), "%s  ·  %d", CZM_T( "srv_players" ), m_iNumPlayers );
-		else Q_strncpy( text, CZM_T( "srv_players" ), sizeof( text ) );
-		CZM_DrawText( smallFont, x, y, w, text, dim );
-		y += CZM_FontHeight( smallFont ) + gap / 2;
-		if( !playersHere || m_iNumPlayers == 0 )
-		{
-			const char *key = !e->answered ? "" : !playersHere ? "srv_players_wait" :
-				e->players > 0 ? "srv_players_hidden" : "srv_players_none";
-			if( key[0] ) CZM_DrawText( textFont, x, y, w, CZM_T( key ), dim );
-		}
-		else
-		{
-			const int columns = w >= H * 0.6f ? 2 : 1;
-			const int colGap = gap * 2, colW = ( w - colGap * ( columns - 1 ) ) / columns;
-			const int fragsW = Q_max( CZM_TextWidth( textFont, "-999" ), (int)( H * 0.06f ) );
-			const int rows = Q_max( 1, ( bottom - y ) / lineH );
-			const int fit = rows * columns;
-			const int shown = m_iNumPlayers > fit ? fit - 1 : m_iNumPlayers;
-			for( int i = 0; i < shown; i++ )
-			{
-				const int cx = x + ( i / rows ) * ( colW + colGap ), cy = y + ( i % rows ) * lineH;
-				CZM_DrawText( textFont, cx, cy, colW - fragsW - gap / 2, m_players[i].name, CzmStyle::Ink() );
-				snprintf( text, sizeof( text ), "%d", m_players[i].frags );
-				CZM_DrawText( textFont, cx + colW - fragsW, cy, fragsW, text, dim, QM_RIGHT );
-			}
-			if( shown < m_iNumPlayers )
-			{
-				snprintf( text, sizeof( text ), CZM_T( "srv_more" ), m_iNumPlayers - shown );
-				CZM_DrawText( textFont, x + ( shown / rows ) * ( colW + colGap ),
-					y + ( shown % rows ) * lineH, colW, text, dim );
-			}
-		}
-	}
-	const bool fav = ( e->sources & SRC_FAVORITE ) != 0;
-	CzmStyle::Button( m_fav, CZM_T( fav ? "srv_fav_in" : "srv_fav_add" ), true, false,
-		IsPressed( HIT_FAVORITE ), fav ? CzmStyle::AccentGold() : 0 );
-	CzmStyle::Button( m_admin, CZM_IsRussian() ? "Админка/VIP" : "Admin/VIP", true, false, IsPressed( HIT_ADMIN ) );
-	CzmStyle::Button( m_play, s_lobbyPicker ? ( CZM_IsRussian() ? "Выбрать сервер" : "Select server" ) :
-		( CZM_IsRussian() ? "Играть" : "Play" ), true, true, IsPressed( HIT_PLAY ), 0, CZMF_UI_ACTION );
+ const CzmRect &roster=m_detailsRoster,&clip=m_detailsPlayers;
+ CzmStyle::Surface(roster,PackRGBA(18,25,35,255));
+ const int rp=Q_max(4,(int)(H*.014f));
+ const bool playersHere=m_iPlayersState==2&&!strcmp(m_szPlayersFor,e->address);
+ if(playersHere)snprintf(text,sizeof(text),"%s  ·  %d",CZM_T("srv_players"),m_iNumPlayers);
+ else Q_strncpy(text,CZM_T("srv_players"),sizeof(text));
+ CZM_DrawText(small,clip.x,roster.y+rp,clip.w*3/4,text,dim);
+ if(playersHere&&m_iNumPlayers)CZM_DrawText(small,clip.x+clip.w*3/4,roster.y+rp,clip.w/4,CZM_IsRussian()?"Фраги":"Frags",dim,QM_RIGHT);
+ if(!playersHere||!m_iNumPlayers){
+  const char *state=!e->answered?CZM_T(IsStale(*e)?"offline":"querying"):
+   !playersHere?CZM_T(m_iPlayersState==3?"srv_players_hidden":"srv_players_wait"):
+   CZM_T(e->players>0?"srv_players_hidden":"srv_players_none");
+  CzmStyle::TextLines(CZM_Rect(clip.x,clip.y+gap/2,clip.w,clip.h-gap/2),state,CZMF_SMALL,dim);
+ }else{
+  const int rowH=DetailPlayerRowH(),rows=DetailPlayerRows();
+  const int fragsW=Q_max(CZM_TextWidth(font,"-999"),(int)(H*.06f));
+  UI::Scissor::PushScissor(clip.x,clip.y,clip.w,clip.h);
+  for(int row=0;row<rows&&m_iDetailPlayerFirst+row<m_iNumPlayers;row++){
+   const int index=m_iDetailPlayerFirst+row,cy=clip.y+row*rowH;
+   if((index&1)==0)CzmStyle::Round(CZM_Rect(clip.x,cy,clip.w,rowH-1),PackRGBA(25,33,44,255),Q_max(2,H/250));
+   const int rankW=Q_max(12,(int)(H*.04f)),ty=cy+(rowH-CZM_FontHeight(font))/2;
+   snprintf(text,sizeof(text),"%d",index+1);CZM_DrawText(small,clip.x+gap/2,ty,rankW,text,dim);
+   CZM_DrawText(font,clip.x+rankW+gap/2,ty,clip.w-rankW-fragsW-gap,m_players[index].name,ink);
+   snprintf(text,sizeof(text),"%d",m_players[index].frags);CZM_DrawText(font,clip.x+clip.w-fragsW-gap/2,ty,fragsW,text,dim,QM_RIGHT);
+  }
+  UI::Scissor::PopScissor();
+  if(m_iNumPlayers>rows){
+   const int thumb=Q_max(8,clip.h*rows/m_iNumPlayers),range=m_iNumPlayers-rows;
+   UI_FillRect(roster.x+roster.w-Q_max(2,H/300)-1,clip.y+(clip.h-thumb)*m_iDetailPlayerFirst/range,Q_max(2,H/300),thumb,CzmStyle::Muted());
+  }
+ }
+ const bool fav=(e->sources&SRC_FAVORITE)!=0;
+ CzmStyle::Button(m_fav,CZM_T(fav?"srv_fav_in":"srv_fav_add"),true,false,IsPressed(HIT_FAVORITE),fav?CzmStyle::AccentGold():0);
+ CzmStyle::Button(m_admin,CZM_IsRussian()?"Админка/VIP":"Admin/VIP",true,false,IsPressed(HIT_ADMIN));
+ CzmStyle::Button(m_play,s_lobbyPicker?(CZM_IsRussian()?"Выбрать сервер":"Select server"):(CZM_IsRussian()?"Играть":"Play"),true,true,IsPressed(HIT_PLAY),0,CZMF_UI_ACTION);
 }
 
 

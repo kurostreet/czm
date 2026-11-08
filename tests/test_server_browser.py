@@ -47,6 +47,7 @@ HARNESS = HARNESS.replace('void CZM_DrawText(HFont f,int x,int y,int w,const cha
     'static unsigned blockLabelColor;static int blockLabels;'
     'void CZM_DrawText(HFont f,int x,int y,int w,const char*s,unsigned c,unsigned just){'
     'if(!strcmp(s,"Заблокировать")||!strcmp(s,"Block")){blockLabelColor=c;blockLabels++;}')
+HARNESS = HARNESS.replace('x,y,w,f,c,just,s);','x,y,w,CZM_FontHeight(f),c,just,s);')
 HARNESS = HARNESS.replace('void CZM_OpenProfile(int){}',
     'static int openedOwner;void CZM_OpenProfile(int owner){openedOwner=owner;}')
 HARNESS += r'''
@@ -65,7 +66,10 @@ const char*CZM_T(const char*k){
  {"srv_sort_name","По названию","By name"},{"srv_search","Поиск: название, карта, IP","Search: name, map, IP"},
  {"srv_fav_add","В избранное","Favorite"},{"srv_fav_in","В избранном","Favorited"},
  {"srv_players","ИГРОКИ","PLAYERS"},{"srv_more","и ещё %d","and %d more"},
- {"ms","мс","ms"},{"srv_password","Требуется пароль","Password required"}};
+ {"ms","мс","ms"},{"srv_password","Требуется пароль","Password required"},
+ {"offline","Сервер не отвечает","Server not responding"},{"querying","Проверяем сервер…","Querying server…"},
+ {"srv_players_wait","Загружаем список игроков…","Loading players…"},
+ {"srv_players_none","Пока никого нет","No players yet"},{"srv_players_hidden","Сервер не передал список игроков","Player list unavailable"}};
  for(auto&v:labels){if(!strcmp(v[0],k))return v[russian?1:2];}return k;
 }
 bool CZM_HomePinned(const char*){return false;}bool CZM_HomeSetPinned(const char*,const char*,bool){return true;}
@@ -74,7 +78,7 @@ CzmServer*CZM_OfficialServer(int){return nullptr;}bool CZM_IsOfficial(const char
 int CZM_OfficialBadge(int,int,int,bool){return 0;}void CZM_GoldComet(const CzmRect&,float,float){}void CZM_OfficialMark(int,int,int){}
 void CZM_LobbyPickedServer(const char*a,const char*,const char*,const char*,int,int){picked++;pickedAddress=a;}
 static std::vector<CzmRect> mapRects;
-void CZM_DrawMapPreview(const char*,int x,int y,int w,int h,const char*){mapRects.push_back(CZM_Rect(x,y,w,h));if(trace)printf("M\t%d\t%d\t%d\t%d\n",x,y,w,h);}
+void CZM_DrawMapPreview(const char*,int x,int y,int w,int h,const char*){mapRects.push_back(CZM_Rect(x,y,w,h));if(trace)printf("C\t%d\t%d\t%d\t%d\tgfx/czm/maps/_zombie.png\n",x,y,w,h);}
 '''
 
 ADAPTERS = r'''
@@ -82,7 +86,6 @@ CCzmServers::~CCzmServers(){}
 void CCzmServers::Refresh(bool){}void CCzmServers::SaveLists(){}
 void CCzmServers::RequestDetails(CzmEntry*){detailsAsked++;}
 CzmEntry*CCzmServers::Selected(){return m_szSelected[0]?&m_entries[0]:nullptr;}
-void CCzmServers::Select(CzmEntry*e){Q_strncpy(m_szSelected,e->address,sizeof(m_szSelected));RequestDetails(e);}
 void CCzmServers::SetFavorite(CzmEntry*e,bool on){if(on)e->sources|=SRC_FAVORITE;else e->sources&=~SRC_FAVORITE;}
 void CCzmServers::AddHistory(const CzmEntry*){}
 void CCzmServers::OpenDialog(int i){m_iDialog=i;}void CCzmServers::CloseDialog(){m_iDialog=DLG_NONE;}
@@ -99,14 +102,15 @@ static void cursor(const CzmRect&r){cursorX=uiStatic.cursorX=r.x+r.w/2;cursorY=u
 int main(int argc,char**argv){
  CCzmServers w;CzmEntry e={};strcpy(e.address,"203.0.113.5:27015");strcpy(e.name,"OLD SCHOOL CS #HALLOWEEN #S3");strcpy(e.map,"de_dust2");strcpy(e.badge,"DE");
  e.answered=e.gs=true;e.players=18;e.maxPlayers=32;e.ping=116;w.m_entries.AddToTail(e);w.m_view.AddToTail(0);
- for(auto resolution:{std::pair<int,int>{1536,716},{960,540},{800,360},{1024,768},{1280,720},{2960,1440},{640,320}}){
+ for(auto resolution:{std::pair<int,int>{1536,716},{640,360},{2340,1080},{960,540},{800,360},{1024,768},{1280,720},{2960,1440},{640,320}}){
   ScreenWidth=resolution.first;ScreenHeight=resolution.second;
   for(int lang=0;lang<2;lang++)for(int picker=0;picker<2;picker++){
    russian=lang==0;s_lobbyPicker=picker;w.m_bDetailsOpen=false;w.Layout();
    int beforeBlocks=blocksOpened;cursor(w.m_blocked);assert(w.HitTest()==w.HIT_BLOCKS);w.Activate(w.HIT_BLOCKS);
    assert(blocksOpened==beforeBlocks+1);
-   assert(w.m_clip.w==ScreenWidth-w.m_iMargin*2);assert(w.m_detailsMap.w==w.m_detailsMap.h);
-   for(auto*r:{&w.m_detailsMap,&w.m_detailsInfo,&w.m_detailsClose,&w.m_report,&w.m_fav,&w.m_admin,&w.m_play})assert(inside(*r,w.m_details));
+   assert(w.m_clip.w==ScreenWidth-w.m_iMargin*2);assert(abs(w.m_detailsMap.w*2-w.m_detailsMap.h*3)<=2);
+   assert(w.m_detailsMap.h<=ScreenHeight*.311f);
+   for(auto*r:{&w.m_detailsMap,&w.m_detailsInfo,&w.m_detailsName,&w.m_detailsRoster,&w.m_detailsPlayers,&w.m_detailsClose,&w.m_report,&w.m_fav,&w.m_admin,&w.m_play})assert(inside(*r,w.m_details));
    assert(!overlap(w.m_report,w.m_detailsClose));
    for(auto&r:w.m_filters)assert(r.y>w.m_tabs[0].y||!overlap(r,w.m_blocked));
    assert(!overlap(w.m_detailsMap,w.m_detailsInfo));assert(!overlap(w.m_detailsMap,w.m_fav));
@@ -115,7 +119,8 @@ int main(int argc,char**argv){
    w.Activate(w.HIT_ROW);assert(w.m_bDetailsOpen&&picked==oldPicked);
    w.m_iPlayersState=2;w.m_iNumPlayers=18;strcpy(w.m_szPlayersFor,e.address);
    for(int i=0;i<18;i++){snprintf(w.m_players[i].name,48,"Player %d",i+1);w.m_players[i].frags=65-i;}
-   mapRects.clear();int oldLabels=blockLabels;w.Draw();for(auto&r:mapRects)assert(r.w==r.h);
+   mapRects.clear();int oldLabels=blockLabels;w.Draw();assert(mapRects.back().w==w.m_detailsMap.w&&mapRects.back().h==w.m_detailsMap.h);
+   for(size_t i=0;i+1<mapRects.size();i++)assert(mapRects[i].w==mapRects[i].h); // browser rows retain square thumbnails
    assert(blockLabels==oldLabels+1&&blockLabelColor==CzmStyle::Ink());
    verifiedAddress=e.address;verifiedOwner=42;w.Layout();
    assert(inside(w.m_verified,w.m_detailsInfo));
@@ -133,6 +138,17 @@ int main(int argc,char**argv){
    w.Draw();actorAdmin=false;w.Layout();assert(!w.m_manage.w);
    int beforeReport=reportsOpened;cursor(w.m_report);assert(w.HitTest()==w.HIT_REPORT);w.Activate(w.HIT_REPORT);
    assert(reportsOpened==beforeReport+1&&reportedAddress==e.address);
+   // Only the overflowing roster can scroll; the browser's list offset stays unchanged.
+   float browserScroll=w.m_flScroll;cursor(w.m_detailsPlayers);w.KeyDown(K_MWHEELDOWN);
+   assert(w.m_iDetailPlayerFirst==1&&w.m_flScroll==browserScroll);
+   w.KeyDown(1);assert(w.m_bDetailPlayerDrag);uiStatic.cursorY-=w.DetailPlayerRowH()*3;cursorY=uiStatic.cursorY;w.MouseMove(uiStatic.cursorX,uiStatic.cursorY);w.KeyUp(1);
+   assert(w.m_iDetailPlayerFirst>1&&w.m_flScroll==browserScroll);w.Draw();
+   w.m_iDetailPlayerFirst=999;w.Layout();assert(w.m_iDetailPlayerFirst==w.m_iNumPlayers-w.DetailPlayerRows());
+   // A short roster has no drag range, and finger jitter on a button stays a tap.
+   w.m_iNumPlayers=1;w.Layout();bool wasFavorite=(w.m_entries[0].sources&SRC_FAVORITE)!=0;cursor(w.m_fav);w.KeyDown(1);assert(!w.m_bDetailPlayerDrag);
+   uiStatic.cursorY+=ScreenHeight/100;cursorY=uiStatic.cursorY;w.MouseMove(uiStatic.cursorX,uiStatic.cursorY);w.KeyUp(1);assert(((w.m_entries[0].sources&SRC_FAVORITE)!=0)!=wasFavorite);
+   for(int state:{0,1,2,3}){w.m_iPlayersState=state;w.m_iNumPlayers=0;w.Draw();}
+   w.m_entries[0].answered=false;w.Draw();w.m_entries[0].answered=true;
    cursor(w.m_play);assert(w.HitTest()==w.HIT_PLAY);
    float scroll=w.m_flScroll;w.KeyDown(K_MWHEELDOWN);assert(w.m_flScroll==scroll);
    w.KeyDown(1);assert(!w.m_bMaybeScroll);w.KeyUp(1);
@@ -152,8 +168,27 @@ int main(int argc,char**argv){
   blockedAddress.clear();assert(w.Passes(e));blockedAddress=e.address;assert(!w.Passes(e));
   blockedAddress.clear();assert(w.Passes(e));assert(e.sources==(SRC_INTERNET|SRC_FAVORITE|SRC_HISTORY));
  }
+ // Long foreign names and all 64 returned players retain the last scroll page.
+ for(auto resolution:{std::pair<int,int>{640,360},{1536,716},{2340,1080},{1024,768}}){
+  ScreenWidth=resolution.first;ScreenHeight=resolution.second;russian=true;s_lobbyPicker=false;
+  std::string longName(63,'W');Q_strncpy(w.m_entries[0].name,longName.c_str(),sizeof(w.m_entries[0].name));
+  w.m_iNumPlayers=64;w.m_iPlayersState=2;w.m_bDetailsOpen=true;
+  for(int i=0;i<64;i++){snprintf(w.m_players[i].name,sizeof(w.m_players[i].name),"ОченьДлинныйНикИгрока_%d",i);w.m_players[i].frags=1000-i;}
+  w.m_iDetailPlayerFirst=999;w.Layout();assert(w.m_iDetailPlayerFirst+ w.DetailPlayerRows()==64);w.DrawDetails();
+  CzmEntry other=e;strcpy(other.address,"203.0.113.6:27015");w.Select(&other);assert(w.m_iDetailPlayerFirst==0);w.Select(&w.m_entries[0]);
+  w.m_entries[0].password=true;w.Activate(w.HIT_PLAY);assert(w.m_iDialog==w.DLG_PASSWORD&&!strcmp(w.m_szPending,e.address));w.CloseDialog();w.m_entries[0].password=false;
+  int beforeAuth=authOpened;w.Activate(w.HIT_ADMIN);assert(authOpened==beforeAuth+1);
+  actorAdmin=false;managedServer.clear();w.Activate(w.HIT_MANAGE);assert(managedServer.empty());
+ }
  ScreenWidth=1536;ScreenHeight=716;russian=true;s_lobbyPicker=true;w.m_bDetailsOpen=false;w.Layout();
- if(argc>1){trace=true;if(!strcmp(argv[1],"details"))w.m_bDetailsOpen=true;w.Draw();}
+ if(argc>1){
+  if(argc>3){ScreenWidth=atoi(argv[2]);ScreenHeight=atoi(argv[3]);}
+  trace=true;if(!strcmp(argv[1],"details")){
+   s_lobbyPicker=false;actorAdmin=true;w.m_bDetailsOpen=true;
+   strcpy(w.m_entries[0].name,"Counter Zombie | Survival | ZP 5");strcpy(w.m_entries[0].map,"zm_3rooms");strcpy(w.m_entries[0].badge,"ZM");
+   w.m_entries[0].players=1;w.m_entries[0].ping=37;w.m_entries[0].password=true;w.m_entries[0].sources|=SRC_FAVORITE;
+   w.m_iPlayersState=2;w.m_iNumPlayers=1;strcpy(w.m_szPlayersFor,w.m_entries[0].address);strcpy(w.m_players[0].name,"Magnus");w.m_players[0].frags=0;
+  }w.Draw();}
  puts("NATIVE_SERVER_BROWSER_OK");
 }
 '''
@@ -208,7 +243,7 @@ int main(){for(int photo=0;photo<2;photo++)for(int size:{48,136,280}){
             'void CCzmServers::Activate(', 'bool CCzmServers::KeyDown(', 'bool CCzmServers::KeyUp(',
             'bool CCzmServers::MouseMove(', 'void CCzmServers::Char(', 'void CCzmServers::DrawDetails(',
             'void CCzmServers::DrawHeader(', 'void CCzmServers::DrawFilters(', 'void CCzmServers::DrawRow(',
-            'void CCzmServers::DrawChip(', 'void CCzmServers::Connect(', 'bool CCzmServers::Passes(']
+            'void CCzmServers::DrawChip(', 'void CCzmServers::Connect(', 'void CCzmServers::Select(', 'bool CCzmServers::Passes(']
         drawing='\n'.join(function(source,s) for s in ['static const char *Plural(', 'static void CountText(', 'static void DrawMapPicture(', 'static unsigned int ModeColor(', 'static void FillRect('])
         code='\n'.join([HARNESS,wrapping,declarations,drawing,declaration,'static CCzmServers*s_browser;static bool s_lobbyPicker;\n'])
         code+='\n'.join(function(source,s) for s in methods)+ADAPTERS+SCENARIOS
@@ -225,5 +260,8 @@ int main(){for(int photo=0;photo<2;photo++)for(int size:{48,136,280}){
                 for view in ['servers','details']:
                     result=subprocess.run([str(exe),view],check=True,capture_output=True,text=True)
                     (dest/(view+'.tsv')).write_text(result.stdout)
+                for width,height in [(1536,716),(640,360)]:
+                    result=subprocess.run([str(exe),'details',str(width),str(height)],check=True,capture_output=True,text=True)
+                    (dest/(f'details-{width}x{height}.tsv')).write_text(result.stdout)
 
 if __name__=='__main__':unittest.main()

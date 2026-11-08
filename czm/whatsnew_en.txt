@@ -1,1 +1,1 @@
-Fixed server menu taps: small finger movements no longer cancel selection in lists that fit the screen. Repeated and stale selections cannot switch weapons. Match chat keys now highlight and grow slightly when touched, with gentle Android haptic feedback and a separate toggle in Game settings.
+Fixed active server-menu taps and stale selections. Match chat keys now highlight and grow slightly, with optional Android keyboard haptics. The server detail card has a compact map preview, a prominent name, clear player and ping statistics, and a scrollable player list.
