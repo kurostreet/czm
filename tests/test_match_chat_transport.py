@@ -1,6 +1,8 @@
 """Run the actual match chat wire, lifecycle and filtered SayText history code."""
 from pathlib import Path
 import re
+import subprocess
+import tempfile
 import unittest
 from test_loading_errors import function
 from test_combat_controls import build
@@ -8,6 +10,16 @@ from test_combat_controls import build
 ROOT = Path(__file__).resolve().parents[1]
 ENGINE = ROOT / "3rdparty/xash3d-fwgs/engine"
 CONSOLE = ENGINE / "client/console.c"
+
+
+def client_sdk_flags():
+    # Use the gameplay target's real include order, not the menu SDK or a mock.
+    cmake = (ROOT / "cl_dll/CMakeLists.txt").read_text()
+    paths = re.search(r"include_directories\((.*?)\)", cmake, re.S).group(1).split()
+    flags = ["-std=c++11", "-fms-extensions", "-DCLIENT_WEAPONS", "-DCLIENT_DLL",
+             "-DSTDINT_H=<cstdint>", "-DLINUX", "-D_LINUX", "-Dstricmp=strcasecmp",
+             "-D_strnicmp=strncasecmp", "-Dstrnicmp=strncasecmp"]
+    return flags + ["-I" + str((ROOT / "cl_dll" / path).resolve()) for path in paths]
 
 ENGINE_STUB = r'''
 #include <cassert>
@@ -105,6 +117,38 @@ def history_source():
 
 
 class MatchChatTransportTests(unittest.TestCase):
+    def test_production_client_sources_compile_with_gameplay_sdk_headers(self):
+        subprocess.run(["g++", *client_sdk_flags(), "-fsyntax-only",
+                        str(ROOT / "cl_dll/saytext.cpp"), str(ROOT / "cl_dll/text_message.cpp")], check=True)
+
+    def test_production_cvar_registration_keeps_engine_privilege_bit(self):
+        code = (ROOT / "cl_dll/saytext.cpp").read_text()
+        with tempfile.TemporaryDirectory(prefix="czm-client-cvar-sdk-") as folder:
+            path = Path(folder)
+            (path / "engine.cpp").write_text(
+                '#include "' + str(ROOT / "3rdparty/xash3d-fwgs/common/cvardef.h") + '"\n'
+                'int EnginePrivilegeBit(){return FCVAR_PRIVILEGED;}\n')
+            (path / "client.cpp").write_text(r'''
+#include <cassert>
+#include <map>
+#include <string>
+#include "hud.h"
+cl_enginefunc_t gEngfuncs={};
+int EnginePrivilegeBit();
+static std::map<std::string,int> registered;
+static cvar_t *Register(const char *name,const char *,int flags){registered[name]=flags;return nullptr;}
+''' + function(code, "static void CzmMatchChatRegister") + r'''
+int main(){
+ assert(FCVAR_PRIVILEGED==EnginePrivilegeBit());
+ gEngfuncs.pfnRegisterVariable=Register;CzmMatchChatRegister();
+ assert(registered.size()==34&&registered.count("czm_mc_head")&&registered.count("czm_mc_epoch"));
+ for(const auto &entry:registered)assert(entry.second==EnginePrivilegeBit());
+}
+''')
+            subprocess.run(["g++", *client_sdk_flags(), str(path / "client.cpp"),
+                            str(path / "engine.cpp"), "-o", str(path / "check")], check=True)
+            subprocess.run([str(path / "check")], check=True)
+
     def test_localized_talk_and_radio_keep_utf8_text_beyond_128_bytes(self):
         text = (ROOT / "cl_dll/text_message.cpp").read_text()
         source = history_source() + r'''
