@@ -68,6 +68,8 @@ jobs:
           CZM_JSON_JAR=/tmp/czm-json.jar python3 -m unittest discover -s tests -p test_translation_client.py -v
           CZM_JSON_JAR=/tmp/czm-json.jar python3 -m unittest discover -s tests -p test_settings_data.py -v
           CZM_JSON_JAR=/tmp/czm-json.jar python3 -m unittest discover -s tests -p test_server_policy.py -k async -v
+          python3 -m unittest discover -s tests -p test_server_resource_store.py -v
+          CZM_JSON_JAR=/tmp/czm-json.jar python3 -m unittest discover -s tests -p test_server_resources_manager.py -v
           python3 -m venv /tmp/czm-server-check
           /tmp/czm-server-check/bin/pip install -q -r server/czm/requirements.txt
           CZM_PLAY_SERVICE_ACCOUNT_FILE=/nonexistent PYTHONPATH=server/czm /tmp/czm-server-check/bin/python -m unittest discover -s server/czm/tests -v
@@ -75,6 +77,7 @@ jobs:
         run: |
           python3 -m unittest discover -s tests -p test_engine_patches.py -v
           python3 scripts/apply_engine_patches.py
+          python3 -m unittest discover -s tests -p test_server_resource_mount.py -v
           python3 -m unittest discover -s tests -p test_http_fallback.py -v
           python3 -m unittest discover -s tests -p test_server_policy.py -k common -v
           python3 -m unittest discover -s tests -p test_goldsrc_entities.py -v
@@ -90,6 +93,7 @@ jobs:
           python3 -m unittest discover -s tests -p test_home_actions.py -v
           python3 -m unittest discover -s tests -p test_lobby_menu.py -v
           python3 -m unittest discover -s tests -p test_server_browser.py -v
+          python3 -m unittest discover -s tests -p test_resource_connect.py -v
           python3 -m unittest discover -s tests -p test_lobby_voice_client.py -v
           python3 -m unittest discover -s tests -p test_lobby_audio.py -v
       - name: Check shared map capture state and read-only protection

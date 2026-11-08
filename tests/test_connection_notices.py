@@ -17,6 +17,7 @@ class ConnectionNoticeTests(unittest.TestCase):
         stub = STUB.replace("unsigned CZM_White();", "unsigned CZM_White(int=255);")
         stub = stub.replace("static double DoubleTime();", "static double DoubleTime();static void ClientCmd(bool,const char*);static void ClientCmdF(bool,const char*,...);")
         stub += '\nconst char *CZM_T(const char *);bool CZM_OnlinePlayAllowed();void CZM_PrepareConnect(const char *);\n'
+        stub += 'void CZM_ConnectWithResources(const char *,const char *);\n'
         stub += 'int CZM_DiagnosticsMode();void CZM_SetDiagnosticsMode(int);bool CZM_DiagnosticsRequired(const char*);\n'
         stub += 'void CZM_ShowNotice(const char*,const char*,const char*="",bool=false);void CZM_ShowMessage(const char*);\n'
         # Separate the default argument from the pointer token for C++ parsing.
@@ -50,6 +51,7 @@ void EngFuncs::CvarSetValue(const char *key,float value){vars[key]=std::to_strin
 void EngFuncs::ClientCmd(bool,const char *command){commands.push_back(command);}
 void EngFuncs::ClientCmdF(bool,const char *format,...){char text[256];va_list a;va_start(a,format);vsnprintf(text,sizeof(text),format,a);va_end(a);commands.push_back(text);}
 bool CZM_OnlinePlayAllowed(){return allowPlay;}void CZM_PrepareConnect(const char *){}
+void CZM_ConnectWithResources(const char *address,const char *protocol){CZM_PrepareConnect(address);EngFuncs::ClientCmdF(false,"connect \"%s\" %s\n",address,protocol);}
 void CZM_PlayClick(){}
 unsigned CZM_White(int a){return PackRGBA(245,247,250,a);}unsigned CZM_Grey(){return PackRGBA(155,163,175,255);}
 HFont CZM_Font(int id){return id;}

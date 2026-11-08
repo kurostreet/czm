@@ -393,6 +393,7 @@ private:
 		HIT_PLAY,
 		HIT_ADMIN,
 		HIT_REPORT,
+		HIT_RESOURCES,
 		HIT_VERIFIED,
 		HIT_MANAGE,
 		HIT_BLOCKS,
@@ -539,7 +540,7 @@ private:
 	CzmRect m_tabs[TAB_COUNT], m_filters[FILTER_COUNT];
 	CzmRect m_blocked;
 	CzmRect m_listHead, m_sort, m_clip, m_details, m_emptyButton;
-	CzmRect m_play, m_fav, m_admin, m_report, m_verified, m_manage;
+	CzmRect m_play, m_fav, m_admin, m_report, m_verified, m_manage, m_resources;
 	int m_policyRevision;
 	CzmRect m_detailsClose, m_detailsMap, m_detailsInfo, m_detailsName, m_detailsRoster, m_detailsPlayers;
 	CzmRect m_dlgPanel, m_dlgField, m_dlgPaste, m_dlgOk, m_dlgCancel;
@@ -1022,8 +1023,7 @@ void CCzmServers::Connect( CzmEntry *e, const char *password )
 	EngFuncs::CvarSetString( "czm_connect_name", e->answered ? e->name : e->address );
 	EngFuncs::CvarSetString( "czm_connect_adr", e->address );
 	m_bReturnHere = true;
-	CZM_PrepareConnect( e->address );
-	EngFuncs::ClientCmdF( false, "connect \"%s\" %s\n", e->address, e->gs ? "gs" : "49" );
+	CZM_ConnectWithResources( e->address, e->gs ? "gs" : "49" );
 }
 
 void CCzmServers::QuickStart( void )
@@ -1583,11 +1583,19 @@ void CCzmServers::Layout( void )
 		m_detailsClose = CZM_Rect( m_details.x + dw - pad - head, m_details.y + pad, head, head );
 		m_report = CZM_Rect( m_detailsClose.x - gap - head * 4, m_detailsClose.y, head * 4, head );
 		m_manage = CZM_OnlineAdmin() ? CZM_Rect( m_report.x - gap - head * 3, m_report.y, head * 3, head ) : CZM_Rect( 0, 0, 0, 0 );
+		m_resources = CZM_Rect( 0, 0, 0, 0 );
+		CzmEntry *selected = Selected();
+		// Eligibility comes from the configured registry, independently of the golden badge.
+		if( selected && CZM_ServerResourcesEligibility( selected->address ) > 0 )
+		{
+			const int rw = Q_max( head * 3, CZM_TextWidth( CZM_Font( CZMF_SMALL ), CZM_IsRussian() ? "Ресурсы" : "Resources" ) + head / 2 );
+			const int right = m_manage.w ? m_manage.x : m_report.x;
+			m_resources = CZM_Rect( right - gap - rw, m_report.y, rw, head );
+		}
 		m_detailsMap = CZM_Rect( left, bodyY, mapW, mapW * 2 / 3 );
 		m_detailsInfo = CZM_Rect( left + leftW + gap, bodyY, inner - leftW - gap, bodyH );
 		m_verified = CZM_Rect( 0, 0, 0, 0 );
 		int rosterY = bodyY + Q_max( 34, (int)( H * 0.074f )) + gap;
-		CzmEntry *selected = Selected();
 		if( selected && CZM_ServerOwner( selected->address ) )
 		{
 			const int vh = CZM_FontHeight( CZM_Font( CZMF_UI_LABEL )) + gap / 2;
@@ -1644,6 +1652,7 @@ int CCzmServers::HitTest( void ) const
 		if( m_detailsClose.HasCursor() ) return HIT_DETAILS_CLOSE;
 		if( m_report.HasCursor() ) return HIT_REPORT;
 		if( m_manage.HasCursor() ) return HIT_MANAGE;
+		if( m_resources.w && CZM_ServerResourcesEligibility( m_szSelected ) > 0 && m_resources.HasCursor() ) return HIT_RESOURCES;
 		if( m_verified.HasCursor() ) return HIT_VERIFIED;
 		if( m_admin.HasCursor() ) return HIT_ADMIN;
 		if( m_play.HasCursor() ) return HIT_PLAY;
@@ -1781,6 +1790,13 @@ void CCzmServers::Activate( int hit )
 	{
 		CzmEntry *e = Selected();
 		if( e ) CZM_ServerReportShow( e->address, e->name );
+		return;
+	}
+	case HIT_RESOURCES:
+	{
+		CzmEntry *e = Selected();
+		if( e && CZM_ServerResourcesEligibility( e->address ) > 0 )
+			CZM_ServerResourcesShow( e->address, CZM_IsRussian() );
 		return;
 	}
 	case HIT_VERIFIED:
@@ -2504,12 +2520,14 @@ void CCzmServers::DrawDetails( void )
  UI_FillRect(0,0,W,H,PackRGBA(3,7,13,205));
  CzmStyle::Surface(d,PackRGBA(14,20,29,255));
  UI_FillRect(d.x+pad,d.y,Q_max(20,d.w/6),Q_max(2,H/400),CzmStyle::AccentRed());
- CzmStyle::Text(CZM_Rect(d.x+pad,d.y+pad,(m_manage.w?m_manage.x:m_report.x)-d.x-pad-gap,m_detailsClose.h),
+ CzmStyle::Text(CZM_Rect(d.x+pad,d.y+pad,(m_resources.w?m_resources.x:(m_manage.w?m_manage.x:m_report.x))-d.x-pad-gap,m_detailsClose.h),
   s_lobbyPicker?(CZM_IsRussian()?"ВЫБОР СЕРВЕРА":"SELECT SERVER"):(CZM_IsRussian()?"СЕРВЕР":"SERVER"),CZMF_UI_META,CzmStyle::AccentRed());
  CzmStyle::Button(m_detailsClose,"",true,false,IsPressed(HIT_DETAILS_CLOSE));
  CzmStyle::Icon(m_detailsClose,UI_DIR "icon_close.png");
  CzmStyle::Button(m_report,CZM_IsRussian()?"Заблокировать":"Block",true,false,IsPressed(HIT_REPORT),0,CZMF_SMALL);
  if(m_manage.w)CzmStyle::Button(m_manage,CZM_IsRussian()?"Управлять":"Manage",true,false,IsPressed(HIT_MANAGE),0,CZMF_SMALL);
+ if(m_resources.w&&CZM_ServerResourcesEligibility(e->address)>0)
+  CzmStyle::Button(m_resources,CZM_IsRussian()?"Ресурсы":"Resources",true,false,IsPressed(HIT_RESOURCES),0,CZMF_SMALL);
  CzmStyle::TextLines(m_detailsName,e->answered&&e->name[0]?e->name:e->address,CZMF_UI_TITLE);
 
  CzmStyle::Surface(CZM_Rect(photo.x-1,photo.y-1,photo.w+2,photo.h+2),PackRGBA(20,26,36,255));

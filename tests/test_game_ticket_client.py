@@ -49,7 +49,10 @@ int main(){
                 sites += 1
                 before = source[max(0, match.start() - 240):match.start()]
                 self.assertIn("CZM_PrepareConnect(", before, f"{path.name}: a connect without CZM_PrepareConnect")
-        self.assertGreaterEqual(sites, 6)
+        self.assertEqual(sites, 1)
+        # All menu entry points share the resource gate and final ticket dispatch.
+        for filename in ("CzmServers.cpp", "CzmMenu.cpp", "CzmNotice.cpp", "CzmLobby.cpp"):
+            self.assertIn("CZM_ConnectWithResources(", (MENU / filename).read_text())
 
     def test_ticket_goes_only_to_its_address_and_leaves_userinfo(self):
         source = (MENU / "CzmOnline.cpp").read_text()

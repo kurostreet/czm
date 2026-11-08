@@ -9,6 +9,11 @@ counter-zombie.ru, kontrafps.ru {
 		header Cache-Control "public, max-age=3600"
 		file_server
 	}
+	# Managed data packs: backend validates the immutable object and rejects
+	# staging, arbitrary paths and linked files. Keep the URL prefix intact.
+	handle /server-resources/* {
+		reverse_proxy 127.0.0.1:8200
+	}
 	# Resource files for the isolated zombie network test.
 	handle_path /zm-test-files/* {
 		root * /srv/czm-zm-test/fastdl

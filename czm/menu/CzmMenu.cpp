@@ -110,6 +110,7 @@ static const struct { const char *key, *ru, *en; } s_strings[] =
 	{ "err_timeout", "Сервер не ответил за отведённое время.\nСоединение закрыто по таймауту.", "The server did not respond in time.\nThe connection timed out." },
 	{ "err_server_blocked", "Этот сервер заблокирован модерацией CZM.\nВыберите другой сервер.", "CZM moderation restricted this server.\nChoose another server." },
 	{ "err_server_policy", "Не удалось проверить доступ к серверу.\nПроверьте интернет и повторите подключение.", "Could not check server access.\nCheck your connection and try again." },
+	{ "err_server_resources", "Не удалось подключить проверенные ресурсы.\nОткрой карточку сервера, проверь файлы и повтори вход.", "Could not attach the verified resources.\nOpen the server card, verify its files and try again." },
 	{ "err_server_hidden", "Этот сервер в вашем списке заблокированных.\nОткройте «Серверы» — «Заблокированные», чтобы вернуть доступ.", "This server is in your blocked list.\nOpen Servers — Blocked to restore access." },
 	{ "err_full", "Сервер заполнен.\nПопробуй позже или выбери другой режим.", "The server is full.\nTry again later or pick another mode." },
 	{ "err_password", "Неверный пароль сервера.", "Wrong server password." },
@@ -1548,8 +1549,7 @@ void CZM_ConnectToServer( int index )
 
 	EngFuncs::CvarSetString( "czm_connect_name", server->name );
 	EngFuncs::CvarSetString( "czm_connect_adr", server->address );
-	CZM_PrepareConnect( server->address );
-	EngFuncs::ClientCmdF( false, "connect \"%s\" %s\n", server->address, server->prot[0] ? server->prot : "gs" );
+	CZM_ConnectWithResources( server->address, server->prot[0] ? server->prot : "gs" );
 }
 
 void CZM_ConnectOfficial( int slot )
@@ -1562,8 +1562,7 @@ void CZM_ConnectOfficial( int slot )
 
 	EngFuncs::CvarSetString( "czm_connect_name", server->name );
 	EngFuncs::CvarSetString( "czm_connect_adr", server->address );
-	CZM_PrepareConnect( server->address );
-	EngFuncs::ClientCmdF( false, "connect \"%s\" %s\n", server->address, server->prot[0] ? server->prot : "gs" );
+	CZM_ConnectWithResources( server->address, server->prot[0] ? server->prot : "gs" );
 }
 
 // a point on the rounded-rectangle border, s in [0, perim)
@@ -1815,6 +1814,8 @@ static void CZM_ShowPendingError( void )
 		snprintf( text, sizeof( text ), "%s", CZM_T( "err_connect" ));
 	else if( !strcmp( reason, "#connection_timeout" ))
 		snprintf( text, sizeof( text ), "%s", CZM_T( "err_timeout" ));
+	else if( !strcmp( reason, "#czm_server_resources" ))
+		snprintf( text, sizeof( text ), "%s", CZM_T( "err_server_resources" ));
 	else if( !strcmp( reason, "#czm_server_blocked" ))
 		snprintf( text, sizeof( text ), "%s", CZM_T( "err_server_blocked" ));
 	else if( !strcmp( reason, "#czm_server_policy" ))

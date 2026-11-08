@@ -12,6 +12,7 @@ from PIL import Image
 from pydantic import BaseModel, Field
 
 from . import service, mappics, accounts, settings, tab, social, website, distribution, lobbies, game_probe, voice_lobby, notifications, rules, moderation, play_feed, playtime, server_moderation, community, admin, official, game_ticket, survival, survival_mod
+from . import server_resources
 from .config import get_settings
 from .db import db
 
@@ -73,6 +74,24 @@ def check_room(room: str) -> str:
     if room not in get_settings().room_list:
         raise HTTPException(404, {"error": "room"})
     return room
+
+
+@router.get("/server-resources/catalog")
+async def server_resources_catalog(request: Request):
+    _read_limit.check(client_ip(request))
+    return JSONResponse(await in_db(server_resources.catalog), headers={"Cache-Control": "no-store"})
+
+
+@download_router.get("/server-resources/{pack_id}/{revision}/{leaf:path}")
+async def server_resource_object(pack_id: str, revision: str, leaf: str):
+    try:
+        path = server_resources.published_file(pack_id, revision, leaf)
+    except (ValueError, OSError):
+        raise HTTPException(404, {"error": "resource"})
+    media_type = "application/json" if leaf == "manifest.json" else "application/zip" if leaf == "bundle.zip" else "application/octet-stream"
+    # Starlette FileResponse supports byte ranges: partial downloads remain bound
+    # to immutable pack/revision URLs; redirects and private folders are absent.
+    return FileResponse(path, media_type=media_type, headers={"Cache-Control": "public, max-age=31536000, immutable", "X-Content-Type-Options": "nosniff"})
 
 
 class HelloIn(BaseModel):

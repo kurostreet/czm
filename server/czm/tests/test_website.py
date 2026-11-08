@@ -168,6 +168,17 @@ class InstallListTests(unittest.TestCase):
         self.assertIn("reverse_proxy 127.0.0.1:8200", downloads)
         self.assertNotIn("file_server", downloads)
 
+    def test_managed_resources_use_the_validated_backend_route_over_https(self):
+        caddy = (self.base / "deploy" / "czm.caddy").read_text()
+        self.assertEqual(caddy.count("handle /server-resources/* {"), 1)
+        secure, plain = caddy.split("http://counter-zombie.ru", 1)
+        block = secure.split("handle /server-resources/* {", 1)[1].split("}", 1)[0]
+        self.assertIn("reverse_proxy 127.0.0.1:8200", block)
+        self.assertNotIn("file_server", block)
+        self.assertNotIn("handle_path /server-resources", caddy)
+        self.assertNotIn("/server-resources", plain)
+        self.assertNotIn("root * /var/lib/czm/server-resources", caddy)
+
     def test_gameplay_shots_carousel_is_separate_from_features(self):
         html = (self.base / "site" / "index.html").read_text()
         js = (self.base / "site" / "assets" / "site.js").read_text()

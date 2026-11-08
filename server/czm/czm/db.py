@@ -381,7 +381,7 @@ def init() -> None:
                         except sqlite3.OperationalError as e:  # the other process was first
                             if "duplicate column" not in str(e):
                                 raise
-            from . import notifications, play_feed, playtime, server_moderation, community, moderator_guard, admin, official, survival, survival_mod
+            from . import notifications, play_feed, playtime, server_moderation, community, moderator_guard, admin, official, survival, survival_mod, server_resources
             conn.executescript(notifications.SCHEMA)
             conn.executescript(playtime.SCHEMA)
             conn.executescript(server_moderation.SCHEMA)
@@ -389,6 +389,7 @@ def init() -> None:
             conn.executescript(moderator_guard.SCHEMA)
             conn.executescript(admin.SCHEMA)
             conn.executescript(official.SCHEMA)
+            conn.executescript(server_resources.SCHEMA)
             conn.executescript(survival.SCHEMA)
             conn.executescript(survival_mod.SCHEMA)
             survival.migrate(conn)
