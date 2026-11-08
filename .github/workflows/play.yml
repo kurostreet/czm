@@ -75,6 +75,7 @@ jobs:
               assert b"assets/bundled" in z.read("gamedata/assets.pb"), "the pack index must list assets/bundled"
               assert not any("game-data" in n for n in names), "game data must not come from CI"
               dex = b"".join(z.read(n) for n in names if n.startswith("base/dex/"))
+              assert b"ServerResources" in dex and b"ServerResourceStore" in dex, "managed resources missing"
               for cls in (b"Lru/kurostreet/counterzombiemobile/ApkUpdate;", b"Lru/kurostreet/counterzombiemobile/InstallStatusReceiver;"):
                   assert cls not in dex, "the Google Play build must not carry the site build's installer: " + cls.decode()
               abis = {n.split("/")[2] for n in names if n.startswith("base/lib/")}
@@ -83,6 +84,8 @@ jobs:
               assert arm64, "no ARM64 libraries"
               for name in arm64:
                   elf = z.read(name)
+                  if name.endswith("/libxash.so"):
+                      assert b"serverResourcesMountPath" in elf, "resource mount bridge missing"
                   assert elf[:6] == b"\x7fELF\x02\x01", name
                   offset = struct.unpack_from("<Q", elf, 32)[0]
                   size, count = struct.unpack_from("<HH", elf, 54)

@@ -641,6 +641,81 @@ void CZM_PrepareConnect( const char *address )
 	s_ticketClearAt = ticket[0] ? now + 60.0 : 0.0;
 }
 
+// A new click replaces the previous pending join. No network or hashing runs on
+// the game thread; Android publishes a snapshot only after checking the current
+// endpoint against the trusted catalog. Keep the selected password/name with it.
+static struct
+{
+	char address[64], protocol[8], name[128], password[128];
+	CMenuBaseWindow *origin;
+	bool active, shown;
+} s_resourceJoin;
+
+void CZM_CancelResourceJoin( void )
+{
+	if( !s_resourceJoin.active ) return;
+	s_resourceJoin.active = false;
+	CZM_ServerResourcesCancelConnection();
+}
+
+void CZM_ConnectWithResources( const char *address, const char *protocol )
+{
+	if( !address || !address[0] || strlen( address ) >= sizeof( s_resourceJoin.address )
+		|| strspn( address, "0123456789abcdefABCDEF.[]:" ) != strlen( address )
+		|| !protocol || ( strcmp( protocol, "gs" ) && strcmp( protocol, "49" )))
+		return;
+	Q_strncpy( s_resourceJoin.address, address, sizeof( s_resourceJoin.address ));
+	Q_strncpy( s_resourceJoin.protocol, protocol, sizeof( s_resourceJoin.protocol ));
+	Q_strncpy( s_resourceJoin.name, EngFuncs::GetCvarString( "czm_connect_name" ), sizeof( s_resourceJoin.name ));
+	Q_strncpy( s_resourceJoin.password, EngFuncs::GetCvarString( "password" ), sizeof( s_resourceJoin.password ));
+	s_resourceJoin.active = true;
+	s_resourceJoin.shown = false;
+	s_resourceJoin.origin = uiStatic.menu.Current();
+	CZM_ServerResourcesRefresh( address );
+}
+
+static void ResourceJoinFrame( void )
+{
+	if( !s_resourceJoin.active ) return;
+	if( s_resourceJoin.origin != uiStatic.menu.Current() )
+	{
+		s_resourceJoin.active = false;
+		CZM_ServerResourcesCancelConnection();
+		return;
+	}
+	const int state = CZM_ServerResourcesPrepare( s_resourceJoin.address );
+	if( state == 2 ) return; // checking or transferring
+	if( state == 3 )
+	{
+		if( !s_resourceJoin.shown )
+		{
+			s_resourceJoin.shown = true;
+			CZM_ServerResourcesShow( s_resourceJoin.address, CZM_IsRussian() );
+		}
+		return;
+	}
+	s_resourceJoin.active = false;
+	if( state < 0 )
+	{
+		CZM_ServerResourcesCancelConnection();
+		if( state != -2 ) CZM_ShowNotice( CZM_IsRussian() ? "Ресурсы сервера" : "Server resources",
+			CZM_IsRussian() ? "Не удалось проверить ресурсы. Открой карточку сервера и попробуй ещё раз."
+			: "Could not check server resources. Open the server card and try again." );
+		return;
+	}
+	if( state != 0 && state != 1 ) { CZM_ServerResourcesCancelConnection(); return; }
+	if( !CZM_OnlinePlayAllowed() || CZM_ServerBlocked( s_resourceJoin.address ))
+	{
+		CZM_ServerResourcesCancelConnection();
+		return;
+	}
+	EngFuncs::CvarSetString( "czm_connect_name", s_resourceJoin.name );
+	EngFuncs::CvarSetString( "czm_connect_adr", s_resourceJoin.address );
+	EngFuncs::CvarSetString( "password", s_resourceJoin.password );
+	CZM_PrepareConnect( s_resourceJoin.address );
+	EngFuncs::ClientCmdF( false, "connect \"%s\" %s\n", s_resourceJoin.address, s_resourceJoin.protocol );
+}
+
 // ---------------------------------------------------------------- the player panel, signed in
 // czm_panel (the "Player panel" item of our servers' menu, or the console): the API gives a one-time
 // link that signs this account in on counter-zombie.ru/panel, and the phone's browser opens it.
@@ -748,6 +823,8 @@ void CZM_OnlineFrame( void )
 	// Account changes arrive from Java without a password or session token in the engine.
 	if( CZM_AccountEvent( body ))
 	{
+		s_resourceJoin.active = false;
+		CZM_ServerResourcesCancelConnection();
 		CzmJson j;
 		if( j.Parse( body.Get() ))
 		{
@@ -816,7 +893,7 @@ void CZM_OnlineFrame( void )
     { CUtlString request;if(CZM_WidgetEvent(request)) {
         char address[64],protocol[8],tail;
         if(CZM_OnlinePlayAllowed() && sscanf(request.Get(),"%63s %7s %c",address,protocol,&tail)==2 && strspn(address,"0123456789.:")==strlen(address) && (!strcmp(protocol,"gs")||!strcmp(protocol,"49"))) {
-            EngFuncs::CvarSetString("czm_connect_adr",address);EngFuncs::CvarSetString("czm_connect_name",address);CZM_PrepareConnect(address);EngFuncs::ClientCmdF(false,"connect \"%s\" %s\n",address,protocol);
+            EngFuncs::CvarSetString("czm_connect_adr",address);EngFuncs::CvarSetString("czm_connect_name",address);CZM_ConnectWithResources( address, protocol );
         }
     }}
 	CZM_CloudFrame();
@@ -931,6 +1008,7 @@ void CZM_OnlineFrame( void )
 	CZM_TabFrame();
 	CZM_SocialFrame();
 	CZM_LobbyFrame();
+	ResourceJoinFrame();
 }
 
 /*

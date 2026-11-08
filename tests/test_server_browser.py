@@ -32,10 +32,13 @@ bool CZM_HomePinned(const char*);bool CZM_HomeSetPinned(const char*,const char*,
 void CZM_ServerAuthShow(const char*,const char*);
 void CZM_ServerReportShow(const char*,const char*);bool CZM_ServerBlocked(const char*);
 void CZM_ServerBlocksShow();
+int CZM_ServerResourcesEligibility(const char*);void CZM_ServerResourcesShow(const char*,bool);
 void CZM_LobbyPickedServer(const char*,const char*,const char*,const char*,int,int);
 struct CzmServer;
 enum{CZM_OFFICIAL_SURVIVAL=0,CZM_OFFICIAL_ESCAPE,CZM_OFFICIAL_COUNT};
 CzmServer*CZM_OfficialServer(int);bool CZM_IsOfficial(const char*);void CZM_PrepareConnect(const char*);
+void CZM_ConnectWithResources(const char*,const char*);
+void CZM_CancelResourceJoin();
 int CZM_OfficialBadge(int,int,int,bool);void CZM_GoldComet(const CzmRect&,float,float);void CZM_OfficialMark(int,int,int);
 '''
 HARNESS = LOBBY_HARNESS.replace('unsigned CZM_White(){return 0xffffffff;}',
@@ -55,6 +58,11 @@ HARNESS = HARNESS.replace('void CZM_OpenProfile(int){}',
 HARNESS += r'''
 #include <cmath>
 static int picked,detailsAsked,authOpened,reportsOpened,blocksOpened;static std::string pickedAddress,blockedAddress,reportedAddress;
+static int resourcesOpened;static bool resourcesRussian;static std::string resourcesAddress,configuredResourceAddress;
+static int resourceJoinCancels;static bool resourceJoinPending;
+void CZM_CancelResourceJoin(){if(resourceJoinPending){resourceJoinPending=false;resourceJoinCancels++;}}
+int CZM_ServerResourcesEligibility(const char*a){return !configuredResourceAddress.empty()&&configuredResourceAddress==a?1:0;}
+void CZM_ServerResourcesShow(const char*a,bool ru){resourcesOpened++;resourcesAddress=a;resourcesRussian=ru;}
 bool CZM_ServerBlocked(const char*a){return blockedAddress==a;}
 void CZM_ServerReportShow(const char*a,const char*){reportsOpened++;reportedAddress=a;}
 void CZM_ServerBlocksShow(){blocksOpened++;}
@@ -119,6 +127,19 @@ int main(int argc,char**argv){
    assert(!overlap(w.m_admin,w.m_play)&&!overlap(w.m_fav,w.m_admin));
    cursor(w.RowRect(0));assert(w.HitTest()==w.HIT_ROW);int oldPicked=picked;
    w.Activate(w.HIT_ROW);assert(w.m_bDetailsOpen&&picked==oldPicked);
+   // A configured server exposes resources even while its official badge is hidden.
+   assert(!w.m_resources.w&&!CZM_IsOfficial(e.address));
+   configuredResourceAddress=e.address;w.Layout();
+   assert(inside(w.m_resources,w.m_details));
+   assert(!overlap(w.m_resources,w.m_report)&&!overlap(w.m_resources,w.m_detailsClose));
+   assert(!overlap(w.m_resources,w.m_detailsName)&&!overlap(w.m_resources,w.m_detailsMap));
+   assert(w.m_resources.x>=w.m_details.x+ScreenHeight*.028f);
+   int beforeResources=resourcesOpened;cursor(w.m_resources);assert(w.HitTest()==w.HIT_RESOURCES);
+   w.KeyDown(1);w.KeyUp(1);assert(resourcesOpened==beforeResources+1&&resourcesAddress==e.address&&resourcesRussian==russian);
+   // A mapping change between draw and tap cannot open the old server's pack.
+   configuredResourceAddress="203.0.113.6:27015";
+   assert(w.HitTest()==w.HIT_DETAILS);w.Activate(w.HIT_RESOURCES);assert(resourcesOpened==beforeResources+1);
+   w.Layout();assert(!w.m_resources.w);configuredResourceAddress.clear();
    w.m_iPlayersState=2;w.m_iNumPlayers=18;strcpy(w.m_szPlayersFor,e.address);
    for(int i=0;i<18;i++){snprintf(w.m_players[i].name,48,"Player %d",i+1);w.m_players[i].frags=65-i;}
    mapRects.clear();int oldLabels=blockLabels;w.Draw();assert(mapRects.back().w==w.m_detailsMap.w&&mapRects.back().h==w.m_detailsMap.h);
@@ -135,7 +156,9 @@ int main(int argc,char**argv){
    cursorX=uiStatic.cursorX=row.x+row.w-row.h*3/2;assert(w.HitTest()==w.HIT_ROW+2);
    cursorX=uiStatic.cursorX=row.x+row.w-row.h/2;assert(w.HitTest()==w.HIT_ROW+1);
    verifiedOwner=0;w.m_bDetailsOpen=true;w.Layout();assert(!w.m_verified.w);
-   actorAdmin=true;w.Layout();assert(inside(w.m_manage,w.m_details)&&!overlap(w.m_manage,w.m_report));
+   actorAdmin=true;configuredResourceAddress=e.address;w.Layout();assert(inside(w.m_manage,w.m_details)&&!overlap(w.m_manage,w.m_report));
+   assert(inside(w.m_resources,w.m_details)&&!overlap(w.m_resources,w.m_manage));
+   assert(w.m_resources.x>=w.m_details.x+ScreenHeight*.028f);configuredResourceAddress.clear();w.Layout();
    cursor(w.m_manage);assert(w.HitTest()==w.HIT_MANAGE);w.Activate(w.HIT_MANAGE);assert(managedServer==e.address);
    w.Draw();actorAdmin=false;w.Layout();assert(!w.m_manage.w);
    int beforeReport=reportsOpened;cursor(w.m_report);assert(w.HitTest()==w.HIT_REPORT);w.Activate(w.HIT_REPORT);
@@ -157,12 +180,15 @@ int main(int argc,char**argv){
    if(picker){assert(picked==oldPicked+1&&pickedAddress==e.address&&!w.m_bDetailsOpen);s_lobbyPicker=true;}
    else assert(w.m_bReturnHere);
    w.m_bDetailsOpen=true;cursorX=uiStatic.cursorX=w.m_details.x-2;cursorY=uiStatic.cursorY=w.m_details.y;
-   assert(w.HitTest()==w.HIT_DETAILS_BACKDROP);w.KeyDown(1);w.KeyUp(1);assert(!w.m_bDetailsOpen);
+   int cancelledBefore=resourceJoinCancels;resourceJoinPending=true;
+   assert(w.HitTest()==w.HIT_DETAILS_BACKDROP);w.KeyDown(1);w.KeyUp(1);assert(!w.m_bDetailsOpen&&!resourceJoinPending&&resourceJoinCancels==cancelledBefore+1);
    // An interior-to-exterior drag cannot trigger backdrop dismissal.
    w.m_bDetailsOpen=true;cursor(w.m_detailsInfo);w.KeyDown(1);cursorX=uiStatic.cursorX=w.m_details.x-2;w.KeyUp(1);assert(w.m_bDetailsOpen);
-   w.KeyDown(27);assert(!w.m_bDetailsOpen);
+   resourceJoinPending=true;cancelledBefore=resourceJoinCancels;
+   w.KeyDown(27);assert(!w.m_bDetailsOpen&&!resourceJoinPending&&resourceJoinCancels==cancelledBefore+1);
    w.m_bDetailsOpen=true;w.OpenDialog(w.DLG_PASSWORD);cursor(w.m_dlgField);assert(w.HitTest()==w.HIT_DIALOG_FIELD);
-   w.KeyDown(27);assert(w.m_iDialog==w.DLG_NONE&&w.m_bDetailsOpen);w.m_bDetailsOpen=false;
+   resourceJoinPending=true;cancelledBefore=resourceJoinCancels;
+   w.KeyDown(27);assert(w.m_iDialog==w.DLG_NONE&&w.m_bDetailsOpen&&resourceJoinPending&&resourceJoinCancels==cancelledBefore);resourceJoinPending=false;w.m_bDetailsOpen=false;
   }
  }
  for(int tab=0;tab<TAB_COUNT;tab++){
@@ -179,10 +205,13 @@ int main(int argc,char**argv){
   w.m_iDetailPlayerFirst=999;w.Layout();assert(w.m_iDetailPlayerFirst+ w.DetailPlayerRows()==64);w.DrawDetails();
   // Closing and reopening the same server is a fresh view, not its last roster page.
   std::string sameServer=w.m_szSelected;w.m_bDetailPlayerDrag=true;w.m_bScrolling=true;
-  w.Activate(w.HIT_DETAILS_CLOSE);assert(!w.m_bDetailsOpen&&!w.m_iDetailPlayerFirst&&!w.m_bDetailPlayerDrag&&!w.m_bScrolling);
+  int cancelledBefore=resourceJoinCancels;resourceJoinPending=true;
+  w.Activate(w.HIT_DETAILS_CLOSE);assert(!w.m_bDetailsOpen&&!w.m_iDetailPlayerFirst&&!w.m_bDetailPlayerDrag&&!w.m_bScrolling&&!resourceJoinPending&&resourceJoinCancels==cancelledBefore+1);
   w.Activate(w.HIT_ROW);assert(w.m_bDetailsOpen&&sameServer==w.m_szSelected&&!w.m_iDetailPlayerFirst&&!w.m_bDetailPlayerDrag);
   detailLabels.clear();w.Layout();w.DrawDetails();assert(std::find(detailLabels.begin(),detailLabels.end(),w.m_players[0].name)!=detailLabels.end());
-  CzmEntry other=e;strcpy(other.address,"203.0.113.6:27015");w.Select(&other);assert(w.m_iDetailPlayerFirst==0);w.Select(&w.m_entries[0]);
+  resourceJoinPending=true;cancelledBefore=resourceJoinCancels;w.Select(&w.m_entries[0]);assert(resourceJoinPending&&resourceJoinCancels==cancelledBefore);
+  CzmEntry other=e;strcpy(other.address,"203.0.113.6:27015");w.Select(&other);assert(w.m_iDetailPlayerFirst==0&&!resourceJoinPending&&resourceJoinCancels==cancelledBefore+1);
+  resourceJoinPending=true;w.Select(nullptr);assert(!resourceJoinPending&&resourceJoinCancels==cancelledBefore+2);w.Select(&w.m_entries[0]);
   w.m_entries[0].password=true;w.Activate(w.HIT_PLAY);assert(w.m_iDialog==w.DLG_PASSWORD&&!strcmp(w.m_szPending,e.address));w.CloseDialog();w.m_entries[0].password=false;
   int beforeAuth=authOpened;w.Activate(w.HIT_ADMIN);assert(authOpened==beforeAuth+1);
   actorAdmin=false;managedServer.clear();w.Activate(w.HIT_MANAGE);assert(managedServer.empty());
@@ -192,6 +221,7 @@ int main(int argc,char**argv){
   if(argc>3){ScreenWidth=atoi(argv[2]);ScreenHeight=atoi(argv[3]);}
   trace=true;if(!strcmp(argv[1],"details")){
    s_lobbyPicker=false;actorAdmin=true;w.m_bDetailsOpen=true;
+   configuredResourceAddress=w.m_entries[0].address;
    strcpy(w.m_entries[0].name,"Counter Zombie | Survival | ZP 5");strcpy(w.m_entries[0].map,"zm_3rooms");strcpy(w.m_entries[0].badge,"ZM");
    w.m_entries[0].players=1;w.m_entries[0].ping=37;w.m_entries[0].password=true;w.m_entries[0].sources|=SRC_FAVORITE;
    w.m_iPlayersState=2;w.m_iNumPlayers=1;strcpy(w.m_szPlayersFor,w.m_entries[0].address);strcpy(w.m_players[0].name,"Magnus");w.m_players[0].frags=0;

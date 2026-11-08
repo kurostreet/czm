@@ -166,11 +166,12 @@ enum { ca_disconnected, ca_active, key_menu, key_game, FRAGMENT_MAX_SIZE=1024, P
 struct { int state,key_dest,connect_time,max_fragment_size,netchan,connect_retry,signon,net_protocol;
  bool changedemo,set_lastdemo; char serveradr[16],bandwidth_test[16]; } cls;
 struct { float value; } host_developer;
-bool customLoading=true; int menuCalls=0,disconnectCalls=0;
+bool customLoading=true,backgroundStopped=false; int menuCalls=0,disconnectCalls=0,resourceClears=0;
 bool CZM_Loading_Enabled() { return customLoading; }
 void Voice_Disconnect() {} void CL_Stop_f() {} void CL_SendDisconnectMessage(int) {}
 void SteamBroker_TerminateGameConnection() {} void CL_ClearState() {}
-void S_StopBackgroundTrack() {} void SCR_EndLoadingPlaque() {} void Netchan_Clear(int *) {}
+void S_StopBackgroundTrack() { backgroundStopped=true; } void SCR_EndLoadingPlaque() {} void Netchan_Clear(int *) {}
+void CZM_ServerResourcesClear() { assert(cls.state==ca_disconnected||backgroundStopped); resourceClears++; }
 void IN_LockInputDevices(bool) {} void CZM_Loading_Disconnected() { disconnectCalls++; }
 void UI_SetActiveMenu(bool active) { assert(active); menuCalls++; cls.key_dest=key_menu; }
 '''
@@ -178,17 +179,18 @@ void UI_SetActiveMenu(bool active) { assert(active); menuCalls++; cls.key_dest=k
         program += r'''
 void Reset(int developer,bool custom) {
  memset(&cls,0,sizeof(cls));cls.state=ca_active;cls.key_dest=key_game;
- host_developer.value=developer;customLoading=custom;menuCalls=disconnectCalls=0;
+ host_developer.value=developer;customLoading=custom;menuCalls=disconnectCalls=resourceClears=0;backgroundStopped=false;
 }
 int main() {
  for(int developer=0;developer<=2;developer++) {
   Reset(developer,true);CL_Disconnect();
-  assert(cls.state==ca_disconnected && cls.key_dest==key_menu && menuCalls==1 && disconnectCalls==1);
+  assert(cls.state==ca_disconnected && cls.key_dest==key_menu && menuCalls==1 && disconnectCalls==1 && resourceClears==1);
  }
- Reset(2,false);CL_Disconnect();assert(menuCalls==0 && disconnectCalls==1);
- Reset(0,false);CL_Disconnect();assert(menuCalls==1);
- Reset(2,true);cls.key_dest=key_menu;CL_Disconnect();assert(menuCalls==0);
- Reset(2,true);cls.state=ca_disconnected;CL_Disconnect();assert(menuCalls==0 && disconnectCalls==0);
+ Reset(2,false);CL_Disconnect();assert(menuCalls==0 && disconnectCalls==1 && resourceClears==1);
+ Reset(0,false);CL_Disconnect();assert(menuCalls==1 && resourceClears==1);
+ Reset(2,true);cls.key_dest=key_menu;CL_Disconnect();assert(menuCalls==0 && resourceClears==1);
+ // A prepared cache must also be detached before a connection ever becomes active.
+ Reset(2,true);cls.state=ca_disconnected;CL_Disconnect();assert(menuCalls==0 && disconnectCalls==0 && resourceClears==1);
 }
 '''
         with tempfile.TemporaryDirectory() as temp:

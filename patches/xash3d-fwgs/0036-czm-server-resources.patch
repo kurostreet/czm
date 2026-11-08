@@ -1,0 +1,287 @@
+diff --git a/engine/common/common.h b/engine/common/common.h
+--- a/engine/common/common.h
++++ b/engine/common/common.h
+@@ -419,6 +419,7 @@
+ byte *FS_LoadDirectFile( const char *path, fs_offset_t *filesizeptr )
+ 	MALLOC_LIKE( _Mem_Free, 1 ) WARN_UNUSED_RESULT;
+ void FS_Rescan_f( void );
++qboolean FS_CzmSetServerResources( const char *path );
+ void FS_LoadGameInfo( void );
+ void FS_SaveVFSConfig( void );
+ 
+diff --git a/engine/common/filesystem_engine.c b/engine/common/filesystem_engine.c
+--- a/engine/common/filesystem_engine.c
++++ b/engine/common/filesystem_engine.c
+@@ -26,6 +26,7 @@
+ #include "common.h"
+ #include "library.h"
+ #include "platform/platform.h"
++#include "czm_resource_mount.h"
+ 
+ #if XASH_WIN32
+ #include <direct.h>
+@@ -42,6 +43,7 @@
+ 
+ static pfnCreateInterface_t fs_pfnCreateInterface;
+ static HINSTANCE fs_hInstance;
++static czm_resource_mount_t fs_czm_resources;
+ 
+ search_t *FS_Search( const char *pattern, int caseinsensitive, int gamedironly )
+ {
+@@ -99,6 +101,21 @@
+ void FS_Rescan_f( void )
+ {
+ 	g_fsapi.Rescan( FS_MountFlags(), ui_language.string );
++	// Rescan drops nonstatic search paths. Reattach only this connection's pack;
++	// never grant executable-code lookup or change the engine's write directory.
++	if( fs_czm_resources.path[0] )
++	{
++		char directory[CZM_RESOURCE_PATH_MAX + 1];
++		Q_snprintf( directory, sizeof( directory ), "%s/", fs_czm_resources.path );
++		g_fsapi.AddGameDirectory( directory, FS_NOWRITE_PATH | FS_CUSTOM_PATH );
++	}
++}
++
++qboolean FS_CzmSetServerResources( const char *path )
++{
++	if( !g_fsapi.Rescan ) return false;
++	if( CZM_ResourceSelect( &fs_czm_resources, path )) FS_Rescan_f();
++	return fs_czm_resources.path[0] != 0;
+ }
+ 
+ static void FS_LoadVFSConfig( const char *gamedir )
+@@ -362,6 +379,15 @@
+ 	}
+ 	COM_FixSlashes( rootdir );
+ 	COM_StripDirectorySlash( rootdir );
++#if XASH_ANDROID
++	// Java returns canonical paths, including /data/user aliases resolved by Android.
++	char *canonical_root = realpath( rootdir, NULL );
++	if( canonical_root )
++	{
++		CZM_ResourceRoot( &fs_czm_resources, canonical_root );
++		free( canonical_root );
++	}
++#endif
+ 
+ 	FS_DetermineReadOnlyRootDirectory( rodir, sizeof( rodir ));
+ 	COM_FixSlashes( rodir );
+@@ -420,6 +446,7 @@
+ */
+ void FS_Shutdown( void )
+ {
++	memset( &fs_czm_resources, 0, sizeof( fs_czm_resources ));
+ 	if( g_fsapi.ShutdownStdio )
+ 		g_fsapi.ShutdownStdio();
+ 
+diff --git a/engine/client/cl_main.c b/engine/client/cl_main.c
+--- a/engine/client/cl_main.c
++++ b/engine/client/cl_main.c
+@@ -1259,6 +1259,99 @@
+ 	convar_t *choice = Cvar_FindVar( "czm_diagnostics" );
+ 	if( choice && CZM_Loading_Enabled() )
+ 		Cvar_DirectSetValue( &host_developer, bound( 0, (int)choice->value, 2 ));
++}
++
++// A one-use Java grant comes from the trusted catalog/verified loader, not a
++// server, cvar or console command. Pin it to the actual resolved endpoint for
++// this connection. Filesystem rescans reuse the pinned mount without JNI/network.
++static string czm_resources_address;
++static qboolean czm_resources_mounted;
++static void CZM_ServerResourcesClear( void );
++
++static qboolean CZM_ServerResourcesReject( void )
++{
++	const char *reason = "#czm_server_resources";
++	CZM_ServerResourcesClear();
++	CZM_Loading_SetError( reason );
++	CL_Disconnect();
++	Cvar_Set( "czm_loading_error", reason );
++	UI_SetActiveMenu( true );
++	return false;
++}
++
++static qboolean CZM_ServerResourcesBind( netadr_t adr )
++{
++	const char *address = NET_AdrToString( adr );
++	if( !Q_strcmp( czm_resources_address, address )) return true;
++	CZM_ServerResourcesClear();
++	Q_strncpy( czm_resources_address, address, sizeof( czm_resources_address ));
++#ifdef __ANDROID__
++	qboolean rejected = true;
++	JNIEnv *env = Android_GetNativeObject( "JNIEnv" );
++	if( !env ) return CZM_ServerResourcesReject();
++	if( (*env)->PushLocalFrame( env, 8 ) < 0 )
++	{
++		if( (*env)->ExceptionCheck( env )) (*env)->ExceptionClear( env );
++		return CZM_ServerResourcesReject();
++	}
++	jclass netclass = (*env)->FindClass( env, "ru/kurostreet/counterzombiemobile/CzmNet" );
++	if( netclass && !(*env)->ExceptionCheck( env ))
++	{
++		jmethodID method = (*env)->GetStaticMethodID( env, netclass, "serverResourcesMountPath", "(Ljava/lang/String;)Ljava/lang/String;" );
++		if( method && !(*env)->ExceptionCheck( env ))
++		{
++			jstring endpoint = (*env)->NewStringUTF( env, address );
++			if( endpoint && !(*env)->ExceptionCheck( env ))
++			{
++				czm_resources_mounted = true; // method may acquire the Java in-use lease
++				jstring path = (*env)->CallStaticObjectMethod( env, netclass, method, endpoint );
++				if( path && !(*env)->ExceptionCheck( env ))
++				{
++					const char *chars = (*env)->GetStringUTFChars( env, path, NULL );
++					if( chars )
++					{
++						czm_resources_mounted = chars[0] != 0;
++						rejected = czm_resources_mounted && !FS_CzmSetServerResources( chars );
++						(*env)->ReleaseStringUTFChars( env, path, chars );
++					}
++				}
++			}
++		}
++	}
++	if( (*env)->ExceptionCheck( env ))
++	{
++		rejected = true;
++		(*env)->ExceptionClear( env );
++	}
++	(*env)->PopLocalFrame( env, NULL );
++	if( rejected ) return CZM_ServerResourcesReject();
++#endif
++	return true;
++}
++
++static void CZM_ServerResourcesClear( void )
++{
++	FS_CzmSetServerResources( "" );
++	czm_resources_address[0] = 0;
++#ifdef __ANDROID__
++	if( czm_resources_mounted )
++	{
++		JNIEnv *env = Android_GetNativeObject( "JNIEnv" );
++		if( env && (*env)->PushLocalFrame( env, 4 ) >= 0 )
++		{
++			jclass netclass = (*env)->FindClass( env, "ru/kurostreet/counterzombiemobile/CzmNet" );
++			if( netclass && !(*env)->ExceptionCheck( env ))
++			{
++				jmethodID method = (*env)->GetStaticMethodID( env, netclass, "serverResourcesUnmounted", "()V" );
++				if( method && !(*env)->ExceptionCheck( env )) (*env)->CallStaticVoidMethod( env, netclass, method );
++			}
++			if( (*env)->ExceptionCheck( env )) (*env)->ExceptionClear( env );
++			(*env)->PopLocalFrame( env, NULL );
++		}
++		else if( env && (*env)->ExceptionCheck( env )) (*env)->ExceptionClear( env );
++	}
++#endif
++	czm_resources_mounted = false;
+ }
+ 
+ // Build credentials only into the packet for its actual destination. Never mutate
+@@ -1372,6 +1465,7 @@
+ 	char protinfo[MAX_INFO_STRING];
+ 	char wireinfo[MAX_INFO_STRING];
+ 	if( !CZM_ServerPolicyAllowed( adr )) return;
++	if( !CZM_ServerResourcesBind( adr )) return;
+ 
+ 	protinfo[0] = 0;
+ 
+@@ -1427,6 +1521,7 @@
+ 
+ 	if( adr.port == 0 ) adr.port = MSG_BigShort( PORT_SERVER );
+ 	if( !CZM_ServerPolicyAllowed( adr )) return;
++	if( !CZM_ServerResourcesBind( adr )) return;
+ 
+ 	int input_devices = IN_CollectInputDevices();
+ 	IN_LockInputDevices( adrtype != NA_LOOPBACK ? true : false );
+@@ -1604,6 +1699,7 @@
+ 
+ 	if( adr.port == 0 ) adr.port = MSG_BigShort( PORT_SERVER );
+ 	if( !CZM_ServerPolicyAllowed( adr )) return;
++	if( !CZM_ServerResourcesBind( adr )) return;
+ 
+ 	if( cls.bandwidth_test.started )
+ 	{
+@@ -1948,7 +2044,10 @@
+ void CL_Disconnect( void )
+ {
+ 	if( cls.state == ca_disconnected )
+-		return;
++	{
++		CZM_ServerResourcesClear();
++		return;
++	}
+ 
+ 	cls.connect_time = 0;
+ 	cls.changedemo = false;
+@@ -1962,6 +2061,7 @@
+ 	CL_ClearState ();
+ 
+ 	S_StopBackgroundTrack ();
++	CZM_ServerResourcesClear(); // after old sounds/resources close, before menu/next join
+ 	SCR_EndLoadingPlaque (); // get rid of loading plaque
+ 
+ 	// clear the network channel, too.
+diff --git a/engine/common/czm_resource_mount.h b/engine/common/czm_resource_mount.h
+new file mode 100644
+--- /dev/null
++++ b/engine/common/czm_resource_mount.h
+@@ -0,0 +1,59 @@
++/* Managed resource mount boundary. No command/cvar can supply a mount path. */
++#ifndef CZM_RESOURCE_MOUNT_H
++#define CZM_RESOURCE_MOUNT_H
++#include <string.h>
++
++#define CZM_RESOURCE_PATH_MAX 1024
++
++typedef struct czm_resource_mount_s
++{
++ char root[CZM_RESOURCE_PATH_MAX];
++ char path[CZM_RESOURCE_PATH_MAX];
++} czm_resource_mount_t;
++
++/* The installer owns files/game; resource packs live in its sibling directory. */
++static inline void CZM_ResourceRoot( czm_resource_mount_t *state, const char *game_root )
++{
++ const char *slash;
++ size_t length;
++ state->root[0] = state->path[0] = 0;
++ if( !game_root || game_root[0] != '/' || !( slash = strrchr( game_root, '/' ))) return;
++ if( strcmp( slash + 1, "game" )) return;
++ length = (size_t)( slash - game_root ) + 1;
++ if( length + sizeof( "server-resources/" ) > sizeof( state->root )) return;
++ memcpy( state->root, game_root, length );
++ memcpy( state->root + length, "server-resources/", sizeof( "server-resources/" ));
++}
++
++static inline int CZM_ResourceToken( const char **cursor )
++{
++ const char *start = *cursor;
++ while( **cursor && **cursor != '/' )
++ {
++  const unsigned char c = (unsigned char)**cursor;
++  if( !(( c >= 'a' && c <= 'z' ) || ( c >= 'A' && c <= 'Z' )
++   || ( c >= '0' && c <= '9' ) || c == '_' || c == '-' )) return 0;
++  if( ++*cursor - start > 64 ) return 0;
++ }
++ return *cursor != start && *(*cursor)++ == '/';
++}
++
++static inline int CZM_ResourcePathValid( const czm_resource_mount_t *state, const char *path )
++{
++ size_t root_length = strlen( state->root );
++ const char *suffix;
++ if( !root_length || !path || strlen( path ) >= sizeof( state->path )
++  || strncmp( path, state->root, root_length )) return 0;
++ suffix = path + root_length;
++ return CZM_ResourceToken( &suffix ) && CZM_ResourceToken( &suffix ) && !strcmp( suffix, "files" );
++}
++
++/* An invalid path revokes the old mount rather than retaining another server's data. */
++static inline int CZM_ResourceSelect( czm_resource_mount_t *state, const char *path )
++{
++ if( !CZM_ResourcePathValid( state, path )) path = "";
++ if( !strcmp( state->path, path )) return 0;
++ memcpy( state->path, path, strlen( path ) + 1 );
++ return 1;
++}
++#endif

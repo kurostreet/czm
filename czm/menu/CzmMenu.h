@@ -147,6 +147,9 @@ bool CZM_PlayServer( void );                // connected plugin supports CZM tea
 void CZM_ConnectOfficial( int slot );
 // before every connect: our server gets the player's CZM ticket (setinfo _czm), any other gets none
 void CZM_PrepareConnect( const char *address );
+// All menu joins pass through a fresh resource catalog check before connecting.
+void CZM_ConnectWithResources( const char *address, const char *protocol );
+void CZM_CancelResourceJoin( void );
 // the "Official" label: a golden pill with a bolt, h high; returns its width, draws only when asked
 int CZM_OfficialBadge( int x, int y, int h, bool draw );
 // the golden badge of our servers with electric sparks crackling round it, size x size at x, y
@@ -353,6 +356,11 @@ void CZM_ServerAuthShow( const char *address, const char *name );
 void CZM_ServerReportShow( const char *address, const char *name );
 bool CZM_ServerBlocked( const char *address );
 int CZM_ServerOwner( const char *address );
+int CZM_ServerResourcesEligibility( const char *address );
+void CZM_ServerResourcesShow( const char *address, bool russian );
+void CZM_ServerResourcesRefresh( const char *address );
+int CZM_ServerResourcesPrepare( const char *address );
+void CZM_ServerResourcesCancelConnection( void );
 void CZM_AdminServerShow( const char *address );
 int CZM_ServerPolicyRevision( void );
 void CZM_ServerBlocksFrame( void );

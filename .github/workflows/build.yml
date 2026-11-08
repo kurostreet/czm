@@ -68,6 +68,8 @@ jobs:
           CZM_JSON_JAR=/tmp/czm-json.jar python3 -m unittest discover -s tests -p test_translation_client.py -v
           CZM_JSON_JAR=/tmp/czm-json.jar python3 -m unittest discover -s tests -p test_settings_data.py -v
           CZM_JSON_JAR=/tmp/czm-json.jar python3 -m unittest discover -s tests -p test_server_policy.py -k async -v
+          python3 -m unittest discover -s tests -p test_server_resource_store.py -v
+          CZM_JSON_JAR=/tmp/czm-json.jar python3 -m unittest discover -s tests -p test_server_resources_manager.py -v
           python3 -m venv /tmp/czm-server-check
           /tmp/czm-server-check/bin/pip install -q -r server/czm/requirements.txt
           CZM_PLAY_SERVICE_ACCOUNT_FILE=/nonexistent PYTHONPATH=server/czm /tmp/czm-server-check/bin/python -m unittest discover -s server/czm/tests -v
@@ -75,6 +77,7 @@ jobs:
         run: |
           python3 -m unittest discover -s tests -p test_engine_patches.py -v
           python3 scripts/apply_engine_patches.py
+          python3 -m unittest discover -s tests -p test_server_resource_mount.py -v
           python3 -m unittest discover -s tests -p test_http_fallback.py -v
           python3 -m unittest discover -s tests -p test_server_policy.py -k common -v
           python3 -m unittest discover -s tests -p test_goldsrc_entities.py -v
@@ -90,6 +93,7 @@ jobs:
           python3 -m unittest discover -s tests -p test_home_actions.py -v
           python3 -m unittest discover -s tests -p test_lobby_menu.py -v
           python3 -m unittest discover -s tests -p test_server_browser.py -v
+          python3 -m unittest discover -s tests -p test_resource_connect.py -v
           python3 -m unittest discover -s tests -p test_lobby_voice_client.py -v
           python3 -m unittest discover -s tests -p test_lobby_audio.py -v
       - name: Check shared map capture state and read-only protection
@@ -152,7 +156,7 @@ jobs:
           from zipfile import ZipFile
           with ZipFile(os.environ["APK_PATH"]) as apk:
               dex = b"".join(apk.read(name) for name in apk.namelist() if name.startswith("classes") and name.endswith(".dex"))
-              for marker in [b"CzmAdmin", b"CzmAdminDialog", b"CzmTranslator", b"ServerOwners", b"CzmCommunity", b"CzmTicketPickerActivity", b"CzmFeedback", b"com/google/mlkit/nl/translate"]:
+              for marker in [b"CzmAdmin", b"CzmAdminDialog", b"CzmTranslator", b"ServerOwners", b"CzmCommunity", b"CzmTicketPickerActivity", b"CzmFeedback", b"ServerResources", b"ServerResourceStore", b"com/google/mlkit/nl/translate"]:
                   assert marker in dex, marker
               for name in ["gfx/vgui/czm_logo.tga", "gfx/shell/strings.lst", "touch/buy.cfg",
                            "gfx/czm/menu_bg.png", "gfx/czm/title.png", "gfx/czm/fade_left.png", "gfx/czm/fade_bottom.png", "gfx/czm/hud_glyphs.tga",
@@ -220,6 +224,8 @@ jobs:
                   assert b"/api/v1/tab/bind" in menu and b"/api/v1/tab/resolve" in menu, abi
                   engine = apk.read("lib/" + abi + "/libxash.so")
                   assert b"serverUserinfo" in engine, abi
+                  assert b"serverResourcesMountPath" in engine and b"#czm_server_resources" in engine, abi
+                  assert b"serverResourcesPrepare" in menu and b"serverResourcesShow" in menu, abi
                   assert b"czm_loading_enable" in engine and b"czm_loading_error" in engine, abi
                   assert b"czm_queryserver" in engine and b"czm_mictest" in engine, abi
                   assert all(marker in engine for marker in (b"czm_voice_held", b"czm_voice_recording", b"czm_voice_level")), abi

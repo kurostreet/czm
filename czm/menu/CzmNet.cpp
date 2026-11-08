@@ -170,6 +170,52 @@ bool CZM_ServerBlocked( const char *address )
 	CZM_End( env ); return blocked;
 }
 
+int CZM_ServerResourcesEligibility( const char *address )
+{
+	JNIEnv *env; jclass cls;
+	if( !CZM_Begin( &env, &cls )) return 0;
+	jmethodID m = CZM_Method( env, cls, "serverResourcesEligibility", "(Ljava/lang/String;)I" );
+	int result = m ? env->CallStaticIntMethod( cls, m, env->NewStringUTF( address ? address : "" )) : 0;
+	CZM_End( env ); return result;
+}
+
+void CZM_ServerResourcesShow( const char *address, bool russian )
+{
+	JNIEnv *env; jclass cls;
+	if( !CZM_Begin( &env, &cls )) return;
+	jmethodID m = CZM_Method( env, cls, "serverResourcesShow", "(Ljava/lang/String;Z)V" );
+	if( m ) env->CallStaticVoidMethod( cls, m, env->NewStringUTF( address ? address : "" ), (jboolean)russian );
+	CZM_End( env );
+}
+
+void CZM_ServerResourcesRefresh( const char *address )
+{
+	JNIEnv *env; jclass cls;
+	if( !CZM_Begin( &env, &cls )) return;
+	jmethodID m = CZM_Method( env, cls, "serverResourcesRefresh", "(Ljava/lang/String;)V" );
+	if( m ) env->CallStaticVoidMethod( cls, m, env->NewStringUTF( address ? address : "" ));
+	CZM_End( env );
+}
+
+int CZM_ServerResourcesPrepare( const char *address )
+{
+	JNIEnv *env; jclass cls;
+	if( !CZM_Begin( &env, &cls )) return -1;
+	jmethodID m = CZM_Method( env, cls, "serverResourcesPrepare", "(Ljava/lang/String;)I" );
+	int result = m ? env->CallStaticIntMethod( cls, m, env->NewStringUTF( address ? address : "" )) : -1;
+	if( env->ExceptionCheck() ) result = -1;
+	CZM_End( env ); return result;
+}
+
+void CZM_ServerResourcesCancelConnection( void )
+{
+	JNIEnv *env; jclass cls;
+	if( !CZM_Begin( &env, &cls )) return;
+	jmethodID m = CZM_Method( env, cls, "serverResourcesCancelConnection", "()V" );
+	if( m ) env->CallStaticVoidMethod( cls, m );
+	CZM_End( env );
+}
+
 int CZM_ServerOwner( const char *address )
 {
 	JNIEnv *env; jclass cls;
@@ -680,6 +726,11 @@ void CZM_ServerAuthShow( const char *, const char * ) {}
 void CZM_ServerReportShow( const char *, const char * ) {}
 bool CZM_ServerBlocked( const char * ) { return false; }
 int CZM_ServerOwner( const char * ) { return 0; }
+int CZM_ServerResourcesEligibility( const char * ) { return 0; }
+void CZM_ServerResourcesShow( const char *, bool ) {}
+void CZM_ServerResourcesRefresh( const char * ) {}
+int CZM_ServerResourcesPrepare( const char * ) { return 0; }
+void CZM_ServerResourcesCancelConnection( void ) {}
 void CZM_AdminServerShow( const char * ) {}
 int CZM_ServerPolicyRevision( void ) { return 0; }
 void CZM_ServerBlocksFrame( void ) {}

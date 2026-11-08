@@ -59,7 +59,7 @@ class AccountClientTests(unittest.TestCase):
             }
             for name, text in sources.items():
                 (tmp / (name + ".java")).write_text(text)
-            files = [str(JAVA / (name + ".java")) for name in ("CzmNet", "CzmAccount", "EmailLoginState", "CzmDialog", "CzmServerAuth", "ServerAuthData", "CzmColorPicker", "ColorWheelData", "CzmCodeInput", "CzmCloud", "SettingsData", "SettingsSchema", "CzmLayoutActivity", "CzmLayoutProvider", "ServerQuery")]
+            files = [str(JAVA / (name + ".java")) for name in ("CzmNet", "ServerResources", "ServerResourceStore", "CzmAccount", "EmailLoginState", "CzmDialog", "CzmServerAuth", "ServerAuthData", "CzmColorPicker", "ColorWheelData", "CzmCodeInput", "CzmCloud", "SettingsData", "SettingsSchema", "CzmLayoutActivity", "CzmLayoutProvider", "ServerQuery")]
             files += [str(JAVA / "CzmDownloads.java"),str(JAVA / "PasswordChangeState.java"),
                       str(JAVA / "ServerPolicy.java"),str(JAVA / "ServerOwners.java"),str(JAVA / "CzmServerReport.java"),str(JAVA / "ServerBlocks.java"),
                       str(JAVA / "CzmCommunity.java"),str(JAVA / "CzmAdmin.java"),str(JAVA / "CzmAdminDialog.java"),str(JAVA / "CzmTicketPickerActivity.java")]
