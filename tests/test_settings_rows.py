@@ -16,14 +16,16 @@ class SettingsRowsTests(unittest.TestCase):
         rows = source[source.index("enum ERowType"):source.index("void FillClipped(")]
         # The row definitions and sizing are production code; unrelated cvar
         # bindings are inert so this test runs without launching the engine.
-        getters = set(re.findall(r"\b(Get\w+)\b", rows)) - {"GetDiagnostics"}
-        setters = set(re.findall(r"\b(Set\w+)\b", rows)) - {"SetDiagnostics"}
+        getters = set(re.findall(r"\b(Get\w+)\b", rows)) - {"GetDiagnostics", "GetMatchKeyboard", "GetMatchKeepOpen", "GetProfileMotion"}
+        setters = set(re.findall(r"\b(Set\w+)\b", rows)) - {"SetDiagnostics", "SetMatchKeyboard", "SetMatchKeepOpen", "SetProfileMotion"}
         active = {"GyroAvailable", "GyroOn", "VoiceOn", "MicTestAvailable"}
         bindings = "\n".join("float %s(){return 0;}" % name for name in sorted(getters))
         bindings += "\n" + "\n".join("void %s(float){}" % name for name in sorted(setters))
         bindings += "\n" + "\n".join("bool %s(){return true;}" % name for name in sorted(active))
         bindings += "\n" + function(source, "float GetDiagnostics( void )")
         bindings += "\n" + function(source, "void SetDiagnostics( float v )")
+        for signature in ["float GetCvar(", "void SetCvar(", "float GetMatchKeyboard(", "void SetMatchKeyboard(", "float GetMatchKeepOpen(", "void SetMatchKeepOpen(", "float GetProfileMotion(", "void SetProfileMotion("]:
+            bindings += "\n" + function(source, signature)
         row_layout = source[source.index("\tstruct RowLayout"):source.index("\n\tvoid Layout(")]
         hit_enum = source[source.index("\tenum\n", source.index("class CCzmSettings")):source.index("\n\tstruct RowLayout")]
         draw = function(source, "void CCzmSettings::Draw()")
@@ -35,6 +37,7 @@ class SettingsRowsTests(unittest.TestCase):
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <map>
 #include <vector>
 #define UI_DIR "gfx/czm/ui/"
 using HFont=int;
@@ -57,7 +60,8 @@ struct CzmRect{int x=0,y=0,w=0,h=0;
 };
 CzmRect CZM_Rect(int x,int y,int w,int h){CzmRect r;r.x=x;r.y=y;r.w=w;r.h=h;return r;}
 CzmRect CzmRect::Grown(int d)const{return CZM_Rect(x-d,y-d,w+2*d,h+2*d);}
-struct EngFuncs{static float GetCvarFloat(const char*){return 0;}static const char*GetCvarString(const char*){return "test";}
+static std::map<std::string,float> settingCvars;
+struct EngFuncs{static float GetCvarFloat(const char*name){return settingCvars[name];}static void CvarSetValue(const char*name,float value){settingCvars[name]=value;}static const char*GetCvarString(const char*){return "test";}
  static void ShellExecute(const char*,const char*,bool){opened++;}static double DoubleTime(){return 100;}
  static void CvarSetString(const char*,const char*){}static void ClientCmd(bool,const char*){saves++;}};
 int CZM_DiagnosticsMode(){return mode;}void CZM_SetDiagnosticsMode(int v){mode=v;changes++;saves++;}
@@ -125,6 +129,33 @@ int main(){
    int hit=w.HitTest();assert(hit==w.HIT_ROW+last*20+1+choice);
    int before=changes,priorSaves=saves;w.Activate(hit);
    assert(mode==choice&&changes==before+1&&saves==priorSaves+1);
+  }
+ }
+ // The product options use real production bindings and remain reachable by touch.
+ for(auto size:{std::pair<int,int>{1536,716},{960,540},{640,360}}){
+  ScreenWidth=size.first;ScreenHeight=size.second;CCzmSettings w;
+  for(int tab:{CZM_TAB_GAME,CZM_TAB_PROFILE}){
+   w.OpenTab(tab);w.Layout();
+   for(int i=0;i<w.RowCount();i++){
+    const auto&row=w.Row(i);bool keyboard=!strcmp(row.label,"s_match_keyboard"),keep=!strcmp(row.label,"s_match_keep_open"),motion=!strcmp(row.label,"s_profile_motion");
+    if(!keyboard&&!keep&&!motion)continue;
+    assert(row.hint&&row.get&&row.set);w.m_iScroll=0;w.Layout();
+    w.m_iScroll=std::min(w.m_iMaxScroll,std::max(0,w.m_rows[i].rect.y-w.m_clip.y));w.Layout();
+    const char*cvar=keyboard?"czm_match_chat":keep?"czm_match_chat_keep_open":"czm_profile_motion";
+    if(keyboard){
+     assert(row.type==ROW_CHOICE&&row.numOptions==2&&!strcmp(row.options[0],"opt_keyboard_czm")&&!strcmp(row.options[1],"opt_keyboard_system"));
+     for(int choice=0;choice<2;choice++){
+      const auto&p=w.m_rows[i].parts[choice];uiStatic.cursorX=p.x+p.w/2;uiStatic.cursorY=p.y+p.h/2;
+      const int hit=w.HitTest();assert(hit==w.HIT_ROW+i*20+1+choice);w.Activate(hit);assert(settingCvars[cvar]==(choice?0:1)&&row.get()==choice);
+     }
+    }else{
+     assert(row.type==ROW_SWITCH);settingCvars[cvar]=motion?1:0;
+     for(int tap=0;tap<2;tap++){
+      const float before=settingCvars[cvar];const auto&p=w.m_rows[i].control;uiStatic.cursorX=p.x+p.w/2;uiStatic.cursorY=p.y+p.h/2;
+      const int hit=w.HitTest();assert(hit==w.HIT_ROW+i*20);w.Activate(hit);assert(settingCvars[cvar]==(before?0:1)&&row.get()==settingCvars[cvar]);
+     }
+    }
+   }
   }
  }
  // About: links open, the rules show, five taps on the version open the console, the rest is text
