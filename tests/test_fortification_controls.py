@@ -1,6 +1,7 @@
 """Run the real fortification role bridge, saved-layout migration and touch visibility."""
 from pathlib import Path
 import re
+import shlex
 import subprocess
 import tempfile
 import unittest
@@ -18,6 +19,14 @@ def build(source):
         subprocess.run(["g++", "-std=c++11", "-I" + str(ROOT / "common"),
                         str(path / "main.cpp"), "-o", str(path / "run")], check=True)
         subprocess.run([str(path / "run")], check=True)
+
+
+def migration_code():
+    source = TOUCH.read_text()
+    names = ["static int Touch_CzmSkillSlot", "static qboolean Touch_CzmFortPositionClear",
+             "static qboolean Touch_CzmFortFindPosition",
+             "static void Touch_CzmEnsureFortifications( qboolean force )"]
+    return '\n'.join(function(source, name) for name in names)
 
 
 class FortificationControlsTests(unittest.TestCase):
@@ -127,9 +136,7 @@ return 0;}
 ''')
 
     def test_saved_layouts_preserve_custom_controls_and_resolve_name_collisions(self):
-        source = TOUCH.read_text()
-        code = function(source, "static void Touch_CzmEnsureFortifications( qboolean force )")
-        build(ENGINE_STUB + code + r'''
+        build(ENGINE_STUB + migration_code() + r'''
 int main(){
 byte color[4]={9,18,27,36};
 auto saved=Touch_AddButton(&touch.list_user,"my_custom_props","custom.png","czm_props",.11f,.22f,.27f,.33f,color,true);
@@ -148,7 +155,7 @@ assert(saved->x1==.11f&&saved->y1==.22f&&saved->x2==.27f&&saved->y2==.33f);
 assert(saved->aspect==.7f&&saved->flags==(TOUCH_FL_HIDE|TOUCH_FL_MP));
 assert(saved->finger==13&&saved->latched&&!strcmp(saved->texture,"custom.png"));
 assert(!memcmp(saved->color,color,4));
-assert(laser->x1==.72f&&laser->y1==.58f&&laser->aspect==1.f);
+assert(laser->aspect==1.f&&ClearOfOtherControls(laser));
 assert(!strcmp(laser->texture,"gfx/czm/touch/lasermine.png"));
 touch.configchanged=false;Touch_CzmEnsureFortifications(false);Touch_CzmEnsureFortifications(true);
 assert(Count()==4&&!touch.configchanged); // repeat profile loads never replace or duplicate actions
@@ -156,9 +163,123 @@ assert(Count()==4&&!touch.configchanged); // repeat profile loads never replace 
 touch.list_user=List();touch.config_loaded=false;cls.state=0;czm_fort_mask.value=0;
 Touch_CzmEnsureFortifications(true);assert(Count()==2);
 auto props=ByCommand("czm_props");laser=ByCommand("czm_lasermine");
-assert(props&&laser&&props->x1==.65f&&props->y1==.58f&&props->aspect==1.f);
+assert(props&&laser&&props->x1==.50f&&props->y1==.65f&&props->aspect==1.f);
+assert(laser->x1==.57f&&laser->y1==.65f&&laser->aspect==1.f);
 assert(!strcmp(props->texture,"gfx/czm/touch/props.png"));
 assert(props->x2>props->x1&&props->y2>props->y1&&laser->x2<=1.f&&laser->y2<=1.f);
+return 0;}
+''')
+
+    def test_all_shipped_schemes_migrate_without_covering_real_controls(self):
+        scenarios = []
+        for scheme in range(1, 4):
+            path = ROOT / "3rdparty/czm_project/touch_presets" / f"czm_scheme{scheme}.cfg"
+            setup = []
+            for line in path.read_text().splitlines():
+                if not line.startswith("touch_addbutton "):
+                    continue
+                row = shlex.split(line)
+                name, texture, command = row[1:4]
+                coords = ','.join(f"{float(value):.9f}f" for value in row[4:8])
+                color = ','.join(row[8:12])
+                flags = row[12] if len(row) >= 13 else "0"
+                aspect = float(row[13]) if len(row) >= 14 else 0.0
+                setup.append(
+                    '{byte color[4]={' + color + '};auto b=Touch_AddButton(&touch.list_user,'
+                    + ','.join('"' + value + '"' for value in (name, texture, command))
+                    + ',' + coords + ',color,true);b->flags=' + flags + ';'
+                    + (f'b->aspect={aspect:.9f}f;b->y2=b->y1+(b->x2-b->x1)/touchAspect*b->aspect;'
+                       if aspect and not texture.startswith('#') else '')
+                    + 'before.push_back(*b);original.push_back(b);}'
+                )
+            scenarios.append(r'''
+for(float ratio:{.466f,.5625f,.75f}){
+touchAspect=ratio;touch.list_user=List();touch.configchanged=false;
+std::vector<touch_button_t> before;std::vector<touch_button_t*> original;
+''' + '\n'.join(setup) + r'''
+const int oldCount=Count();Touch_CzmEnsureFortifications(true);
+auto props=ByCommand("czm_props"),laser=ByCommand("czm_lasermine");
+assert(Count()==oldCount+2&&props&&laser&&ClearOfOtherControls(props)&&ClearOfOtherControls(laser));
+for(unsigned i=0;i<before.size();i++){
+    const auto &old=before[i];auto b=original[i];
+    assert(b->x1==old.x1&&b->y1==old.y1&&b->x2==old.x2&&b->y2==old.y2);
+    assert(b->aspect==old.aspect&&b->flags==old.flags&&!strcmp(b->command,old.command));
+}
+touch.configchanged=false;Touch_CzmEnsureFortifications(true);
+assert(Count()==oldCount+2&&!touch.configchanged);
+}
+''')
+        build(ENGINE_STUB + migration_code() + '\nint main(){\n'
+              + '\n'.join(scenarios) + '\nreturn 0;}\n')
+
+    def test_custom_obstacles_relocate_controls_and_full_layouts_add_nothing(self):
+        build(ENGINE_STUB + migration_code() + r'''
+int main(){
+byte color[4]={};
+auto hidden=Touch_AddButton(&touch.list_user,"custom-use","use.png","+use",.48f,.64f,.7f,.85f,color,true);
+hidden->flags=TOUCH_FL_HIDE;
+Touch_CzmEnsureFortifications(true);
+auto props=ByCommand("czm_props"),laser=ByCommand("czm_lasermine");
+assert(props&&laser&&ClearOfOtherControls(props)&&ClearOfOtherControls(laser));
+assert(props->x1!=.50f||props->y1!=.65f);
+assert(laser->x1!=.57f||laser->y1!=.65f);
+assert(hidden->x1==.48f&&hidden->y1==.64f&&hidden->x2==.7f&&hidden->y2==.85f);
+assert(hidden->flags==TOUCH_FL_HIDE);
+// The search must fail without replacing custom actions when no clear cell exists.
+touch.list_user=List();touch.configchanged=false;
+auto full=Touch_AddButton(&touch.list_user,"custom-full","full.png","+jump",0,0,1,1,color,true);
+full->flags=TOUCH_FL_HIDE;
+Touch_CzmEnsureFortifications(true);
+assert(Count()==1&&ByCommand("+jump")==full&&!touch.configchanged);
+// Movement/look regions and zombie-only skills do not block the human controls.
+touch.list_user=List();touch.configchanged=false;
+for(const char *command:{"_move","_look","_joy","_dpad","czm_skill_g","czm_skill_r","+czm_skill_e"}){
+    Touch_AddButton(&touch.list_user,command,"",command,0,0,1,1,color,true);
+}
+Touch_AddButton(&touch.list_user,"invalid-width","","+attack",1,0,0,1,color,true);
+Touch_AddButton(&touch.list_user,"invalid-height","","+use",0,1,1,0,color,true);
+Touch_CzmEnsureFortifications(true);
+props=ByCommand("czm_props");laser=ByCommand("czm_lasermine");
+assert(props&&laser&&props->x1==.50f&&props->y1==.65f&&laser->x1==.57f&&laser->y1==.65f);
+// On a wide display, the physically nearest clear cell is above this obstacle,
+// although comparing normalized x/y distances would choose the left-hand cell.
+touch.list_user=List();
+Touch_AddButton(&touch.list_user,"physical-obstacle","","+use",.45f,.64f,.70f,.85f,color,true);
+float x=.50f,y=.65f;
+assert(Touch_CzmFortFindPosition(&x,&y,.06f,.12f));
+assert(x>.5299f&&x<.5301f&&y>.4199f&&y<.4201f);
+return 0;}
+''')
+
+    def test_failed_automatic_placement_waits_before_scanning_again(self):
+        build(ENGINE_STUB + migration_code() + r'''
+int main(){
+byte color[4]={};
+Touch_AddButton(&touch.list_user,"occupied","","+jump",0,0,1,1,color,true);
+touch.config_loaded=true;czm_fort_mask.value=3;host.realtime=10;
+stringComparisons=0;Touch_CzmEnsureFortifications(false);
+assert(Count()==1&&stringComparisons>0&&!touch.configchanged);
+// This counts every production Q_strcmp: the cooldown must precede even the
+// command/name scans, not merely skip the expensive placement grid.
+for(double time:{10.,10.25,10.999}){
+    host.realtime=time;stringComparisons=0;Touch_CzmEnsureFortifications(false);
+    assert(stringComparisons==0&&Count()==1);
+}
+host.realtime=11.001;stringComparisons=0;Touch_CzmEnsureFortifications(false);
+assert(stringComparisons>0&&Count()==1);
+// Editor attempts bypass and reset a failed automatic attempt's cached deadline.
+host.realtime=11.1;stringComparisons=0;Touch_CzmEnsureFortifications(true);
+assert(stringComparisons>0&&Count()==1);
+stringComparisons=0;Touch_CzmEnsureFortifications(false);assert(stringComparisons>0);
+stringComparisons=0;Touch_CzmEnsureFortifications(false);assert(stringComparisons==0);
+// A clock restart cannot retain a deadline from a previous session.
+host.realtime=2;stringComparisons=0;Touch_CzmEnsureFortifications(false);
+assert(stringComparisons>0&&Count()==1);
+stringComparisons=0;Touch_CzmEnsureFortifications(false);assert(stringComparisons==0);
+// Once the user makes room, an explicit editor attempt works immediately.
+touch.list_user=List();Touch_CzmEnsureFortifications(true);
+assert(Count()==2&&ByCommand("czm_props")&&ByCommand("czm_lasermine"));
+assert(touch.configchanged);
 return 0;}
 ''')
 
@@ -210,6 +331,7 @@ CLIENT_STUB = r'''
 #include <map>
 #include <string>
 #include <cstring>
+#include <cmath>
 #include "czm_combat.h"
 struct {bool m_fPlayerDead=false;int m_iIntermission=0;} gHUD;
 int g_iUser1;float clockTime;
@@ -233,7 +355,9 @@ ENGINE_STUB = r'''
 #include <string>
 #include <vector>
 typedef bool qboolean;typedef unsigned char byte;
-#define Q_strcmp strcmp
+int stringComparisons=0;
+int CountCompare(const char *a,const char *b){stringComparisons++;return strcmp(a,b);}
+#define Q_strcmp CountCompare
 #define Q_snprintf snprintf
 #define TO_SCRN_X(x) ((x)*1000)
 #define TO_SCRN_Y(y) ((y)*500)
@@ -246,13 +370,14 @@ int flags=0,finger=-1;bool latched=false;touch_button_t *next=nullptr;
 struct List{touch_button_t *first=nullptr,*last=nullptr;};
 struct{List list_user;bool config_loaded=false,configchanged=false,clientonly=false;int state=0;}touch;
 struct{int state=ca_active;}cls;struct{int maxclients=32;}cl;
+struct{double realtime=0;}host;
 struct Cvar{float value=0;std::string text;const char *string="";};
 Cvar czm_skill_mask,czm_fort_mask,czm_touch_anchors;
 std::vector<std::string> commands;
 void Cvar_DirectFullSet(Cvar *c,const char *s,unsigned flags){assert(flags==0);c->text=s;c->string=c->text.c_str();}
 void Touch_AddButtonCommand(const touch_button_t*,const char *s){commands.push_back(s);}
 bool Touch_CzmLeftFireHidden(touch_button_t*){return false;}
-float Touch_AspectRatio(){return .5f;}
+float touchAspect=.5f;float Touch_AspectRatio(){return touchAspect;}
 touch_button_t *Touch_AddButton(List *l,const char *name,const char *texture,const char *command,
 float x1,float y1,float x2,float y2,byte *color,bool){
 // Match the engine's replace-by-name semantics, so a migration collision destroys the sentinel.
@@ -265,6 +390,17 @@ button->x1=x1;button->y1=y1;button->x2=x2;button->y2=y2;memcpy(button->color,col
 int Count(){int count=0;for(auto b=touch.list_user.first;b;b=b->next)count++;return count;}
 touch_button_t *ByCommand(const char *command){
 for(auto b=touch.list_user.first;b;b=b->next)if(!strcmp(b->command,command))return b;return nullptr;
+}
+bool ClearOfOtherControls(const touch_button_t *fort){
+if(fort->x1<0||fort->y1<0||fort->x2>.98f||fort->y2>.98f)return false;
+for(auto b=touch.list_user.first;b;b=b->next){
+    if(b==fort||b->x2<=b->x1||b->y2<=b->y1)continue;
+    if(!strcmp(b->command,"_move")||!strcmp(b->command,"_look")||!strcmp(b->command,"_joy")||!strcmp(b->command,"_dpad"))continue;
+    if(!strcmp(b->command,"czm_skill_g")||!strcmp(b->command,"czm_skill_r")||!strcmp(b->command,"+czm_skill_e"))continue;
+    const float gapX=.008f,gapY=.008f/touchAspect;
+    if(fort->x1 < b->x2+gapX&&fort->x2+gapX > b->x1&&fort->y1 < b->y2+gapY&&fort->y2+gapY > b->y1)return false;
+}
+return true;
 }
 '''
 

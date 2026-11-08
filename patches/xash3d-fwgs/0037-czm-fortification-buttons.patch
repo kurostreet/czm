@@ -53,18 +53,60 @@ diff --git a/engine/client/input/in_touch.c b/engine/client/input/in_touch.c
  
      const int skill = Touch_CzmSkillSlot( button->command );
      if( skill >= 0 && ( cls.state != ca_active || !((int)czm_skill_mask.value & (1 << skill))))
-@@ -1472,6 +1487,42 @@
+@@ -1472,6 +1487,91 @@
  
  static void Touch_CzmEnsureSkills_f( void ) { Touch_CzmEnsureSkills( true ); }
  
++// Ordinary buttons keep their hit rectangles. Full-screen look/move zones are backgrounds.
++static qboolean Touch_CzmFortPositionClear( float x, float y, float width, float height )
++{
++    const float gap = 0.008f, verticalGap = gap / Touch_AspectRatio();
++    for( touch_button_t *b = touch.list_user.first; b; b = b->next )
++    {
++        if( Touch_CzmSkillSlot( b->command ) >= 0 || !Q_strcmp( b->command, "_move" )
++            || !Q_strcmp( b->command, "_look" ) || !Q_strcmp( b->command, "_joy" )
++            || !Q_strcmp( b->command, "_dpad" )) continue;
++        if( b->x2 <= b->x1 || b->y2 <= b->y1 ) continue;
++        if( x < b->x2 + gap && x + width > b->x1 - gap
++            && y < b->y2 + verticalGap && y + height > b->y1 - verticalGap ) return false;
++    }
++    return true;
++}
++
++static qboolean Touch_CzmFortFindPosition( float *x, float *y, float width, float height )
++{
++    if( *x >= 0.02f && *y >= 0.02f && *x + width <= 0.98f && *y + height <= 0.98f
++        && Touch_CzmFortPositionClear( *x, *y, width, height )) return true;
++    qboolean found = false;
++    float best = 1e9f, bestX = *x, bestY = *y;
++    for( int row = 0; row < 9; row++ )
++    {
++        for( int column = 0; column < 13; column++ )
++        {
++            float candidateX = 0.04f + column * 0.07f, candidateY = 0.12f + row * 0.10f;
++            if( candidateX + width > 0.98f || candidateY + height > 0.98f ) continue;
++            float dx = candidateX - *x, dy = (candidateY - *y) * Touch_AspectRatio();
++            float distance = dx * dx + dy * dy;
++            if( distance >= best || !Touch_CzmFortPositionClear( candidateX, candidateY, width, height )) continue;
++            best = distance; bestX = candidateX; bestY = candidateY; found = true;
++        }
++    }
++    if( found ) { *x = bestX; *y = bestY; }
++    return found;
++}
++
 +// Migrate saved profiles by command, preserving their positions, icons and hidden state.
 +static void Touch_CzmEnsureFortifications( qboolean force )
 +{
 +    if( !force && ( !touch.config_loaded || cls.state != ca_active || !(int)czm_fort_mask.value )) return;
++    static double blockedRetryAt;
++    // A crowded custom profile should not repeat the placement search every frame.
++    if( !force && host.realtime < blockedRetryAt && blockedRetryAt - host.realtime <= 1.0 ) return;
++    blockedRetryAt = 0;
 +    static const char *commands[] = { "czm_props", "czm_lasermine" };
 +    static const char *names[] = { "czm_fort_props", "czm_fort_laser" };
 +    static const char *icons[] = { "props", "lasermine" };
-+    static const float positions[] = { 0.65f, 0.72f };
++    static const float positions[] = { 0.50f, 0.57f };
 +    byte color[4] = { 255, 255, 255, 235 };
 +    for( int i = 0; i < 2; i++ )
 +    {
@@ -83,9 +125,16 @@ diff --git a/engine/client/input/in_touch.c b/engine/client/input/in_touch.c
 +                if( !Q_strcmp( b->name, name )) { taken = true; break; }
 +            if( !taken ) break;
 +        }
++        float x = positions[i], y = 0.65f, width = 0.06f, height = width / Touch_AspectRatio();
++        // A completely covered custom layout stays intact; the action remains in the editor catalogue.
++        if( !Touch_CzmFortFindPosition( &x, &y, width, height ))
++        {
++            if( !force ) blockedRetryAt = host.realtime + 1.0;
++            continue;
++        }
 +        Q_snprintf( texture, sizeof( texture ), "gfx/czm/touch/%s.png", icons[i] );
 +        touch_button_t *b = Touch_AddButton( &touch.list_user, name, texture, commands[i],
-+            positions[i], 0.58f, positions[i] + 0.06f, 0.58f + 0.06f / Touch_AspectRatio(), color, true );
++            x, y, x + width, y + height, color, true );
 +        b->aspect = 1.0f;
 +        touch.configchanged = true;
 +    }
@@ -96,7 +145,7 @@ diff --git a/engine/client/input/in_touch.c b/engine/client/input/in_touch.c
  static void Touch_CzmPublishAnchors( void )
  {
      int bounds[16] = {0};
-@@ -1479,7 +1530,8 @@
+@@ -1479,7 +1579,8 @@
      {
          int slot = Touch_CzmSkillSlot( b->command );
          if( !Q_strcmp( b->command, "+voicerecord" )) slot = 3;
@@ -106,7 +155,7 @@ diff --git a/engine/client/input/in_touch.c b/engine/client/input/in_touch.c
          {
              if( b->command[0] == '+' )
              {
-@@ -2078,6 +2130,7 @@
+@@ -2078,6 +2179,7 @@
  	Touch_UpdateViewport();
  	Touch_InitConfig();
  	Touch_CzmEnsureSkills( false );
