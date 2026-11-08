@@ -62,6 +62,7 @@ int main(){
  CZM_ConnectWithResources("5.6.7.8:27016","gs");state=-1;ResourceJoinFrame();assert(notice==1&&calls.size()==count);
  CZM_ConnectWithResources("5.6.7.8:27016","gs");state=1;allowed=false;ResourceJoinFrame();assert(calls.size()==count);allowed=true;
  CZM_ConnectWithResources("5.6.7.8:27016","gs");state=1;uiStatic.menu.current=&menu2;ResourceJoinFrame();assert(calls.size()==count);
+ CZM_ConnectWithResources("5.6.7.8:27016","gs");CZM_CancelResourceJoin();state=1;ResourceJoinFrame();assert(calls.size()==count);
  CZM_ConnectWithResources("[2001:db8::1]:27015","gs");state=0;ResourceJoinFrame();assert(calls.back()=="connect \"[2001:db8::1]:27015\" gs\n");
 }
 '''

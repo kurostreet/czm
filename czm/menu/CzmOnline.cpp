@@ -651,6 +651,13 @@ static struct
 	bool active, shown;
 } s_resourceJoin;
 
+void CZM_CancelResourceJoin( void )
+{
+	if( !s_resourceJoin.active ) return;
+	s_resourceJoin.active = false;
+	CZM_ServerResourcesCancelConnection();
+}
+
 void CZM_ConnectWithResources( const char *address, const char *protocol )
 {
 	if( !address || !address[0] || strlen( address ) >= sizeof( s_resourceJoin.address )

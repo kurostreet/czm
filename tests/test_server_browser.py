@@ -38,6 +38,7 @@ struct CzmServer;
 enum{CZM_OFFICIAL_SURVIVAL=0,CZM_OFFICIAL_ESCAPE,CZM_OFFICIAL_COUNT};
 CzmServer*CZM_OfficialServer(int);bool CZM_IsOfficial(const char*);void CZM_PrepareConnect(const char*);
 void CZM_ConnectWithResources(const char*,const char*);
+void CZM_CancelResourceJoin();
 int CZM_OfficialBadge(int,int,int,bool);void CZM_GoldComet(const CzmRect&,float,float);void CZM_OfficialMark(int,int,int);
 '''
 HARNESS = LOBBY_HARNESS.replace('unsigned CZM_White(){return 0xffffffff;}',
@@ -58,6 +59,8 @@ HARNESS += r'''
 #include <cmath>
 static int picked,detailsAsked,authOpened,reportsOpened,blocksOpened;static std::string pickedAddress,blockedAddress,reportedAddress;
 static int resourcesOpened;static bool resourcesRussian;static std::string resourcesAddress,configuredResourceAddress;
+static int resourceJoinCancels;static bool resourceJoinPending;
+void CZM_CancelResourceJoin(){if(resourceJoinPending){resourceJoinPending=false;resourceJoinCancels++;}}
 int CZM_ServerResourcesEligibility(const char*a){return !configuredResourceAddress.empty()&&configuredResourceAddress==a?1:0;}
 void CZM_ServerResourcesShow(const char*a,bool ru){resourcesOpened++;resourcesAddress=a;resourcesRussian=ru;}
 bool CZM_ServerBlocked(const char*a){return blockedAddress==a;}
@@ -177,12 +180,15 @@ int main(int argc,char**argv){
    if(picker){assert(picked==oldPicked+1&&pickedAddress==e.address&&!w.m_bDetailsOpen);s_lobbyPicker=true;}
    else assert(w.m_bReturnHere);
    w.m_bDetailsOpen=true;cursorX=uiStatic.cursorX=w.m_details.x-2;cursorY=uiStatic.cursorY=w.m_details.y;
-   assert(w.HitTest()==w.HIT_DETAILS_BACKDROP);w.KeyDown(1);w.KeyUp(1);assert(!w.m_bDetailsOpen);
+   int cancelledBefore=resourceJoinCancels;resourceJoinPending=true;
+   assert(w.HitTest()==w.HIT_DETAILS_BACKDROP);w.KeyDown(1);w.KeyUp(1);assert(!w.m_bDetailsOpen&&!resourceJoinPending&&resourceJoinCancels==cancelledBefore+1);
    // An interior-to-exterior drag cannot trigger backdrop dismissal.
    w.m_bDetailsOpen=true;cursor(w.m_detailsInfo);w.KeyDown(1);cursorX=uiStatic.cursorX=w.m_details.x-2;w.KeyUp(1);assert(w.m_bDetailsOpen);
-   w.KeyDown(27);assert(!w.m_bDetailsOpen);
+   resourceJoinPending=true;cancelledBefore=resourceJoinCancels;
+   w.KeyDown(27);assert(!w.m_bDetailsOpen&&!resourceJoinPending&&resourceJoinCancels==cancelledBefore+1);
    w.m_bDetailsOpen=true;w.OpenDialog(w.DLG_PASSWORD);cursor(w.m_dlgField);assert(w.HitTest()==w.HIT_DIALOG_FIELD);
-   w.KeyDown(27);assert(w.m_iDialog==w.DLG_NONE&&w.m_bDetailsOpen);w.m_bDetailsOpen=false;
+   resourceJoinPending=true;cancelledBefore=resourceJoinCancels;
+   w.KeyDown(27);assert(w.m_iDialog==w.DLG_NONE&&w.m_bDetailsOpen&&resourceJoinPending&&resourceJoinCancels==cancelledBefore);resourceJoinPending=false;w.m_bDetailsOpen=false;
   }
  }
  for(int tab=0;tab<TAB_COUNT;tab++){
@@ -199,10 +205,13 @@ int main(int argc,char**argv){
   w.m_iDetailPlayerFirst=999;w.Layout();assert(w.m_iDetailPlayerFirst+ w.DetailPlayerRows()==64);w.DrawDetails();
   // Closing and reopening the same server is a fresh view, not its last roster page.
   std::string sameServer=w.m_szSelected;w.m_bDetailPlayerDrag=true;w.m_bScrolling=true;
-  w.Activate(w.HIT_DETAILS_CLOSE);assert(!w.m_bDetailsOpen&&!w.m_iDetailPlayerFirst&&!w.m_bDetailPlayerDrag&&!w.m_bScrolling);
+  int cancelledBefore=resourceJoinCancels;resourceJoinPending=true;
+  w.Activate(w.HIT_DETAILS_CLOSE);assert(!w.m_bDetailsOpen&&!w.m_iDetailPlayerFirst&&!w.m_bDetailPlayerDrag&&!w.m_bScrolling&&!resourceJoinPending&&resourceJoinCancels==cancelledBefore+1);
   w.Activate(w.HIT_ROW);assert(w.m_bDetailsOpen&&sameServer==w.m_szSelected&&!w.m_iDetailPlayerFirst&&!w.m_bDetailPlayerDrag);
   detailLabels.clear();w.Layout();w.DrawDetails();assert(std::find(detailLabels.begin(),detailLabels.end(),w.m_players[0].name)!=detailLabels.end());
-  CzmEntry other=e;strcpy(other.address,"203.0.113.6:27015");w.Select(&other);assert(w.m_iDetailPlayerFirst==0);w.Select(&w.m_entries[0]);
+  resourceJoinPending=true;cancelledBefore=resourceJoinCancels;w.Select(&w.m_entries[0]);assert(resourceJoinPending&&resourceJoinCancels==cancelledBefore);
+  CzmEntry other=e;strcpy(other.address,"203.0.113.6:27015");w.Select(&other);assert(w.m_iDetailPlayerFirst==0&&!resourceJoinPending&&resourceJoinCancels==cancelledBefore+1);
+  resourceJoinPending=true;w.Select(nullptr);assert(!resourceJoinPending&&resourceJoinCancels==cancelledBefore+2);w.Select(&w.m_entries[0]);
   w.m_entries[0].password=true;w.Activate(w.HIT_PLAY);assert(w.m_iDialog==w.DLG_PASSWORD&&!strcmp(w.m_szPending,e.address));w.CloseDialog();w.m_entries[0].password=false;
   int beforeAuth=authOpened;w.Activate(w.HIT_ADMIN);assert(authOpened==beforeAuth+1);
   actorAdmin=false;managedServer.clear();w.Activate(w.HIT_MANAGE);assert(managedServer.empty());

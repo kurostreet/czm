@@ -474,6 +474,7 @@ private:
 	void DrawDialog( void );
 	void DrawChip( const CzmRect &r, const char *icon, bool pressed, bool active = false );
 	void SetDetailsOpen( bool open ) {
+		if( m_bDetailsOpen && !open ) CZM_CancelResourceJoin();
 		m_bDetailsOpen = open;
 		m_iDetailPlayerFirst = m_iDetailPlayerDown = 0;
 		if( m_bDetailPlayerDrag ) { m_bScrolling = false; m_iPressed = HIT_NONE; }
@@ -513,7 +514,7 @@ private:
 	char m_szQuery[64];      // folded search text
 
 	int m_iDialog;
-	bool m_bDetailsOpen;
+	bool m_bDetailsOpen = false;
 	CzmTextEdit m_field;
 	char m_szDialogError[128];
 	char m_szPending[64];    // server waiting for its password
@@ -1298,12 +1299,14 @@ void CCzmServers::Select( CzmEntry *e )
 {
 	if( !e )
 	{
+		if( m_szSelected[0] ) CZM_CancelResourceJoin();
 		m_szSelected[0] = 0;
 		return;
 	}
 
 	if( strcmp( m_szSelected, e->address ))
 	{
+		CZM_CancelResourceJoin();
 		m_iDetailPlayerFirst = 0;
 		Q_strncpy( m_szSelected, e->address, sizeof( m_szSelected ));
 		m_iNumPlayers = 0;

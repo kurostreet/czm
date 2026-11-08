@@ -149,6 +149,7 @@ void CZM_ConnectOfficial( int slot );
 void CZM_PrepareConnect( const char *address );
 // All menu joins pass through a fresh resource catalog check before connecting.
 void CZM_ConnectWithResources( const char *address, const char *protocol );
+void CZM_CancelResourceJoin( void );
 // the "Official" label: a golden pill with a bolt, h high; returns its width, draws only when asked
 int CZM_OfficialBadge( int x, int y, int h, bool draw );
 // the golden badge of our servers with electric sparks crackling round it, size x size at x, y
