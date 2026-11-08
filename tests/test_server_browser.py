@@ -48,6 +48,8 @@ HARNESS = HARNESS.replace('void CZM_DrawText(HFont f,int x,int y,int w,const cha
     'void CZM_DrawText(HFont f,int x,int y,int w,const char*s,unsigned c,unsigned just){'
     'if(!strcmp(s,"Заблокировать")||!strcmp(s,"Block")){blockLabelColor=c;blockLabels++;}')
 HARNESS = HARNESS.replace('x,y,w,f,c,just,s);','x,y,w,CZM_FontHeight(f),c,just,s);')
+HARNESS = HARNESS.replace('void CZM_DrawText(HFont f,int x,int y,int w,const char*s,unsigned c,unsigned just){',
+    'static std::vector<std::string> detailLabels;void CZM_DrawText(HFont f,int x,int y,int w,const char*s,unsigned c,unsigned just){detailLabels.emplace_back(s);')
 HARNESS = HARNESS.replace('void CZM_OpenProfile(int){}',
     'static int openedOwner;void CZM_OpenProfile(int owner){openedOwner=owner;}')
 HARNESS += r'''
@@ -172,9 +174,14 @@ int main(int argc,char**argv){
  for(auto resolution:{std::pair<int,int>{640,360},{1536,716},{2340,1080},{1024,768}}){
   ScreenWidth=resolution.first;ScreenHeight=resolution.second;russian=true;s_lobbyPicker=false;
   std::string longName(63,'W');Q_strncpy(w.m_entries[0].name,longName.c_str(),sizeof(w.m_entries[0].name));
-  w.m_iNumPlayers=64;w.m_iPlayersState=2;w.m_bDetailsOpen=true;
+  w.m_iNumPlayers=64;w.m_iPlayersState=2;w.m_bDetailsOpen=true;strcpy(w.m_szPlayersFor,w.m_entries[0].address);
   for(int i=0;i<64;i++){snprintf(w.m_players[i].name,sizeof(w.m_players[i].name),"ОченьДлинныйНикИгрока_%d",i);w.m_players[i].frags=1000-i;}
   w.m_iDetailPlayerFirst=999;w.Layout();assert(w.m_iDetailPlayerFirst+ w.DetailPlayerRows()==64);w.DrawDetails();
+  // Closing and reopening the same server is a fresh view, not its last roster page.
+  std::string sameServer=w.m_szSelected;w.m_bDetailPlayerDrag=true;w.m_bScrolling=true;
+  w.Activate(w.HIT_DETAILS_CLOSE);assert(!w.m_bDetailsOpen&&!w.m_iDetailPlayerFirst&&!w.m_bDetailPlayerDrag&&!w.m_bScrolling);
+  w.Activate(w.HIT_ROW);assert(w.m_bDetailsOpen&&sameServer==w.m_szSelected&&!w.m_iDetailPlayerFirst&&!w.m_bDetailPlayerDrag);
+  detailLabels.clear();w.Layout();w.DrawDetails();assert(std::find(detailLabels.begin(),detailLabels.end(),w.m_players[0].name)!=detailLabels.end());
   CzmEntry other=e;strcpy(other.address,"203.0.113.6:27015");w.Select(&other);assert(w.m_iDetailPlayerFirst==0);w.Select(&w.m_entries[0]);
   w.m_entries[0].password=true;w.Activate(w.HIT_PLAY);assert(w.m_iDialog==w.DLG_PASSWORD&&!strcmp(w.m_szPending,e.address));w.CloseDialog();w.m_entries[0].password=false;
   int beforeAuth=authOpened;w.Activate(w.HIT_ADMIN);assert(authOpened==beforeAuth+1);

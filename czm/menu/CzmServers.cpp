@@ -472,6 +472,12 @@ private:
 	void DrawDetails( void );
 	void DrawDialog( void );
 	void DrawChip( const CzmRect &r, const char *icon, bool pressed, bool active = false );
+	void SetDetailsOpen( bool open ) {
+		m_bDetailsOpen = open;
+		m_iDetailPlayerFirst = m_iDetailPlayerDown = 0;
+		if( m_bDetailPlayerDrag ) { m_bScrolling = false; m_iPressed = HIT_NONE; }
+		m_bDetailPlayerDrag = false;
+	}
 	int DetailPlayerRowH() const { return Q_max( CZM_FontHeight( CZM_Font( CZMF_SMALL )) + H / 90, H * 44 / 1000 ); }
 	int DetailPlayerRows() const { return Q_max( 1, m_detailsPlayers.h / Q_max( 1, DetailPlayerRowH() )); }
 
@@ -569,7 +575,7 @@ CCzmServers::CCzmServers() : CMenuFramework( "CzmServers" )
 	memset( &m_search, 0, sizeof( m_search ));
 	m_szQuery[0] = 0;
 	m_iDialog = DLG_NONE;
-	m_bDetailsOpen = false;
+	SetDetailsOpen( false );
 	memset( &m_field, 0, sizeof( m_field ));
 	m_szDialogError[0] = 0;
 	m_szPending[0] = 0;
@@ -1323,7 +1329,7 @@ void CCzmServers::Show()
 	m_bMaybeScroll = m_bScrolling = false;
 	m_flVelocity = 0.0f;
 	m_iDialog = DLG_NONE;
-	m_bDetailsOpen = false;
+	SetDetailsOpen( false );
 	m_field.End();
 	m_bReturnHere = false;
 
@@ -1334,7 +1340,7 @@ void CCzmServers::Show()
 
 void CCzmServers::Hide()
 {
-	m_bDetailsOpen = false;
+	SetDetailsOpen( false );
 	m_szJoinAddress[0] = 0;
 	m_search.End();
 	m_field.End();
@@ -1713,12 +1719,12 @@ void CCzmServers::Activate( int hit )
 	switch( hit )
 	{
 	case HIT_BACK:
-		if( m_bDetailsOpen ) m_bDetailsOpen = false;
+		if( m_bDetailsOpen ) SetDetailsOpen( false );
 		else Hide();
 		return;
 	case HIT_DETAILS_CLOSE:
 	case HIT_DETAILS_BACKDROP:
-		m_bDetailsOpen = false;
+		SetDetailsOpen( false );
 		return;
 	case HIT_SEARCH:
 		m_search.Begin( m_search.text, m_searchBox );
@@ -1891,7 +1897,7 @@ void CCzmServers::Activate( int hit )
 		}
 
 		Select( e );
-		m_bDetailsOpen = true;
+		SetDetailsOpen( true );
 		m_flVelocity = 0.0f;
 	}
 }
@@ -1953,7 +1959,7 @@ bool CCzmServers::KeyDown( int key )
 		if( m_iDialog != DLG_NONE )
 			CloseDialog();
 		else if( m_bDetailsOpen )
-			m_bDetailsOpen = false;
+			SetDetailsOpen( false );
 		else if( m_search.active )
 			m_search.End();
 		else
@@ -2490,7 +2496,7 @@ void CCzmServers::DrawList( void )
 
 void CCzmServers::DrawDetails( void )
 {
- CzmEntry *e=Selected();if(!e){m_bDetailsOpen=false;return;}
+ CzmEntry *e=Selected();if(!e){SetDetailsOpen(false);return;}
  const CzmRect &d=m_details,&photo=m_detailsMap,&info=m_detailsInfo;
  const int gap=Q_max(5,(int)(H*.018f)),pad=Q_max(8,(int)(H*.028f));
  const HFont small=CZM_Font(CZMF_UI_META),font=CZM_Font(CZMF_SMALL);
@@ -2643,7 +2649,7 @@ void CCzmServers::Draw()
 	if( revision != m_policyRevision )
 	{
 		m_policyRevision = revision; m_bForceRebuild = true; m_iPressed = HIT_NONE;
-		if( Selected() && CZM_ServerBlocked( Selected()->address )) m_bDetailsOpen = false;
+		if( Selected() && CZM_ServerBlocked( Selected()->address )) SetDetailsOpen( false );
 	}
 	if( m_szJoinAddress[0] && now - m_flJoinStarted > LIST_TIMEOUT )
 	{
