@@ -13,14 +13,14 @@ STUBS = {
     'android/content/Context.java': '''package android.content;
 public class Context {
  public static final String CONNECTIVITY_SERVICE="connectivity";
- public java.io.File getFilesDir(){return new java.io.File(System.getProperty("java.io.tmpdir"),"czm-manager-test-unused");}
+ public java.io.File getFilesDir(){return new java.io.File(System.getProperty("czm.manager.root",System.getProperty("java.io.tmpdir")+"/czm-manager-test-unused"));}
  public Object getSystemService(String key){return new android.net.ConnectivityManager();}
  public Preferences getSharedPreferences(String key,int mode){return new Preferences();}
  public static class Preferences { public boolean getBoolean(String key,boolean fallback){return fallback;} public Editor edit(){return new Editor();} }
  public static class Editor { public Editor putBoolean(String key,boolean value){return this;} public void apply(){} }
 }''',
     'android/app/Activity.java': '''package android.app; public class Activity extends android.content.Context { public boolean isFinishing(){return false;} public void runOnUiThread(Runnable action){} }''',
-    'android/net/ConnectivityManager.java': '''package android.net; public class ConnectivityManager { public boolean isActiveNetworkMetered(){return true;} }''',
+    'android/net/ConnectivityManager.java': '''package android.net; public class ConnectivityManager { public static boolean metered=true; public boolean isActiveNetworkMetered(){return metered;} }''',
     'android/os/Looper.java': '''package android.os; public class Looper {public static Looper getMainLooper(){return new Looper();}}''',
     'android/os/Handler.java': '''package android.os; public class Handler {public Handler(Looper looper){} public boolean post(Runnable action){return true;} public boolean postDelayed(Runnable action,long delay){return true;} public void removeCallbacks(Runnable action){} }''',
     'android/view/View.java': '''package android.view; public class View {public static final int GONE=8; public interface OnClickListener {void onClick(View view);} public void setOnClickListener(OnClickListener action){} public void setEnabled(boolean enabled){} public void setVisibility(int value){} }''',
@@ -30,7 +30,7 @@ public class Context {
     'android/widget/ProgressBar.java': '''package android.widget; public class ProgressBar extends android.view.View {public ProgressBar(android.content.Context context,Object attrs,int style){} public void setMax(int value){} public void setProgress(int value){} public void setIndeterminate(boolean value){} }''',
     'android/widget/LinearLayout.java': '''package android.widget; public class LinearLayout extends android.view.View { public static class LayoutParams {public LayoutParams(int width,int height){}} public void addView(android.view.View view){} public void addView(android.view.View view,LayoutParams params){} }''',
     'android/R.java': '''package android; public final class R {public static class attr {public static final int progressBarStyleHorizontal=1;}}''',
-    'org/libsdl/app/SDLActivity.java': '''package org.libsdl.app; public class SDLActivity {public static android.content.Context getContext(){return null;}}''',
+    'org/libsdl/app/SDLActivity.java': '''package org.libsdl.app; public class SDLActivity {public static android.content.Context context; public static android.content.Context getContext(){return context;}}''',
     'ru/kurostreet/counterzombiemobile/CzmDialog.java': '''package ru.kurostreet.counterzombiemobile;
 final class CzmDialog {static final int MUTED=0; final android.widget.Button submit=new android.widget.Button(); final android.widget.TextView error=new android.widget.TextView(); final android.widget.LinearLayout body=new android.widget.LinearLayout(); interface Dismiss {void dismissed(CzmDialog dialog);} CzmDialog(android.app.Activity a,String title,String text,String ok,String cancel,boolean ru,boolean secure){} static int dp(android.content.Context c,int value){return value;} android.widget.TextView note(String text){return new android.widget.TextView();} android.widget.Button link(String text,android.view.View.OnClickListener listener){return new android.widget.Button();} void fail(String text){} boolean isShowing(){return false;} void dismiss(){} void show(){} void setOnDismissListener(Dismiss listener){} }''',
 }

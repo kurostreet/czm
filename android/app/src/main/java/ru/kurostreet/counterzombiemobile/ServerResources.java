@@ -215,7 +215,7 @@ final class ServerResources {
             }catch(Exception ignored){}
             Item check=null;
             synchronized(ServerResources.class){
-                if(loaded!=null){registry=loaded;catalogAt=clock();catalogMaxAge=maxAge;catalogNext=catalogAt+maxAge;}
+                if(loaded!=null){applyRegistry(loaded,maxAge);}
                 if(request==catalogRequest)catalogLoading=false;
                 if(connection&&generation==connectionGeneration){
                     if(loaded==null){Item old=registry.get(connectionAddress);connectionState=old!=null&&old.enabled?-1:0;}
@@ -457,7 +457,7 @@ final class ServerResources {
                 File[] leftovers=revision.listFiles();if(leftovers!=null)for(File f:leftovers)if(f.getName().startsWith("bundle-")&&f.getName().endsWith(".part"))f.delete();
                 prune(item);
                 synchronized(ServerResources.class){if(pack.operation==operation.serial){pack.manifest=manifest;pack.verified=true;pack.canonicalPath=installed.getCanonicalPath();pack.missing=0;pack.done=network;pack.total=network;pack.state=READY;pack.error="";}}
-            }catch(Exception e){fail(pack,operation.serial,e);}
+            }catch(Exception e){fail(pack,operation.serial,operation.cancelled?new Stopped():e);}
             finally{
                 synchronized(ServerResources.class){
                     if(active==operation)active=null;
@@ -495,8 +495,13 @@ final class ServerResources {
             if(!key.isEmpty()&&values.put(key,item)!=null)throw new IOException("address");
             if(key.equals(address))result=item;
         }
-        synchronized(ServerResources.class){registry=Collections.unmodifiableMap(values);catalogAt=clock();catalogMaxAge=age*1000L;catalogNext=catalogAt+catalogMaxAge;}
+        synchronized(ServerResources.class){applyRegistry(Collections.unmodifiableMap(values),age*1000L);}
         return result;
+    }
+
+    private static void applyRegistry(Map<String,Item> values,long maxAge){
+        registry=values;catalogAt=clock();catalogMaxAge=maxAge;catalogNext=catalogAt+maxAge;
+        if(active!=null&&!currentItem(active.pack.item)){active.cancelled=true;active.pack.state=PAUSED;}
     }
 
     private static File findReusable(Item item,File installed,Asset asset,Operation control) throws IOException {
@@ -549,7 +554,7 @@ final class ServerResources {
 
     private static synchronized void pause(String address){
         Item item=registry.get(endpoint(address));
-        if(active!=null&&item!=null&&active.pack.item.key().equals(item.key()))active.cancelled=true;
+        if(active!=null&&item!=null&&active.pack.item.key().equals(item.key())){active.cancelled=true;active.pack.state=PAUSED;active.pack.error="";}
         if(endpoint(address).equals(connectionAddress))cancelConnection();
     }
 

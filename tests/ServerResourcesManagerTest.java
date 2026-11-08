@@ -1,6 +1,8 @@
 package ru.kurostreet.counterzombiemobile;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Constructor;
@@ -10,6 +12,16 @@ import java.net.URL;
 import java.net.URLConnection;
 import java.net.URLStreamHandler;
 import java.security.cert.Certificate;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.security.MessageDigest;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
+import org.json.JSONObject;
+import org.json.JSONArray;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -26,6 +38,8 @@ public final class ServerResourcesManagerTest {
     static final String HASH = String.join("", Collections.nCopies(64, "a"));
     static int checks;
     static volatile boolean networkFailure=true;
+    static final Map<String,byte[]> objects=new ConcurrentHashMap<>();
+    static final Map<String,Integer> requests=new ConcurrentHashMap<>();
     static volatile String reply="{\"schema\":1,\"max_age_seconds\":60,\"servers\":[]}";
 
     static void check(boolean yes,String message){checks++;if(!yes)throw new AssertionError(message);}
@@ -121,22 +135,88 @@ public final class ServerResourcesManagerTest {
     }
     static final class FakeConnection extends HttpsURLConnection {
         FakeConnection(URL url){super(url);}
+        byte[] body(){return url.getPath().equals("/api/v1/server-resources/catalog")?reply.getBytes(StandardCharsets.UTF_8):objects.get(url.getPath());}
         public void connect(){}
         public void disconnect(){}
         public boolean usingProxy(){return false;}
-        public int getResponseCode() throws IOException {if(networkFailure)throw new IOException("simulated offline");return 200;}
-        public long getContentLengthLong(){return reply.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;}
-        public InputStream getInputStream(){return new ByteArrayInputStream(reply.getBytes(java.nio.charset.StandardCharsets.UTF_8));}
+        public int getResponseCode() throws IOException {
+            if(networkFailure)throw new IOException("simulated offline");
+            requests.merge(url.getPath(),1,Integer::sum);return body()==null?404:200;
+        }
+        public long getContentLengthLong(){return body()==null?0:body().length;}
+        public String getHeaderField(String key){return key.equalsIgnoreCase("Content-Length")?Long.toString(getContentLengthLong()):null;}
+        public InputStream getInputStream() throws IOException {byte[] data=body();if(data==null)throw new IOException("missing fixture");return new ByteArrayInputStream(data);}
         public String getCipherSuite(){return "HOST_TEST_ONLY";}
         public Certificate[] getLocalCertificates(){return null;}
         public Certificate[] getServerCertificates(){return new Certificate[0];}
+    }
+    static String sha(byte[] bytes) throws Exception {
+        StringBuilder out=new StringBuilder();for(byte b:MessageDigest.getInstance("SHA-256").digest(bytes))out.append(String.format(java.util.Locale.ROOT,"%02x",b&255));return out.toString();
+    }
+    static byte[] wave(int seed){
+        byte[] bytes=new byte[1044];ByteBuffer out=ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
+        out.put("RIFF".getBytes(StandardCharsets.US_ASCII));out.putInt(bytes.length-8);out.put("WAVEfmt ".getBytes(StandardCharsets.US_ASCII));
+        out.putInt(16).putShort((short)1).putShort((short)1).putInt(8000).putInt(8000).putShort((short)1).putShort((short)8);
+        out.put("data".getBytes(StandardCharsets.US_ASCII)).putInt(1000);while(out.hasRemaining())out.put((byte)(seed+out.position()*13));return bytes;
+    }
+    static void publishFixture(String revision,byte[] first,byte[] reused) throws Exception {
+        String base="/server-resources/survival/"+revision+"/";
+        String[] names={"sound/test.wav","sound/reused.wav"};byte[][] data={first,reused};
+        ByteArrayOutputStream zipped=new ByteArrayOutputStream();
+        try(ZipOutputStream zip=new ZipOutputStream(zipped)){
+            for(int i=0;i<names.length;i++){zip.putNextEntry(new ZipEntry(names[i]));zip.write(data[i]);zip.closeEntry();}
+        }
+        byte[] archive=zipped.toByteArray();objects.put(base+"bundle.zip",archive);
+        JSONArray files=new JSONArray();long total=0;
+        for(int i=0;i<names.length;i++){
+            String hash=sha(data[i]),path=base+"files/"+hash;objects.put(path,data[i]);total+=data[i].length;
+            files.put(new JSONObject().put("path",names[i]).put("size",data[i].length).put("sha256",hash).put("url","https://kontrafps.ru"+path));
+        }
+        JSONObject manifest=new JSONObject().put("schema",1).put("pack_id","survival").put("revision",revision).put("total_bytes",total).put("files",files)
+            .put("archive",new JSONObject().put("url","https://kontrafps.ru"+base+"bundle.zip").put("size",archive.length).put("sha256",sha(archive)));
+        byte[] encoded=manifest.toString().getBytes(StandardCharsets.UTF_8);objects.put(base+"manifest.json",encoded);
+        JSONObject slot=new JSONObject().put("server_id","survival").put("address",ADDRESS).put("resources_enabled",true).put("pack_id","survival").put("revision",revision)
+            .put("manifest_url","https://kontrafps.ru"+base+"manifest.json").put("manifest_sha256",sha(encoded)).put("download_bytes",archive.length);
+        reply=new JSONObject().put("schema",1).put("max_age_seconds",60).put("servers",new JSONArray().put(slot).put(new JSONObject().put("server_id","escape").put("address","").put("resources_enabled",false))).toString();
+    }
+    static void awaitFiles() throws Exception {((ExecutorService)get("FILE_WORK")).submit(()->{}).get(10,TimeUnit.SECONDS);}
+    static int count(String path){return requests.getOrDefault(path,0);}
+    static void bulkThenIncremental() throws Exception {
+        File root=Files.createTempDirectory("czm-manager-flow-").toFile().getCanonicalFile();
+        System.setProperty("czm.manager.root",root.getPath());org.libsdl.app.SDLActivity.context=new android.content.Context();android.net.ConnectivityManager.metered=false;
+        try{
+            fixture();objects.clear();requests.clear();networkFailure=false;set("registry",Collections.emptyMap());set("catalogAt",0L);set("connectionItem",null);set("connectionState",0);packs().clear();
+            byte[] first=wave(1),same=wave(2),changed=wave(3);publishFixture("r1",first,same);
+            ServerResources.refresh(ADDRESS);awaitCatalog();awaitFiles();
+            check(ServerResources.prepare(ADDRESS)==3,"real fresh manifest and missing files wait for download consent");
+            Method download=MANAGER.getDeclaredMethod("download",String.class);download.setAccessible(true);download.invoke(null,ADDRESS);awaitFiles();
+            check(ServerResources.prepare(ADDRESS)==1,"bulk transfer verifies and publishes ready revision");
+            check(count("/server-resources/survival/r1/bundle.zip")==1,"first download is one bulk ZIP");
+            check(count("/server-resources/survival/r1/files/"+sha(first))==0&&count("/server-resources/survival/r1/files/"+sha(same))==0,"first ZIP avoids per-file HTTP round trips");
+            File r1=new File(root,"server-resources/survival/r1/files");
+            check(java.util.Arrays.equals(Files.readAllBytes(new File(r1,"sound/test.wav").toPath()),first),"first revision file bytes match");
+            check(ServerResources.mountPath(ADDRESS).equals(r1.getCanonicalPath()),"bulk verified directory is granted to engine");ServerResources.unmounted();
+            publishFixture("r2",changed,same);ServerResources.refresh(ADDRESS);awaitCatalog();awaitFiles();
+            check(ServerResources.prepare(ADDRESS)==3,"new revision waits for changed content");
+            download.invoke(null,ADDRESS);awaitFiles();check(ServerResources.prepare(ADDRESS)==1,"incremental update becomes ready");
+            check(count("/server-resources/survival/r2/bundle.zip")==0,"incremental update skips whole archive");
+            check(count("/server-resources/survival/r2/files/"+sha(changed))==1,"only changed file downloads");
+            check(count("/server-resources/survival/r2/files/"+sha(same))==0,"unchanged file reused with hash verification");
+            File r2=new File(root,"server-resources/survival/r2/files");
+            check(java.util.Arrays.equals(Files.readAllBytes(new File(r2,"sound/test.wav").toPath()),changed),"new revision changed file matches");
+            check(java.util.Arrays.equals(Files.readAllBytes(new File(r2,"sound/reused.wav").toPath()),same),"reused file remains correct");
+            check(java.util.Arrays.equals(Files.readAllBytes(new File(r1,"sound/test.wav").toPath()),first),"incremental update preserves previous revision");
+            check(ServerResources.mountPath(ADDRESS).equals(r2.getCanonicalPath()),"new verified revision is granted");ServerResources.unmounted();
+        }finally{
+            org.libsdl.app.SDLActivity.context=null;System.clearProperty("czm.manager.root");ServerResourceStore.deleteTree(root);
+        }
     }
     public static void main(String[] args) throws Exception {
         URL.setURLStreamHandlerFactory(protocol->protocol.equals("https")?new URLStreamHandler(){
             protected URLConnection openConnection(URL url){return new FakeConnection(url);}
         }:null);
         try{
-            leasesAndCancellation();mappingRevocation();expiryDuringInitialVerification();catalogFailurePolicy();clearRevokesSharedPackBeforeQueuedIO();
+            leasesAndCancellation();mappingRevocation();expiryDuringInitialVerification();catalogFailurePolicy();clearRevokesSharedPackBeforeQueuedIO();bulkThenIncremental();
             System.out.println("SERVER_RESOURCES_MANAGER_OK "+checks);
         }finally{
             ((ExecutorService)get("CATALOG_WORK")).shutdownNow();((ExecutorService)get("FILE_WORK")).shutdownNow();
