@@ -346,8 +346,11 @@ class WheelsTests(unittest.TestCase):
         # the touch editor draws and moves only the buttons the player owns: a wheel is one of them
         touch = (ROOT / "czm/menu/CzmTouch.cpp").read_text()
         start = touch.index("struct CzmTouchButton\n")
-        end = touch.index("\n}\n", touch.index("static bool ButtonEditable(")) + 3
-        program = ("#include <cassert>\n#include <cstdio>\n#include <cstring>\n#define TOUCH_FLAG_NOEDIT 4\n" + touch[start:end] + r'''
+        button_end = touch.index("\n};", start) + 3
+        editable_start = touch.index("static bool ButtonEditable(")
+        end = touch.index("\n}\n", editable_start) + 3
+        program = ("#include <cassert>\n#include <cstdio>\n#include <cstring>\n#define TOUCH_FLAG_NOEDIT 4\n"
+                   + touch[start:button_end] + "\n" + touch[editable_start:end] + r'''
 static bool editable( const char *command ) { CzmTouchButton b = {}; strcpy( b.texture, "gfx/czm/touch/x" ); strcpy( b.command, command ); return ButtonEditable( b ); }
 int main() {
 	assert( editable( "_czmwheel weapons" ) && editable( "radio1" ) && editable( "showvguimenu 38" ) && editable( "_wheel czm_dd czm_dd" ));
