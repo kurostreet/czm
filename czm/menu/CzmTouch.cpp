@@ -128,6 +128,8 @@ static const CzmAction s_actions[] =
 	// server chat commands, the usual ones on zombie servers
 	{ "zpmenu", "Меню зомби", "Zombie menu", "say /zpmenu", GROUP_SERVER },
 	{ "servermenu", "Меню сервера", "Server menu", "say /menu", GROUP_SERVER },
+	{ "props", "Пропс", "Prop", "czm_props", GROUP_SERVER },
+	{ "lasermine", "Лазер", "Laser", "czm_lasermine", GROUP_SERVER },
 	{ "unstuck", "Застрял", "Unstuck", "say /unstuck", GROUP_SERVER },
 	{ "rs", "Сброс счёта", "Reset score", "say /rs", GROUP_SERVER },
 	{ "rtv", "Голосовать за карту", "Rock the vote", "say rtv", GROUP_SERVER },
@@ -166,7 +168,7 @@ static const char *s_icons[] =
 	"left", "right", "buy", "ammo1", "ammo2", "armor", "autobuy", "rebuy", "chat", "teamchat", "voice", "radio",
 	"radio1", "radio2", "radio3", "score", "zpmenu", "servermenu", "unstuck", "rs", "rtv", "top", "rank", "vip",
 	"timeleft", "nextmap", "more", "numbers", "num1", "num2", "num3", "num4", "num5", "num6", "num7", "num8", "num9",
-	"num0", "cancel", "team", "screenshot", "edit", "custom", "ddrun", "kill", "wheel", "skill_g", "skill_r", "skill_e",
+	"num0", "cancel", "team", "screenshot", "edit", "custom", "ddrun", "kill", "wheel", "skill_g", "skill_r", "skill_e", "props", "lasermine",
 };
 
 #define CZM_ICONS ( (int)( sizeof( s_icons ) / sizeof( s_icons[0] )))
@@ -239,6 +241,7 @@ void CZM_SetTouchScheme( int scheme, bool fromPreset )
 	EngFuncs::CvarSetValue( "czm_touch_scheme", scheme );
     // Upgrade every selected layout once in place, without resetting its controls.
     EngFuncs::ClientCmd( true, "czm_skill_buttons\n" );
+    EngFuncs::ClientCmd( true, "czm_fort_buttons\n" );
     CZM_SaveTouchConfig();
 }
 

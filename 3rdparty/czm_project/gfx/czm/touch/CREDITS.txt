@@ -6,5 +6,5 @@ Attribution 3.0 license (https://creativecommons.org/licenses/by/3.0/):
   Skoll, sbed (http://opengameart.org/content/95-game-icons).
 They were recoloured and placed on round buttons by scripts/make_czm_touch.py.
 
-The fire, crouch, movement, "more" and "unstuck" glyphs, the digits and the
+The fire, crouch, movement, "more", "unstuck", sandbag pallet and wall-laser glyphs, the digits and the
 button backgrounds were drawn for this game.

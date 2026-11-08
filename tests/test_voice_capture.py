@@ -132,7 +132,7 @@ S_VoiceRecordStart_f();assert(!Voice_IsRecording()&&!czm_voice_held.value);retur
     def test_mic_anchors_follow_layout_release_hidden_and_cancel_holds(self):
         touch = (ENGINE / "client/input/in_touch.c").read_text()
         code = "\n".join(function(touch, name) for name in (
-            "static void Touch_CzmPublishAnchors", "static void Touch_CzmCancelSkillHolds( void )\n{"))
+            "static int Touch_CzmFortSlot", "static void Touch_CzmPublishAnchors", "static void Touch_CzmCancelSkillHolds( void )\n{"))
         build(TOUCH_STUB + code + r'''
 int main(){
 touch_button_t mic;strcpy(mic.command,"+voicerecord");mic.x1=.8;mic.y1=.4;mic.x2=.9;mic.y2=.6;
