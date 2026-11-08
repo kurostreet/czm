@@ -67,6 +67,7 @@ jobs:
           CZM_JSON_JAR=/tmp/czm-json.jar python3 -m unittest discover -s tests -p test_account_client.py -v
           CZM_JSON_JAR=/tmp/czm-json.jar python3 -m unittest discover -s tests -p test_translation_client.py -v
           CZM_JSON_JAR=/tmp/czm-json.jar python3 -m unittest discover -s tests -p test_settings_data.py -v
+          CZM_JSON_JAR=/tmp/czm-json.jar python3 -m unittest discover -s tests -p test_layout_file_flow.py -v
           CZM_JSON_JAR=/tmp/czm-json.jar python3 -m unittest discover -s tests -p test_server_policy.py -k async -v
           python3 -m unittest discover -s tests -p test_server_resource_store.py -v
           CZM_JSON_JAR=/tmp/czm-json.jar python3 -m unittest discover -s tests -p test_server_resources_manager.py -v
@@ -129,6 +130,7 @@ jobs:
           python3 -m unittest discover -s tests -p test_background_downloads.py -v
           /tmp/czm-server-check/bin/python -m unittest discover -s tests -p test_sprays.py -v
           python3 -m unittest discover -s tests -p test_touch_editor.py -v
+          python3 -m unittest discover -s tests -p test_native_touch_texture.py -v
           python3 -m unittest discover -s tests -p test_combat_controls.py -v
           python3 -m unittest discover -s tests -p test_fortification_controls.py -v
           python3 -m unittest discover -s tests -p test_voice_capture.py -v

@@ -272,6 +272,13 @@ struct CzmTouchButton
 	int flags;
 };
 
+static void ButtonTexturePath( const CzmTouchButton &b, char *path, size_t size )
+{
+	// Migrated and imported buttons may already include the image extension.
+	const char *extension = strrchr( b.texture, '.' );
+	snprintf( path, size, "%s%s", b.texture, extension && !stricmp( extension, ".png" ) ? "" : ".png" );
+}
+
 static bool ButtonEditable( const CzmTouchButton &b )
 {
 	// _move and _look are the walk and look zones; _wheel is a swipe button and _czmwheel a wheel of
@@ -2296,7 +2303,7 @@ void CCzmTouchEditor::DrawButtons( void )
 			CZM_DrawImage( UI_DIR "dot.png", r.x - glow, r.y - glow, r.w + glow * 2, r.h + glow * 2, PackRGBA( 239, 68, 68, 150 ));
 		}
 
-		snprintf( texture, sizeof( texture ), "%s.png", b.texture );
+		ButtonTexturePath( b, texture, sizeof( texture ));
 		CZM_DrawImage( texture, r.x, r.y, r.w, r.h, PackRGBA( 255, 255, 255, hidden ? 70 : b.color[3] ));
 
 		if( hidden )
@@ -2406,7 +2413,7 @@ void CCzmTouchEditor::DrawPanel( void )
 	CZM_DrawPanel( m_panel );
 
 	// what the button is: icon, name and command
-	snprintf( texture, sizeof( texture ), "%s.png", b.texture );
+	ButtonTexturePath( b, texture, sizeof( texture ));
 	CZM_DrawImage( texture, m_panel.x + pad, m_panel.y + H * 0.02f, icon, icon );
 	CZM_DrawText( titleFont, m_panel.x + pad + icon + H * 0.02f, m_panel.y + H * 0.02f, m_panel.w - pad * 2 - icon, ButtonLabel( b ), CZM_White());
 	if( m_conflict[HUD_BLOCKS + m_iSelected] >= 0 )

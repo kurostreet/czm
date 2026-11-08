@@ -48,6 +48,17 @@ class SettingsTests(unittest.TestCase):
         for i in range(80,97):
             button=copy.deepcopy(buttons[0]);button[0]='extra_%d'%i;buttons.append(button)
         with self.assertRaises(accounts.AuthError):settings.validate(self.data)
+    def test_fortification_buttons_survive_account_and_second_device_round_trip(self):
+        buttons=self.data['layouts']['1']
+        for i,(command,icon,flags) in enumerate([('czm_props','props',65),('czm_lasermine','lasermine',0)]):
+            button=copy.deepcopy(buttons[0]);button[0]='fortification_%d'%i
+            button[1]='gfx/czm/touch/%s.png'%icon;button[2]=command
+            button[3:7]=[.5+i*.07,.65,.56+i*.07,.78];button[11]=flags;buttons.append(button)
+        response=self.save(self.tokens[0],0,self.data)
+        self.assertEqual(response.status_code,200,response.text)
+        with db.db() as c:second=accounts.login(c,'Player0','Password123','other-device')['token']
+        self.assertEqual(self.get(second).json()['payload'],self.data)
+        self.assertIsNone(self.get(self.tokens[1]).json()['payload'])
     def test_progress_hud_layout_round_trips_between_devices(self):
         self.data['cvars'].update({'czm_hud_progress_x':'0.41','czm_hud_progress_y':'0.75',
             'czm_hud_progress_scale':'1.25','czm_hud_progress_opacity':'0.5','czm_hud_progress_hidden':'1'})
@@ -66,7 +77,9 @@ class SettingsTests(unittest.TestCase):
         for key,value in [('password','secret'),('rcon_password','secret'),('czm_hud_style','nan'),('cl_crosshair_color','256 0 0')]:
             bad=copy.deepcopy(self.data);bad['cvars'][key]=value
             self.assertEqual(self.save(self.tokens[0],0,bad).status_code,400,(key,value))
-        for cmd in ['exec evil.cfg','+attack;quit','setinfo _pw secret']:
+        for cmd in ['exec evil.cfg','+attack;quit','setinfo _pw secret','czm_props;quit',
+                    'czm_lasermine anything','czm_props\nquit','+czm_skill_e\nquit',
+                    'exec touch_default/numbers.cfg;quit']:
             bad=copy.deepcopy(self.data);bad['layouts']['1'][0][2]=cmd
             self.assertEqual(self.save(self.tokens[0],0,bad).status_code,400,cmd)
         for n in [float('inf'),-1,2]:
