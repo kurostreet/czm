@@ -221,6 +221,7 @@ void CZM_ClientMenuFrame( void );
 // Native match chat bridge: polled before the client stack, also while closed.
 void CZM_MatchChatFrame( void );
 void CZM_MatchChatAfterClientMenuFrame( bool menusActive );
+void CZM_MatchKeyHaptic( void ); // Android keyboard tap, respecting system haptic settings
 void CZM_DrawPanel( const CzmRect &r );
 void CZM_DrawButton( const char *image, const CzmRect &r, const char *label, unsigned int textColor, bool pressed, int font = CZMF_BUTTON );
 

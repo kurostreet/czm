@@ -43,6 +43,7 @@ target_sources(menu PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/czm/menu/CzmMapPics.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/czm/menu/CzmChat.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/czm/menu/CzmMatchChat.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/czm/menu/CzmHaptic.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/czm/menu/CzmSocial.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/czm/menu/CzmLobby.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/czm/menu/CzmLobbyInvites.cpp"
