@@ -98,7 +98,12 @@ jobs:
           python3 -m unittest discover -s tests -p test_scoreboard_styles.py -v
           python3 -m unittest discover -s tests -p test_tab_avatars.py -v
           python3 -m unittest discover -s tests -p test_social_menu.py -v
+          python3 -m unittest discover -s tests -p test_profile_color.py -v
           python3 -m unittest discover -s tests -p test_chat_translation.py -v
+          python3 -m unittest discover -s tests -p test_community_layout.py -v
+          python3 -m unittest discover -s tests -p test_match_chat.py -v
+          python3 -m unittest discover -s tests -p test_match_chat_transport.py -v
+          python3 -m unittest discover -s tests -p test_match_chat_hardware.py -v
           python3 -m unittest discover -s tests -p test_rules_window.py -v
           python3 -m unittest discover -s tests -p test_moderation_window.py -v
           python3 -m unittest discover -s tests -p test_top_window.py -v
@@ -191,6 +196,8 @@ jobs:
                   assert b"menu_czmservers" in menu and b"czm_srv_filters" in menu and b"favorite_servers.lst" in menu, abi
                   assert b"serverOwner" in menu and b"admin-server/%s" in menu, abi
                   assert b"/api/v1/social/theme" in menu and b"gfx/czm/profile/lab.png" in menu, abi
+                  assert b"/api/v1/social/nick-color" in menu and b"czm_profile_motion" in menu, abi
+                  assert all(marker in menu for marker in (b"CzmMatchChat", b"czm_match_chat_send", b"czm_match_chat_ru", b"czm_mc_line%d")), abi
                   assert b"Translate with Google" in menu and b"translationAvailable" in menu and b"copyUtf8" in menu, abi
                   assert "lib/"+abi+"/libtranslate_jni.so" in apk.namelist(), abi
                   if abi == "arm64-v8a":
@@ -214,11 +221,13 @@ jobs:
                   assert b"czm_queryserver" in engine and b"czm_mictest" in engine, abi
                   assert all(marker in engine for marker in (b"czm_voice_held", b"czm_voice_recording", b"czm_voice_level")), abi
                   assert b"czm_tab_state" in engine and b"czm_tag" in engine, abi
+                  assert all(marker in engine for marker in (b"czm_match_chat_request", b"czm_match_chat_epoch", b"czm_match_chat_send", b"czm_match_chat_ime")), abi
                   client = apk.read("lib/" + abi + "/libclient_android_" + suffix + ".so")
                   assert b"CzmSkill" in client and b"CzmClip" in client, abi
                   assert b"czm_autorun" in client and b"czm_buy_state" in client and b"czm_menu" in client, abi
                   assert b"czm_tab_style" in client, abi
                   assert b"czm_tab/%s" in client and b"czm_tab_avatar_%d" in client, abi
+                  assert b"czm_mc_epoch" in client and b"czm_mc_line%d" in client, abi
               for name in ["engine-resources", "client-resources"]:
                   metadata = json.loads(apk.read("assets/bundled/" + name + ".json"))
                   assert hashlib.sha256(apk.read("assets/bundled/" + name + ".zip")).hexdigest() == metadata["sha256"]

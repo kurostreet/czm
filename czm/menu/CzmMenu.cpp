@@ -277,6 +277,14 @@ static const struct { const char *key, *ru, *en; } s_strings[] =
 	{ "s_voice_in", "Громкость голосов", "Voice volume" },
 	{ "s_voice_out", "Громкость микрофона", "Microphone volume" },
 	{ "s_lang", "Язык", "Language" },
+	{ "s_match_keyboard", "Клавиатура в матче", "Match keyboard" },
+	{ "s_match_keyboard_hint", "Выбери клавиатуру для игрового чата", "Choose the keyboard for in-match chat" },
+	{ "opt_keyboard_czm", "CZM", "CZM" },
+	{ "opt_keyboard_system", "Системная", "System" },
+	{ "s_match_keep_open", "Оставлять чат после отправки", "Keep chat open after sending" },
+	{ "s_match_keep_open_hint", "Клавиатура остаётся открытой для следующего сообщения", "The keyboard stays open for your next message" },
+	{ "s_profile_motion", "Анимация профиля", "Profile animation" },
+	{ "s_profile_motion_hint", "Плавные блики и движение фона в карточке", "Soft glints and background motion on the profile card" },
 	{ "s_xhair", "Предпросмотр", "Preview" },
 	{ "s_xhair_hint", "Так прицел выглядит в игре", "How the crosshair looks in the game" },
 	{ "s_xhair_size", "Размер", "Size" },
@@ -534,6 +542,8 @@ void CZM_Init( void )
 	EngFuncs::CvarRegister( "czm_spray_photo", "", FCVAR_ARCHIVE );   // name of the selected gallery spray
 	EngFuncs::CvarRegister( "czm_news_seen", "0", FCVAR_ARCHIVE );   // the newest news the player opened
 	EngFuncs::CvarRegister( "czm_chat_room", "0", FCVAR_ARCHIVE );   // 0 global, 1 ru, 2 en
+	EngFuncs::CvarRegister( "czm_match_chat_ru", "-1", FCVAR_ARCHIVE ); // follow UI until RU/EN is chosen
+	EngFuncs::CvarRegister( "czm_profile_motion", "1", FCVAR_ARCHIVE );
 	EngFuncs::CvarRegister( "czm_ui_volume", "0.65", FCVAR_ARCHIVE );
 	EngFuncs::CvarRegister( "czm_menu_music", "0", FCVAR_ARCHIVE );  // main menu track, see CZM_MENU_TRACKS
 	EngFuncs::CvarRegister( "czm_srv_filters", "0", FCVAR_ARCHIVE ); // server list filters, bits
@@ -653,6 +663,7 @@ void CZM_CreateFonts( float scale )
 		{ "CZM Semibold", 40, 600 },    // CZMF_PROFILE_NAME
 		{ "CZM Medium", 24, 500 },      // CZMF_PROFILE_TEXT
 		{ "CZM Medium", 23, 500 },      // CZMF_CHAT_TEXT
+		{ "CZM BlackItalic", 62, 900 }, // CZMF_PROFILE_TITLE
 	};
 
 	for( int i = 0; i < CZMF_COUNT; i++ )
@@ -2287,6 +2298,7 @@ void CZM_ClientMenuFrame( void )
 		if( CL_IsActive() && !uiStatic.menu.IsActive( ))
 			EngFuncs::KEY_SetDest( KEY_GAME );
 	}
+	CZM_MatchChatAfterClientMenuFrame( uiStatic.client.IsActive() || uiStatic.menu.IsActive() );
 }
 
 // main menu tracks in the order of the choice in Settings → Sound (credits in README.md)
@@ -2302,6 +2314,7 @@ void CZM_MenuAudioFrame( void )
 {
 	static const char *playing;
 	CZM_Init();
+	CZM_MatchChatFrame(); // runs before the client stack, including while the chat is closed
 	const bool inMenu = !CL_IsActive() && !gpGlobals->demoplayback && uiStatic.menu.IsActive()
 		&& EngFuncs::GetCvarFloat( "czm_loading_stage" ) == CZM_STAGE_NONE;
 	if( !inMenu )

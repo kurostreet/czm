@@ -863,6 +863,16 @@ async def social_theme(body: ProfileThemeIn, request: Request, x_czm_key: str | 
     return await social_result(request, lambda c: social.update_theme(c, x_czm_key or "", body.theme))
 
 
+class ProfileNickColorIn(BaseModel):
+    model_config = {"extra": "forbid"}
+    nick_color: str = Field(max_length=7, pattern=r"^(#[0-9A-Fa-f]{6})?$", strict=True)
+
+
+@router.post("/social/nick-color")
+async def social_nick_color(body: ProfileNickColorIn, request: Request, x_czm_key: str | None = Header(default=None)):
+    return await social_result(request, lambda c: social.update_nick_color(c, x_czm_key or "", body.nick_color))
+
+
 @router.post("/social/action")
 async def social_action(body: SocialActionIn, request: Request, x_czm_key: str | None = Header(default=None)):
     return await social_result(request, lambda c: social.action(c, x_czm_key or "", body.target, body.action))

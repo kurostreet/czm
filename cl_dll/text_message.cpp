@@ -235,7 +235,8 @@ int CHudTextMessage::MsgFunc_TextMsg( const char *pszName, int iSize, void *pbuf
 	case HUD_PRINTTALK:
 		psz[0] = 2; // mark, so SayTextPrint will color it
 		Localize_Format( psz + 1, MAX_TEXTMSG_STRING - 1, msg_text, args, 4 );
-		gHUD.m_SayText.SayTextPrint( ConvertCRtoNL( psz ), 128 );
+		ConvertCRtoNL( psz );
+		gHUD.m_SayText.SayTextPrint( psz, strlen( psz ));
 		break;
 
 	case HUD_PRINTCONSOLE:
@@ -250,7 +251,8 @@ int CHudTextMessage::MsgFunc_TextMsg( const char *pszName, int iSize, void *pbuf
 		Localize_Format( psz + 1, MAX_TEXTMSG_STRING - 1, szBuf[1], &args[1], 3 );
 
 		clientIdx = atoi( szBuf[0] );
-		gHUD.m_SayText.SayTextPrint( ConvertCRtoNL( psz ), 128, clientIdx );
+		ConvertCRtoNL( psz );
+		gHUD.m_SayText.SayTextPrint( psz, strlen( psz ), clientIdx );
 		break;
 	}
 

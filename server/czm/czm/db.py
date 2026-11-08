@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS social_profiles (
     player INTEGER PRIMARY KEY REFERENCES players(id),
     status TEXT NOT NULL DEFAULT '',
     theme TEXT NOT NULL DEFAULT 'ember',
+    nick_color TEXT NOT NULL DEFAULT '',
     last_seen INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS social_presence (
@@ -295,7 +296,7 @@ CREATE TABLE IF NOT EXISTS development_invites (
 
 # columns added after the first version of a table
 COLUMNS = {
-    "social_profiles": {"theme": "TEXT NOT NULL DEFAULT 'ember'"},
+    "social_profiles": {"theme": "TEXT NOT NULL DEFAULT 'ember'", "nick_color": "TEXT NOT NULL DEFAULT ''"},
     "releases": {"news_id": "INTEGER", "auto": "INTEGER NOT NULL DEFAULT 0", "channel": "TEXT NOT NULL DEFAULT 'legacy'"},
     "players": {"rules_version": "INTEGER NOT NULL DEFAULT 0",
                 "rules_at": "INTEGER NOT NULL DEFAULT 0",

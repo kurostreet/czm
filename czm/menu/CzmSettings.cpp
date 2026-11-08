@@ -331,6 +331,14 @@ float GetTabStyle( void ) { return bound( 0, (int)GetCvar( "czm_tab_style" ), 2 
 // the radar look; its place and size are set in the editor of buttons and HUD
 float GetRadarStyle( void ) { return bound( 0, (int)GetCvar( "czm_hud_radar_style" ), 2 ); }
 void SetRadarStyle( float v ) { SetCvar( "czm_hud_radar_style", bound( 0, (int)v, 2 )); EngFuncs::ClientCmd( false, "host_writeconfig\n" ); }
+// The keyboard choice is ordered CZM first, while the cvar uses 1 for the custom keyboard.
+float GetMatchKeyboard( void ) { return GetCvar( "czm_match_chat" ) != 0.0f ? 0 : 1; }
+void SetMatchKeyboard( float v ) { SetCvar( "czm_match_chat", v == 0.0f ? 1 : 0 ); }
+float GetMatchKeepOpen( void ) { return GetCvar( "czm_match_chat_keep_open" ) != 0.0f; }
+void SetMatchKeepOpen( float v ) { SetCvar( "czm_match_chat_keep_open", v != 0.0f ? 1 : 0 ); }
+float GetProfileMotion( void ) { return GetCvar( "czm_profile_motion" ) != 0.0f; }
+void SetProfileMotion( float v ) { SetCvar( "czm_profile_motion", v != 0.0f ? 1 : 0 ); }
+
 // how the chat and the server messages look
 float GetMsgStyle( void ) { return bound( 0, (int)GetCvar( "czm_hud_msg_style" ), 2 ); }
 float GetMsgList( void ) { return GetCvar( "czm_hud_msg_list" ) > 0.5f ? 1 : 0; }
@@ -443,6 +451,8 @@ const CzmRow s_game[] =
 {
 	{ ROW_SECTION, "s_sec_general", NULL, NULL, NULL, NULL, 0, 0, 0, 0, {}, 0, 0 },
 	{ ROW_CHOICE, "s_lang", NULL, GetLang, SetLang, NULL, 0, 1, 1, 0, { "RU", "EN" }, 2, 0 },
+	{ ROW_CHOICE, "s_match_keyboard", "s_match_keyboard_hint", GetMatchKeyboard, SetMatchKeyboard, NULL, 0, 1, 1, 0, { "opt_keyboard_czm", "opt_keyboard_system" }, 2, 0 },
+	{ ROW_SWITCH, "s_match_keep_open", "s_match_keep_open_hint", GetMatchKeepOpen, SetMatchKeepOpen, NULL, 0, 1, 1, 0, {}, 0, 0 },
 	{ ROW_SECTION, "s_sec_xhair", NULL, NULL, NULL, NULL, 0, 0, 0, 0, {}, 0, 0 },
 	{ ROW_XHAIR, "s_xhair", "s_xhair_hint", NULL, NULL, NULL, 0, 0, 0, 0, {}, 0, 0 },
 	{ ROW_CHOICE, "s_xhair_size", NULL, GetXhairSize, SetXhairSize, NULL, 0, 3, 1, 0, { "opt_auto", "opt_small", "opt_medium", "opt_large" }, 4, 0 },
@@ -476,6 +486,7 @@ const CzmRow s_profile[] =
 	{ ROW_ACCOUNT, "s_account", "s_account_hint", NULL, NULL, NULL, 0, 0, 0, 0, {}, 0, 0 },
 	{ ROW_COMMUNITY, "s_community", "s_community_hint", NULL, NULL, NULL, 0, 0, 0, 0, {}, 0, 0 },
 	{ ROW_NICK, "s_nick", "s_nick_hint", NULL, NULL, NULL, 0, 0, 0, 0, {}, 0, 0 },
+	{ ROW_SWITCH, "s_profile_motion", "s_profile_motion_hint", GetProfileMotion, SetProfileMotion, NULL, 0, 1, 1, 0, {}, 0, 0 },
 	{ ROW_AVATARS, "s_avatar", "s_avatar_hint", NULL, NULL, NULL, 0, 0, 0, 0, {}, 0, 0 },
 	{ ROW_SPRAYS, "s_spray", "s_spray_hint", NULL, NULL, NULL, 0, 0, 0, 0, {}, 0, 0 },
 };

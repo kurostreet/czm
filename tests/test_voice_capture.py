@@ -202,6 +202,7 @@ FOCUS_STUB = r'''
 enum{FORCE_DRAW_VERSION_TIME=2,WINDOW_MODE_FULLSCREEN=1};typedef int window_mode_t;
 struct{float value=0;}vid_fullscreen;
 void IN_ActivateMouse(){}void IN_DeactivateMouse(){}void Key_ClearStates(){}
+void Con_CzmMatchChatReset(){} // match-chat lifecycle is exercised in test_match_chat_transport
 void VID_SetMode(){}void VID_RestoreScreenResolution(window_mode_t){}
 '''
 

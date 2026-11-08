@@ -115,8 +115,10 @@ def messages(conn: sqlite3.Connection, room: str, after: int, viewer: int = 0) -
     """The room's recent messages; without the players the viewer blocked."""
     limit = get_settings().room_history
     rows = conn.execute(
-        "SELECT m.id, m.player, m.text, m.created, p.nick, p.avatar, p.avatar_rev, s.role FROM messages m "
+        "SELECT m.id, m.player, m.text, m.created, p.nick, p.avatar, p.avatar_rev, s.role, "
+        "COALESCE(sp.nick_color, '') AS nick_color FROM messages m "
         "JOIN players p ON p.id = m.player LEFT JOIN staff s ON s.player = m.player "
+        "LEFT JOIN social_profiles sp ON sp.player = m.player "
         "WHERE m.room = ? AND m.deleted = 0 AND m.id > ? "
         "AND NOT EXISTS (SELECT 1 FROM social_blocks b WHERE b.source = ? AND b.target = m.player) "
         "ORDER BY m.id DESC LIMIT ?",
@@ -127,6 +129,7 @@ def messages(conn: sqlite3.Connection, room: str, after: int, viewer: int = 0) -
     roles = community.role_map(conn, [r["player"] for r in rows])
     return [
         {"id": r["id"], "p": r["player"], "n": r["nick"], "a": avatar_ref(r), "t": profanity.clean(r["text"]), "ts": r["created"],
+         "nick_color": r["nick_color"],
          **({"r": roles[r["player"]][0], "rp": roles[r["player"]][1]} if r["player"] in roles else {}),
          **({"k": places[r["player"]]} if r["player"] in places else {})}   # the place in the Top 100
         for r in reversed(rows)
@@ -179,7 +182,9 @@ def post_message(conn: sqlite3.Connection, player: sqlite3.Row, room: str, text:
     next_id = conn.execute("SELECT last_id+1 FROM chat_message_sequence WHERE id=1").fetchone()[0]
     cur = conn.execute("INSERT INTO messages (id, room, player, text, created) VALUES (?, ?, ?, ?, ?)", (next_id, room, player["id"], text, t))
     conn.execute("UPDATE players SET last_message = ? WHERE id = ?", (t, player["id"]))
-    return {"id": cur.lastrowid, "p": player["id"], "n": player["nick"], "a": avatar_ref(player), "t": text, "ts": t}
+    profile = conn.execute("SELECT nick_color FROM social_profiles WHERE player=?", (player["id"],)).fetchone()
+    return {"id": cur.lastrowid, "p": player["id"], "n": player["nick"], "a": avatar_ref(player), "t": text, "ts": t,
+            "nick_color": profile["nick_color"] if profile else ""}
 
 
 # complaints and bans ---------------------------------------------------------

@@ -55,6 +55,7 @@ enum CzmFontId
 	CZMF_PROFILE_NAME,
 	CZMF_PROFILE_TEXT,
 	CZMF_CHAT_TEXT,
+	CZMF_PROFILE_TITLE, // large player-authored profile statement
 	CZMF_COUNT
 };
 
@@ -217,6 +218,9 @@ void CZM_KeepClientMenu( CMenuBaseWindow *window ); // opened again before that 
 bool CZM_ClientMenuOpen( CMenuBaseWindow *window ); // shown and not on its way out
 // every frame before the client windows: the closes asked for, and the touch buttons back when none is open
 void CZM_ClientMenuFrame( void );
+// Native match chat bridge: polled before the client stack, also while closed.
+void CZM_MatchChatFrame( void );
+void CZM_MatchChatAfterClientMenuFrame( bool menusActive );
 void CZM_DrawPanel( const CzmRect &r );
 void CZM_DrawButton( const char *image, const CzmRect &r, const char *label, unsigned int textColor, bool pressed, int font = CZMF_BUTTON );
 
