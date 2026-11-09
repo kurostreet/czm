@@ -247,11 +247,34 @@ void CZM_SetTouchScheme( int scheme, bool fromPreset )
 
 void CZM_TouchStartup( void )
 {
-	// the first start with these layouts replaces the old stock buttons
+	// This is a first-install marker, not a release number. Updating the app must
+	// never replace a player's saved controls or HUD with the newest default.
 	if( EngFuncs::GetCvarFloat( "czm_touch_version" ) < 1.0f )
 	{
-		CZM_SetTouchScheme( 1, true );
-		CZM_TouchResetHud();
+		int savedScheme = 0;
+		char path[64];
+		const int selectedScheme = CZM_TouchScheme();
+
+		// A restored/imported profile can outlive its startup marker. Prefer the
+		// active profile, then another saved CZM scheme, before creating a default.
+		for( int i = 0; i < CZM_SCHEMES; i++ )
+		{
+			int scheme = ( selectedScheme - 1 + i ) % CZM_SCHEMES + 1;
+			SchemePath( scheme, path, sizeof( path ));
+			if( EngFuncs::FileExists( path, true ))
+			{
+				savedScheme = scheme;
+				break;
+			}
+		}
+
+		if( savedScheme )
+			CZM_SetTouchScheme( savedScheme, false );
+		else
+		{
+			CZM_SetTouchScheme( 1, true );
+			CZM_TouchResetHud();
+		}
 		EngFuncs::CvarSetValue( "czm_touch_version", 1.0f );
 		EngFuncs::ClientCmd( false, "host_writeconfig\n" );
 	}

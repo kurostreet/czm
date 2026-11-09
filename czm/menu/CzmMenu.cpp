@@ -430,7 +430,7 @@ static const struct { const char *key, *ru, *en; } s_strings[] =
 	{ "upd_cancel", "Отмена", "Cancel" },
 	{ "upd_store_title", "Доступно обновление", "Update available" },
 	{ "upd_store_notes", "Новая версия игры уже в Google Play.", "A new version of the game is on Google Play." },
-	{ "upd_store_button", "Обновить в Google Play", "Update on Google Play" },
+	{ "upd_store_button", "Обновить", "Update" },
 	{ "news_loading", "Загружаем новости…", "Loading news…" },
 	// first start
 	{ "s_layouts", "Обмен раскладками", "Share layouts" },

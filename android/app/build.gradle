@@ -1,8 +1,13 @@
-import java.time.LocalDateTime
-import java.time.Month
-import java.time.temporal.ChronoUnit
-
 apply plugin: "com.android.application"
+
+def releaseVersion = new Properties()
+rootProject.file("version.properties").withInputStream { releaseVersion.load(it) }
+def publicVersionName = releaseVersion.getProperty("versionName", "")
+def publicVersionCode = releaseVersion.getProperty("versionCode", "").toInteger()
+if (!(publicVersionName ==~ /[0-9]+\.[0-9]+\.[0-9]+/) ||
+        publicVersionCode <= 40281373 || publicVersionCode > 2100000000) {
+    throw new GradleException("Invalid release version: use a semantic version and an increasing Android versionCode")
+}
 
 android {
 	namespace = "ru.kurostreet.counterzombiemobile"
@@ -11,8 +16,10 @@ android {
 
 	defaultConfig {
 		applicationId = "ru.kurostreet.counterzombiemobile"
-		versionName = "1.35-" + getGitHash()
-		versionCode = getBuildNum()
+		versionName = publicVersionName
+		versionCode = publicVersionCode
+		// Source identity is diagnostic metadata, never the public version label.
+		buildConfigField("String", "CZM_SOURCE_COMMIT", '"' + getSourceCommit() + '"')
 		minSdk = 21
 		targetSdk = 36
 		// ABIs are set per flavor: Google Play takes no 32-bit-only x86 (64-bit rule)
@@ -64,6 +71,7 @@ android {
 		debug {
 			debuggable = true
 			applicationIdSuffix = ".test"
+			versionNameSuffix = "-test." + publicVersionCode
 
 			proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.txt"
 		}
@@ -79,6 +87,7 @@ android {
 		create("continuous") {
 			initWith(getByName("release"))
 			applicationIdSuffix = ".test"
+			versionNameSuffix = "-test." + publicVersionCode
 			signingConfig = signingConfigs.continuous
 
 			externalNativeBuild {
@@ -181,23 +190,19 @@ def embeddedEngine = tasks.register("buildBundledEngine", Exec) {
 
 tasks.named("preBuild").configure { dependsOn embeddedEngine }
 
-static def getBuildNum() {
-	LocalDateTime now = LocalDateTime.now()
-	LocalDateTime releaseDate = LocalDateTime.of(2015, Month.OCTOBER, 29, 0, 0, 0)
-	int qBuildNum = releaseDate.until(now, ChronoUnit.DAYS)
-	int minuteOfDay = now.getHour() * 60 + now.getMinute()
-	return qBuildNum * 10000 + minuteOfDay
-}
-
-def getGitHash() {
-	Process process = new ProcessBuilder("git", "rev-parse", "--short", "HEAD")
+def getSourceCommit() {
+	Process process = new ProcessBuilder("git", "rev-parse", "HEAD")
 			.directory(project.rootDir)
 			.redirectErrorStream(true)
 			.start()
 	InputStreamReader inputStreamReader = new InputStreamReader(process.getInputStream())
 	BufferedReader bufferedReader = new BufferedReader(inputStreamReader)
 
-	return bufferedReader.getText().trim()
+	String commit = bufferedReader.getText().trim()
+	if (process.waitFor() != 0 || !(commit ==~ /[0-9a-f]{40}/)) {
+		throw new GradleException("Cannot identify the exact source commit")
+	}
+	return commit
 }
 
 // CMake prepares the bundled game assets. Finish native preparation before

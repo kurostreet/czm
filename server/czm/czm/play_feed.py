@@ -1,16 +1,14 @@
-"""What players hear about Google Play releases: the bell's news and the site's "What's new".
+"""Published Google Play releases in the bell's history and the site's "What's new".
 
-A build that passed CI or sits on the internal track is not news. Every quarter of an hour the
-service reads the Play tracks (read only) and learns each release's code, version and notes. A
-release becomes news as soon as it is on the public track: the closed test (alpha) while there is
-no production, then production. The bell in the game, the site's "What's new" and the owner's bot
-get it at once (the owner's decision of 28.10.2026: every alpha update is announced everywhere).
-Google may still be reviewing it for a few hours; the bell's button opens Google Play, which offers
-the update as soon as Google approves it. Internal releases are never announced.
+A successful CI build, an uploaded bundle and a completed track edit are not evidence that an
+update is available. The background reader confirms Google's release lifecycle is PUBLISHED
+before a release can enter this feed. Internal releases supply notes to their testers but never
+become public news. Production is the public track once it has a published release; until then
+alpha is used. The client separately asks Google Play whether this account/device can update:
+news history never creates an actionable update card.
 
-The old feed (one item per site build, "1.35-<commit>") was cleared once; the migration screen of
-old site installs is a separate mechanism (distribution.py) and stays. play_witnesses still records
-who updated (account deletion removes those rows).
+Existing news keeps its original version and wording; installing an update clears only the
+client's update card, not the release history.
 """
 import logging
 import re
@@ -23,7 +21,8 @@ log = logging.getLogger("czm.play_feed")
 
 PUBLIC_TRACKS = ("production", "alpha")
 SYNC_EVERY = 900
-WITNESSES = 2                  # a fallback only: sync() announces a public release first
+WITNESSES = 2                  # only releases already confirmed published may be witnessed
+PUBLISHED = "RELEASE_LIFECYCLE_STATE_PUBLISHED"
 MONTHS = ("января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября",
           "октября", "ноября", "декабря")
 
@@ -35,6 +34,7 @@ CREATE TABLE IF NOT EXISTS play_releases (
     notes TEXT NOT NULL DEFAULT '',
     notes_en TEXT NOT NULL DEFAULT '',      -- the English notes ('' = none: English players read Russian)
     tracks TEXT NOT NULL DEFAULT '',
+    verified_published INTEGER NOT NULL DEFAULT 0,
     first_seen INTEGER NOT NULL,
     public_since INTEGER,
     announced INTEGER,
@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS play_witnesses (
 
 
 def version_name(version: str) -> str:
-    """What a player reads: "1.35", never the commit of "1.35-85efaec"."""
+    """The release version (for example 1.36.0), without legacy diagnostic commit suffixes."""
     m = re.match(r"\d+(?:\.\d+)*", version or "")
     return m.group(0) if m else ""
 
@@ -121,6 +121,10 @@ def migrate(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
     if "notes_en" not in {r[1] for r in conn.execute("PRAGMA table_info(play_releases)")}:
         conn.execute("ALTER TABLE play_releases ADD COLUMN notes_en TEXT NOT NULL DEFAULT ''")
+    if "verified_published" not in {r[1] for r in conn.execute("PRAGMA table_info(play_releases)")}:
+        # Old track statuses may describe a release still awaiting review. Re-verify them;
+        # historical news remains intact and is never assigned invented version numbers.
+        conn.execute("ALTER TABLE play_releases ADD COLUMN verified_published INTEGER NOT NULL DEFAULT 0")
     if _flag(conn, "news_feed_play"):
         return
     gone = conn.execute("UPDATE news SET deleted=1 WHERE deleted=0 AND id IN "
@@ -146,21 +150,26 @@ def _version(release: dict) -> str:
     return (m.group(1) if m else name).strip()[:32]
 
 
+def published(release: dict) -> bool:
+    return (release.get("releaseLifecycleState") == PUBLISHED
+            and release.get("status") in ("completed", "inProgress"))
+
+
 def public_track(tracks: dict) -> str:
-    live = any(r.get("status") == "completed" for r in tracks.get("production", []))
-    return "production" if live else "alpha"
+    return "production" if any(published(r) for r in tracks.get("production", [])) else "alpha"
 
 
 def sync(conn: sqlite3.Connection, tracks: dict) -> None:
-    """tracks: {"internal": [release, ...], "alpha": [...], ...} as the Play Developer API lists them."""
+    """Track metadata joined to independently verified release lifecycle summaries by read_tracks().
+    A raw edit response without lifecycle confirmation is deliberately not publishable news."""
     t = now()
     first_run = conn.execute("SELECT COUNT(*) FROM play_releases").fetchone()[0] == 0
     public = public_track(tracks)
     found: dict[int, dict] = {}
     for track, releases in tracks.items():
         for release in releases or []:
-            if release.get("status") not in ("completed", "inProgress"):
-                continue                      # a draft or a halted rollout reaches nobody
+            if not published(release):
+                continue                      # pending review, drafts, halted and unknown are not new updates
             for code in release.get("versionCodes") or []:
                 info = found.setdefault(int(code), {"version": _version(release), "notes": _notes(release),
                                                     "notes_en": _notes(release, True), "tracks": set()})
@@ -170,22 +179,26 @@ def sync(conn: sqlite3.Connection, tracks: dict) -> None:
         listed = ",".join(sorted(info["tracks"]))
         row = conn.execute("SELECT * FROM play_releases WHERE code=?", (code,)).fetchone()
         if row is None:
-            conn.execute("INSERT INTO play_releases(code, version, notes, notes_en, tracks, first_seen, public_since) "
-                         "VALUES (?,?,?,?,?,?,?)", (code, info["version"], info["notes"], info["notes_en"], listed, t,
-                                                    t if on_public else None))
+            conn.execute("INSERT INTO play_releases(code, version, notes, notes_en, tracks, first_seen, public_since, verified_published) "
+                         "VALUES (?,?,?,?,?,?,?,1)", (code, info["version"], info["notes"], info["notes_en"], listed, t,
+                                                      t if on_public else None))
             if first_run and on_public:
                 # players already have it: the site lists it, the bell does not ring for it
                 uploaded = conn.execute("SELECT MIN(created) FROM play_publishes WHERE version_code=?", (code,)).fetchone()[0]
                 conn.execute("UPDATE play_releases SET announced=?, notified=1 WHERE code=?", (uploaded or t, code))
         else:
-            conn.execute("UPDATE play_releases SET version=?, notes=?, notes_en=?, tracks=?, public_since=COALESCE(public_since, ?) "
+            conn.execute("UPDATE play_releases SET version=?, notes=?, notes_en=?, tracks=?, verified_published=1, "
+                         "public_since=CASE WHEN ? THEN COALESCE(public_since, ?) ELSE NULL END "
                          "WHERE code=?", (info["version"] or row["version"], info["notes"] or row["notes"],
-                                          info["notes_en"] or row["notes_en"], listed, t if on_public else None, code))
+                                          info["notes_en"] or row["notes_en"], listed, on_public, t, code))
     if found:
         marks = ",".join("?" * len(found))
-        conn.execute(f"UPDATE play_releases SET tracks='' WHERE code NOT IN ({marks})", tuple(found))
+        conn.execute(f"UPDATE play_releases SET tracks='', verified_published=0, public_since=NULL "
+                     f"WHERE code NOT IN ({marks})", tuple(found))
+    else:
+        conn.execute("UPDATE play_releases SET tracks='', verified_published=0, public_since=NULL")
     if not first_run:
-        # a release on the public track is news at once: the bell, the site and the bot
+        # Only Google's published public releases may become news.
         for code in sorted(c for c, info in found.items() if public in info["tracks"]):
             announce(conn, code)
 
@@ -197,7 +210,7 @@ def witness(conn: sqlite3.Connection, before, player, code: int, store: int | No
         return False
     if before["version"] == player["version"]:
         return False                          # no update: the same build as last time
-    row = conn.execute("SELECT * FROM play_releases WHERE code=? AND public_since IS NOT NULL AND announced IS NULL",
+    row = conn.execute("SELECT * FROM play_releases WHERE code=? AND verified_published=1 AND tracks!='' AND public_since IS NOT NULL AND announced IS NULL",
                        (code,)).fetchone()
     if row is None or before["created"] >= row["public_since"]:
         return False
@@ -226,7 +239,8 @@ def remember(conn: sqlite3.Connection, code: int, version: str, notes: str, note
 
 def announce(conn: sqlite3.Connection, code: int) -> bool:
     row = conn.execute("SELECT * FROM play_releases WHERE code=?", (code,)).fetchone()
-    if row is None or row["announced"]:
+    if (row is None or row["announced"] or not row["verified_published"]
+            or not row["tracks"] or row["public_since"] is None):
         return False
     # what the bell and the site already told players about the previous updates
     told = conn.execute(
@@ -244,7 +258,7 @@ def announce(conn: sqlite3.Connection, code: int) -> bool:
 def latest(conn: sqlite3.Connection, limit: int = 3) -> list[dict]:
     """The releases on the Play tracks now, newest first: Play offers each account the one of its
     track, and the bell shows the notes of exactly that code."""
-    rows = conn.execute("SELECT code, version, notes, notes_en FROM play_releases WHERE tracks != '' ORDER BY code DESC LIMIT ?",
+    rows = conn.execute("SELECT code, version, notes, notes_en FROM play_releases WHERE verified_published=1 AND tracks != '' ORDER BY code DESC LIMIT ?",
                         (limit,)).fetchall()
     return [{"code": r["code"], "version": version_name(r["version"]), "notes": r["notes"], "notes_en": r["notes_en"]}
             for r in rows]
@@ -278,7 +292,8 @@ def site_news(conn: sqlite3.Connection, limit: int) -> list[dict]:
 
 
 def unnotified(conn: sqlite3.Connection) -> list[dict]:
-    return [dict(r) for r in conn.execute("SELECT * FROM play_releases WHERE announced IS NOT NULL AND notified=0 ORDER BY code")]
+    return [dict(r) for r in conn.execute("SELECT * FROM play_releases WHERE announced IS NOT NULL AND notified=0 "
+                                        "AND verified_published=1 AND tracks!='' AND public_since IS NOT NULL ORDER BY code")]
 
 
 def mark_notified(conn: sqlite3.Connection, code: int) -> None:
@@ -286,8 +301,14 @@ def mark_notified(conn: sqlite3.Connection, code: int) -> None:
 
 
 def read_tracks() -> dict:
-    """The Play tracks of the app, read in a throwaway edit. Raises on any failure."""
+    """Read notes from a throwaway edit and join actual published lifecycle summaries.
+
+    edits.tracks.status=completed also occurs while Google is reviewing a release. Only the
+    separate GET /tracks/{track}/releases endpoint says whether users can actually receive it.
+    Every read must succeed before sync replaces the last verified snapshot.
+    """
     import httpx
+    from urllib.parse import quote
     from . import play_publish
     from .config import get_settings
     settings = get_settings()
@@ -297,12 +318,38 @@ def read_tracks() -> dict:
         edit = play_publish._check(client.post(f"{app}/edits", headers=auth), "правка")["id"]
         try:
             listed = play_publish._check(client.get(f"{app}/edits/{edit}/tracks", headers=auth), "дорожки")
+            result = {}
+            for track in listed.get("tracks", []):
+                name = str(track.get("track", ""))
+                if not name:
+                    continue
+                summaries = play_publish._check(client.get(
+                    f"{app}/tracks/{quote(name, safe='')}/releases", headers=auth), "публикация " + name)
+                metadata = {int(code): release for release in track.get("releases", [])
+                            for code in release.get("versionCodes", [])}
+                releases = []
+                for summary in summaries.get("releases", []):
+                    if summary.get("releaseLifecycleState") != PUBLISHED or summary.get("track", name) != name:
+                        continue
+                    for artifact in summary.get("activeArtifacts", []):
+                        code = int(artifact.get("versionCode", 0))
+                        if code <= 0:
+                            continue
+                        # A pending edit may show only the next release, while the lifecycle
+                        # endpoint still lists the older published one. Keep that published code;
+                        # sync retains its remembered notes when this response has none.
+                        release = dict(metadata.get(code) or {"name": summary.get("releaseName", ""),
+                                                              "status": "completed"})
+                        release["versionCodes"] = [str(code)]
+                        release["releaseLifecycleState"] = PUBLISHED
+                        releases.append(release)
+                result[name] = releases
         finally:
             try:
                 client.delete(f"{app}/edits/{edit}", headers=auth)
             except httpx.HTTPError:
                 pass
-    return {t.get("track", ""): t.get("releases", []) for t in listed.get("tracks", [])}
+    return result
 
 
 async def run() -> None:

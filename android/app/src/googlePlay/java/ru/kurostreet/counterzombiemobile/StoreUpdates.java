@@ -33,8 +33,9 @@ final class StoreUpdates {
 
     private static boolean offered(AppUpdateInfo info) {
         int state = info.updateAvailability();
-        return state == UpdateAvailability.DEVELOPER_TRIGGERED_UPDATE_IN_PROGRESS
-            || state == UpdateAvailability.UPDATE_AVAILABLE;
+        return info.availableVersionCode() > BuildConfig.VERSION_CODE
+            && (state == UpdateAvailability.DEVELOPER_TRIGGERED_UPDATE_IN_PROGRESS
+                || state == UpdateAvailability.UPDATE_AVAILABLE);
     }
 
     private static void failed() {
@@ -54,7 +55,7 @@ final class StoreUpdates {
                     .addOnSuccessListener(info -> {
                         boolean ok = offered(info);
                         bytes = ok ? Math.max(0, info.totalBytesToDownload()) : 0;
-                        available = ok ? Math.max(1, info.availableVersionCode()) : 0;
+                        available = ok ? info.availableVersionCode() : 0;
                     })
                     .addOnFailureListener(e -> failed());   // retry after a short offline failure
             } catch (RuntimeException e) {

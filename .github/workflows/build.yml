@@ -142,6 +142,7 @@ jobs:
           python3 -m unittest discover -s tests -p test_settings_rows.py -v
           python3 -m unittest discover -s tests -p test_spectator_overlay.py -v
           python3 -m unittest discover -s tests -p test_default_layout.py -v
+          python3 -m unittest discover -s tests -p test_default_layout_startup.py -v
       - name: Build engine and client from source
         working-directory: android
         run: ./gradlew --no-daemon assembleGitDebug
@@ -152,6 +153,10 @@ jobs:
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK_PATH" > apk-info.txt
           grep -F "package: name='ru.kurostreet.counterzombiemobile.test'" apk-info.txt
           grep -F "application-label:'Counter Zombie Mobile 32 players'" apk-info.txt
+          python3 scripts/check_android_version.py --flavor test \
+            --version "$(sed -n "s/.*versionName='\([^']*\)'.*/\1/p" apk-info.txt | head -n1)" \
+            --code "$(sed -n "s/.*versionCode='\([^']*\)'.*/\1/p" apk-info.txt | head -n1)" \
+            --package "ru.kurostreet.counterzombiemobile.test"
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$APK_PATH"
           python - <<'PY'
           import os, json, hashlib, io, wave, array, struct
