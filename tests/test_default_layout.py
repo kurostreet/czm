@@ -26,6 +26,20 @@ int main()
 
 
 class DefaultLayoutTests(unittest.TestCase):
+    def test_scheme1_keeps_the_uploaded_layout_except_replaced_auto_buttons(self):
+        # Keep the original export as provenance. It contains the old automatic
+        # pair as well as the owner's deliberately positioned replacements.
+        original = json.loads((ROOT / "scripts/layouts/owner-20261109.json").read_text())
+        self.assertEqual(LAYOUT["cvars"], original["cvars"])
+        self.assertEqual(LAYOUT["schema"], original["schema"])
+        auto_names = {"czm_fort_props", "czm_fort_laser"}
+        expected = [button for button in original["layouts"]["1"] if button[0] not in auto_names]
+        self.assertEqual(LAYOUT["layouts"], {"1": expected})
+        for command in ("czm_props", "czm_lasermine"):
+            matches = [b for b in expected if b[2] == command]
+            self.assertEqual(len(matches), 1)
+            self.assertGreater(matches[0][3], .8)  # the owner's pair on the right
+
     def test_scheme1_preset_is_the_shared_layout_with_round_buttons(self):
         self.check_preset(1, LAYOUT)
 

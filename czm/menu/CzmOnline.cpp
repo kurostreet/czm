@@ -447,7 +447,7 @@ static void StoreUpdateFrame( double now )
 	if( selfUpdate || now < next )
 		return;
 	next = now + 5.0;
-	if( CZM_NetStoreUpdate( &code, &bytes ))
+	if( CZM_NetStoreUpdate( &code, &bytes ) && code > CZM_NetVersionCode( ))
 	{
 		CzmUpdateInfo &u = s_online.update;
 

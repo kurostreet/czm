@@ -48,7 +48,11 @@ jobs:
       - name: Apply engine patches
         run: python3 scripts/apply_engine_patches.py
       - name: Check Play update availability and store navigation
-        run: python3 -m unittest discover -s tests -p test_store_updates.py -v
+        run: |
+          python3 -m unittest discover -s tests -p test_store_updates.py -v
+          python3 -m unittest discover -s tests -p test_store_update_card.py -v
+          python3 -m unittest discover -s tests -p test_default_layout.py -v
+          python3 -m unittest discover -s tests -p test_default_layout_startup.py -v
       - name: Build the bundle
         working-directory: android
         run: ./gradlew --no-daemon :app:checkGooglePlayReleaseDuplicateClasses :app:bundleGooglePlayRelease
@@ -63,6 +67,7 @@ jobs:
           java -jar /tmp/bundletool.jar dump manifest --bundle "$AAB" --xpath /manifest/@android:versionCode > code.txt
           java -jar /tmp/bundletool.jar dump manifest --bundle "$AAB" --xpath /manifest/@android:versionName > version.txt
           grep -qx "dev.gaming.czm" package.txt
+          python3 scripts/check_android_version.py --flavor play --version "$(cat version.txt)" --code "$(cat code.txt)" --package "$(cat package.txt)"
           if java -jar /tmp/bundletool.jar dump manifest --bundle "$AAB" | grep -q REQUEST_INSTALL_PACKAGES; then
             echo "::error::the Google Play build must not install APKs itself"; exit 1
           fi

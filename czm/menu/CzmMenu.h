@@ -314,7 +314,7 @@ void CZM_ApplyStartupSettings( void );
 int CZM_TouchScheme( void ); // 1..3
 // switches the layout; fromPreset drops the player's changes to that layout
 void CZM_SetTouchScheme( int scheme, bool fromPreset );
-void CZM_TouchStartup( void ); // first start of this version: our layout replaces the stock one
+void CZM_TouchStartup( void ); // first install: our layout replaces stock controls; updates keep saved profiles
 void CZM_SaveTouchConfig( void ); // writes the current buttons and touch settings to the layout file
 void CZM_OpenTouchEditor( void );
 void CZM_TouchResetHud( void ); // HUD places and sizes back to the defaults

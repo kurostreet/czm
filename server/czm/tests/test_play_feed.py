@@ -9,8 +9,10 @@ from czm import db, play_feed, service
 from czm.config import get_settings
 
 
-def track(code, version="1.35-abc1234", notes="Новый профиль.", status="completed", english="New profile."):
+def track(code, version="1.35-abc1234", notes="Новый профиль.", status="completed", english="New profile.",
+          lifecycle=play_feed.PUBLISHED):
     release = {"name": f"{code} ({version})", "versionCodes": [str(code)], "status": status,
+               "releaseLifecycleState": lifecycle,
                "releaseNotes": [{"language": "ru-RU", "text": notes}]}
     if english:
         release["releaseNotes"].insert(0, {"language": "en-US", "text": english})
@@ -69,7 +71,7 @@ class PlayFeedTests(unittest.TestCase):
                 self.assertTrue(conn.execute("SELECT published FROM releases WHERE id=?", (rid,)).fetchone()[0])
             self.assertEqual(service.last_news_id(conn), before)
 
-    def test_a_release_is_news_as_soon_as_it_is_on_the_public_track(self):
+    def test_a_release_is_news_only_once_published_on_the_public_track(self):
         for n in range(1, 4):
             self.player(n)
         with db.db() as conn:
@@ -87,7 +89,7 @@ class PlayFeedTests(unittest.TestCase):
         with db.db() as conn:
             self.assertEqual(service.last_news_id(conn), news_before)
             self.assertEqual(play_feed.unnotified(conn), [])
-            # sent to the closed test: the next look makes it news everywhere at once
+            # approved and published on the closed test: the next look makes it news
             self.clock += 600
             play_feed.sync(conn, {"internal": [track(101, "1.35-bbb2222", "Новый профиль и SUPPORT.")],
                                   "alpha": [track(101, "1.35-bbb2222", "Новый профиль и SUPPORT.")]})
@@ -240,11 +242,66 @@ class PlayFeedTests(unittest.TestCase):
             self.assertIsNone(conn.execute("SELECT public_since FROM play_releases WHERE code=201").fetchone()[0])
             self.assertIsNone(conn.execute("SELECT announced FROM play_releases WHERE code=201").fetchone()[0])
 
-    def test_tracks_are_read_in_a_throwaway_edit(self):
+    def test_review_and_missing_lifecycle_never_announce_or_supply_update_notes(self):
+        with db.db() as conn:
+            play_feed.sync(conn, {"alpha": [track(800, "1.35-old")]})
+            before = service.last_news_id(conn)
+            for lifecycle in (None, "RELEASE_LIFECYCLE_STATE_DRAFT", "RELEASE_LIFECYCLE_STATE_NOT_SENT_FOR_REVIEW",
+                              "RELEASE_LIFECYCLE_STATE_IN_REVIEW", "RELEASE_LIFECYCLE_STATE_APPROVED_NOT_PUBLISHED",
+                              "RELEASE_LIFECYCLE_STATE_NOT_APPROVED", "RELEASE_LIFECYCLE_STATE_UNSPECIFIED"):
+                self.clock += 600
+                candidate = track(801, "1.36.0", lifecycle=lifecycle)
+                play_feed.remember(conn, 801, "1.36.0", "Новая раскладка.", "New default layout.")
+                play_feed.sync(conn, {"alpha": [track(800, "1.35-old"), candidate], "production": [candidate]})
+                self.assertEqual(play_feed.public_track({"production": [candidate]}), "alpha")
+                self.assertEqual(service.last_news_id(conn), before)
+                self.assertEqual([r["code"] for r in play_feed.latest(conn)], [800])
+                self.assertFalse(play_feed.announce(conn, 801))
+            self.clock += 600
+            play_feed.sync(conn, {"alpha": [track(801, "1.36.0", "Новая раскладка.", english="New default layout.")]})
+            self.assertEqual(service.news(conn)[0]["text"], "Обновление в Google Play, версия 1.36.0\nНовая раскладка.")
+            self.assertEqual(play_feed.latest(conn)[0]["version"], "1.36.0")
+            self.assertEqual(service.news(conn, lang="en")[0]["text"], "Google Play update, version 1.36.0\nNew default layout.")
+            announced = service.last_news_id(conn)
+            # Withdrawn releases no longer supply an available update's name/notes. History remains.
+            play_feed.sync(conn, {"alpha": []})
+            self.assertEqual(play_feed.latest(conn), [])
+            self.assertEqual(service.last_news_id(conn), announced)
+            self.assertIn("1.36.0", service.news(conn)[0]["text"])
+            self.assertEqual(play_feed.site_news(conn, 1)[0]["version"], "1.36.0")
+
+    def test_upgrade_migration_requires_publication_proof_and_preserves_history(self):
+        import sqlite3
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        self.addCleanup(conn.close)
+        conn.executescript("""
+            CREATE TABLE site_counters(name TEXT PRIMARY KEY, value INTEGER);
+            INSERT INTO site_counters VALUES ('news_feed_play', 1);
+            CREATE TABLE play_releases(code INTEGER PRIMARY KEY, version TEXT, notes TEXT, notes_en TEXT,
+                tracks TEXT, first_seen INTEGER, public_since INTEGER, announced INTEGER, news_id INTEGER,
+                notified INTEGER);
+            CREATE TABLE news(id INTEGER PRIMARY KEY, text TEXT, text_en TEXT, created INTEGER, deleted INTEGER DEFAULT 0);
+            INSERT INTO news VALUES (1, 'Обновление в Google Play, версия 1.35', '', 1, 0);
+            INSERT INTO play_releases VALUES (899, '1.35-abc1234', 'История', '', 'alpha', 1, 1, 1, 1, 0);
+        """)
+        play_feed.migrate(conn)
+        self.assertEqual(play_feed.latest(conn), [])  # old completed != verified published
+        self.assertEqual(play_feed.unnotified(conn), [])  # nor an owner notification before verification
+        self.assertFalse(play_feed.announce(conn, 899))
+        self.assertEqual(conn.execute("SELECT text FROM news").fetchone()[0], "Обновление в Google Play, версия 1.35")
+        play_feed.sync(conn, {"alpha": [track(899)]})
+        self.assertEqual(play_feed.latest(conn)[0]["version"], "1.35")
+        self.assertEqual([r["code"] for r in play_feed.unnotified(conn)], [899])
+        self.assertEqual(conn.execute("SELECT COUNT(*) FROM news").fetchone()[0], 1)
+        play_feed.sync(conn, {"alpha": []})
+        self.assertEqual(play_feed.unnotified(conn), [])
+
+    def test_tracks_join_notes_to_actual_published_summaries_and_delete_only_own_edit(self):
         calls = []
 
         class Response:
-            def __init__(self, status, body): self.status_code, self._body, self.content = status, body, b"x"
+            def __init__(self, status, body): self.status_code, self._body, self.content = status, body, b"x" if body else b""
             def json(self): return self._body
 
         class Client:
@@ -254,15 +311,51 @@ class PlayFeedTests(unittest.TestCase):
             def post(self, url, **k): calls.append(("POST", url)); return Response(200, {"id": "edit-1"})
             def get(self, url, **k):
                 calls.append(("GET", url))
-                return Response(200, {"tracks": [{"track": "alpha", "releases": [track(300)]}, {"track": "production"}]})
+                if "/edits/" in url:
+                    return Response(200, {"tracks": [{"track": "alpha", "releases": [track(300), track(301)]},
+                                                      {"track": "production"}]})
+                if "/tracks/alpha/" in url:
+                    return Response(200, {"releases": [
+                        {"releaseName": "300 (1.36.0)", "track": "alpha", "activeArtifacts": [{"versionCode": 300}],
+                         "releaseLifecycleState": play_feed.PUBLISHED},
+                        {"releaseName": "301 (1.36.1)", "track": "alpha", "activeArtifacts": [{"versionCode": 301}],
+                         "releaseLifecycleState": "RELEASE_LIFECYCLE_STATE_IN_REVIEW"},
+                        # Pending edit metadata may omit an older published artifact.
+                        {"releaseName": "299 (1.35-old)", "track": "alpha", "activeArtifacts": [{"versionCode": 299}],
+                         "releaseLifecycleState": play_feed.PUBLISHED}]})
+                return Response(204, {})
             def delete(self, url, **k): calls.append(("DELETE", url)); return Response(204, {})
 
         with patch("httpx.Client", Client), patch("czm.play_publish.access_token", return_value="token"):
             tracks = play_feed.read_tracks()
-        self.assertEqual(tracks["alpha"][0]["versionCodes"], ["300"])
+        self.assertEqual([r["versionCodes"] for r in tracks["alpha"]], [["300"], ["299"]])
+        self.assertEqual(tracks["alpha"][0]["releaseNotes"], track(300)["releaseNotes"])
+        self.assertEqual(tracks["alpha"][1]["name"], "299 (1.35-old)")
+        self.assertTrue(all(r["releaseLifecycleState"] == play_feed.PUBLISHED for r in tracks["alpha"]))
         self.assertEqual(tracks["production"], [])
-        self.assertEqual([c[0] for c in calls], ["POST", "GET", "DELETE"])
-        self.assertTrue(calls[2][1].endswith("/edits/edit-1"))
+        self.assertEqual([c[0] for c in calls], ["POST", "GET", "GET", "GET", "DELETE"])
+        self.assertTrue(calls[-1][1].endswith("/edits/edit-1"))
+
+    def test_failed_lifecycle_read_never_returns_unverified_edit_metadata(self):
+        import httpx
+        calls = []
+        def respond(request):
+            calls.append((request.method, request.url.path))
+            if request.method == "POST":
+                return httpx.Response(200, json={"id": "own-edit"})
+            if request.method == "DELETE":
+                return httpx.Response(204)
+            if "/edits/" in request.url.path:
+                return httpx.Response(200, json={"tracks": [{"track": "alpha", "releases": [track(999)]}]})
+            return httpx.Response(403, json={"error": {"message": "lifecycle unavailable"}})
+        factory = httpx.Client
+        with patch("httpx.Client", side_effect=lambda **kw: factory(transport=httpx.MockTransport(respond), **kw)), \
+             patch("czm.play_publish.access_token", return_value="token"):
+            from czm.play_publish import PublishError
+            with self.assertRaises(PublishError):
+                play_feed.read_tracks()
+        self.assertEqual(calls[-1][0], "DELETE")
+        self.assertTrue(calls[-1][1].endswith("/edits/own-edit"))
 
 
 try:

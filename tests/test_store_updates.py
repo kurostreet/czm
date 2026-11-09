@@ -9,6 +9,8 @@ ROOT = Path(__file__).resolve().parents[1]
 JAVA = ROOT / 'android/app/src/googlePlay/java/ru/kurostreet/counterzombiemobile/StoreUpdates.java'
 
 STUBS = {
+    'ru/kurostreet/counterzombiemobile/BuildConfig.java': '''package ru.kurostreet.counterzombiemobile;
+        public class BuildConfig { public static final int VERSION_CODE=40101000; }''',
     'android/content/Context.java': '''package android.content;
         public class Context { public Context getApplicationContext(){return this;}
         public String getPackageName(){return "dev.gaming.czm";} }''',
@@ -72,6 +74,12 @@ STUBS = {
             check(unavailable.attempts==2&&unavailable.opened.isEmpty(),"no store or browser must not crash the game");
             advance();offer(UpdateAvailability.UPDATE_NOT_AVAILABLE,40103000,100);
             check(StoreUpdates.state(activity).isEmpty(),"no update for this Play account means no badge");
+            advance();offer(UpdateAvailability.UPDATE_AVAILABLE,BuildConfig.VERSION_CODE,100);
+            check(StoreUpdates.state(activity).isEmpty(),"installed version must never advertise itself as an update");
+            advance();offer(UpdateAvailability.UPDATE_AVAILABLE,BuildConfig.VERSION_CODE-1,100);
+            check(StoreUpdates.state(activity).isEmpty(),"older Play code must never produce an update card");
+            advance();offer(UpdateAvailability.UPDATE_AVAILABLE,0,100);
+            check(StoreUpdates.state(activity).isEmpty(),"missing offered version must not become a made-up code");
             advance();manager.next=new Task<>(null,true);StoreUpdates.state(activity);int count=manager.requests;
             offer(UpdateAvailability.UPDATE_AVAILABLE,40104000,400);
             SystemClock.now+=59999;check(StoreUpdates.state(activity).isEmpty()&&manager.requests==count,"failed request backs off");

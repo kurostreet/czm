@@ -1279,8 +1279,8 @@ void CCzmMainMenu::DrawBell( void )
 
 		// what is new, up to three lines
 		ty = c.y + H * 0.022f + CZM_FontHeight( nameFont ) + H * 0.01f;
-		// Play notes are written in Russian; other players read the plain line in their language
-		const char *notes = update->store && ( !update->notes[0] || !CZM_IsRussian( )) ? CZM_T( "upd_store_notes" ) : update->notes;
+		// StoreUpdateFrame already chose this release's notes in the menu's language.
+		const char *notes = update->store && !update->notes[0] ? CZM_T( "upd_store_notes" ) : update->notes;
 		lines = CZM_WrapText( textFont, notes, c.w - H * 0.06f, starts, 3 );
 		for( int l = 0; l < lines && ty + CZM_FontHeight( textFont ) < m_updateButton.y; l++ )
 		{

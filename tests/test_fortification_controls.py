@@ -175,11 +175,13 @@ return 0;}
         for scheme in range(1, 4):
             path = ROOT / "3rdparty/czm_project/touch_presets" / f"czm_scheme{scheme}.cfg"
             setup = []
+            commands = set()
             for line in path.read_text().splitlines():
                 if not line.startswith("touch_addbutton "):
                     continue
                 row = shlex.split(line)
                 name, texture, command = row[1:4]
+                commands.add(command)
                 coords = ','.join(f"{float(value):.9f}f" for value in row[4:8])
                 color = ','.join(row[8:12])
                 flags = row[12] if len(row) >= 13 else "0"
@@ -192,6 +194,7 @@ return 0;}
                        if aspect and not texture.startswith('#') else '')
                     + 'before.push_back(*b);original.push_back(b);}'
                 )
+            missing = sum(command not in commands for command in ("czm_props", "czm_lasermine"))
             scenarios.append(r'''
 for(float ratio:{.466f,.5625f,.75f}){
 touchAspect=ratio;touch.list_user=List();touch.configchanged=false;
@@ -199,16 +202,19 @@ std::vector<touch_button_t> before;std::vector<touch_button_t*> original;
 ''' + '\n'.join(setup) + r'''
 const int oldCount=Count();Touch_CzmEnsureFortifications(true);
 auto props=ByCommand("czm_props"),laser=ByCommand("czm_lasermine");
-assert(Count()==oldCount+2&&props&&laser&&ClearOfOtherControls(props)&&ClearOfOtherControls(laser));
+assert(Count()==oldCount+MISSING&&props&&laser);
+// Shipped owner controls stay where the owner put them; only auto-added
+// controls must find unoccupied space among the other buttons.
+if(MISSING)assert(ClearOfOtherControls(props)&&ClearOfOtherControls(laser));
 for(unsigned i=0;i<before.size();i++){
     const auto &old=before[i];auto b=original[i];
     assert(b->x1==old.x1&&b->y1==old.y1&&b->x2==old.x2&&b->y2==old.y2);
     assert(b->aspect==old.aspect&&b->flags==old.flags&&!strcmp(b->command,old.command));
 }
 touch.configchanged=false;Touch_CzmEnsureFortifications(true);
-assert(Count()==oldCount+2&&!touch.configchanged);
+assert(Count()==oldCount+MISSING&&!touch.configchanged);
 }
-''')
+'''.replace("MISSING", str(missing)))
         build(ENGINE_STUB + migration_code() + '\nint main(){\n'
               + '\n'.join(scenarios) + '\nreturn 0;}\n')
 
