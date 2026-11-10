@@ -37,6 +37,16 @@ final class CzmDialog {static final int MUTED=0; final android.widget.Button sub
 
 
 class ServerResourcesManagerTest(unittest.TestCase):
+    def test_dialog_refresh_keeps_scroll_position(self):
+        # The dialog refreshes every 400 ms; CzmDialog.fail() scrolls to the top, so calling it on
+        # every refresh kept the buttons below the error out of reach.
+        source = (JAVA / 'ServerResources.java').read_text(encoding='utf-8')
+        show = source[source.index('static void show('):source.index('private static void pollPack(')]
+        self.assertNotIn('dialog.fail(error(failure', show)
+        self.assertIn('if(!message.equals(shownError[0])){shownError[0]=message;', show)
+        dialog = (JAVA / 'CzmDialog.java').read_text(encoding='utf-8')
+        self.assertIn('scroll.smoothScrollTo(0, 0)', dialog[dialog.index('void fail('):])
+
     def test_actual_manager_mapping_expiry_and_single_use_mount(self):
         jar = Path(os.environ.get('CZM_JSON_JAR', '/missing'))
         if not shutil.which('javac') or not jar.is_file():

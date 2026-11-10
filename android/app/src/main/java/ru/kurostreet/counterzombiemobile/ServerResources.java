@@ -285,7 +285,8 @@ final class ServerResources {
 
     private static File root() throws IOException {
         Context ctx=context();if(ctx==null)throw new IOException("context");
-        File root=new File(ctx.getFilesDir(),"server-resources");
+        // Android reports files under /data/user/0, a link to /data/data: start from the real folder.
+        File root=new File(ctx.getFilesDir().getCanonicalFile(),"server-resources");
         if(!root.exists()&&!root.mkdirs())throw new IOException("storage");
         if(!root.getCanonicalFile().equals(root.getAbsoluteFile()))throw new IOException("path");
         return root;
@@ -622,6 +623,7 @@ final class ServerResources {
             Button refresh=dialog.link(ru?"Обновить сведения":"Refresh details",v->{synchronized(ServerResources.class){catalogNext=0;requestCatalog(false,0);}pollPack(address,false);});
             dialog.submit.setOnClickListener(v->download(address));
             final Runnable[] tick=new Runnable[1];
+            final String[] shownError={""};   // fail() scrolls to the top: only when the message changes
             tick[0]=()->{
                 if(!dialog.isShowing())return;
                 Item item;Pack pack;boolean loading;
@@ -646,7 +648,8 @@ final class ServerResources {
                     progress.setIndeterminate(CHECKING.equals(state)||CLEARING.equals(state));
                     progress.setProgress(total>0?(int)Math.min(1000,done*1000/total):0);
                     dialog.submit.setText(PAUSED.equals(state)?(ru?"Продолжить":"Resume"):ERROR.equals(state)?(ru?"Повторить":"Retry"):(ru?"Скачать / исправить":"Download / repair"));
-                    if(!failure.isEmpty())dialog.fail(error(failure,ru));else dialog.error.setVisibility(View.GONE);
+                    String message=failure.isEmpty()?"":error(failure,ru);
+                    if(!message.equals(shownError[0])){shownError[0]=message;if(message.isEmpty())dialog.error.setVisibility(View.GONE);else dialog.fail(message);}
                     dialog.submit.setEnabled(!working&&!READY.equals(state));verify.setEnabled(!working);clear.setEnabled(!CLEARING.equals(state));cancel.setEnabled(DOWNLOADING.equals(state));
                 }
                 if(item==null||!item.enabled||pack==null){dialog.submit.setEnabled(false);verify.setEnabled(false);clear.setEnabled(false);cancel.setEnabled(false);progress.setIndeterminate(loading||item!=null&&item.enabled);}
