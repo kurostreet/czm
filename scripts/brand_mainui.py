@@ -49,6 +49,8 @@ def brand_base_menu(source):
         "\tif( CZM_DrawLoadingScreen( ))\n\t\treturn;\n\n"
         "\t// server menus as cards over the game\n"
         "\tCZM_DrawGameOverlay();\n\n"
+        "\t// the next-map vote window of our servers\n"
+        "\tCZM_VoteFrame();\n\n"
         "\t// the touch wheels (weapons, radio) over the game\n"
         "\tCZM_DrawTouchWheel();\n\n"
         "\tCZM_DrawCombatControls();\n\n"

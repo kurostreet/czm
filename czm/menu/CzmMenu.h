@@ -346,6 +346,7 @@ bool CZM_ShopCarried( unsigned int weaponBits, int slot, const char **name, cons
 void CZM_ShopDrawSilhouette( const char *image, int x, int y, int w, int h, unsigned int color );
 // in a match: server menus (plugins, votes) drawn as cards over the game
 void CZM_DrawGameOverlay( void );
+void CZM_VoteFrame( void );      // the next-map vote window follows the server ballot (CzmMapVote.cpp)
 
 /*
  * network through the Android side (czm/menu/CzmNet.cpp, CzmNet.java)
