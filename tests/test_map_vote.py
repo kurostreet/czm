@@ -173,6 +173,37 @@ assert(g==0&&n<45);
 return 0;}
 """)
 
+    def test_menu_cursor_follows_the_finger_not_a_resting_mouse(self):
+        # HUD_Frame forwarded the mouse position every frame while a window was over the game.
+        # On a phone it never changes, so it pulled the cursor away from every touch.
+        source = (ROOT / "cl_dll/cdll_int.cpp").read_text()
+        start = source.index("void DLLEXPORT HUD_Frame( double time )")
+        body = source[source.index("{", start):]
+        depth, end = 0, 0
+        for i, c in enumerate(body):
+            depth += (c == "{") - (c == "}")
+            if depth == 0:
+                end = i + 1
+                break
+        body = body[:end].replace("DLLEXPORT ", "")
+        build(r"""
+#include <cassert>
+struct Menu { bool active = true; int moves = 0, x = 0, y = 0;
+  bool IsActive(){return active;} void MouseMove(int nx,int ny){moves++;x=nx;y=ny;} } menu, *g_pMenu = &menu;
+int mouseX = 40, mouseY = 900;
+struct { void (*GetMousePosition)(int*,int*); } gEngfuncs = { [](int *x,int *y){*x=mouseX;*y=mouseY;} };
+struct Voice { void Frame(double){} } voice; Voice *GetClientVoice(){return &voice;}
+void HUD_Frame( double time )
+""" + body + r"""
+int main(){
+HUD_Frame(0);assert(menu.moves==1);            // a window opens: the cursor starts at the mouse
+for(int i=0;i<120;i++){HUD_Frame(i);}
+assert(menu.moves==1); // a resting mouse never drags it back
+mouseY=500;HUD_Frame(1);assert(menu.moves==2&&menu.y==500); // a real mouse still moves it
+menu.active=false;mouseY=100;HUD_Frame(2);assert(menu.moves==2);
+return 0;}
+""")
+
     def test_window_never_reorders_under_the_finger(self):
         window = (ROOT / "czm/menu/CzmMapVote.cpp").read_text()
         self.assertIn('#include "../../common/czm_scroll.h"', window)
