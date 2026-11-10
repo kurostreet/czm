@@ -1,0 +1,12 @@
+diff --git a/engine/common/masterlist.c b/engine/common/masterlist.c
+--- a/engine/common/masterlist.c
++++ b/engine/common/masterlist.c
+@@ -769,7 +769,7 @@
+ #endif
+ 	// NOTE: do not use fwgs.github.io for GitHub pages
+ 	// because org-wide URL is xash.su (for legacy reasons)
+-	NET_AddMasterStatic( "http://xash.su/server-list" );
++	NET_AddMasterStatic( "https://xash.su/server-list" );
+ 	// FIXME: https raw.githubcontent source
+ 	// FIXME: cloudflare'd sources both HTTP and HTTPS
+ 
