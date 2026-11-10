@@ -105,6 +105,25 @@ final class CzmDialog extends Dialog {
     TextView note(String value) {
         TextView v = text(value, 12, MUTED); v.setPadding(0, dp(activity, 6), 0, dp(activity, 4)); body.addView(v); return v;
     }
+    /** A white, bold status line at the top of the body. */
+    TextView lead(String value) {
+        TextView v = text(value, 14, Color.WHITE); v.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        v.setPadding(0, dp(activity, 6), 0, 0); body.addView(v); return v;
+    }
+    static final int ACTION = 0, WAITING = 1, DONE = 2;
+    /** ACTION: red call to action; WAITING: grey, nothing to press; DONE: calm green, nothing left to do. */
+    void submitStyle(int kind) {
+        if (kind == DONE) {
+            submit.setBackground(shape(activity, Color.rgb(16, 36, 30), Color.rgb(47, 111, 88), 22));
+            submit.setTextColor(Color.rgb(107, 218, 167));
+        } else if (kind == WAITING) {
+            submit.setBackground(shape(activity, Color.rgb(28, 35, 45), Color.rgb(44, 53, 66), 22));
+            submit.setTextColor(MUTED);
+        } else {
+            submit.setBackground(shape(activity, RED, 0, 22));
+            submit.setTextColor(Color.WHITE);
+        }
+    }
     Button button(String value, boolean primary) {
         Button b = new Button(activity); b.setText(value); b.setTextSize(13); b.setTextColor(Color.WHITE);
         b.setAllCaps(false); b.setMinHeight(0); b.setMinimumHeight(0); b.setMinWidth(0); b.setMinimumWidth(0);

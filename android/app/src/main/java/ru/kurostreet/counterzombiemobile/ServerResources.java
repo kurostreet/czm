@@ -619,12 +619,6 @@ final class ServerResources {
         }
     }
 
-    private static synchronized void pause(String address){
-        Item item=registry.get(endpoint(address));
-        if(active!=null&&item!=null&&active.pack.item.key().equals(item.key())){active.cancelled=true;active.pack.state=PAUSED;active.pack.error="";}
-        if(endpoint(address).equals(connectionAddress))cancelConnection();
-    }
-
     private static void clear(String address){
         final Item item;final Pack pack;final int serial;
         synchronized(ServerResources.class){
@@ -660,11 +654,15 @@ final class ServerResources {
         if(key.equals("mobile"))return ru?"Для мобильной сети включите разрешение ниже.":"Allow mobile data below to continue.";
         if(key.equals("space"))return ru?"Недостаточно свободного места. Освободите память и продолжите.":"Not enough free space. Free storage and resume.";
         if(key.equals("in_use"))return ru?"Сначала отключитесь от сервера: этот набор используется.":"Disconnect from the server first: this pack is in use.";
-        if(key.equals("revision_changed"))return ru?"Набор обновился. Обновите сведения и скачайте актуальные файлы.":"The pack changed. Refresh and download the current revision.";
+        if(key.equals("revision_changed"))return ru?"Набор обновился на сервере. Нажмите кнопку ещё раз.":"The pack changed on the server. Press the button again.";
         if(key.equals("revision_reused"))return ru?"У набора изменился манифест без новой ревизии. Обратитесь к администратору.":"The manifest changed without a new revision. Contact the administrator.";
-        return ru?"Не удалось проверить или скачать файлы. Проверьте сеть и повторите.":"Could not verify or download files. Check the connection and retry.";
+        return ru?"Нет связи с сервером ресурсов. Проверьте интернет.":"No connection to the resource server. Check the internet.";
     }
 
+    /**
+     * The server card's resources window. The player only downloads: checking files, refreshing
+     * the catalog and repairing happen by themselves. One main button follows the pack's state.
+     */
     static void show(String address,boolean ru){
         String key=endpoint(address);if(key.isEmpty())return;
         Context ctx=context();if(!(ctx instanceof Activity))return;Activity activity=(Activity)ctx;
@@ -676,52 +674,70 @@ final class ServerResources {
             }
             CzmDialog dialog=new CzmDialog(activity,ru?"Ресурсы сервера":"Server resources",address,
                 ru?"Скачать":"Download",ru?"Закрыть":"Close",ru,false);editor=dialog;editorAddress=key;
-            TextView status=dialog.note(ru?"Проверяем каталог…":"Checking catalog…");
+            TextView status=dialog.lead(ru?"Проверяем файлы…":"Checking files…");
             TextView volume=dialog.note("");
             ProgressBar progress=new ProgressBar(activity,null,android.R.attr.progressBarStyleHorizontal);
             progress.setMax(1000);dialog.body.addView(progress,new android.widget.LinearLayout.LayoutParams(-1,CzmDialog.dp(activity,12)));
             CheckBox mobile=new CheckBox(activity);mobile.setText(ru?"Разрешить загрузку через мобильную сеть":"Allow downloads using mobile data");
             mobile.setTextColor(CzmDialog.MUTED);mobile.setTextSize(12);mobile.setChecked(mobileAllowed());dialog.body.addView(mobile);
             mobile.setOnCheckedChangeListener((button,checked)->activity.getSharedPreferences("server-resources",0).edit().putBoolean("mobile",checked).apply());
-            Button verify=dialog.link(ru?"Проверить файлы":"Verify files",v->{Item item; synchronized(ServerResources.class){item=registry.get(key);}if(item!=null&&item.enabled)inspect(item,true);});
-            Button clear=dialog.link(ru?"Очистить кэш этого набора":"Clear this pack's cache",v->{
-                CzmDialog confirm=new CzmDialog(activity,ru?"Очистить ресурсы?":"Clear resources?",ru?"Файлы клиента и настройки сохранятся":"Your game files and settings remain",ru?"Очистить":"Clear",ru?"Отмена":"Cancel",ru,false);
-                confirm.submit.setOnClickListener(b->{confirm.dismiss();clear(address);});confirm.show();
-            });
-            Button cancel=dialog.link(ru?"Отменить загрузку":"Cancel download",v->pause(address));
-            Button refresh=dialog.link(ru?"Обновить сведения":"Refresh details",v->{synchronized(ServerResources.class){catalogNext=0;requestCatalog(false,0);}pollPack(address,false);});
-            dialog.submit.setOnClickListener(v->download(address));
+            TextView hint=dialog.note("");
+            dialog.submit.setOnClickListener(v->act(address));
             final Runnable[] tick=new Runnable[1];
             final String[] shownError={""};   // fail() scrolls to the top: only when the message changes
+            final int[] look={-1};
             tick[0]=()->{
                 if(!dialog.isShowing())return;
                 Item item;Pack pack;boolean loading;
                 synchronized(ServerResources.class){if(clock()-catalogAt>=catalogMaxAge)requestCatalog(false,0);item=registry.get(key);pack=item!=null&&item.enabled?packs.get(item.key()):null;loading=catalogLoading;}
-                if(item==null){status.setText(loading?(ru?"Проверяем каталог…":"Checking catalog…"):(ru?"У этого сервера нет управляемого набора":"No managed pack for this server"));volume.setText("");}
-                else if(!item.enabled){status.setText(ru?"Ресурсы ещё не опубликованы":"Resources have not been published yet");volume.setText(ru?"Обычное подключение доступно":"You can connect normally");}
-                else if(pack==null){status.setText(ru?"Проверяем файлы…":"Checking files…");volume.setText(bytes(item.bytes));pollPack(address,false);}
-                else{
-                    String state;long done,total,missing;String failure;boolean working;
-                    synchronized(ServerResources.class){state=pack.state;done=pack.done;total=pack.total;missing=pack.missing;failure=pack.error;working=pack.working;}
-                    String text=ru?"Нужно скачать ресурсы":"Resources need downloading";
-                    if(CHECKING.equals(state))text=ru?"Проверяем файлы…":"Checking files…";
-                    else if(READY.equals(state))text=ru?"Ресурсы проверены и готовы":"Resources verified and ready";
-                    else if(DOWNLOADING.equals(state))text=ru?"Скачиваем и проверяем…":"Downloading and verifying…";
-                    else if(PAUSED.equals(state))text=ru?"Загрузка приостановлена":"Download paused";
-                    else if(CLEARING.equals(state))text=ru?"Очищаем кэш…":"Clearing cache…";
-                    else if(ERROR.equals(state))text=ru?"Нужна повторная попытка":"Please retry";
-                    status.setText(text);
-                    volume.setText(DOWNLOADING.equals(state)?bytes(done)+" / "+bytes(total):
-                        (READY.equals(state)?(ru?"На устройстве: ":"On device: ")+bytes(pack.manifest==null?0:pack.manifest.total):
-                        (ru?"Скачать: ":"Download: ")+bytes(missing)+(pack.manifest==null?"":(ru?" · после распаковки: ":" · unpacked: ")+bytes(pack.manifest.total))));
-                    progress.setIndeterminate(CHECKING.equals(state)||CLEARING.equals(state));
-                    progress.setProgress(total>0?(int)Math.min(1000,done*1000/total):0);
-                    dialog.submit.setText(PAUSED.equals(state)?(ru?"Продолжить":"Resume"):ERROR.equals(state)?(ru?"Повторить":"Retry"):(ru?"Скачать / исправить":"Download / repair"));
-                    String message=failure.isEmpty()?"":error(failure,ru);
-                    if(!message.equals(shownError[0])){shownError[0]=message;if(message.isEmpty())dialog.error.setVisibility(View.GONE);else dialog.fail(message);}
-                    dialog.submit.setEnabled(!working&&!READY.equals(state));verify.setEnabled(!working);clear.setEnabled(!CLEARING.equals(state));cancel.setEnabled(DOWNLOADING.equals(state));
+                String head,size="",tip="",action=ru?"Скачать":"Download",failure="";
+                int kind=CzmDialog.WAITING,bar=0;boolean enabled=false,spin=false;
+                if(item==null||!item.enabled){
+                    head=loading?(ru?"Проверяем…":"Checking…"):(ru?"Для этого сервера нет ресурсов":"This server has no resource pack");
+                    tip=loading?"":(ru?"На сервер можно заходить как обычно.":"You can join the server as usual.");spin=loading;
+                }else if(pack==null){
+                    head=ru?"Проверяем файлы…":"Checking files…";action=ru?"Проверка…":"Checking…";spin=true;pollPack(address,false);
+                }else{
+                    String state;long done,total,missing,unpacked;boolean working,verified,older,checked;
+                    synchronized(ServerResources.class){state=pack.state;done=pack.done;total=pack.total;missing=pack.missing;failure=pack.error;working=pack.working;
+                        verified=pack.verified;older=pack.older;checked=pack.manifest!=null;unpacked=checked?pack.manifest.total:0;}
+                    if(DOWNLOADING.equals(state)){
+                        int percent=total>0?(int)Math.min(100,done*100/total):0;bar=total>0?(int)Math.min(1000,done*1000/total):0;
+                        head=ru?"Скачиваем ресурсы…":"Downloading resources…";size=bytes(done)+" / "+bytes(total);
+                        tip=ru?"Окно можно закрыть — загрузка продолжится.":"You can close this window: the download continues.";
+                        action=(ru?"Загрузка ":"Downloading ")+percent+"%";
+                    }else if(working){
+                        head=ru?"Проверяем файлы…":"Checking files…";action=ru?"Проверка…":"Checking…";spin=true;
+                    }else if(READY.equals(state)&&verified){
+                        head=ru?"Ресурсы проверены и готовы":"Resources verified and ready";size=(ru?"На устройстве: ":"On device: ")+bytes(unpacked);
+                        tip=ru?"Игра возьмёт их сама при входе на сервер.":"The game uses them by itself when you join.";
+                        action=ru?"Всё загружено ✓":"All downloaded ✓";kind=CzmDialog.DONE;bar=1000;
+                    }else if(ERROR.equals(state)&&!checked){
+                        head=ru?"Не удалось проверить файлы":"Could not check the files";
+                        tip=ru?"Проверьте сеть и нажмите «Повторить».":"Check the connection and press Retry.";
+                        action=ru?"Повторить":"Retry";kind=CzmDialog.ACTION;enabled=true;
+                    }else if(PAUSED.equals(state)||ERROR.equals(state)){
+                        head=ru?"Загрузка прервалась":"The download stopped";
+                        tip=ru?"Загрузка продолжится с того же места.":"It resumes where it stopped.";
+                        action=ru?"Продолжить":"Resume";kind=CzmDialog.ACTION;enabled=true;bar=total>0?(int)Math.min(1000,done*1000/total):0;
+                    }else if(older){
+                        head=ru?"Вышло обновление ресурсов":"A resource update is available";
+                        size=(ru?"Скачать: ":"Download: ")+bytes(missing)+(ru?" — только изменённые файлы":": changed files only");
+                        tip=ru?"До обновления на сервер можно заходить как обычно.":"Until you update, you can join as usual.";
+                        action=ru?"Обновить":"Update";kind=CzmDialog.ACTION;enabled=true;
+                    }else{
+                        head=ru?"Ресурсы сервера ещё не скачаны":"Server resources are not downloaded yet";
+                        size=(ru?"Скачать: ":"Download: ")+bytes(missing)+(unpacked>0?(ru?" · после распаковки: ":" · unpacked: ")+bytes(unpacked):"");
+                        tip=ru?"Без них сервер тоже работает: нужные файлы докачаются при входе.":"The server works without them too: needed files download when you join.";
+                        kind=CzmDialog.ACTION;enabled=true;
+                    }
                 }
-                if(item==null||!item.enabled||pack==null){dialog.submit.setEnabled(false);verify.setEnabled(false);clear.setEnabled(false);cancel.setEnabled(false);progress.setIndeterminate(loading||item!=null&&item.enabled);}
+                status.setText(head);volume.setText(size);hint.setText(tip);
+                progress.setIndeterminate(spin);progress.setProgress(bar);
+                dialog.submit.setText(action);dialog.submit.setEnabled(enabled);
+                if(look[0]!=kind){look[0]=kind;dialog.submitStyle(kind);}
+                String message=failure.isEmpty()?"":error(failure,ru);
+                if(!message.equals(shownError[0])){shownError[0]=message;if(message.isEmpty())dialog.error.setVisibility(View.GONE);else dialog.fail(message);}
                 UI.postDelayed(tick[0],400);
             };
             dialog.setOnDismissListener(d->{
@@ -730,8 +746,33 @@ final class ServerResources {
                     if(key.equals(connectionAddress)&&connectionState>=2)cancelConnection();
                 }
             });
-            dialog.show();pollPack(address,false);tick[0].run();
+            dialog.show();recheck(address);tick[0].run();
         });
+    }
+
+    /** The main button: a failed check is checked again; otherwise download, update or resume. */
+    private static void act(String address){
+        Item item;boolean check;
+        synchronized(ServerResources.class){
+            item=registry.get(endpoint(address));
+            if(item==null||!item.enabled){catalogNext=0;requestCatalog(false,0);return;}
+            Pack pack=packs.get(item.key());check=pack!=null&&ERROR.equals(pack.state)&&pack.manifest==null;
+        }
+        if(check)inspect(item,false);else download(address);
+    }
+
+    /** Opening the window checks the files again by itself (sizes for a pack verified in this session). */
+    private static void recheck(String address){
+        Item item;
+        synchronized(ServerResources.class){
+            if(clock()-catalogAt>=catalogMaxAge){requestCatalog(false,0);return;}
+            item=registry.get(endpoint(address));
+            if(item==null||!item.enabled)return;
+            Pack existing=packs.get(item.key());
+            // A stopped download keeps its "Resume"; a running operation is left alone.
+            if(existing!=null&&(existing.working||PAUSED.equals(existing.state)||ERROR.equals(existing.state)))return;
+        }
+        inspect(item,false);
     }
 
     private static void pollPack(String address,boolean full){

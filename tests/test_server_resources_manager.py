@@ -32,7 +32,7 @@ public class Context {
     'android/R.java': '''package android; public final class R {public static class attr {public static final int progressBarStyleHorizontal=1;}}''',
     'org/libsdl/app/SDLActivity.java': '''package org.libsdl.app; public class SDLActivity {public static android.content.Context context; public static android.content.Context getContext(){return context;}}''',
     'ru/kurostreet/counterzombiemobile/CzmDialog.java': '''package ru.kurostreet.counterzombiemobile;
-final class CzmDialog {static final int MUTED=0; final android.widget.Button submit=new android.widget.Button(); final android.widget.TextView error=new android.widget.TextView(); final android.widget.LinearLayout body=new android.widget.LinearLayout(); interface Dismiss {void dismissed(CzmDialog dialog);} CzmDialog(android.app.Activity a,String title,String text,String ok,String cancel,boolean ru,boolean secure){} static int dp(android.content.Context c,int value){return value;} android.widget.TextView note(String text){return new android.widget.TextView();} android.widget.Button link(String text,android.view.View.OnClickListener listener){return new android.widget.Button();} void fail(String text){} boolean isShowing(){return false;} void dismiss(){} void show(){} void setOnDismissListener(Dismiss listener){} }''',
+final class CzmDialog {static final int MUTED=0,ACTION=0,WAITING=1,DONE=2; android.widget.TextView lead(String text){return new android.widget.TextView();} void submitStyle(int kind){} final android.widget.Button submit=new android.widget.Button(); final android.widget.TextView error=new android.widget.TextView(); final android.widget.LinearLayout body=new android.widget.LinearLayout(); interface Dismiss {void dismissed(CzmDialog dialog);} CzmDialog(android.app.Activity a,String title,String text,String ok,String cancel,boolean ru,boolean secure){} static int dp(android.content.Context c,int value){return value;} android.widget.TextView note(String text){return new android.widget.TextView();} android.widget.Button link(String text,android.view.View.OnClickListener listener){return new android.widget.Button();} void fail(String text){} boolean isShowing(){return false;} void dismiss(){} void show(){} void setOnDismissListener(Dismiss listener){} }''',
 }
 
 
@@ -46,6 +46,17 @@ class ServerResourcesManagerTest(unittest.TestCase):
         self.assertIn('if(!message.equals(shownError[0])){shownError[0]=message;', show)
         dialog = (JAVA / 'CzmDialog.java').read_text(encoding='utf-8')
         self.assertIn('scroll.smoothScrollTo(0, 0)', dialog[dialog.index('void fail('):])
+
+    def test_dialog_has_one_main_button_and_no_service_buttons(self):
+        # Owner, 10.11: players only download. Checking, refreshing and repair run by themselves.
+        source = (JAVA / 'ServerResources.java').read_text(encoding='utf-8')
+        show = source[source.index('static void show('):source.index('private static void pollPack(')]
+        for removed in ('Проверить файлы', 'Очистить кэш', 'Отменить загрузку', 'Обновить сведения', 'Скачать / исправить', 'dialog.link('):
+            self.assertNotIn(removed, show)
+        for label in ('"Скачать"', '"Обновить"', '"Продолжить"', '"Повторить"', '"Всё загружено ✓"', '"Загрузка "'):
+            self.assertIn(label, show)
+        self.assertIn('dialog.submitStyle(kind)', show)
+        self.assertIn('recheck(address)', show)
 
     def test_actual_manager_mapping_expiry_and_single_use_mount(self):
         jar = Path(os.environ.get('CZM_JSON_JAR', '/missing'))
