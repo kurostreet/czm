@@ -86,9 +86,12 @@ def digest(path: Path) -> str:
     return h.hexdigest()
 
 
-def catalog(conn: sqlite3.Connection) -> dict:
+def catalog(conn: sqlite3.Connection, packs: bool = True) -> dict:
+    """packs=False is the v1 answer for game versions up to 1.36.2: they refuse to join a
+    server whose pack is missing, so they get the addresses without packs and keep joining
+    with the engine's normal download. From 1.36.3 a pack is optional and read from v2."""
     addresses = official.state(conn)  # enabled is visibility only, never eligibility
-    assigned = {row["slot"]: row for row in conn.execute("SELECT * FROM official_resources")}
+    assigned = {row["slot"]: row for row in conn.execute("SELECT * FROM official_resources")} if packs else {}
     servers = []
     for slot in official.SLOTS:
         item = {"server_id": slot, "address": addresses[slot], "resources_enabled": False}

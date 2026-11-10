@@ -33,6 +33,7 @@ void CZM_ServerAuthShow(const char*,const char*);
 void CZM_ServerReportShow(const char*,const char*);bool CZM_ServerBlocked(const char*);
 void CZM_ServerBlocksShow();
 int CZM_ServerResourcesEligibility(const char*);void CZM_ServerResourcesShow(const char*,bool);
+int CZM_ServerResourcesStatus(const char*);int CZM_ServerResourcesProgress(const char*);
 void CZM_LobbyPickedServer(const char*,const char*,const char*,const char*,int,int);
 struct CzmServer;
 enum{CZM_OFFICIAL_SURVIVAL=0,CZM_OFFICIAL_ESCAPE,CZM_OFFICIAL_COUNT};
@@ -62,6 +63,9 @@ static int resourcesOpened;static bool resourcesRussian;static std::string resou
 static int resourceJoinCancels;static bool resourceJoinPending;
 void CZM_CancelResourceJoin(){if(resourceJoinPending){resourceJoinPending=false;resourceJoinCancels++;}}
 int CZM_ServerResourcesEligibility(const char*a){return !configuredResourceAddress.empty()&&configuredResourceAddress==a?1:0;}
+static int resourceStatus=1,resourceProgress=-1;
+int CZM_ServerResourcesStatus(const char*a){return CZM_ServerResourcesEligibility(a)?resourceStatus:0;}
+int CZM_ServerResourcesProgress(const char*){return resourceProgress;}
 void CZM_ServerResourcesShow(const char*a,bool ru){resourcesOpened++;resourcesAddress=a;resourcesRussian=ru;}
 bool CZM_ServerBlocked(const char*a){return blockedAddress==a;}
 void CZM_ServerReportShow(const char*a,const char*){reportsOpened++;reportedAddress=a;}
@@ -131,6 +135,13 @@ int main(int argc,char**argv){
    assert(!w.m_resources.w&&!CZM_IsOfficial(e.address));
    configuredResourceAddress=e.address;w.Layout();
    assert(inside(w.m_resources,w.m_details));
+   // The card invites the optional download; the label follows the pack on the device.
+   {const char*want[][2]={{"Скачать ресурсы","Download resources"},{"Обновить ресурсы","Update resources"},{"Ресурсы ✓","Resources ✓"},{"Загрузка 42%","Downloading 42%"}};
+    for(int s=1;s<=4;s++){resourceStatus=s;resourceProgress=s==4?420:-1;detailLabels.clear();w.Layout();w.DrawDetails();
+     const std::string label=want[s-1][russian?0:1];
+     assert(std::find(detailLabels.begin(),detailLabels.end(),label)!=detailLabels.end());
+     assert(w.m_resources.w-w.m_resources.h/2>=CZM_TextWidth(CZM_Font(CZMF_UI_LABEL),label.c_str()));}
+    resourceStatus=1;resourceProgress=-1;w.Layout();}
    assert(!overlap(w.m_resources,w.m_report)&&!overlap(w.m_resources,w.m_detailsClose));
    assert(!overlap(w.m_resources,w.m_detailsName)&&!overlap(w.m_resources,w.m_detailsMap));
    assert(w.m_resources.x>=w.m_details.x+ScreenHeight*.028f);
@@ -281,7 +292,8 @@ int main(){for(int photo=0;photo<2;photo++)for(int size:{48,136,280}){
             'bool CCzmServers::MouseMove(', 'void CCzmServers::Char(', 'void CCzmServers::DrawDetails(',
             'void CCzmServers::DrawHeader(', 'void CCzmServers::DrawFilters(', 'void CCzmServers::DrawRow(',
             'void CCzmServers::DrawChip(', 'void CCzmServers::Connect(', 'void CCzmServers::Select(', 'bool CCzmServers::Passes(']
-        drawing='\n'.join(function(source,s) for s in ['static const char *Plural(', 'static void CountText(', 'static void DrawMapPicture(', 'static unsigned int ModeColor(', 'static void FillRect('])
+        drawing='\n'.join(function(source,s) for s in ['static const char *Plural(', 'static void CountText(', 'static void DrawMapPicture(', 'static unsigned int ModeColor(', 'static void FillRect(',
+            'static const char *ResourcesLabel(', 'static int ResourcesLabelWidth(', 'static void DrawResourcesButton('])
         code='\n'.join([HARNESS,wrapping,declarations,drawing,declaration,'static CCzmServers*s_browser;static bool s_lobbyPicker;\n'])
         code+='\n'.join(function(source,s) for s in methods)+ADAPTERS+SCENARIOS
         with tempfile.TemporaryDirectory() as folder:

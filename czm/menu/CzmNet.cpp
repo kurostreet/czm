@@ -179,6 +179,24 @@ int CZM_ServerResourcesEligibility( const char *address )
 	CZM_End( env ); return result;
 }
 
+int CZM_ServerResourcesStatus( const char *address )
+{
+	JNIEnv *env; jclass cls;
+	if( !CZM_Begin( &env, &cls )) return 0;
+	jmethodID m = CZM_Method( env, cls, "serverResourcesStatus", "(Ljava/lang/String;)I" );
+	int result = m ? env->CallStaticIntMethod( cls, m, env->NewStringUTF( address ? address : "" )) : 0;
+	CZM_End( env ); return result;
+}
+
+int CZM_ServerResourcesProgress( const char *address )
+{
+	JNIEnv *env; jclass cls;
+	if( !CZM_Begin( &env, &cls )) return -1;
+	jmethodID m = CZM_Method( env, cls, "serverResourcesProgress", "(Ljava/lang/String;)I" );
+	int result = m ? env->CallStaticIntMethod( cls, m, env->NewStringUTF( address ? address : "" )) : -1;
+	CZM_End( env ); return result;
+}
+
 void CZM_ServerResourcesShow( const char *address, bool russian )
 {
 	JNIEnv *env; jclass cls;
@@ -728,6 +746,8 @@ void CZM_ServerReportShow( const char *, const char * ) {}
 bool CZM_ServerBlocked( const char * ) { return false; }
 int CZM_ServerOwner( const char * ) { return 0; }
 int CZM_ServerResourcesEligibility( const char * ) { return 0; }
+int CZM_ServerResourcesStatus( const char * ) { return 0; }
+int CZM_ServerResourcesProgress( const char * ) { return -1; }
 void CZM_ServerResourcesShow( const char *, bool ) {}
 void CZM_ServerResourcesRefresh( const char * ) {}
 int CZM_ServerResourcesPrepare( const char * ) { return 0; }

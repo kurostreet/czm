@@ -644,11 +644,16 @@ void CZM_PrepareConnect( const char *address )
 // A new click replaces the previous pending join. No network or hashing runs on
 // the game thread; Android publishes a snapshot only after checking the current
 // endpoint against the trusted catalog. Keep the selected password/name with it.
+// A join never asks about resources: a pack already on the device is mounted,
+// otherwise the game connects as usual and the engine downloads what it needs.
+// Packs are downloaded from the server card ("Download resources").
+#define CZM_RESOURCE_JOIN_WAIT_MS 10000
 static struct
 {
 	char address[64], protocol[8], name[128], password[128];
 	CMenuBaseWindow *origin;
-	bool active, shown;
+	bool active;
+	int deadline;
 } s_resourceJoin;
 
 void CZM_CancelResourceJoin( void )
@@ -669,7 +674,7 @@ void CZM_ConnectWithResources( const char *address, const char *protocol )
 	Q_strncpy( s_resourceJoin.name, EngFuncs::GetCvarString( "czm_connect_name" ), sizeof( s_resourceJoin.name ));
 	Q_strncpy( s_resourceJoin.password, EngFuncs::GetCvarString( "password" ), sizeof( s_resourceJoin.password ));
 	s_resourceJoin.active = true;
-	s_resourceJoin.shown = false;
+	s_resourceJoin.deadline = uiStatic.realTime + CZM_RESOURCE_JOIN_WAIT_MS;
 	s_resourceJoin.origin = uiStatic.menu.Current();
 	CZM_ServerResourcesRefresh( address );
 }
@@ -684,26 +689,12 @@ static void ResourceJoinFrame( void )
 		return;
 	}
 	const int state = CZM_ServerResourcesPrepare( s_resourceJoin.address );
-	if( state == 2 ) return; // checking or transferring
-	if( state == 3 )
-	{
-		if( !s_resourceJoin.shown )
-		{
-			s_resourceJoin.shown = true;
-			CZM_ServerResourcesShow( s_resourceJoin.address, CZM_IsRussian() );
-		}
-		return;
-	}
+	// Checking a pack already on the device; bounded so a slow phone or network never holds the join.
+	if( state == 2 && uiStatic.realTime - s_resourceJoin.deadline < 0 ) return;
 	s_resourceJoin.active = false;
-	if( state < 0 )
-	{
-		CZM_ServerResourcesCancelConnection();
-		if( state != -2 ) CZM_ShowNotice( CZM_IsRussian() ? "Ресурсы сервера" : "Server resources",
-			CZM_IsRussian() ? "Не удалось проверить ресурсы. Открой карточку сервера и попробуй ещё раз."
-			: "Could not check server resources. Open the server card and try again." );
-		return;
-	}
-	if( state != 0 && state != 1 ) { CZM_ServerResourcesCancelConnection(); return; }
+	if( state == -2 ) { CZM_ServerResourcesCancelConnection(); return; } // the player cancelled
+	// Anything but a verified pack: join without it (no mount permit), never ask or cancel.
+	if( state != 1 ) CZM_ServerResourcesCancelConnection();
 	if( !CZM_OnlinePlayAllowed() || CZM_ServerBlocked( s_resourceJoin.address ))
 	{
 		CZM_ServerResourcesCancelConnection();

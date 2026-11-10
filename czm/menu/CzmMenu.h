@@ -357,6 +357,10 @@ void CZM_ServerReportShow( const char *address, const char *name );
 bool CZM_ServerBlocked( const char *address );
 int CZM_ServerOwner( const char *address );
 int CZM_ServerResourcesEligibility( const char *address );
+// Server card button: 0 no pack, 1 download, 2 update, 3 downloaded, 4 busy.
+int CZM_ServerResourcesStatus( const char *address );
+// Download progress 0..1000, or -1 while nothing is transferred.
+int CZM_ServerResourcesProgress( const char *address );
 void CZM_ServerResourcesShow( const char *address, bool russian );
 void CZM_ServerResourcesRefresh( const char *address );
 int CZM_ServerResourcesPrepare( const char *address );
