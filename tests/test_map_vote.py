@@ -131,6 +131,61 @@ Opening late;Ballot j;j.count=1;j.session=12;j.flags=AUTO|OPEN;j.opens=3;assert(
 return 0;}
 ''')
 
+    def test_list_follows_the_finger_flings_and_tells_taps(self):
+        build(r"""
+#include <cassert>
+#include <cmath>
+#include "czm_scroll.h"
+using CzmScroll::List;
+int main(){
+const double f=1.0/60;
+// A tap that wobbles less than the touch slop is a tap and does not move the list.
+List l;l.slop=24;l.SetMax(1000);
+l.Press(500,0);l.Move(510,0.02);l.Move(495,0.04);assert(l.Release(0.06)&&l.pos==0);
+// A drag starts where the slop ends: no jump, then the list follows the finger 1:1.
+l.Press(800,1);l.Move(790,1.016);assert(l.pos==0&&!l.dragging);
+l.Move(770,1.032);assert(l.dragging&&l.pos==0);
+l.Move(700,1.048);assert(std::fabs(l.pos-70)<0.01f);
+l.Move(600,1.064);assert(std::fabs(l.pos-170)<0.01f);
+// Lifted while moving: a drag is not a tap and the flick goes on, slowing down to a stop.
+assert(!l.Release(1.070));assert(l.velocity>1000);
+float last=l.pos;double t=0;
+for(;t<4&&l.velocity!=0;t+=f){l.Step(f);assert(l.pos>=last&&l.pos<=l.max);last=l.pos;}
+assert(l.velocity==0&&t<3.5&&l.pos>300);
+// A finger that stopped before lifting does not fling.
+List s;s.slop=24;s.SetMax(1000);s.Press(800,0);s.Move(700,0.016);s.Move(600,0.032);
+assert(!s.Release(0.3));const float kept=s.pos;for(int i=0;i<60;i++)s.Step(f);assert(s.pos==kept);
+// A finger that catches a moving list stops it and is not a tap.
+List c;c.SetMax(1000);c.velocity=900;c.Step(f);c.Press(400,0);assert(c.velocity==0);
+assert(!c.Release(0.05));const float caught=c.pos;c.Step(f);assert(c.pos==caught);
+// Revealing a row glides there without overshooting.
+List r;r.SetMax(1000);r.Reveal(900,1000,500);assert(r.aiming&&r.target==500);
+float prev=0;int frames=0;while(r.aiming&&frames<120){r.Step(f);assert(r.pos>=prev&&r.pos<=500);prev=r.pos;frames++;}
+assert(r.pos==500&&frames<40);
+r.Reveal(600,700,500);assert(!r.aiming);                 // already in view: nothing moves
+// The wheel and drags never leave the list.
+r.Wheel(5000);for(int i=0;i<120;i++)r.Step(f);assert(r.pos==1000);
+List e;e.slop=10;e.SetMax(300);e.Press(100,0);e.Move(0,0.01);e.Move(-900,0.02);assert(e.pos==300);
+e.Release(0.021);for(int i=0;i<60;i++)e.Step(f);assert(e.pos==300&&e.velocity==0);
+// A reordered row glides to its new place.
+float g=5;int n=0;while(g!=0&&n<60){const float next=CzmScroll::Glide(g,0,f);assert(next<=g&&next>=0);g=next;n++;}
+assert(g==0&&n<45);
+return 0;}
+""")
+
+    def test_window_never_reorders_under_the_finger(self):
+        window = (ROOT / "czm/menu/CzmMapVote.cpp").read_text()
+        self.assertIn('#include "../../common/czm_scroll.h"', window)
+        draw = window[window.index("void CCzmVoteWindow::Draw()"):]
+        self.assertIn("if( !m_scroller.down && !m_barDrag )", draw)
+        self.assertIn("if( m_orderWaiting ) TakeOrder();", draw)
+        self.assertIn("m_scroller.Step( dt );", draw)
+        # rows are hit where they are drawn and by map number, never by their place in the list
+        self.assertIn("return HIT_ROW + m_view[i];", window)
+        self.assertIn("m_selected = hit - HIT_ROW;", window)
+        # the slider has its own strip beside the list, so a tap on a row never moves the list
+        self.assertIn("const int barLeft = m_list.x + m_list.w + 1;", window)
+
     def test_hud_turns_messages_into_the_ballot(self):
         code = (ROOT / "cl_dll/hud/czm_vote.cpp").read_text()
         code = re.sub(r'#include "[^\"]+"\n', '', code)
@@ -142,7 +197,6 @@ return 0;}
         self.assertIn('EngFuncs::CvarRegister( "czm_vote", "", FCVAR_PRIVILEGED );', menu)
         window = (ROOT / "czm/menu/CzmMapVote.cpp").read_text()
         self.assertIn('EngFuncs::ClientCmdF( false, "czm_vote_map %d\\n", m_selected );', window)
-        self.assertRegex(window, r"m_selected = m_ballot\.rows\[hit - HIT_ROW\]\.number;")
         # The window is modal like our other windows over the game: it never says otherwise.
         self.assertNotIn("Ходить", window)
         self.assertIn("/votemap", window)
