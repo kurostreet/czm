@@ -4,6 +4,8 @@ import os,subprocess,tempfile,unittest,re
 from test_loading_errors import function
 from test_social_menu import STUB,HARNESS
 from test_tab_avatars import VECTOR,STRING
+# The next-map vote window shares this suite in CI.
+from test_map_vote import MapVoteTests  # noqa: F401
 
 ROOT=Path(__file__).resolve().parents[1]
 SCENARIOS=r'''

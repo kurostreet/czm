@@ -510,6 +510,10 @@ void CZM_Init( void )
     // Public capability query: the server must be able to read it before sending CzmSkill.
     EngFuncs::CvarRegister( "czm_skill_ui", "1", 0 );
     EngFuncs::CvarRegister( "czm_skill_state", "", FCVAR_PRIVILEGED );
+	// Public capability query: czm_mapvote.amxx sends this client the ballot for its vote
+	// window (CzmVote) instead of a numbered menu. The HUD keeps the ballot in czm_vote.
+	EngFuncs::CvarRegister( "czm_mapvote_ui", "1", 0 );
+	EngFuncs::CvarRegister( "czm_vote", "", FCVAR_PRIVILEGED );
 	EngFuncs::CvarRegister( "czm_shop", "1", FCVAR_ARCHIVE );       // 1 wheel, 2 grid
 	EngFuncs::CvarRegister( "czm_shop_anim", "1", FCVAR_ARCHIVE );
 	EngFuncs::CvarRegister( "czm_shop_auto", "0", FCVAR_ARCHIVE );  // open the shop when a round starts

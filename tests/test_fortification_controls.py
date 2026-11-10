@@ -89,8 +89,12 @@ Skill(0,CzmCombat::FORT_HUMAN_CT);Fort(3);
 g_iUser1=4;CZM_SkillsFrame();Fort(0);g_iUser1=0;CZM_SkillsFrame();Fort(0);
 Skill(0,CzmCombat::FORT_HUMAN_CT);gHUD.m_iIntermission=1;CZM_SkillsFrame();Fort(0);
 gHUD.m_iIntermission=0;CZM_SkillsFrame();Fort(0);
-clockTime=15;Skill(0,CzmCombat::FORT_HUMAN_CT);Fort(3);
-clockTime=14;CZM_SkillsFrame();Fort(0);clockTime=15;CZM_SkillsFrame();Fort(0);
+clockTime=15;clientTime=15;Skill(0,CzmCombat::FORT_HUMAN_CT);Fort(3);
+// The client clock steps back while re-synchronising with the server: the buttons stay.
+clientTime=14.98f;CZM_SkillsFrame();Fort(3);clientTime=14;CZM_SkillsFrame();Fort(3);
+clockTime=15.5f;clientTime=15.4f;CZM_SkillsFrame();Fort(3);
+// Real time only moves forward; a heartbeat missing for 3 s still hides them.
+clockTime=18.6f;CZM_SkillsFrame();Fort(0);clockTime=19;CZM_SkillsFrame();Fort(0);
 Skill(0,CzmCombat::FORT_HUMAN_CT);Fort(3);
 Skill(1,CzmCombat::FORT_HUMAN_CT);CZM_SkillsFrame();Fort(0);
 Skill(0,CzmCombat::FORT_HUMAN_CT);Fort(3);
@@ -340,14 +344,14 @@ CLIENT_STUB = r'''
 #include <cmath>
 #include "czm_combat.h"
 struct {bool m_fPlayerDead=false;int m_iIntermission=0;} gHUD;
-int g_iUser1;float clockTime;
+int g_iUser1;float clockTime,clientTime;
 std::map<std::string,std::string> cvars;
-float Time(){return clockTime;}
+float Time(){return clientTime;}double AbsTime(){return clockTime;}
 const char *Get(const char *key){return cvars[key].c_str();}
 void Set(const char *key,const char *value){cvars[key]=value;}
 void Hook(const char *,int(*)(const char*,int,void*)){}
 struct {void(*pfnHookUserMsg)(const char*,int(*)(const char*,int,void*));void(*Cvar_Set)(const char*,const char*);
-const char *(*pfnGetCvarString)(const char*);float(*GetClientTime)();} gEngfuncs={Hook,Set,Get,Time};
+const char *(*pfnGetCvarString)(const char*);float(*GetClientTime)();double(*GetAbsoluteTime)();} gEngfuncs={Hook,Set,Get,Time,AbsTime};
 struct BufferReader{const unsigned char *p;int pos=0,size;BufferReader(const char*,void *b,int n):p((unsigned char*)b),size(n){}
 int ReadByte(){assert(pos<size);return p[pos++];}int ReadShort(){int a=ReadByte(),b=ReadByte();return (short)(a|(b<<8));}};
 void CZM_SkillsFrame();void CZM_SkillsReset();void CZM_ClipReset();

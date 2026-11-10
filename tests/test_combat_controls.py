@@ -81,14 +81,14 @@ free(capability.string);return 0;}
 #include <cstring>
 #include "czm_combat.h"
 struct {bool m_fPlayerDead=false;int m_iIntermission=0;} gHUD;
-int g_iUser1;float clockTime;
+int g_iUser1;float clockTime,clientTime;
 std::map<std::string,std::string> cvars;
-float Time(){return clockTime;}
+float Time(){return clientTime;}double AbsTime(){return clockTime;}
 const char *Get(const char *key){return cvars[key].c_str();}
 void Set(const char *key,const char *value){cvars[key]=value;}
 void Hook(const char *,int(*)(const char*,int,void*)){}
 struct {void(*pfnHookUserMsg)(const char*,int(*)(const char*,int,void*));void(*Cvar_Set)(const char*,const char*);
-const char *(*pfnGetCvarString)(const char*);float(*GetClientTime)();} gEngfuncs={Hook,Set,Get,Time};
+const char *(*pfnGetCvarString)(const char*);float(*GetClientTime)();double(*GetAbsoluteTime)();} gEngfuncs={Hook,Set,Get,Time,AbsTime};
 struct BufferReader{const unsigned char *p;int pos=0,size;BufferReader(const char*,void *b,int n):p((unsigned char*)b),size(n){}
 int ReadByte(){assert(pos<size);return p[pos++];}int ReadShort(){int a=ReadByte(),b=ReadByte();return (short)(a|(b<<8));}};
 void CZM_SkillsFrame();void CZM_SkillsReset();void CZM_ClipReset();

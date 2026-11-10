@@ -13,6 +13,7 @@ prefix in its colour, the privilege) and gives a player toasts for "+N tokens" a
 #include "czm_tags.h"
 #include "czm_hud.h"
 #include "czm_skills.h"
+#include "czm_vote.h"
 #include "../../common/czm_hud_overlay.h"
 #include "../../common/czm_aim.h"
 #include "../../common/czm_hud_scope.h"
@@ -114,6 +115,7 @@ static int MsgFunc_CzmAim( const char *name, int size, void *buffer )
 void CZM_TagsInit( void )
 {
     CZM_SkillsInit();
+    CZM_VoteInit();
 	gEngfuncs.pfnHookUserMsg( "CzmAim", MsgFunc_CzmAim );
 	gEngfuncs.pfnHookUserMsg( "CzmTag", MsgFunc_CzmTag );
 	gEngfuncs.pfnHookUserMsg( "CzmToast", MsgFunc_CzmToast );
