@@ -22,13 +22,13 @@ static const float defaults[BLOCKS][2] = {
     { 0.156000f, 0.685800f },
     { 0.500000f, 0.500000f },
     { 0.155764f, 0.952833f },
-    { 0.101551f, 0.309222f },
-    { 0.500000f, 0.862222f }
+    { 0.101551f, 0.314778f },
+    { 0.500000f, 0.866389f }
 };
 static const float defaultScale[BLOCKS] = { 0.753500f, 0.754700f, 1.0f, 0.748400f, 0.748400f, 1.0f, 0.600000f, 1.0f, 1.0f, 0.837981f, 0.755976f };
 static const bool defaultHidden[BLOCKS] = { false, false, false, false, true, false, false, false, false, false, false };
 static const int defaultHudStyle = 1, defaultRadarStyle = RADAR_TACTICAL, defaultMessageStyle = MSG_CZM;
-static const int defaultMessageList = 0, defaultSpectatorStyle = 2;
+static const int defaultMessageList = 1, defaultSpectatorStyle = 2;
 static const int chatLines = 5;
 // The HUD grows with the screen height, but on screens narrower than 2.1:1 (16:9 phones, tablets)
 // it follows the width instead: then the blocks keep their gaps as on the phone where the layout was made.

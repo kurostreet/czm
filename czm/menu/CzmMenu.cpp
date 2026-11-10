@@ -522,7 +522,7 @@ void CZM_Init( void )
 	EngFuncs::CvarRegister( "czm_parallax", "1", FCVAR_ARCHIVE );
 	EngFuncs::CvarRegister( "czm_hud_radar_style", "1", FCVAR_ARCHIVE );
 	EngFuncs::CvarRegister( "czm_hud_msg_style", "1", FCVAR_ARCHIVE );
-	EngFuncs::CvarRegister( "czm_hud_msg_list", "0", FCVAR_ARCHIVE );
+	EngFuncs::CvarRegister( "czm_hud_msg_list", "1", FCVAR_ARCHIVE );
 	EngFuncs::CvarRegister( "czm_hud_spec_style", "2", FCVAR_ARCHIVE );
 	for( int i=0;i<CzmHud::BLOCKS;i++ ) for( int k=0;k<5;k++ ) {
 		char name[64],value[32];
