@@ -78,6 +78,14 @@ def check_room(room: str) -> str:
 
 @router.get("/server-resources/catalog")
 async def server_resources_catalog(request: Request):
+    # Game versions up to 1.36.2 cannot join without a listed pack: never list packs to them.
+    _read_limit.check(client_ip(request))
+    return JSONResponse(await in_db(server_resources.catalog, False), headers={"Cache-Control": "no-store"})
+
+
+@router.get("/server-resources/catalog/v2")
+async def server_resources_catalog_v2(request: Request):
+    # 1.36.3+: a pack is optional, the game joins as usual until the player downloads it.
     _read_limit.check(client_ip(request))
     return JSONResponse(await in_db(server_resources.catalog), headers={"Cache-Control": "no-store"})
 

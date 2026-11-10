@@ -342,6 +342,66 @@ HIMAGE CZM_MapPicture( const char *map )
 	return CZM_MapPreview( map );
 }
 
+// ---------------------------------------------------------------- server resources button
+// Packs are optional: a join never asks. The card invites the download instead: a red,
+// pulsing "Download resources", "Update resources" with a dot when a newer revision is
+// published, and a calm "Resources ✓" once the current revision is on the device.
+static const char *ResourcesLabel( int status, int progress, char *buf, size_t size )
+{
+	const bool ru = CZM_IsRussian();
+	switch( status )
+	{
+	case 2: return ru ? "Обновить ресурсы" : "Update resources";
+	case 3: return ru ? "Ресурсы ✓" : "Resources ✓";
+	case 4:
+		if( progress < 0 ) return ru ? "Проверка…" : "Checking…";
+		snprintf( buf, size, ru ? "Загрузка %d%%" : "Downloading %d%%", Q_min( 100, progress / 10 ));
+		return buf;
+	default: return ru ? "Скачать ресурсы" : "Download resources";
+	}
+}
+
+// One width for every state, so the header does not jump while the label changes.
+static int ResourcesLabelWidth( void )
+{
+	const HFont font = CZM_Font( CZMF_UI_LABEL );
+	char buf[64];
+	int width = 0;
+	for( int status = 1; status <= 5; status++ )
+	{
+		const char *label = ResourcesLabel( status == 5 ? 4 : status, status == 5 ? -1 : 1000, buf, sizeof( buf ));
+		width = Q_max( width, CZM_TextWidth( font, label ));
+	}
+	return width;
+}
+
+static void DrawResourcesButton( const CzmRect &r, const char *address, bool pressed )
+{
+	const int status = CZM_ServerResourcesStatus( address );
+	if( status <= 0 ) return;
+	char buf[64];
+	const char *label = ResourcesLabel( status, status == 4 ? CZM_ServerResourcesProgress( address ) : -1, buf, sizeof( buf ));
+	if( status == 1 || status == 2 )
+	{
+		// A soft red glow breathing about once a second; it stays inside the header gap.
+		const float pulse = 0.5f + 0.5f * sinf( uiStatic.realTime * 0.005f );
+		const int grow = Q_max( 2, (int)( r.h * ( 0.04f + 0.07f * pulse )));
+		CzmStyle::Round( CZM_Rect( r.x - grow, r.y - grow, r.w + grow * 2, r.h + grow * 2 ),
+			PackRGBA( 229, 63, 77, (int)( 45 + 95 * pulse )));
+		CzmStyle::Button( r, label, true, true, pressed, 0, CZMF_UI_LABEL );
+		if( status == 2 )
+		{
+			// The bell's "new" dot: white ring, red centre, on the top-right corner.
+			const int d = Q_max( 8, r.h * 34 / 100 ), x = r.x + r.w - d * 2 / 3, y = r.y - d / 3;
+			CZM_DrawImage( UI_DIR "dot.png", x, y, d, d, CzmStyle::Ink());
+			const int in = Q_max( 1, d / 5 );
+			CZM_DrawImage( UI_DIR "dot.png", x + in, y + in, d - in * 2, d - in * 2, CzmStyle::AccentRed());
+		}
+		return;
+	}
+	CzmStyle::Button( r, label, true, false, pressed, status == 3 ? CzmStyle::Success() : CzmStyle::AccentBlue(), CZMF_UI_LABEL );
+}
+
 /*
 =================
 CCzmServers
@@ -1589,9 +1649,9 @@ void CCzmServers::Layout( void )
 		m_resources = CZM_Rect( 0, 0, 0, 0 );
 		CzmEntry *selected = Selected();
 		// Eligibility comes from the configured registry, independently of the golden badge.
-		if( selected && CZM_ServerResourcesEligibility( selected->address ) > 0 )
+		if( selected && CZM_ServerResourcesStatus( selected->address ) > 0 )
 		{
-			const int rw = Q_max( head * 3, CZM_TextWidth( CZM_Font( CZMF_SMALL ), CZM_IsRussian() ? "Ресурсы" : "Resources" ) + head / 2 );
+			const int rw = Q_max( head * 3, ResourcesLabelWidth() + head * 3 / 4 );
 			const int right = m_manage.w ? m_manage.x : m_report.x;
 			m_resources = CZM_Rect( right - gap - rw, m_report.y, rw, head );
 		}
@@ -1655,7 +1715,7 @@ int CCzmServers::HitTest( void ) const
 		if( m_detailsClose.HasCursor() ) return HIT_DETAILS_CLOSE;
 		if( m_report.HasCursor() ) return HIT_REPORT;
 		if( m_manage.HasCursor() ) return HIT_MANAGE;
-		if( m_resources.w && CZM_ServerResourcesEligibility( m_szSelected ) > 0 && m_resources.HasCursor() ) return HIT_RESOURCES;
+		if( m_resources.w && CZM_ServerResourcesStatus( m_szSelected ) > 0 && m_resources.HasCursor() ) return HIT_RESOURCES;
 		if( m_verified.HasCursor() ) return HIT_VERIFIED;
 		if( m_admin.HasCursor() ) return HIT_ADMIN;
 		if( m_play.HasCursor() ) return HIT_PLAY;
@@ -1798,7 +1858,7 @@ void CCzmServers::Activate( int hit )
 	case HIT_RESOURCES:
 	{
 		CzmEntry *e = Selected();
-		if( e && CZM_ServerResourcesEligibility( e->address ) > 0 )
+		if( e && CZM_ServerResourcesStatus( e->address ) > 0 )
 			CZM_ServerResourcesShow( e->address, CZM_IsRussian() );
 		return;
 	}
@@ -2529,8 +2589,7 @@ void CCzmServers::DrawDetails( void )
  CzmStyle::Icon(m_detailsClose,UI_DIR "icon_close.png");
  CzmStyle::Button(m_report,CZM_IsRussian()?"Заблокировать":"Block",true,false,IsPressed(HIT_REPORT),0,CZMF_SMALL);
  if(m_manage.w)CzmStyle::Button(m_manage,CZM_IsRussian()?"Управлять":"Manage",true,false,IsPressed(HIT_MANAGE),0,CZMF_SMALL);
- if(m_resources.w&&CZM_ServerResourcesEligibility(e->address)>0)
-  CzmStyle::Button(m_resources,CZM_IsRussian()?"Ресурсы":"Resources",true,false,IsPressed(HIT_RESOURCES),0,CZMF_SMALL);
+ if(m_resources.w)DrawResourcesButton(m_resources,e->address,IsPressed(HIT_RESOURCES));
  CzmStyle::TextLines(m_detailsName,e->answered&&e->name[0]?e->name:e->address,CZMF_UI_TITLE);
 
  CzmStyle::Surface(CZM_Rect(photo.x-1,photo.y-1,photo.w+2,photo.h+2),PackRGBA(20,26,36,255));

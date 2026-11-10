@@ -1,4 +1,4 @@
-"""Exercise asynchronous joins: consent, cancellation, replacement and policy gates."""
+"""Exercise asynchronous joins: optional packs, bounded checks, cancellation, replacement and policy gates."""
 from pathlib import Path
 import subprocess
 import tempfile
@@ -19,7 +19,7 @@ class ResourceConnectTest(unittest.TestCase):
 #include <cstdio>
 #include <cstdarg>
 using CMenuBaseWindow=int;
-struct {struct {int *current=nullptr;int *Current(){return current;}}menu;}uiStatic;
+struct {struct {int *current=nullptr;int *Current(){return current;}}menu;int realTime=0;}uiStatic;
 static std::map<std::string,std::string> vars;
 static std::vector<std::string> calls;
 static int state=2,shown=0,notice=0,cancelled=0,refreshes=0;
@@ -48,18 +48,28 @@ int main(){
  vars["password"]="original";vars["czm_connect_name"]="Survival";
  CZM_ConnectWithResources("1.2.3.4:27015","gs");assert(refreshes==1);
  ResourceJoinFrame();assert(calls.empty());
- state=3;ResourceJoinFrame();ResourceJoinFrame();assert(shown==1&&calls.empty());
- state=2;ResourceJoinFrame();assert(calls.empty());
+ // Checking a pack already on the device may take a moment; the join never opens a window.
+ uiStatic.realTime+=9000;ResourceJoinFrame();assert(calls.empty()&&shown==0);
  vars["password"]="other";state=1;ResourceJoinFrame();assert(calls.size()==2);
  assert(calls[0]=="ticket:1.2.3.4:27015");assert(calls[1]=="connect \"1.2.3.4:27015\" gs\n");
  assert(vars["password"]=="original"&&vars["czm_connect_name"]=="Survival");
+ assert(cancelled==0); // a verified pack keeps its single-use mount permit
  ResourceJoinFrame();assert(calls.size()==2);
  CZM_ConnectWithResources("1.2.3.4:27015","gs");
  CZM_ConnectWithResources("5.6.7.8:27016","49");state=0;ResourceJoinFrame();
  assert(calls.back()=="connect \"5.6.7.8:27016\" 49\n");
  size_t count=calls.size();
- CZM_ConnectWithResources("5.6.7.8:27016","gs");state=-2;ResourceJoinFrame();assert(calls.size()==count&&notice==0&&cancelled==1);
- CZM_ConnectWithResources("5.6.7.8:27016","gs");state=-1;ResourceJoinFrame();assert(notice==1&&calls.size()==count);
+ // A check that takes too long joins without the pack instead of holding the player.
+ CZM_ConnectWithResources("5.6.7.8:27016","gs");ResourceJoinFrame();assert(calls.size()==count);
+ int before=cancelled;uiStatic.realTime+=10001;ResourceJoinFrame();
+ assert(calls.size()==count+2&&calls.back()=="connect \"5.6.7.8:27016\" gs\n"&&cancelled==before+1&&notice==0);count=calls.size();
+ // States that used to ask (3) or refuse (-1) join as usual: no window, no notice, no mount permit.
+ before=cancelled;CZM_ConnectWithResources("5.6.7.8:27016","gs");state=3;ResourceJoinFrame();
+ assert(calls.size()==count+2&&shown==0&&notice==0&&cancelled==before+1);count=calls.size();
+ before=cancelled;CZM_ConnectWithResources("5.6.7.8:27016","gs");state=-1;ResourceJoinFrame();
+ assert(calls.size()==count+2&&notice==0&&cancelled==before+1);count=calls.size();
+ // Only the player's own cancellation stops the join.
+ before=cancelled;CZM_ConnectWithResources("5.6.7.8:27016","gs");state=-2;ResourceJoinFrame();assert(calls.size()==count&&notice==0&&cancelled==before+1);
  CZM_ConnectWithResources("5.6.7.8:27016","gs");state=1;allowed=false;ResourceJoinFrame();assert(calls.size()==count);allowed=true;
  CZM_ConnectWithResources("5.6.7.8:27016","gs");state=1;uiStatic.menu.current=&menu2;ResourceJoinFrame();assert(calls.size()==count);
  CZM_ConnectWithResources("5.6.7.8:27016","gs");CZM_CancelResourceJoin();state=1;ResourceJoinFrame();assert(calls.size()==count);

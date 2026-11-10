@@ -49,6 +49,8 @@ public final class CzmNet {
     public static int serverOwner(String address){return ServerOwners.INSTANCE.owner(address);}
     public static void serverResourcesShow(String address,boolean ru){ServerResources.show(address,ru);}
     public static int serverResourcesEligibility(String address){return ServerResources.eligibility(address);}
+    public static int serverResourcesStatus(String address){return ServerResources.status(address);}
+    public static int serverResourcesProgress(String address){return ServerResources.progress(address);}
     public static void serverResourcesRefresh(String address){ServerResources.refresh(address);}
     public static int serverResourcesPrepare(String address){return ServerResources.prepare(address);}
     public static String serverResourcesPath(String address){return ServerResources.path(address);}

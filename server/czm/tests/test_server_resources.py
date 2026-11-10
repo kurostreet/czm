@@ -59,11 +59,19 @@ class ServerResourceTests(unittest.TestCase):
         with db.db() as conn:
             return resources.activate(conn, slot, "survival", revision)
 
-    def catalog(self):
-        answer = self.client.get("/api/v1/server-resources/catalog")
+    def catalog(self, path="/api/v1/server-resources/catalog/v2"):
+        answer = self.client.get(path)
         self.assertEqual(answer.status_code, 200, answer.text)
         self.assertEqual(answer.headers["cache-control"], "no-store")
         return answer.json()
+
+    def test_v1_catalog_never_lists_packs_to_games_that_cannot_join_without_them(self):
+        # Up to 1.36.2 the game refuses to join a server whose listed pack is missing.
+        self.configure(); self.publish(); self.activate()
+        self.assertTrue(self.catalog()["servers"][0]["resources_enabled"])
+        self.assertEqual(self.catalog("/api/v1/server-resources/catalog"), {"schema": 1, "max_age_seconds": 60, "servers": [
+            {"server_id": "survival", "address": "176.118.222.43:27016", "resources_enabled": False},
+            {"server_id": "escape", "address": "", "resources_enabled": False}]})
 
     def test_catalog_off_until_explicit_activation_independent_of_visibility(self):
         self.assertEqual(self.catalog(), {"schema": 1, "max_age_seconds": 60, "servers": [

@@ -108,7 +108,8 @@ public final class ServerResourcesManagerTest {
     }
     static void catalogFailurePolicy() throws Exception {
         fixture();ServerResources.refresh(ADDRESS);awaitCatalog();
-        check(ServerResources.prepare(ADDRESS)==-1,"known enabled server fails closed when catalog fetch fails");
+        check(ServerResources.prepare(ADDRESS)==0,"known enabled server joins as usual when the catalog fetch fails");
+        check(ServerResources.mountPath(ADDRESS).isEmpty(),"a join without a catalog grants no resource path");
         fixture();ServerResources.refresh(OTHER);awaitCatalog();
         check(ServerResources.prepare(OTHER)==0,"foreign server remains connectable without managed mount when catalog fails");
         check(ServerResources.mountPath(OTHER).isEmpty(),"foreign fallback grants no resource path");
@@ -118,6 +119,21 @@ public final class ServerResourcesManagerTest {
         check(ServerResources.prepare(ADDRESS)==0,"disabled pack uses normal connection");
         check(ServerResources.mountPath(ADDRESS).isEmpty(),"disabled pack grants no mount");
         check(ServerResources.eligibility(ADDRESS)==1,"configured slot is eligible independent of display visibility");
+    }
+    static void downloadsNeverHoldJoin() throws Exception {
+        fixture();Object item=get("connectionItem");Object pack=packs().get(key(item));Class<?> owner=pack.getClass();
+        Method update=MANAGER.getDeclaredMethod("updateConnection",item.getClass());update.setAccessible(true);
+        field(owner,"working").set(pack,true);field(owner,"state").set(pack,"downloading");set("connectionState",2);update.invoke(null,item);
+        check(ServerResources.prepare(ADDRESS)==0,"a running download never holds a join");
+        check(ServerResources.mountPath(ADDRESS).isEmpty(),"a pack being downloaded is never mounted");
+        field(owner,"state").set(pack,"checking");set("connectionState",2);update.invoke(null,item);
+        check(ServerResources.prepare(ADDRESS)==2,"checking a pack already on the device is waited for");
+        field(owner,"working").set(pack,false);field(owner,"state").set(pack,"ready");update.invoke(null,item);
+        check(ServerResources.prepare(ADDRESS)==1,"the checked pack is mounted");
+        set("connectionState",0);update.invoke(null,item);
+        check(ServerResources.prepare(ADDRESS)==0&&ServerResources.mountPath(ADDRESS).isEmpty(),"a download finishing later never mounts into a join that went without the pack");
+        field(owner,"state").set(pack,"error");set("connectionState",2);update.invoke(null,item);
+        check(ServerResources.prepare(ADDRESS)==0,"a broken pack joins as usual");
     }
     static void clearRevokesSharedPackBeforeQueuedIO() throws Exception {
         fixture();Object second=item(OTHER,"r2");readyPack(second);
@@ -135,7 +151,7 @@ public final class ServerResourcesManagerTest {
     }
     static final class FakeConnection extends HttpsURLConnection {
         FakeConnection(URL url){super(url);}
-        byte[] body(){return url.getPath().equals("/api/v1/server-resources/catalog")?reply.getBytes(StandardCharsets.UTF_8):objects.get(url.getPath());}
+        byte[] body(){return url.getPath().equals("/api/v1/server-resources/catalog/v2")?reply.getBytes(StandardCharsets.UTF_8):objects.get(url.getPath());}
         public void connect(){}
         public void disconnect(){}
         public boolean usingProxy(){return false;}
@@ -191,17 +207,26 @@ public final class ServerResourcesManagerTest {
             fixture();objects.clear();requests.clear();networkFailure=false;set("registry",Collections.emptyMap());set("catalogAt",0L);set("connectionItem",null);set("connectionState",0);packs().clear();
             byte[] first=wave(1),same=wave(2),changed=wave(3);publishFixture("r1",first,same);
             ServerResources.refresh(ADDRESS);awaitCatalog();awaitFiles();
-            check(ServerResources.prepare(ADDRESS)==3,"real fresh manifest and missing files wait for download consent");
+            check(ServerResources.prepare(ADDRESS)==0,"a pack not on the device never holds or asks at the join");
+            check(ServerResources.mountPath(ADDRESS).isEmpty(),"joining without the pack grants no mount");
+            check(count("/server-resources/survival/r1/manifest.json")==0,"a join without the pack does not touch it");
+            ServerResources.status(ADDRESS);awaitFiles();
+            check(ServerResources.status(ADDRESS)==1,"nothing on the device: the server card offers the download");
             Method download=MANAGER.getDeclaredMethod("download",String.class);download.setAccessible(true);download.invoke(null,ADDRESS);awaitFiles();
-            check(ServerResources.prepare(ADDRESS)==1,"bulk transfer verifies and publishes ready revision");
+            check(ServerResources.status(ADDRESS)==3,"downloaded revision shows as ready on the server card");
+            ServerResources.refresh(ADDRESS);awaitCatalog();awaitFiles();
+            check(ServerResources.prepare(ADDRESS)==1,"a join after the download mounts the verified revision");
             check(count("/server-resources/survival/r1/bundle.zip")==1,"first download is one bulk ZIP");
             check(count("/server-resources/survival/r1/files/"+sha(first))==0&&count("/server-resources/survival/r1/files/"+sha(same))==0,"first ZIP avoids per-file HTTP round trips");
             File r1=new File(root,"server-resources/survival/r1/files");
             check(java.util.Arrays.equals(Files.readAllBytes(new File(r1,"sound/test.wav").toPath()),first),"first revision file bytes match");
             check(ServerResources.mountPath(ADDRESS).equals(r1.getCanonicalPath()),"bulk verified directory is granted to engine");ServerResources.unmounted();
             publishFixture("r2",changed,same);ServerResources.refresh(ADDRESS);awaitCatalog();awaitFiles();
-            check(ServerResources.prepare(ADDRESS)==3,"new revision waits for changed content");
-            download.invoke(null,ADDRESS);awaitFiles();check(ServerResources.prepare(ADDRESS)==1,"incremental update becomes ready");
+            check(ServerResources.prepare(ADDRESS)==0&&ServerResources.mountPath(ADDRESS).isEmpty(),"a newer revision not yet downloaded joins without a pack");
+            ServerResources.status(ADDRESS);awaitFiles();
+            check(ServerResources.status(ADDRESS)==2,"an older revision on the device: the server card offers the update");
+            download.invoke(null,ADDRESS);awaitFiles();check(ServerResources.status(ADDRESS)==3,"incremental update is ready on the card");
+            ServerResources.refresh(ADDRESS);awaitCatalog();awaitFiles();check(ServerResources.prepare(ADDRESS)==1,"incremental update becomes ready");
             check(count("/server-resources/survival/r2/bundle.zip")==0,"incremental update skips whole archive");
             check(count("/server-resources/survival/r2/files/"+sha(changed))==1,"only changed file downloads");
             check(count("/server-resources/survival/r2/files/"+sha(same))==0,"unchanged file reused with hash verification");
@@ -219,7 +244,7 @@ public final class ServerResourcesManagerTest {
             protected URLConnection openConnection(URL url){return new FakeConnection(url);}
         }:null);
         try{
-            leasesAndCancellation();mappingRevocation();expiryDuringInitialVerification();catalogFailurePolicy();clearRevokesSharedPackBeforeQueuedIO();bulkThenIncremental(false);bulkThenIncremental(true);
+            leasesAndCancellation();mappingRevocation();expiryDuringInitialVerification();catalogFailurePolicy();downloadsNeverHoldJoin();clearRevokesSharedPackBeforeQueuedIO();bulkThenIncremental(false);bulkThenIncremental(true);
             System.out.println("SERVER_RESOURCES_MANAGER_OK "+checks);
         }finally{
             ((ExecutorService)get("CATALOG_WORK")).shutdownNow();((ExecutorService)get("FILE_WORK")).shutdownNow();

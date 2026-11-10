@@ -42,7 +42,9 @@ import org.libsdl.app.SDLActivity;
  * never from a game server's name, FastDL URL, favorite or displayed badge.
  */
 final class ServerResources {
-    private static final String CATALOG = "https://kontrafps.ru/api/v1/server-resources/catalog";
+    // v2: this client never blocks a join on a pack. Older clients read the v1 path,
+    // which lists no packs, so they keep joining with the engine's normal download.
+    private static final String CATALOG = "https://kontrafps.ru/api/v1/server-resources/catalog/v2";
     private static final ExecutorService CATALOG_WORK = Executors.newSingleThreadExecutor();
     private static final ExecutorService FILE_WORK = Executors.newSingleThreadExecutor();
     private static final Handler UI = new Handler(Looper.getMainLooper());
@@ -63,6 +65,9 @@ final class ServerResources {
     private static String editorAddress="";
     private static Operation active;
     private static final Set<String> clearing=new HashSet<>(), deleting=new HashSet<>();
+    // Server card button before a pack was inspected in this session: 1 download, 2 update.
+    private static final Map<String,Integer> local=new HashMap<>();
+    private static final Set<String> probing=new HashSet<>();
 
     private ServerResources() {}
     private static long clock(){return System.nanoTime()/1000000L;}
@@ -101,7 +106,7 @@ final class ServerResources {
         String state=CHECKING, error="";
         String canonicalPath="";
         long done,total,missing;
-        boolean verified, working;
+        boolean verified, working, older;
         int operation;
         Pack(Item item){this.item=item;}
     }
@@ -134,7 +139,10 @@ final class ServerResources {
         requestCatalog(true,connectionGeneration);
     }
 
-    /** 2 checking/downloading; 3 needs user's action; 1 ready; 0 none; -1 failure; -2 cancelled. */
+    /**
+     * 2 checking a downloaded pack; 1 ready; 0 join as usual without a pack; -2 cancelled.
+     * A join never waits for a download and never asks: packs are downloaded from the server card.
+     */
     static synchronized int prepare(String address){
         String key=endpoint(address);
         if(!key.equals(connectionAddress))return -1;
@@ -155,6 +163,51 @@ final class ServerResources {
     static synchronized int eligibility(String address){
         if(clock()-catalogAt>=catalogMaxAge){requestCatalog(false,0);return 0;}
         return registry.containsKey(endpoint(address))?1:0;
+    }
+
+    /**
+     * Server card button, polled every frame: 0 no pack; 1 download; 2 update (an older revision
+     * is on the device); 3 downloaded and verified; 4 checking, downloading or clearing.
+     * Disk and network work happen once per revision on the worker threads.
+     */
+    static synchronized int status(String address){
+        if(clock()-catalogAt>=catalogMaxAge)requestCatalog(false,0);
+        Item item=registry.get(endpoint(address));
+        if(item==null||!item.enabled)return 0;
+        if(clearing.contains(item.pack)||deleting.contains(item.pack+"/"+item.revision))return 4;
+        Pack pack=packs.get(item.key());
+        if(pack==null){probe(item);Integer known=local.get(item.key());return known==null?1:known;}
+        if(pack.working)return 4;
+        if(READY.equals(pack.state)&&pack.verified)return 3;
+        return pack.older?2:1;
+    }
+
+    /** Download progress for the server card button, 0..1000, or -1 while nothing is transferred. */
+    static synchronized int progress(String address){
+        Item item=registry.get(endpoint(address));if(item==null)return -1;
+        Pack pack=packs.get(item.key());
+        if(pack==null||!pack.working||!DOWNLOADING.equals(pack.state)||pack.total<=0)return -1;
+        return (int)Math.min(1000,pack.done*1000/pack.total);
+    }
+
+    /** A revision with installed files is inspected (that verifies it); otherwise only the folder is looked at. */
+    private static void probe(Item item){
+        if(!probing.add(item.key()))return;
+        FILE_WORK.execute(()->{
+            boolean present=false;int value=1;
+            try{present=present(item);if(!present&&olderRevision(item))value=2;}catch(IOException ignored){}
+            synchronized(ServerResources.class){local.put(item.key(),value);}
+            if(present)inspect(item,false);
+        });
+    }
+    private static boolean present(Item item) throws IOException {String[] names=files(item).list();return names!=null&&names.length>0;}
+    private static boolean olderRevision(Item item) throws IOException {
+        File[] revisions=child(root(),item.pack).listFiles();
+        if(revisions!=null)for(File rev:revisions){
+            if(!rev.isDirectory()||!id(rev.getName())||rev.getName().equals(item.revision))continue;
+            String[] names=new File(rev,"files").list();if(names!=null&&names.length>0)return true;
+        }
+        return false;
     }
 
     static synchronized String path(String address){
@@ -213,20 +266,31 @@ final class ServerResources {
                 }
                 loaded=Collections.unmodifiableMap(values);
             }catch(Exception ignored){}
-            Item check=null;
+            Item check=null,join=null;
             synchronized(ServerResources.class){
                 if(loaded!=null){applyRegistry(loaded,maxAge);}
                 if(request==catalogRequest)catalogLoading=false;
                 if(connection&&generation==connectionGeneration){
-                    if(loaded==null){Item old=registry.get(connectionAddress);connectionState=old!=null&&old.enabled?-1:0;}
+                    // Without a catalog the game joins as usual: a pack is an extra, never a gate.
+                    if(loaded==null)connectionState=0;
                     else{
                         connectionItem=loaded.get(connectionAddress);
                         if(connectionItem==null||!connectionItem.enabled)connectionState=0;
-                        else{connectionState=2;check=connectionItem;}
+                        else{connectionState=2;join=connectionItem;}
                     }
                 }
             }
-            if(check!=null)inspect(check,false);
+            if(join!=null){
+                // Only a revision already downloaded to this device is checked and mounted.
+                boolean present=false;try{present=present(join);}catch(IOException ignored){}
+                synchronized(ServerResources.class){
+                    if(generation==connectionGeneration&&connectionState==2){if(present)check=join;else connectionState=0;}
+                }
+            }
+            if(check!=null){
+                inspect(check,false);
+                synchronized(ServerResources.class){if(generation==connectionGeneration)updateConnection(check);}
+            }
         });
     }
 
@@ -344,8 +408,9 @@ final class ServerResources {
                     }else available++;
                 }
                 long expected=available==0&&!manifest.archiveUrl.isEmpty()&&manifest.archiveBytes<=network+Math.max(1L<<20,network/20)?manifest.archiveBytes:network;
+                boolean older=missing>0&&olderRevision(item);
                 synchronized(ServerResources.class){
-                    if(pack.operation==serial){pack.manifest=manifest;pack.missing=expected;pack.done=0;pack.total=expected;pack.canonicalPath=directory.getCanonicalPath();
+                    if(pack.operation==serial){pack.manifest=manifest;pack.missing=expected;pack.done=0;pack.total=expected;pack.canonicalPath=directory.getCanonicalPath();pack.older=older;
                         pack.verified=missing==0;pack.state=missing==0?READY:MISSING;pack.error="";}
                 }
             }catch(Exception e){fail(pack,serial,e);}
@@ -356,16 +421,17 @@ final class ServerResources {
     }
 
     private static void updateConnection(Item item){
-        if(connectionState<0||connectionItem==null||!connectionItem.key().equals(item.key())||!connectionItem.address.equals(item.address))return;
+        // 0 is final for this join: a download finishing later never mounts into it.
+        if(connectionState<=0||connectionItem==null||!connectionItem.key().equals(item.key())||!connectionItem.address.equals(item.address))return;
         if(!currentItem(item)||clock()-catalogAt>=catalogMaxAge){connectionState=2;grantExpires=0;return;}
-        if(clearing.contains(item.pack)||deleting.contains(item.pack+"/"+item.revision)){connectionState=3;grantExpires=0;return;}
+        if(clearing.contains(item.pack)||deleting.contains(item.pack+"/"+item.revision)){connectionState=0;grantExpires=0;return;}
         Pack pack=packs.get(item.key());if(pack==null){connectionState=2;return;}
-        if(pack.working){connectionState=2;return;}
+        // Checking a downloaded pack is short; a running download is never waited for.
+        if(pack.working){if(CHECKING.equals(pack.state))connectionState=2;else{connectionState=0;grantExpires=0;}return;}
         if(READY.equals(pack.state)&&pack.verified){
             if(connectionState!=1){grantConsumed=false;grantExpires=Math.min(clock()+60000,catalogAt+catalogMaxAge);}
             connectionState=1;
-        }else if(ERROR.equals(pack.state))connectionState=-1;
-        else connectionState=3;
+        }else{connectionState=0;grantExpires=0;}
     }
 
     private static synchronized void fail(Pack pack,int serial,Exception failure){
@@ -575,7 +641,10 @@ final class ServerResources {
         }
         FILE_WORK.execute(()->{
             try{ServerResourceStore.deleteTree(child(root(),item.pack));
-                synchronized(ServerResources.class){for(Pack p:packs.values())if(p.item.pack.equals(item.pack)){p.verified=false;p.state=MISSING;p.missing=p.manifest==null?0:p.manifest.total;}}
+                synchronized(ServerResources.class){
+                    for(Pack p:packs.values())if(p.item.pack.equals(item.pack)){p.verified=false;p.older=false;p.state=MISSING;p.missing=p.manifest==null?0:p.manifest.total;}
+                    local.keySet().removeIf(k->k.startsWith(item.pack+"/"));
+                }
             }catch(Exception e){fail(pack,serial,e);}
             finally{synchronized(ServerResources.class){clearing.remove(item.pack);for(Pack p:packs.values())if(p.item.pack.equals(item.pack))p.working=false;}}
         });
