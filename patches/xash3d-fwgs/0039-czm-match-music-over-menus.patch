@@ -1,0 +1,25 @@
+diff --git a/engine/client/sound/s_stream.c b/engine/client/sound/s_stream.c
+index e081e69..0b683b5 100644
+--- a/engine/client/sound/s_stream.c
++++ b/engine/client/sound/s_stream.c
+@@ -121,7 +121,9 @@ void S_StartBackgroundTrack( const char *introTrack, const char *mainTrack, int
+ 
+ 	Q_strncpy( s_bgTrack.current, introTrack, sizeof( s_bgTrack.current ));
+ 	memset( &musicfade, 0, sizeof( musicfade )); // clear any soundfade
+-	s_bgTrack.source = cls.key_dest;
++	// CZM: a track started during a match belongs to the match (the server's "mp3 play":
++	// votes, round music), even if one of our panels (shop, server menu) is open right then.
++	s_bgTrack.source = ( cls.state == ca_active && !cl.background ) ? key_game : cls.key_dest;
+ 
+ 	if( position != 0 )
+ 	{
+@@ -236,7 +238,8 @@ void S_StreamBackgroundTrack( void )
+ 	if( !cl.background )
+ 	{
+ 		// pause music by source type
+-		if( s_bgTrack.source == key_game && cls.key_dest == key_menu ) return;
++		// CZM: our panels (shop, server menu, Esc) open over the running match: its music keeps playing.
++		if( s_bgTrack.source == key_game && cls.key_dest == key_menu && cls.state != ca_active ) return;
+ 		if( s_bgTrack.source == key_menu && cls.key_dest != key_menu ) return;
+ 	}
+ 	else if( cls.key_dest == key_console )

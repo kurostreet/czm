@@ -4,6 +4,8 @@ import subprocess
 import tempfile
 import unittest
 from test_lobby_voice_client import STUBS, JAVA
+# The match music rules run with the audio checks after CI applies the engine patches.
+from test_match_music import MatchMusicTests  # noqa: F401
 
 HARNESS=r'''
 package ru.kurostreet.counterzombiemobile;
