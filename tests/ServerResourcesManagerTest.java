@@ -181,9 +181,12 @@ public final class ServerResourcesManagerTest {
     }
     static void awaitFiles() throws Exception {((ExecutorService)get("FILE_WORK")).submit(()->{}).get(10,TimeUnit.SECONDS);}
     static int count(String path){return requests.getOrDefault(path,0);}
-    static void bulkThenIncremental() throws Exception {
+    /** aliased: the app folder is reached through a link, as Android's /data/user/0 -> /data/data. */
+    static void bulkThenIncremental(boolean aliased) throws Exception {
         File root=Files.createTempDirectory("czm-manager-flow-").toFile().getCanonicalFile();
-        System.setProperty("czm.manager.root",root.getPath());org.libsdl.app.SDLActivity.context=new android.content.Context();android.net.ConnectivityManager.metered=false;
+        File alias=new File(root.getParentFile(),root.getName()+"-alias");
+        if(aliased)Files.createSymbolicLink(alias.toPath(),root.toPath());
+        System.setProperty("czm.manager.root",(aliased?alias:root).getPath());org.libsdl.app.SDLActivity.context=new android.content.Context();android.net.ConnectivityManager.metered=false;
         try{
             fixture();objects.clear();requests.clear();networkFailure=false;set("registry",Collections.emptyMap());set("catalogAt",0L);set("connectionItem",null);set("connectionState",0);packs().clear();
             byte[] first=wave(1),same=wave(2),changed=wave(3);publishFixture("r1",first,same);
@@ -208,7 +211,7 @@ public final class ServerResourcesManagerTest {
             check(java.util.Arrays.equals(Files.readAllBytes(new File(r1,"sound/test.wav").toPath()),first),"incremental update preserves previous revision");
             check(ServerResources.mountPath(ADDRESS).equals(r2.getCanonicalPath()),"new verified revision is granted");ServerResources.unmounted();
         }finally{
-            org.libsdl.app.SDLActivity.context=null;System.clearProperty("czm.manager.root");ServerResourceStore.deleteTree(root);
+            org.libsdl.app.SDLActivity.context=null;System.clearProperty("czm.manager.root");Files.deleteIfExists(alias.toPath());ServerResourceStore.deleteTree(root);
         }
     }
     public static void main(String[] args) throws Exception {
@@ -216,7 +219,7 @@ public final class ServerResourcesManagerTest {
             protected URLConnection openConnection(URL url){return new FakeConnection(url);}
         }:null);
         try{
-            leasesAndCancellation();mappingRevocation();expiryDuringInitialVerification();catalogFailurePolicy();clearRevokesSharedPackBeforeQueuedIO();bulkThenIncremental();
+            leasesAndCancellation();mappingRevocation();expiryDuringInitialVerification();catalogFailurePolicy();clearRevokesSharedPackBeforeQueuedIO();bulkThenIncremental(false);bulkThenIncremental(true);
             System.out.println("SERVER_RESOURCES_MANAGER_OK "+checks);
         }finally{
             ((ExecutorService)get("CATALOG_WORK")).shutdownNow();((ExecutorService)get("FILE_WORK")).shutdownNow();
