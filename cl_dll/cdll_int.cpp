@@ -355,11 +355,17 @@ void DLLEXPORT HUD_Frame( double time )
 	// Handle menu input and mouse movement
 	if( g_pMenu )
 	{
+		static int lastX = -1, lastY = -1;
 		int x = 0, y = 0;
 		if( g_pMenu->IsActive() )
 		{
 			gEngfuncs.GetMousePosition( &x, &y );
-			g_pMenu->MouseMove( x, y );
+			// Only a mouse that moved moves the menu cursor. On a touch screen the mouse
+			// position never changes: sent every frame it dragged the cursor away from the
+			// finger, so a list jumped under the finger and taps turned into drags.
+			if( x != lastX || y != lastY )
+				g_pMenu->MouseMove( x, y );
+			lastX = x; lastY = y;
 		}
 	}
 
